@@ -18,6 +18,8 @@ The `docs/specs/` directory is the source of truth. Read it before writing any c
 
 Build strictly in phase order (see implementation-phases spec). Phase 4 has 9 sub-phases, one per dashboard page; components are built where first needed and reused later.
 
+Project-specific Claude Code customization (rules, slash commands, the `spec-guardian` reviewer agent, and the `spec-cited` output style) lives under [.claude/](.claude/CLAUDE.md).
+
 ## What This Project Is
 
 Two deliverables in a **pnpm monorepo**, sharing `packages/shared` (Zod schemas, model normalization, price table):

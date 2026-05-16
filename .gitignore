@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Claude Code — personal per-user overrides (shared settings.json IS committed)
+.claude/settings.local.json
+

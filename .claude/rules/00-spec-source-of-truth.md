@@ -1,0 +1,26 @@
+# Rule 00 — Specs are the source of truth
+
+The `docs/specs/` and `docs/guides/` directories define this project. Before
+proposing or writing code, **read the spec section relevant to the task** and
+cite it in your response.
+
+## Spec index
+
+| Topic | File | When to read |
+|---|---|---|
+| AWS pipeline, accounts, collector flow | [docs/specs/2026-05-15-system-architecture.md](../../docs/specs/2026-05-15-system-architecture.md) | Anything touching AWS, the collector, or cross-account access |
+| DynamoDB table, entities, access patterns, model normalization | [docs/specs/2026-05-15-data-model.md](../../docs/specs/2026-05-15-data-model.md) | Anything reading or writing DynamoDB, building Route Handlers, or working with model IDs |
+| Tech stack, visual system, component inventory, performance patterns | [docs/specs/2026-05-15-design-system.md](../../docs/specs/2026-05-15-design-system.md) | Anything visual, any new component, any chart |
+| 6-phase build plan with verification checklists | [docs/specs/2026-05-15-implementation-phases.md](../../docs/specs/2026-05-15-implementation-phases.md) | **Always**, to confirm the work belongs to the current phase |
+| Auth.js + Microsoft Entra ID + AWS credential setup | [docs/guides/auth-setup.md](../../docs/guides/auth-setup.md) | Anything touching sign-in or AWS credentials |
+| Collector operational runbook, SAM deploy/undeploy | [docs/guides/aws-infrastructure.md](../../docs/guides/aws-infrastructure.md) | Phase 6 collector work |
+| Dashboard deployment runbook (Netlify) | [docs/guides/dashboard-deployment.md](../../docs/guides/dashboard-deployment.md) | Deployment work |
+
+## Rules
+
+1. **Cite the spec.** When you make a non-trivial recommendation, reference the
+   spec section it comes from (e.g. "per Data Model spec — Access Patterns").
+2. **Specs lead, code follows.** If reality and the spec disagree, surface the
+   conflict and propose updating one of them — never silently diverge.
+3. **No duplication in `.claude/`.** Rules in this directory summarise the
+   spec; they do not replace it.
