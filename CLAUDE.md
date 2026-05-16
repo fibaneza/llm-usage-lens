@@ -8,13 +8,13 @@ This repository is **pre-implementation**. Only `docs/` (specs), `LICENSE`, and 
 
 The `docs/specs/` directory is the source of truth. Read it before writing any code:
 
-- [[docs/specs/2026-05-15-system-architecture]] — AWS serverless pipeline, account layout, data sources, Lambda collector flow
-- [[docs/specs/2026-05-15-data-model]] — DynamoDB single-table design, entities, access patterns, model ID normalization
-- [[docs/specs/2026-05-15-design-system]] — tech stack, visual design, component inventory, performance patterns
-- [[docs/specs/2026-05-15-implementation-phases]] — 6-phase build plan; each phase independently testable
-- [[docs/guides/auth-setup]] — Auth.js + Microsoft Entra ID and AWS credential setup
-- [[docs/guides/aws-infrastructure]] — operational runbook: collector design, SAM deploy/undeploy CLI
-- [[docs/guides/dashboard-deployment]] — operational runbook: Next.js dashboard on Netlify, deploy/undeploy CLI
+- [docs/specs/2026-05-15-system-architecture.md](docs/specs/2026-05-15-system-architecture.md) — AWS serverless pipeline, account layout, data sources, Lambda collector flow
+- [docs/specs/2026-05-15-data-model.md](docs/specs/2026-05-15-data-model.md) — DynamoDB single-table design, entities, access patterns, model ID normalization
+- [docs/specs/2026-05-15-design-system.md](docs/specs/2026-05-15-design-system.md) — tech stack, visual design, component inventory, performance patterns
+- [docs/specs/2026-05-15-implementation-phases.md](docs/specs/2026-05-15-implementation-phases.md) — 6-phase build plan; each phase independently testable
+- [docs/guides/auth-setup.md](docs/guides/auth-setup.md) — Auth.js + Microsoft Entra ID and AWS credential setup
+- [docs/guides/aws-infrastructure.md](docs/guides/aws-infrastructure.md) — operational runbook: collector design, SAM deploy/undeploy CLI
+- [docs/guides/dashboard-deployment.md](docs/guides/dashboard-deployment.md) — operational runbook: Next.js dashboard on Netlify, deploy/undeploy CLI
 
 Build strictly in phase order (see implementation-phases spec). Phase 4 has 9 sub-phases, one per dashboard page; components are built where first needed and reused later.
 
