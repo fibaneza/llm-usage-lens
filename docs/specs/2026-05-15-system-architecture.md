@@ -24,7 +24,7 @@ Organization (all authenticated users see all data)
 
 - A department contains **one or more teams**. Each team owns **exactly one** AWS member account.
 - An AWS account therefore maps to exactly one team and exactly one department. This mapping lives in the DynamoDB account registry — department and team are always derivable from the account ID.
-- Service-level attribution uses **application inference profiles**: a team creates one inference profile per service, tagged `service=<name>`. Calls routed through a profile are attributable to that service (visible in CloudTrail and Cost Explorer).
+- Service-level attribution uses **application inference profiles**: a team creates one inference profile per service, tagged `service=<name>`. Calls routed through a profile are attributable to that service in CloudTrail Lake (the v1 source for `byService` in DynamoDB). Cost Explorer cost allocation tags are **not** used for dashboard service breakdown in v1.
 - User-level attribution uses IAM Identity Center SSO usernames extracted from CloudTrail Lake.
 
 ## Authentication & Access
@@ -107,7 +107,7 @@ Next.js App (local dev / future deployment)
 
 Each hourly run performs these steps:
 
-1. Read the account registry from DynamoDB (all active accounts).
+1. Read the account registry from DynamoDB (all `AccountMeta` items with `active: true`). Only registered accounts receive rollups. Member accounts with Bedrock usage but **no** registry entry are ignored until an admin adds them in Settings. Registry accounts with no data for a day are **skipped** (no empty rollup item).
 2. Assume `CostExplorerReadRole` in the management account and query **Cost Explorer**:
    - `GetCostAndUsage` for yesterday (finalized) and today (partial).
    - Filtered to `AmazonBedrock` service.
@@ -120,9 +120,9 @@ Each hourly run performs these steps:
    - `GetMetricData` with account-scoped queries covering all linked source accounts — issued from the monitoring account, no role assumption.
    - Per `ModelId` dimension: InputTokenCount, OutputTokenCount, Invocations, InvocationLatency.
    - Time range: yesterday + today.
-5. Normalize raw Bedrock model IDs to canonical keys (see Data Model spec — Model ID Normalization), then merge all three data sources per account per day. Per-user and per-service costs are proportional estimates.
-6. Write/overwrite DailyRollup items to DynamoDB using `BatchWriteItem` (25 items/batch) — yesterday = finalized, today = estimated.
-7. Update the SyncStatus item.
+5. Normalize raw Bedrock model IDs to canonical keys (see Data Model spec — Model ID Normalization), then merge all three data sources per account per day (see **Three-source merge rules** below). Per-user and per-service costs are proportional estimates.
+6. Write/overwrite DailyRollup items to DynamoDB using `BatchWriteItem` (25 items/batch) — yesterday = finalized, today = estimated (see Today's cost fallback below when Cost Explorer returns zero for today).
+7. Update the SyncStatus item (`lastRunAt`, `nextScheduledAt` = next hour boundary, status, counts, errors).
 
 ### Two-Day Refresh Strategy
 
@@ -142,10 +142,10 @@ The dashboard shows a subtle indicator on today's data: "Cost data finalizes wit
 CloudTrail Lake provides per-user and per-service invocations and token counts (exact). Cost Explorer provides per-account and per-model cost (exact). Per-user and per-service cost are proportional estimates:
 
 ```
-userCost = (userTokensForModel / accountTotalTokensForModel) × accountModelCost
+userCost = (userTokensForModel / cloudWatchModelTokens) × accountModelCost
 ```
 
-The same ratio formula applies to per-service cost. All per-user and per-service cost values carry a `costEstimated: true` flag. Only account-level and model-level costs from Cost Explorer are exact.
+`cloudWatchModelTokens` is the CloudWatch token total for that model on that account-day (see **Three-source merge rules** — do not use CloudTrail sums as the denominator). The same ratio formula applies to per-service cost. All per-user and per-service cost values carry a `costEstimated: true` flag. Only account-level and model-level costs from Cost Explorer are exact.
 
 ## IAM Architecture
 
@@ -156,6 +156,7 @@ The same ratio formula applies to per-service cost. All per-user and per-service
 Permissions:
 - `cloudwatch:GetMetricData`, `cloudwatch:ListMetrics` — cross-account observability queries (the observability account is the monitoring account)
 - `cloudtrail:StartQuery`, `cloudtrail:GetQueryResults` — local CloudTrail Lake queries
+- `bedrock:ListTagsForResource` (and/or `tag:GetResources` if using Resource Groups Tagging API) — resolve `service=<name>` on inference profile ARNs when tags are not present on CloudTrail events; validate required APIs against a sample event in Phase 6
 - `sts:AssumeRole` on `arn:aws:iam::{managementAccountId}:role/CostExplorerReadRole`
 - `dynamodb:PutItem`, `dynamodb:BatchWriteItem`, `dynamodb:GetItem`, `dynamodb:Query`, `dynamodb:Scan` on the `bedrock-usage` table
 - `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` — CloudWatch Logs
@@ -226,8 +227,113 @@ Not used: **Amazon Security Lake** — a security-operations data lake in OCSF f
 1. **Single region**: Only `us-east-1` Bedrock usage is collected. Usage in other regions is not captured.
 2. **Cost Explorer lag**: Cost data is 8-24h behind. Today's cost is estimated from token counts and model pricing. Yesterday's cost is finalized.
 3. **Per-user/per-service cost is approximate**: Calculated proportionally from token usage ratio. Only account-level and model-level cost from Cost Explorer is exact.
-4. **Service tagging dependency**: `byService` data quality depends on teams routing calls through tagged application inference profiles. Usage not routed through a tagged profile falls into the `_untagged` bucket.
-5. **Cost allocation tag activation**: Cost allocation tags must be activated in the AWS Billing console before they appear in Cost Explorer, and they apply only to usage going forward — not retroactively. Newly applied `service` tags report as `_untagged` until activation propagates (up to 24h).
-6. **CloudTrail Lake query cost**: CloudTrail Lake charges per query scan. At high Bedrock call volumes, this cost should be monitored.
-7. **Cost Explorer API cost**: Each `GetCostAndUsage` call costs $0.01. Cost Explorer is queried once per day per run (yesterday + today) — 2 calls per hourly run, roughly $1.50/month regardless of the number of accounts.
-8. **Lambda overrun**: With reserved concurrency of 1 and an hourly trigger, a run exceeding 60 minutes would collide with the next invocation. The 5-minute timeout makes this effectively impossible, but EventBridge invocation failures are surfaced via a CloudWatch alarm.
+4. **Service tagging dependency**: `byService` data quality depends on teams routing calls through tagged **application inference profiles** (`service=<name>`). Usage not routed through a tagged profile falls into the `_untagged` bucket. Billing cost allocation tags in the AWS console do not populate `byService` in v1.
+5. **CloudTrail Lake query cost**: CloudTrail Lake charges per query scan. At high Bedrock call volumes, this cost should be monitored.
+6. **Cost Explorer API cost**: Each `GetCostAndUsage` call costs $0.01. Cost Explorer is queried once per day per run (yesterday + today) — 2 calls per hourly run, roughly $1.50/month regardless of the number of accounts.
+7. **Lambda overrun**: With reserved concurrency of 1 and an hourly trigger, a run exceeding 60 minutes would collide with the next invocation. The 5-minute timeout makes this effectively impossible, but EventBridge invocation failures are surfaced via a CloudWatch alarm.
+
+---
+
+## Collector Appendices
+
+### Cost Explorer `USAGE_TYPE` → model (parsing)
+
+`GetCostAndUsage` is grouped by `USAGE_TYPE`. Bedrock usage types embed the model family. Parse with prefix rules (align with `packages/shared/src/models.ts`):
+
+| Usage type pattern (examples) | Canonical key |
+|-------------------------------|---------------|
+| `*ClaudeOpus*`, `*claude-opus*` | `claude-opus` |
+| `*ClaudeSonnet*`, `*claude-sonnet*`, `*Claude3-5-Sonnet*` | `claude-sonnet` |
+| `*ClaudeHaiku*`, `*claude-haiku*`, `*Claude3-5-Haiku*` | `claude-haiku` |
+| Anything else for `AmazonBedrock` | `other` |
+
+Log unrecognized usage types to CloudWatch Logs so operators can extend the mapping. Costs without a parseable model roll into account-level totals and `other` as appropriate.
+
+### CloudTrail Lake — sample query (illustrative)
+
+Event data store holds org-wide management events. Filter Bedrock invocations for yesterday + today (UTC), then aggregate in SQL or post-process `GetQueryResults` rows:
+
+```sql
+SELECT
+  recipientAccountId AS accountId,
+  userIdentity.userName AS ssoUsername,
+  COALESCE(
+    requestParameters.inferenceProfileArn,
+    requestParameters.modelId
+  ) AS profileOrModel,
+  requestParameters.modelId AS modelId,
+  COUNT(*) AS invocations
+FROM {event_data_store_id}
+WHERE eventSource = 'bedrock.amazonaws.com'
+  AND eventName IN ('InvokeModel', 'InvokeModelWithResponseStream')
+  AND eventTime BETWEEN '{yesterdayStart}' AND '{todayEnd}'
+GROUP BY 1, 2, 3, 4
+```
+
+**Service name extraction (application code, not SQL):** resolve `inferenceProfileArn` → resource tags (`service=<name>`). If missing, use `_untagged`. Map `modelId` through shared normalization.
+
+**SSO username:** use `userIdentity.type = 'AssumedRole'` session issuer / `userName` per org CloudTrail field layout; validate against a sample event in your org during Phase 6.
+
+**Tokens:** the sample query counts invocations only. Phase 6 must also extract `inputTokenCount` / `outputTokenCount` from event fields (or aggregate from CloudWatch for totals and CloudTrail for attribution splits) — confirm field names on a real `InvokeModel` event.
+
+### Today's cost fallback
+
+When Cost Explorer returns **zero or no rows** for today's UTC day (common due to 8–24h lag):
+
+1. Use **CloudWatch token counts** per model for today (exact).
+2. Estimate model cost: `(modelInputTokens × inputPricePer1K + modelOutputTokens × outputPricePer1K) / 1000` using a **static price table** in `packages/shared` (updated manually when AWS publishes new list prices).
+3. Set `costFinalized: false` and `costEstimated: true` at model and account level for today.
+4. When yesterday's CE data arrives, overwrite with exact costs (`costFinalized: true`).
+
+Yesterday's rollup must **never** use token-based pricing if Cost Explorer returned data for that day.
+
+### Three-source merge rules
+
+When CloudWatch, CloudTrail, and Cost Explorer disagree, use this precedence for v1:
+
+| Field | Source of truth |
+|-------|-----------------|
+| Account/model **cost** (yesterday) | Cost Explorer when rows exist; never token-priced; set `costEstimated: false` on model entries |
+| Account/model **cost** (today) | Cost Explorer when rows exist; else token-based estimate (Today's cost fallback); `costFinalized: false`, `costEstimated: true` when token-priced |
+| Account/model **tokens & invocations** (totals) | **CloudWatch** — authoritative for rollup-level metrics |
+| `byUser` / `byService` token & invocation counts | **CloudTrail Lake** — only source with attribution |
+| Per-user / per-service **cost** | Proportional split: `(entity tokens for model ÷ CloudWatch model tokens) × model cost` |
+
+CloudTrail user/service token sums may not equal CloudWatch model totals (sampling, timing, or untracked calls). Do not rebalance CloudWatch totals to match CloudTrail; keep breakdowns as recorded and accept small drift.
+
+### Inference profile tag resolution
+
+Resolve `inferenceProfileArn` → service name in application code:
+
+1. Prefer **tags on the CloudTrail event** if `service` is already present in `requestParameters` or resource tags in the event payload.
+2. Else call **`bedrock:ListTagsForResource`** on the profile ARN (add to Lambda role; may require resource-based policies on member accounts for cross-account ARNs — validate in Phase 6).
+3. Else derive from profile **name/ARN convention** only if your org standardizes names (document the convention in Settings onboarding).
+4. If none apply → `_untagged`.
+
+Direct `InvokeModel` / `InvokeModelWithResponseStream` without an inference profile → `_untagged` for service; SSO user still attributed when present in `userIdentity`.
+
+### Shared code layout (monorepo)
+
+The Next.js app and Lambda collector share schemas and model normalization without copy-paste:
+
+```
+/
+├── apps/
+│   ├── dashboard/              # Next.js (Phases 1–5)
+│   │   ├── app/                # App Router pages + app/api/* Route Handlers
+│   │   └── lib/
+│   │       ├── data/           # server-only DynamoDB access
+│   │       └── dynamodb.ts
+│   └── collector/              # Lambda bedrock-cost-collector (Phase 6)
+├── packages/
+│   └── shared/                 # Zod schemas, models.ts, price table
+│       ├── src/models.ts
+│       ├── src/schemas/
+│       └── package.json
+├── scripts/                    # create-table, seed-* (run from repo root via pnpm)
+├── docker-compose.yml          # DynamoDB Local
+├── pnpm-workspace.yaml
+└── ...
+```
+
+Both apps depend on `@bedrock-usage/shared` (workspace package). Phase 1 scaffolds the workspace; Phase 3 implements schemas in `packages/shared`; Phase 6 imports the same package in the collector bundle.

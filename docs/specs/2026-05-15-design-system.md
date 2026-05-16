@@ -21,7 +21,7 @@ Enterprise analytics dashboard for tracking AWS Bedrock usage and cost across an
 | **Styling** | Tailwind CSS | v4+ |
 | **UI Components** | shadcn/ui | Copy-paste components on Radix UI primitives |
 | **Design patterns** | UI UX Pro Max | Component patterns, accessibility, interactions |
-| **Authentication** | Auth.js (NextAuth v5) | Microsoft Entra ID provider; provider-agnostic, swappable in `auth.ts` |
+| **Authentication** | Auth.js (NextAuth v5) | Microsoft Entra ID provider; provider-agnostic, swappable in `apps/dashboard/auth.ts` |
 | **Validation** | Zod | v4, all API boundaries and form inputs |
 | **Charts** | Recharts | Stacked area, bar, donut charts |
 | **Icons** | Lucide React | SVG-based, consistent stroke width |
@@ -37,7 +37,7 @@ Enterprise analytics dashboard for tracking AWS Bedrock usage and cost across an
 | **Linting** | ESLint v9 | Flat config (`eslint.config.ts`) |
 | **Formatting** | Prettier | Code formatting, paired with ESLint |
 | **Git Hooks** | Husky + lint-staged | Pre-commit: ESLint + Prettier on staged files |
-| **Secret Detection** | gitleaks | Pre-commit scan for AWS keys, Clerk secrets, tokens |
+| **Secret Detection** | gitleaks | Pre-commit scan for AWS keys, `AUTH_SECRET`, OAuth client secrets, tokens |
 
 ## Technology Decisions
 
@@ -58,7 +58,7 @@ Decisions on technologies evaluated and excluded, with rationale:
 
 ## Authentication
 
-- **Library:** Auth.js (NextAuth v5) — the provider abstraction. Switching identity providers is a config change in `auth.ts`; pages, middleware, and route guards use Auth.js session APIs and never change.
+- **Library:** Auth.js (NextAuth v5) — the provider abstraction. Switching identity providers is a config change in `apps/dashboard/auth.ts`; pages, middleware, and route guards use Auth.js session APIs and never change.
 - **Identity provider:** Microsoft Entra ID. Recommended start: a free Entra tenant, developing against the real provider from day one.
 - **Access model:** Open access — every authenticated member sees all data.
 - **Session:** Auth.js encrypted JWT session cookie.
@@ -71,9 +71,9 @@ Decisions on technologies evaluated and excluded, with rationale:
 
 DynamoDB and the AWS SDK are **server-only**. Client Components never access the database.
 
-- Data-access functions live in `lib/data/` and import `server-only` — imported only by Route Handlers and Server Components. A client-side import is a build error.
-- **Client Components** get data two ways: as props from a Server Component, or via TanStack Query calling a same-origin Route Handler over HTTP. They never import `lib/data/` or the AWS SDK.
-- **Route Handlers** (`app/api/*`) are the only HTTP-reachable backend: validate input with Zod, check the Auth.js session, query DynamoDB, return the standardized `{ data }` / `{ error }` shape.
+- Data-access functions live in `apps/dashboard/lib/data/` and import `server-only` — imported only by Route Handlers and Server Components. A client-side import is a build error.
+- **Client Components** get data two ways: as props from a Server Component, or via TanStack Query calling a same-origin Route Handler over HTTP. They never import `apps/dashboard/lib/data/` or the AWS SDK.
+- **Route Handlers** (`apps/dashboard/app/api/*`) are the only HTTP-reachable backend: validate input with Zod, check the Auth.js session, query DynamoDB, return the standardized `{ data }` / `{ error }` shape.
 - AWS credentials and the AWS SDK never ship to the browser.
 
 ## Caching Strategy
@@ -128,7 +128,7 @@ Each dashboard section loads independently. A slow chart does not block KPI card
 
 Pre-commit (Husky + lint-staged + gitleaks):
 1. **lint-staged** — ESLint fix + Prettier format on staged files only
-2. **gitleaks** — scans staged changes for secrets (AWS keys, `CLERK_SECRET_KEY`, tokens)
+2. **gitleaks** — scans staged changes for secrets (AWS keys, `AUTH_SECRET`, `AUTH_*_SECRET`, tokens)
 
 Pre-push:
 - `tsc --noEmit` — TypeScript type check catches type errors before PR
@@ -340,7 +340,7 @@ Global date filter present in the page header of every dashboard page:
 
 | Component | Source | Purpose |
 |-----------|--------|---------|
-| `CostTrendChart` | Recharts | Stacked area chart by model (loaded with `next/dynamic`, `ssr: false`) |
+| `CostTrendChart` | Recharts | Stacked area chart; `groupBy: 'model' \| 'team'` (loaded with `next/dynamic`, `ssr: false`) |
 | `ModelBreakdownChart` | Recharts | Donut chart showing model distribution |
 
 ### Filters & Controls
@@ -359,7 +359,7 @@ Global date filter present in the page header of every dashboard page:
 | Component | Source | Purpose |
 |-----------|--------|---------|
 | `SyncStatusBadge` | Custom (shadcn Badge) | Last sync time + status indicator |
-| `SyncCountdown` | Custom | "Next sync in 42 min" live countdown in top bar |
+| `SyncCountdown` | Custom | "Next sync in 42 min" live countdown in top bar; uses `SyncStatus.nextScheduledAt` when present, otherwise `lastRunAt + 1h` |
 | `CostEstimateIndicator` | Custom (shadcn Badge) | Subtle badge when cost is estimated (not finalized) |
 | `TagCoverageBar` | Custom | Progress bar showing % of tagged usage per team |
 | `EmptyState` | Custom | Reusable empty state with icon, message, and optional CTA |

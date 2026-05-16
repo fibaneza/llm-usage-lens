@@ -61,7 +61,7 @@ Attributes:
 |---------|---------------|
 | Get one account | `PK = ACCT#{id}`, `SK = META` |
 | All accounts in a department | `GSI1: gsi1pk = DEPT#{deptId}` |
-| All accounts (settings page) | Table scan with `SK = META` filter (~500 items max) |
+| All accounts (settings page) | Table scan with `SK = META` filter (v1 expects ≤100 active accounts; design headroom to ~500) |
 
 ## Entity: DailyRollup
 
@@ -133,7 +133,7 @@ Attributes:
 |---------|---------------|
 | Date range for one account | `PK = ACCT#{id}`, `SK between DAILY#start and DAILY#end` |
 | All accounts for one date | `GSI1: gsi1pk = DATE#{date}` |
-| All accounts for date range | N parallel GSI1 queries (one per day) |
+| All accounts for date range | N parallel GSI1 queries (one per day); cap custom ranges at 90 days in API validation to bound query count and payload size |
 | Ranking: top depts by cost | Fetch all rollups for date range via GSI1, group by departmentId, sort in memory |
 | Ranking: top teams by cost | Same, group by teamId, sort |
 | Ranking: top users by cost | Same, extract byUser from each model, merge across accounts, sort |
@@ -159,12 +159,14 @@ CloudWatch and CloudTrail Lake return raw Bedrock model IDs (e.g. `anthropic.cla
 | `anthropic.claude-3-5-haiku-*`, `anthropic.claude-haiku-*` | `claude-haiku` | Claude Haiku | `#14B8A6` |
 | Any other model ID | `other` | Other models | `#D97706` |
 
+Chart colors in this table are reference values for `packages/shared/src/models.ts`. The dashboard maps each canonical key to a **semantic CSS variable** (e.g. `--chart-claude-sonnet`); components never use raw hex.
+
 Normalization rules:
 - Match by prefix on the model family, ignoring version/date suffixes and the `:N` inference profile suffix.
 - Region-prefixed IDs (e.g. `us.anthropic.claude-...`) strip the region prefix before matching.
 - Unrecognized model IDs fall into the `other` canonical key. The raw IDs are preserved in a `rawModelIds` list inside that entry so new models can be identified and added to the mapping.
 
-The mapping table lives in shared code (`lib/models.ts`) used by both the Lambda and the Next.js app, so the two never drift.
+The mapping table lives in `@bedrock-usage/shared` (`packages/shared`) used by both `apps/collector` and `apps/dashboard`, so the two never drift.
 
 ## Entity: SyncStatus
 
@@ -175,7 +177,8 @@ PK:      SYSTEM
 SK:      SYNC#LATEST
 
 Attributes:
-  lastRunAt        string           ISO8601
+  lastRunAt        string           ISO8601 — when the last run finished
+  nextScheduledAt  string           ISO8601 — next EventBridge cron fire (lastRunAt + 1h, aligned to hour boundary); written by Lambda after each run
   status           string           "success" | "partial" | "error"
   accountsTotal    number
   accountsSuccess  number
@@ -183,6 +186,8 @@ Attributes:
   errors           list             [ { accountId: string, message: string } ]
   durationMs       number
 ```
+
+`SyncCountdown` in the UI prefers `nextScheduledAt`. If the item is missing (never synced), show a neutral message instead of a countdown.
 
 ### Access Pattern
 
@@ -201,8 +206,31 @@ All data written to DynamoDB and returned from Next.js Route Handlers is validat
 | `AccountMetaSchema` | Settings page CRUD, Lambda registry reads |
 | `DailyRollupSchema` | Lambda writes, API route responses |
 | `SyncStatusSchema` | Sync status display, Lambda writes |
-| `RankingQuerySchema` | API query params: dateFrom, dateTo, tab, model, sortBy, order, limit |
-| `DateRangeQuerySchema` | API query params: dateFrom, dateTo, accountId |
+| `RankingQuerySchema` | API query params: dateFrom, dateTo, `tab` (`departments` \| `teams` \| `services` \| `users`), model, sortBy, order, limit |
+| `DateRangeQuerySchema` | API query params: dateFrom, dateTo, accountId (max 90-day span) |
+| `TeamsQuerySchema` | Extends date range with optional `departmentId` filter (`GET /api/teams`) |
+
+## API Routes
+
+All routes live under `apps/dashboard/app/api/`, require an Auth.js session, validate query/body with Zod, and return `{ data: T }` or `{ error: { code, message } }`. Date params use `YYYY-MM-DD` (UTC).
+
+**HTTP status codes:** `200` success · `400` validation error (Zod) · `401` no session · `404` account/department/team not found · `500` unexpected server error.
+
+| Route | Method | Schema / params | Data access |
+|-------|--------|-----------------|-------------|
+| `/api/overview` | GET | `DateRangeQuerySchema` | GSI1 rollups for range → KPIs, trends, top departments |
+| `/api/ranking` | GET | `RankingQuerySchema` | GSI1 rollups for range → in-memory group/sort by tab |
+| `/api/departments` | GET | `DateRangeQuerySchema` | Rollups + `AccountMeta` → department aggregates |
+| `/api/departments/[id]` | GET | `DateRangeQuerySchema` | Department rollups, teams, top users |
+| `/api/teams` | GET | `TeamsQuerySchema` | All accounts / optional `departmentId` filter → team list |
+| `/api/teams/[id]` | GET | `DateRangeQuerySchema` | Account rollups → services, users, models |
+| `/api/services` | GET | `DateRangeQuerySchema` | Rollups → merge `byService` across accounts |
+| `/api/users` | GET | `DateRangeQuerySchema` | Rollups → merge `byUser` across accounts |
+| `/api/sync-status` | GET | — | `getSyncStatus()` |
+| `/api/accounts` | GET | — | `getAllAccounts()` |
+| `/api/accounts` | POST | `AccountMetaSchema` (create) | Settings CRUD |
+| `/api/accounts/[id]` | PATCH | `AccountMetaSchema` (partial) | Settings CRUD |
+| `/api/accounts/[id]` | DELETE | — | Soft-deactivate (`active: false`) |
 
 ## Design Decisions
 
@@ -216,7 +244,7 @@ All metrics (cost, tokens, invocations) are broken down by model first. User and
 
 ### DynamoDB over a Relational Database
 
-The store is DynamoDB, not RDS/Aurora. An analytics dashboard is aggregation-heavy and SQL `GROUP BY` would be a natural fit, but at this scale (<500 accounts) the tradeoffs favor DynamoDB: in-memory aggregation is proven fast (<1500 items, <100ms — see below), DynamoDB on-demand costs roughly 10× less than Aurora Serverless v2 at this volume, and it avoids VPC and connection-pooling complexity. A relational database would be the better choice for ad-hoc analytical queries or 10,000+ accounts. If heavy ad-hoc reporting is needed later, the path is DynamoDB → S3 export → Athena, not a migration to Aurora.
+The store is DynamoDB, not RDS/Aurora. An analytics dashboard is aggregation-heavy and SQL `GROUP BY` would be a natural fit. DynamoDB fits organizations from small teams up to hundreds of accounts; **in-memory ranking in v1 is tuned for ≤100 accounts** (see In-Memory Aggregation below). At that scale, on-demand DynamoDB costs roughly 10× less than Aurora Serverless v2 and avoids VPC and connection-pooling complexity. A relational database would be the better choice for ad-hoc analytical queries or 10,000+ accounts. If heavy ad-hoc reporting is needed later, the path is DynamoDB → S3 export → Athena, not a migration to Aurora.
 
 ### User Attribution Reflects Actual Usage
 
@@ -224,11 +252,15 @@ Bedrock access is permission-gated in IAM Identity Center — only users whose p
 
 ### Server-Only Data Access
 
-DynamoDB and the AWS SDK are accessed **only from server code** — Route Handlers and Server Components, via data-access functions in `lib/data/` that import `server-only`. Client Components never touch the table; they receive data as props from Server Components or fetch it from same-origin Route Handlers over HTTP. AWS credentials never reach the browser.
+DynamoDB and the AWS SDK are accessed **only from server code** — Route Handlers and Server Components, via data-access functions in `apps/dashboard/lib/data/` that import `server-only`. Client Components never touch the table; they receive data as props from Server Components or fetch it from same-origin Route Handlers over HTTP. AWS credentials never reach the browser.
 
 ### In-Memory Aggregation for Rankings
 
-Department, service, and user rankings are computed in the Next.js API route by fetching all DailyRollup items for the date range and aggregating in memory. For an organization with <500 accounts, this is <1500 items for a 30-day range. DynamoDB returns this in <100ms and JavaScript sorts it in <10ms. No pre-aggregated ranking entities needed.
+Department, service, and user rankings are computed in the Next.js API route by fetching all `DailyRollup` items for the date range (one GSI1 query per day in range, paginated) and aggregating in memory.
+
+**Scale math:** one rollup per account per day → `accounts × days` items (e.g. 500 accounts × 30 days = **15,000** items). v1 targets **≤100 accounts** for snappy ranking at the default 30-day range (~3,000 items). Organizations above ~100 accounts should use shorter date presets, rely on the 90-day API cap, or add pre-aggregated entities later (see No DepartmentDailyRollup Entity).
+
+At ≤3,000 items, DynamoDB fetch plus in-memory sort typically completes in well under a second. No pre-aggregated ranking entities needed for v1.
 
 ### No HourlySnapshot Entity
 
@@ -242,6 +274,12 @@ Department totals are computed on-the-fly from account DailyRollups grouped by d
 
 DailyRollup items expire after 365 days via DynamoDB TTL. This is configurable per deployment. For longer retention, items can be archived to S3 before expiry.
 
-### _untagged Bucket
+### Service Attribution (`byService`)
 
-Usage without a service cost allocation tag is captured under the `_untagged` key in byService. The Settings page displays a tag coverage metric per team to motivate tagging discipline.
+**v1 source of truth:** CloudTrail Lake — the `service` name is derived from the **application inference profile** on each `InvokeModel` / `InvokeModelWithResponseStream` call (teams create one profile per service, tagged `service=<name>`). Token and invocation counts in `byService` come from CloudTrail; costs are proportional estimates (see System Architecture spec).
+
+**Not used for `byService` in v1:** AWS Billing cost allocation tags in Cost Explorer. Those tags affect CE billing reports only and are not merged into the dashboard's `byService` map. A future enhancement could cross-check CE tags for validation.
+
+### `_untagged` Bucket
+
+Calls with no identifiable inference profile (or no `service` tag on the profile) are stored under `_untagged` in `byService`. **Direct `InvokeModel` calls** (model ID only, no inference profile) always count as `_untagged` for service; user attribution from CloudTrail still applies. The Settings page **tag coverage** metric is `1 − (untagged tokens / total tokens)` per team over the selected date range — it measures inference-profile discipline, not Cost Explorer tag activation.

@@ -21,7 +21,7 @@ Components are built where they are first needed and reused in subsequent pages.
 | 3 | Data Layer | DynamoDB Local, Zod schemas, Route Handlers, TanStack Query |
 | 4 | Pages (4.1–4.9) | All 9 dashboard pages, one sub-phase each |
 | 5 | Polish & Accessibility | Error boundaries, accessibility audit, responsive testing |
-| 6 | AWS Lambda Collector | Serverless data pipeline (separate from Next.js) |
+| 6 | AWS Lambda Collector | Serverless pipeline (`apps/collector`), shared `packages/shared` |
 
 ---
 
@@ -31,7 +31,9 @@ Components are built where they are first needed and reused in subsequent pages.
 
 ### Tasks
 
-- [ ] Initialize Next.js project with pnpm, TypeScript strict mode, App Router
+- [ ] Initialize pnpm workspace monorepo (`pnpm-workspace.yaml`, `packages/shared`, `apps/dashboard`)
+  - `packages/shared`: Zod schemas and `models.ts` consumed by dashboard and (later) collector — see System Architecture spec **Shared code layout**
+- [ ] Initialize Next.js project in `apps/dashboard` with TypeScript strict mode, App Router
 - [ ] Configure Tailwind CSS v4 with dark mode theme
   - Color tokens (CSS variables from design system spec)
   - Typography (Fira Code + Fira Sans via Google Fonts)
@@ -60,7 +62,7 @@ Components are built where they are first needed and reused in subsequent pages.
   - Type check (`tsc --noEmit`)
   - Secret scan (gitleaks)
   - Build (`next build`)
-- [ ] Verify: project runs with `pnpm dev`, Clerk login works, dark theme renders
+- [ ] Verify: project runs with `pnpm dev`, Microsoft Entra ID sign-in works, dark theme renders
 
 ### Dependencies
 
@@ -124,35 +126,40 @@ Phase 1 (Foundation).
 - [ ] Set up DynamoDB Local via Docker
   - `docker-compose.yml` with DynamoDB Local service
   - Document startup instructions in README
-- [ ] Create DynamoDB table setup script (`scripts/create-table.ts`)
+- [ ] Create DynamoDB table setup script (repo-root `scripts/create-table.ts`, invoked via `pnpm` from workspace root)
   - Creates `bedrock-usage` table with PK/SK + GSI1
   - Idempotent (safe to re-run)
-- [ ] Implement Zod v4 validation schemas
+- [ ] Implement Zod v4 validation schemas in `packages/shared/src/schemas/`
   - `AccountMetaSchema`
   - `DailyRollupSchema`
-  - `SyncStatusSchema`
+  - `SyncStatusSchema` (includes `nextScheduledAt`)
   - `RankingQuerySchema` (dateFrom, dateTo, tab, model, sortBy, order, limit)
-  - `DateRangeQuerySchema` (dateFrom, dateTo, accountId)
-- [ ] Implement shared model ID normalization module (`lib/models.ts`)
-  - Raw Bedrock model ID → canonical key → display name + chart color
-  - Used by both the Next.js app and the Lambda collector (see Data Model spec — Model ID Normalization)
+  - `DateRangeQuerySchema` (dateFrom, dateTo, accountId; max 90-day span)
+  - `TeamsQuerySchema` (date range + optional `departmentId`)
+- [ ] Implement shared model ID normalization in `packages/shared/src/models.ts`
+  - Raw Bedrock model ID → canonical key → display name + chart CSS token
+  - Re-export from `apps/dashboard/lib/models.ts` if needed for convenience
+  - Same package imported by Lambda in Phase 6 (see System Architecture spec — Shared code layout)
 - [ ] Create seed scripts
   - `scripts/seed.ts` — realistic data: 3 departments, 5 teams, 10 users, 8 services, 30 days of rollups, multiple models
   - `scripts/seed-empty.ts` — empty state: accounts exist but no rollups (tests empty states)
   - `scripts/seed-large.ts` — stress test: 50 accounts, 90 days, 20 users/team, 15 services
-- [ ] Build DynamoDB client (`lib/dynamodb.ts`)
+  - `scripts/seed-ranking.ts` (optional) — 100 accounts × 30 days to validate ranking performance at v1 upper bound
+- [ ] Build DynamoDB client (`apps/dashboard/lib/dynamodb.ts`)
   - AWS SDK v3 document client
   - Configurable endpoint (DynamoDB Local vs AWS)
-- [ ] Build data access functions (`lib/data/`)
+- [ ] Build data access functions (`apps/dashboard/lib/data/`)
   - `getAccountMeta(accountId)`
   - `getAllAccounts()`
   - `getAccountsByDepartment(departmentId)`
   - `getDailyRollups(accountId, dateFrom, dateTo)`
   - `getRollupsByDate(date)` — must loop on `LastEvaluatedKey` (GSI1 query can exceed DynamoDB's 1MB limit)
   - `getSyncStatus()` — return a "never synced" state when no item exists, not an error
-- [ ] Build Route Handlers (`app/api/`)
+- [ ] Build Route Handlers (`apps/dashboard/app/api/`) — see Data Model spec **API Routes** table; return `401`/`400`/`404` per HTTP status table
+  - `GET /api/overview`, `/api/ranking`, `/api/departments`, `/api/departments/[id]`, `/api/teams`, `/api/teams/[id]`, `/api/services`, `/api/users`, `/api/sync-status`
+  - `GET|POST /api/accounts`, `PATCH|DELETE /api/accounts/[id]` (Settings CRUD)
   - Standardized response format: `{ data: T }` / `{ error: { code, message } }`
-  - Zod validation on all query params
+  - Zod validation on all query params; enforce 90-day max on custom date ranges
   - Next.js server cache with 1-hour revalidation
 - [ ] Set up TanStack Query
   - `QueryClientProvider` in root layout
@@ -216,7 +223,7 @@ Components are introduced in the sub-phase where they are first needed:
 **Tasks:**
 - [ ] Build `MetricCard` component (shadcn Card + icon + value + trend)
 - [ ] Build `DeltaBadge` component ("+12.3%" green / "-5.1%" red)
-- [ ] Build `CostTrendChart` (Recharts stacked area, `next/dynamic` with `ssr: false`, `ResponsiveContainer`)
+- [ ] Build `CostTrendChart` (Recharts stacked area, `next/dynamic` with `ssr: false`, `ResponsiveContainer`; prop `groupBy: 'model' | 'team'` for reuse on department detail)
 - [ ] Build `ModelBreakdownChart` (Recharts donut, `next/dynamic` with `ssr: false`, `ResponsiveContainer`)
 - [ ] Build top departments horizontal bar chart
 - [ ] Connect `SyncStatusBadge` and `SyncCountdown` to real data (SyncStatus entity)
@@ -435,7 +442,7 @@ Components are introduced in the sub-phase where they are first needed:
 - [ ] Verify `prefers-reduced-motion` is respected (animations disabled/reduced)
 - [ ] Populate `CommandMenu` with real data (departments, teams, users, services)
 - [ ] E2E tests with Playwright
-  - Login flow (Clerk)
+  - Login flow (Auth.js + Microsoft Entra ID, or test auth bypass via `.env.test`)
   - Overview page loads
   - Ranking tab switching
   - Department → detail drill-down
@@ -451,7 +458,7 @@ Phase 4 (all sub-phases complete).
 
 ## Phase 6 — AWS Lambda Collector
 
-**Goal:** Serverless data pipeline that collects real Bedrock usage and cost data hourly and writes to DynamoDB. Runs in a dedicated observability account. This phase is separate from the Next.js app.
+**Goal:** Serverless data pipeline that collects real Bedrock usage and cost data hourly and writes to DynamoDB. Runs in a dedicated observability account as a **separate deployable** (`apps/collector`), sharing `packages/shared` with the dashboard.
 
 ### One-Time AWS Setup
 
@@ -466,7 +473,7 @@ Phase 4 (all sub-phases complete).
 
 ### Tasks
 
-- [ ] Create Lambda project structure (Node.js 22.x, TypeScript) in the observability account
+- [ ] Create Lambda project in `apps/collector` (Node.js 22.x, TypeScript), depends on `@bedrock-usage/shared`
 - [ ] Implement Lambda handler (`bedrock-cost-collector`)
   - Read account registry from DynamoDB (all active accounts)
   - Assume `CostExplorerReadRole` in the management account, query Cost Explorer
@@ -480,8 +487,11 @@ Phase 4 (all sub-phases complete).
   - Query CloudWatch via cross-account observability
     - `GetMetricData` with account-scoped queries for all source accounts — no role assumption
     - Per ModelId: InputTokenCount, OutputTokenCount, Invocations, InvocationLatency
-  - Normalize raw Bedrock model IDs to canonical keys (shared `lib/models.ts`)
-  - Merge all three data sources per account per day
+  - Normalize raw Bedrock model IDs to canonical keys (`@bedrock-usage/shared`)
+  - Apply today's cost fallback when Cost Explorer returns zero (shared price table + token counts)
+  - Write `nextScheduledAt` on SyncStatus (next UTC hour boundary)
+  - Merge all three data sources per account per day (System Architecture spec — Three-source merge rules)
+  - Resolve inference profile tags per Tag resolution appendix
   - Write/overwrite DailyRollup items to DynamoDB via `BatchWriteItem` (25/batch)
   - Update SyncStatus item
 - [ ] Implement two-day refresh strategy (UTC calendar days)
@@ -507,7 +517,7 @@ Phase 4 (all sub-phases complete).
 
 ### Dependencies
 
-Phase 3 (Data Layer — Zod schemas, `lib/models.ts`, and DynamoDB table structure shared).
+Phase 3 (Data Layer — Zod schemas in `packages/shared`, and DynamoDB table structure shared).
 
 ---
 

@@ -34,11 +34,13 @@ Do not use static `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. Short-lived SSO
 
 ### 2. Install Auth.js
 
+From `apps/dashboard` (or `pnpm add next-auth@beta --filter dashboard` from repo root):
+
 ```
 pnpm add next-auth@beta
 ```
 
-### 3. Environment variables (`.env.local`)
+### 3. Environment variables (`apps/dashboard/.env.local`)
 
 ```
 AUTH_SECRET=                # generate with: npx auth secret
@@ -48,9 +50,9 @@ AUTH_MICROSOFT_ENTRA_ID_SECRET=<client secret value>
 AUTH_MICROSOFT_ENTRA_ID_ISSUER=https://login.microsoftonline.com/<tenant id>/v2.0
 ```
 
-### 4. `auth.ts` (project root)
+### 4. `apps/dashboard/auth.ts`
 
-Auth.js v5 auto-reads the `AUTH_MICROSOFT_ENTRA_ID_*` variables.
+Auth.js v5 auto-reads the `AUTH_MICROSOFT_ENTRA_ID_*` variables from the dashboard app env.
 
 ```ts
 import NextAuth from "next-auth"
@@ -64,14 +66,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 })
 ```
 
-### 5. Auth route handler — `app/api/auth/[...nextauth]/route.ts`
+### 5. Auth route handler — `apps/dashboard/app/api/auth/[...nextauth]/route.ts`
 
 ```ts
 import { handlers } from "@/auth"
 export const { GET, POST } = handlers
 ```
 
-### 6. `middleware.ts` (project root)
+### 6. `apps/dashboard/middleware.ts`
 
 Protects the dashboard and API routes, excluding the auth routes themselves.
 
@@ -83,7 +85,7 @@ export const config = {
 }
 ```
 
-### 7. Sign-in page — `app/sign-in/page.tsx`
+### 7. Sign-in page — `apps/dashboard/app/sign-in/page.tsx`
 
 ```tsx
 import { signIn } from "@/auth"
@@ -114,10 +116,10 @@ export default function SignInPage() {
 pnpm dev
 ```
 
-Visit `/dashboard` → redirected to `/sign-in` → "Sign in with Microsoft" → Entra login → back to `/dashboard`.
+Run from the repo root (workspace script targets `apps/dashboard`) or from `apps/dashboard`. Visit `/dashboard` → redirected to `/sign-in` → "Sign in with Microsoft" → Entra login → back to `/dashboard`.
 
 ---
 
 ## Switching Providers Later
 
-Auth.js is the provider abstraction. To switch identity providers, change only `auth.ts` — swap `MicrosoftEntraID` for another provider and update its environment variables. Steps 5–8 never change.
+Auth.js is the provider abstraction. To switch identity providers, change only `apps/dashboard/auth.ts` — swap `MicrosoftEntraID` for another provider and update its environment variables. Steps 5–8 never change.
