@@ -1,6 +1,6 @@
 # Rule 40 — Design system & stack
 
-Source: [docs/specs/2026-05-15-design-system.md](../../docs/specs/2026-05-15-design-system.md).
+Source: `docs/specs/2026-05-15-design-system.md`.
 
 ## Stack (do not substitute without updating the spec)
 

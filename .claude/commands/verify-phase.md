@@ -9,7 +9,7 @@ Execute the **Verify** bullets defined in the spec for phase `$ARGUMENTS`.
 
 Steps:
 
-1. Read [docs/specs/2026-05-15-implementation-phases.md](../../docs/specs/2026-05-15-implementation-phases.md)
+1. Read `docs/specs/2026-05-15-implementation-phases.md`
    and extract the "Verify" line(s) for the requested phase.
 2. For each bullet, choose the cheapest reliable check:
    - "project runs with `pnpm dev`" → start the dev server, hit `/`, stop it

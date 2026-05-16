@@ -9,13 +9,13 @@ Resolve `$ARGUMENTS` to a file and read it before answering anything else.
 
 | Argument | File |
 |---|---|
-| `architecture` | [docs/specs/2026-05-15-system-architecture.md](../../docs/specs/2026-05-15-system-architecture.md) |
-| `data-model` | [docs/specs/2026-05-15-data-model.md](../../docs/specs/2026-05-15-data-model.md) |
-| `design-system` | [docs/specs/2026-05-15-design-system.md](../../docs/specs/2026-05-15-design-system.md) |
-| `phases` | [docs/specs/2026-05-15-implementation-phases.md](../../docs/specs/2026-05-15-implementation-phases.md) |
-| `auth` | [docs/guides/auth-setup.md](../../docs/guides/auth-setup.md) |
-| `aws-infra` | [docs/guides/aws-infrastructure.md](../../docs/guides/aws-infrastructure.md) |
-| `dashboard-deploy` | [docs/guides/dashboard-deployment.md](../../docs/guides/dashboard-deployment.md) |
+| `architecture` | `docs/specs/2026-05-15-system-architecture.md` |
+| `data-model` | `docs/specs/2026-05-15-data-model.md` |
+| `design-system` | `docs/specs/2026-05-15-design-system.md` |
+| `phases` | `docs/specs/2026-05-15-implementation-phases.md` |
+| `auth` | `docs/guides/auth-setup.md` |
+| `aws-infra` | `docs/guides/aws-infrastructure.md` |
+| `dashboard-deploy` | `docs/guides/dashboard-deployment.md` |
 
 Steps:
 

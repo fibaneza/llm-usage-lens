@@ -28,6 +28,6 @@
 8. **Sanitize input at the system boundary.** Route Handlers validate every
    query and body with Zod; data-access functions trust their typed inputs.
 
-See [docs/guides/auth-setup.md](../../docs/guides/auth-setup.md) and the
+See `docs/guides/auth-setup.md` and the
 Authentication section of
-[docs/specs/2026-05-15-system-architecture.md](../../docs/specs/2026-05-15-system-architecture.md).
+`docs/specs/2026-05-15-system-architecture.md`.

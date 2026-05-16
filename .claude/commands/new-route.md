@@ -6,9 +6,8 @@ argument-hint: <HTTP path, e.g. /api/teams/[id]>
 # /new-route
 
 Create a Next.js Route Handler at `$ARGUMENTS` following the conventions in
-[rules/10-server-only-boundary.md](../rules/10-server-only-boundary.md) and
-[docs/specs/2026-05-15-data-model.md](../../docs/specs/2026-05-15-data-model.md)
-("API Routes").
+`.claude/rules/10-server-only-boundary.md` and
+`docs/specs/2026-05-15-data-model.md` ("API Routes").
 
 The handler **must**:
 

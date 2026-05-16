@@ -1,6 +1,6 @@
 # Rule 30 — Phase discipline
 
-Source: [docs/specs/2026-05-15-implementation-phases.md](../../docs/specs/2026-05-15-implementation-phases.md).
+Source: `docs/specs/2026-05-15-implementation-phases.md`.
 
 ## Build order (strict)
 

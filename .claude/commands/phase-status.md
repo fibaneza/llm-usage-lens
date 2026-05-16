@@ -9,7 +9,7 @@ next one.
 
 Steps:
 
-1. Read [docs/specs/2026-05-15-implementation-phases.md](../../docs/specs/2026-05-15-implementation-phases.md).
+1. Read `docs/specs/2026-05-15-implementation-phases.md`.
 2. Inspect repo state with `ls`/Glob:
    - `package.json`, `pnpm-workspace.yaml` → Phase 1 started?
    - `apps/dashboard/` exists? `apps/collector/`? `packages/shared/`?

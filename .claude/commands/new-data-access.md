@@ -8,8 +8,8 @@ argument-hint: <function name, e.g. getRollupsByDate>
 Create a server-only data access function `$ARGUMENTS` in
 `apps/dashboard/lib/data/`.
 
-Conventions (see [rules/10-server-only-boundary.md](../rules/10-server-only-boundary.md)
-and [rules/20-data-model-conventions.md](../rules/20-data-model-conventions.md)):
+Conventions (see `.claude/rules/10-server-only-boundary.md`
+and `.claude/rules/20-data-model-conventions.md`):
 
 1. File starts with `import "server-only";`.
 2. Imports the document client from `apps/dashboard/lib/dynamodb.ts` — never
@@ -26,6 +26,6 @@ and [rules/20-data-model-conventions.md](../rules/20-data-model-conventions.md))
 
 Steps:
 
-1. Locate the access pattern in [docs/specs/2026-05-15-data-model.md](../../docs/specs/2026-05-15-data-model.md)
+1. Locate the access pattern in `docs/specs/2026-05-15-data-model.md`
    ("Access Patterns" tables). Refuse to invent new patterns.
 2. Generate the function, its Zod-typed return, and the Vitest stub.

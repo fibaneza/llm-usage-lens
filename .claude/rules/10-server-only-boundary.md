@@ -33,6 +33,6 @@ credentials must never reach the browser.
    `"use client"` module or in a Server Component's client subtree. If you
    find one, treat it as a security bug.
 
-See [docs/specs/2026-05-15-system-architecture.md](../../docs/specs/2026-05-15-system-architecture.md)
-("Authentication & Access") and [docs/specs/2026-05-15-data-model.md](../../docs/specs/2026-05-15-data-model.md)
+See `docs/specs/2026-05-15-system-architecture.md`
+("Authentication & Access") and `docs/specs/2026-05-15-data-model.md`
 ("API Routes").

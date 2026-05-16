@@ -1,6 +1,6 @@
 # Rule 20 — Data model conventions
 
-Source: [docs/specs/2026-05-15-data-model.md](../../docs/specs/2026-05-15-data-model.md).
+Source: `docs/specs/2026-05-15-data-model.md`.
 
 ## Non-negotiables
 

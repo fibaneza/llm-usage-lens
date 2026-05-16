@@ -8,13 +8,13 @@ cite it in your response.
 
 | Topic | File | When to read |
 |---|---|---|
-| AWS pipeline, accounts, collector flow | [docs/specs/2026-05-15-system-architecture.md](../../docs/specs/2026-05-15-system-architecture.md) | Anything touching AWS, the collector, or cross-account access |
-| DynamoDB table, entities, access patterns, model normalization | [docs/specs/2026-05-15-data-model.md](../../docs/specs/2026-05-15-data-model.md) | Anything reading or writing DynamoDB, building Route Handlers, or working with model IDs |
-| Tech stack, visual system, component inventory, performance patterns | [docs/specs/2026-05-15-design-system.md](../../docs/specs/2026-05-15-design-system.md) | Anything visual, any new component, any chart |
-| 6-phase build plan with verification checklists | [docs/specs/2026-05-15-implementation-phases.md](../../docs/specs/2026-05-15-implementation-phases.md) | **Always**, to confirm the work belongs to the current phase |
-| Auth.js + Microsoft Entra ID + AWS credential setup | [docs/guides/auth-setup.md](../../docs/guides/auth-setup.md) | Anything touching sign-in or AWS credentials |
-| Collector operational runbook, SAM deploy/undeploy | [docs/guides/aws-infrastructure.md](../../docs/guides/aws-infrastructure.md) | Phase 6 collector work |
-| Dashboard deployment runbook (Netlify) | [docs/guides/dashboard-deployment.md](../../docs/guides/dashboard-deployment.md) | Deployment work |
+| AWS pipeline, accounts, collector flow | `docs/specs/2026-05-15-system-architecture.md` | Anything touching AWS, the collector, or cross-account access |
+| DynamoDB table, entities, access patterns, model normalization | `docs/specs/2026-05-15-data-model.md` | Anything reading or writing DynamoDB, building Route Handlers, or working with model IDs |
+| Tech stack, visual system, component inventory, performance patterns | `docs/specs/2026-05-15-design-system.md` | Anything visual, any new component, any chart |
+| 6-phase build plan with verification checklists | `docs/specs/2026-05-15-implementation-phases.md` | **Always**, to confirm the work belongs to the current phase |
+| Auth.js + Microsoft Entra ID + AWS credential setup | `docs/guides/auth-setup.md` | Anything touching sign-in or AWS credentials |
+| Collector operational runbook, SAM deploy/undeploy | `docs/guides/aws-infrastructure.md` | Phase 6 collector work |
+| Dashboard deployment runbook (Netlify) | `docs/guides/dashboard-deployment.md` | Deployment work |
 
 ## Rules
 

@@ -9,7 +9,7 @@ Begin work on phase `$ARGUMENTS`.
 
 Steps:
 
-1. Read [docs/specs/2026-05-15-implementation-phases.md](../../docs/specs/2026-05-15-implementation-phases.md)
+1. Read `docs/specs/2026-05-15-implementation-phases.md`
    and locate the phase (or sub-phase) section.
 2. Run the same checks as `/phase-status` to confirm prior phases are
    complete. **If any prior phase is incomplete, refuse and report what's
