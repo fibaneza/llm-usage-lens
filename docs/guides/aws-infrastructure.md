@@ -4,7 +4,7 @@ Operational runbook for the AWS side of the project: how the collector pipeline
 is designed, how it works at runtime, and the CLI commands to deploy and
 undeploy it.
 
-> Design source of truth: `docs/specs/2026-05-15-system-architecture.md`. This
+> Design source of truth: [[docs/specs/2026-05-15-system-architecture]]. This
 > guide is the *operational* companion — it does not redefine architecture
 > decisions, it explains how to run them.
 
@@ -13,7 +13,7 @@ undeploy it.
 ## 1. What runs in AWS
 
 Only the **collector** runs in AWS. The Next.js dashboard is hosted separately
-(see `dashboard-deployment.md`). The collector is a serverless pipeline that
+(see [[docs/guides/dashboard-deployment]]). The collector is a serverless pipeline that
 gathers Bedrock cost and usage data hourly and writes aggregated rollups to
 DynamoDB.
 
@@ -195,7 +195,7 @@ path, local deploy is for first setup and break-glass.
 
 ## Related docs
 
-- `docs/guides/dashboard-deployment.md` — hosting the Next.js dashboard
-- `docs/guides/auth-setup.md` — Auth.js + Microsoft Entra ID and AWS credentials
-- `docs/specs/2026-05-15-system-architecture.md` — full architecture design
-- `docs/specs/2026-05-15-implementation-phases.md` — Phase 6 build plan
+- [[docs/guides/dashboard-deployment]] — hosting the Next.js dashboard
+- [[docs/guides/auth-setup]] — Auth.js + Microsoft Entra ID and AWS credentials
+- [[docs/specs/2026-05-15-system-architecture]] — full architecture design
+- [[docs/specs/2026-05-15-implementation-phases]] — Phase 6 build plan

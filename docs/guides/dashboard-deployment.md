@@ -4,8 +4,8 @@ Operational runbook for the Next.js dashboard (`apps/dashboard`): how it is
 built and hosted, the environment it needs, and the CLI commands to deploy and
 undeploy it on **Netlify**.
 
-> Design source of truth: `docs/specs/2026-05-15-design-system.md` and
-> `docs/specs/2026-05-15-system-architecture.md`. This guide is the
+> Design source of truth: [[docs/specs/2026-05-15-design-system]] and
+> [[docs/specs/2026-05-15-system-architecture]]. This guide is the
 > *operational* companion.
 
 ---
@@ -14,7 +14,7 @@ undeploy it on **Netlify**.
 
 The dashboard is hosted on **Netlify** with `@netlify/plugin-nextjs`. Netlify
 runs Next.js Server Components and Route Handlers as serverless functions; the
-collector and DynamoDB stay in AWS (see `aws-infrastructure.md`).
+collector and DynamoDB stay in AWS (see [[docs/guides/aws-infrastructure]]).
 
 The repo is a **pnpm monorepo** — the dashboard is one workspace under
 `apps/dashboard` and depends on `@bedrock-usage/shared`. Netlify must build from
@@ -185,6 +185,6 @@ aws iam update-access-key --user-name <dashboard-reader-user> \
 
 ## Related docs
 
-- `docs/guides/aws-infrastructure.md` — the collector and AWS-side IaC
-- `docs/guides/auth-setup.md` — Auth.js + Microsoft Entra ID and AWS credentials
-- `docs/specs/2026-05-15-design-system.md` — tech stack and design decisions
+- [[docs/guides/aws-infrastructure]] — the collector and AWS-side IaC
+- [[docs/guides/auth-setup]] — Auth.js + Microsoft Entra ID and AWS credentials
+- [[docs/specs/2026-05-15-design-system]] — tech stack and design decisions
