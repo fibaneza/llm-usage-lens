@@ -1,0 +1,233 @@
+# System Architecture Spec
+
+**Status:** Draft
+**Date:** 2026-05-15
+**Scope:** AWS serverless architecture for Bedrock cost and usage data collection
+
+---
+
+## Overview
+
+A serverless data pipeline that collects AWS Bedrock usage metrics and cost data across an organization with multiple AWS accounts, aggregates it hourly, and stores it in DynamoDB for consumption by a Next.js dashboard.
+
+The collector runs in a dedicated **observability account** and reaches member accounts without per-account role assumption — CloudWatch metrics arrive via CloudWatch cross-account observability, and Bedrock API activity arrives via an organization-wide CloudTrail event data store.
+
+## Organizational Hierarchy
+
+```
+Organization (all authenticated users see all data)
+  └── Department (logical grouping, stored in DynamoDB account registry)
+        └── Team (= 1 AWS member account)
+              ├── Services (via tagged application inference profiles)
+              └── Users   (IAM Identity Center SSO username from CloudTrail)
+```
+
+- A department contains **one or more teams**. Each team owns **exactly one** AWS member account.
+- An AWS account therefore maps to exactly one team and exactly one department. This mapping lives in the DynamoDB account registry — department and team are always derivable from the account ID.
+- Service-level attribution uses **application inference profiles**: a team creates one inference profile per service, tagged `service=<name>`. Calls routed through a profile are attributable to that service (visible in CloudTrail and Cost Explorer).
+- User-level attribution uses IAM Identity Center SSO usernames extracted from CloudTrail Lake.
+
+## Authentication & Access
+
+- **Dashboard users**: Auth.js (NextAuth v5) with Microsoft Entra ID as the identity provider. Open access — every authenticated member sees all data. Auth.js is the provider abstraction: switching identity providers is a config change in `auth.ts`, not an app change.
+- **Next.js API routes**: Auth.js middleware protects both `/dashboard/*` and `/api/*`. Route Handlers additionally check the session to reject unauthenticated requests.
+- **AWS account users**: AWS access (including Bedrock) is via IAM Identity Center — existing, unchanged, and separate from dashboard login. Bedrock access is **permission-gated** — a user can invoke Bedrock only if their permission set grants Bedrock permissions. Not every team member has access by default. Consequently the dashboard shows only users who have actually invoked Bedrock; CloudTrail records real invocations, so users with no usage never appear.
+- **Lambda collector**: Dedicated IAM service role in the observability account, completely separate from SSO user roles.
+
+## Account Layout
+
+| Account | Role |
+|---------|------|
+| **Management account** | Hosts the organization CloudTrail and a single read-only Cost Explorer role. No workloads. |
+| **Observability account** | Dedicated account (a Control Tower *Log Archive* account fits). Hosts the collector Lambda, DynamoDB, EventBridge, the CloudTrail Lake event data store, and is the CloudWatch cross-account observability **monitoring account**. |
+| **Member accounts** | One per team. Linked as CloudWatch observability **source accounts**; Bedrock activity captured by the org CloudTrail. **No custom IAM roles deployed.** |
+
+## Region
+
+The collector operates in **`us-east-1` only**. Bedrock usage outside `us-east-1` is not collected. Multi-region collection is a documented future enhancement (the account registry's `region` field would become a list and the CloudWatch query would loop regions).
+
+## Data Sources
+
+The Lambda collector merges three AWS data sources per run:
+
+| Source | What it provides | Cross-account method |
+|--------|-----------------|----------------------|
+| **AWS Cost Explorer** | Cost ($) per account and per model — exact. `GetCostAndUsage` grouped by `LINKED_ACCOUNT` and `USAGE_TYPE` (Bedrock usage types encode the model). | Collector assumes a single read-only role in the management account. |
+| **Amazon CloudWatch** | Bedrock metrics: InputTokenCount, OutputTokenCount, Invocations, InvocationLatency per ModelId. | CloudWatch cross-account observability — the monitoring account queries all linked source accounts directly. **No role assumption.** |
+| **CloudTrail Lake** | Per-user and per-service Bedrock API calls — SSO username from `userIdentity`, service from the application inference profile in the request, grouped by model. | Org-wide event data store, queried locally in the observability account (CloudTrail delegated administrator). |
+
+## Architecture Diagram
+
+```
+AWS Organization
+│
+├── Management Account
+│     ├── Organization CloudTrail (org-wide trail → CloudTrail Lake event data store)
+│     └── CostExplorerReadRole  ← assumed by the collector (Cost Explorer only)
+│
+├── Observability Account  (dedicated; e.g. Control Tower Log Archive)
+│     ├── CloudTrail Lake — org event data store (CloudTrail delegated administrator)
+│     ├── CloudWatch cross-account observability — MONITORING account
+│     ├── DynamoDB table: bedrock-usage
+│     ├── EventBridge Rule (cron: every 1 hour)
+│     └── Lambda: bedrock-cost-collector (BedrockCollectorLambdaRole)
+│           │
+│           ├── Cost Explorer (assume CostExplorerReadRole in management account)
+│           │     └── GetCostAndUsage
+│           │           ├── Filter: Service = AmazonBedrock
+│           │           └── GroupBy: [LINKED_ACCOUNT, USAGE_TYPE]
+│           │                 → per-account + per-model cost (exact)
+│           │
+│           ├── CloudTrail Lake (local — org event data store)
+│           │     └── StartQuery → poll GetQueryResults (async SQL)
+│           │           └── Bedrock calls grouped by account, SSO username,
+│           │               inference profile (service), model
+│           │
+│           ├── CloudWatch GetMetricData (cross-account observability)
+│           │     └── Account-scoped queries for all source accounts in one call
+│           │           ├── InputTokenCount per ModelId
+│           │           ├── OutputTokenCount per ModelId
+│           │           ├── Invocations per ModelId
+│           │           └── InvocationLatency per ModelId
+│           │
+│           └── Merge all three → write DailyRollup to DynamoDB (BatchWriteItem)
+│                 ├── Today's rollup (tokens exact, cost estimated)
+│                 └── Yesterday's rollup (tokens exact, cost finalized)
+│
+└── Member Accounts (one per team)
+      ├── CloudWatch metrics → linked as observability SOURCE accounts
+      └── Bedrock API calls → captured by the organization CloudTrail
+      (no custom IAM roles deployed)
+
+Next.js App (local dev / future deployment)
+  └── Route Handlers → DynamoDB via AWS SDK, protected by Auth.js middleware
+```
+
+## Lambda Collector Flow
+
+Each hourly run performs these steps:
+
+1. Read the account registry from DynamoDB (all active accounts).
+2. Assume `CostExplorerReadRole` in the management account and query **Cost Explorer**:
+   - `GetCostAndUsage` for yesterday (finalized) and today (partial).
+   - Filtered to `AmazonBedrock` service.
+   - Grouped by `LINKED_ACCOUNT` and `USAGE_TYPE`. Usage types are parsed to extract the model — this yields exact per-account and per-model cost.
+3. Query **CloudTrail Lake** locally (org-wide event data store):
+   - `StartQuery` (SQL), then poll `GetQueryResults` until the query completes (async).
+   - Bedrock `InvokeModel`/`InvokeModelWithResponseStream` calls grouped by account, SSO username, application inference profile (→ service), and model ID.
+   - Time range: yesterday + today.
+4. Query **CloudWatch** via cross-account observability:
+   - `GetMetricData` with account-scoped queries covering all linked source accounts — issued from the monitoring account, no role assumption.
+   - Per `ModelId` dimension: InputTokenCount, OutputTokenCount, Invocations, InvocationLatency.
+   - Time range: yesterday + today.
+5. Normalize raw Bedrock model IDs to canonical keys (see Data Model spec — Model ID Normalization), then merge all three data sources per account per day. Per-user and per-service costs are proportional estimates.
+6. Write/overwrite DailyRollup items to DynamoDB using `BatchWriteItem` (25 items/batch) — yesterday = finalized, today = estimated.
+7. Update the SyncStatus item.
+
+### Two-Day Refresh Strategy
+
+All date bucketing uses **UTC**. "Today" and "yesterday" are UTC calendar days, matching the native time zones of Cost Explorer and CloudWatch. The dashboard labels date ranges as UTC.
+
+Cost Explorer data lags 8-24 hours. Each Lambda run refreshes two days:
+
+| Target day | Cost data | Token/invocation data | costFinalized flag |
+|---|---|---|---|
+| Yesterday | Complete (Cost Explorer caught up) | Complete (CloudWatch + CloudTrail) | `true` |
+| Today | Partial or zero | Complete up to current hour | `false` |
+
+The dashboard shows a subtle indicator on today's data: "Cost data finalizes within 24h."
+
+### Per-User and Per-Service Cost Estimation
+
+CloudTrail Lake provides per-user and per-service invocations and token counts (exact). Cost Explorer provides per-account and per-model cost (exact). Per-user and per-service cost are proportional estimates:
+
+```
+userCost = (userTokensForModel / accountTotalTokensForModel) × accountModelCost
+```
+
+The same ratio formula applies to per-service cost. All per-user and per-service cost values carry a `costEstimated: true` flag. Only account-level and model-level costs from Cost Explorer are exact.
+
+## IAM Architecture
+
+### Lambda Execution Role (Observability Account)
+
+**Role name:** `BedrockCollectorLambdaRole`
+
+Permissions:
+- `cloudwatch:GetMetricData`, `cloudwatch:ListMetrics` — cross-account observability queries (the observability account is the monitoring account)
+- `cloudtrail:StartQuery`, `cloudtrail:GetQueryResults` — local CloudTrail Lake queries
+- `sts:AssumeRole` on `arn:aws:iam::{managementAccountId}:role/CostExplorerReadRole`
+- `dynamodb:PutItem`, `dynamodb:BatchWriteItem`, `dynamodb:GetItem`, `dynamodb:Query`, `dynamodb:Scan` on the `bedrock-usage` table
+- `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` — CloudWatch Logs
+
+### Cost Explorer Role (Management Account)
+
+**Role name:** `CostExplorerReadRole`
+
+Permissions:
+- `ce:GetCostAndUsage`
+
+Trust policy:
+- Allows `arn:aws:iam::{observabilityAccountId}:role/BedrockCollectorLambdaRole`
+
+This is the **only** cross-account role assumption in the design — a single hop, independent of the number of member accounts.
+
+### Member Accounts
+
+**No custom IAM roles are deployed to member accounts.** Member accounts participate as CloudWatch observability source accounts and send Bedrock activity to the organization CloudTrail. Both are configured at the organization level.
+
+## Deployment / Setup
+
+| Item | Setup |
+|------|-------|
+| **CloudWatch cross-account observability** | Observability account configured as the monitoring account. Source links enabled organization-wide via the AWS Organizations integration, so current and future member accounts link automatically. |
+| **CloudTrail** | Organization trail in the management account. CloudTrail delegated administrator set to the observability account so the CloudTrail Lake event data store can be queried locally. |
+| **`CostExplorerReadRole`** | Single CloudFormation stack in the management account (not a StackSet — one account only). |
+| **Application inference profiles** | Teams create one tagged inference profile per service (`service=<name>`). Operational responsibility of each team. |
+
+When a new team account joins the organization, it auto-links for CloudWatch observability and is covered by the org CloudTrail — no per-account deployment step.
+
+## AWS Services Summary
+
+| Service | Role | Account | Runtime/Setup |
+|---|---|---|---|
+| **AWS Organizations** | Multi-account structure | Management | Existing |
+| **IAM Identity Center** | User SSO login (existing, no changes) | Management | Existing |
+| **Organization CloudTrail** | Org-wide Bedrock API activity capture | Management | Setup |
+| **CloudTrail Lake** | Org event data store, user/service attribution SQL queries | Observability | Runtime |
+| **CloudWatch cross-account observability** | Cross-account metric access without role assumption | Observability (monitoring) + members (source) | Setup |
+| **Amazon EventBridge** | Hourly cron trigger | Observability | Runtime |
+| **AWS Lambda** | `bedrock-cost-collector` | Observability | Runtime |
+| **AWS Cost Explorer** | Cost data per account and per model | Management (via assumed role) | Runtime |
+| **Amazon CloudWatch** | Bedrock metrics (tokens, invocations, latency per model) | Each member (source) | Runtime |
+| **Amazon DynamoDB** | Single table: rollups, account registry, sync status | Observability | Runtime |
+| **AWS STS** | Single cross-account hop for Cost Explorer | Observability → Management | Runtime |
+| **AWS IAM** | Collector role + Cost Explorer role | Observability + Management | Setup |
+| **AWS CloudFormation** | `CostExplorerReadRole` stack | Management | Setup (one-time) |
+
+## Future / Optional Services
+
+| Service | Use | Status |
+|---|---|---|
+| **Amazon S3** | Archive `DailyRollup` items past the 365-day TTL; optional Cost & Usage Report / Data Exports delivery | Optional, not in v1 |
+| **Amazon Athena** | Ad-hoc analytical queries over archived rollups (DynamoDB → S3 → Athena) | Future |
+
+Not used: **Amazon Security Lake** — a security-operations data lake in OCSF format; overkill for a cost/usage dashboard, and CloudTrail Lake is the direct fit. **AWS Control Tower** is contextual governance, not a project dependency — if the organization runs it, the observability account is its existing *Log Archive* account.
+
+## Lambda Configuration
+
+- **Runtime:** Node.js 22.x
+- **Timeout:** 5 minutes (CloudTrail Lake SQL polling plus CloudWatch and Cost Explorer queries can take 2-3 minutes for large orgs)
+- **Memory:** 512 MB (sufficient for in-memory merge of all account data)
+- **Concurrency:** Reserved concurrency 1 (single instance, no parallel invocations needed — hourly cron)
+
+## Known Limitations
+
+1. **Single region**: Only `us-east-1` Bedrock usage is collected. Usage in other regions is not captured.
+2. **Cost Explorer lag**: Cost data is 8-24h behind. Today's cost is estimated from token counts and model pricing. Yesterday's cost is finalized.
+3. **Per-user/per-service cost is approximate**: Calculated proportionally from token usage ratio. Only account-level and model-level cost from Cost Explorer is exact.
+4. **Service tagging dependency**: `byService` data quality depends on teams routing calls through tagged application inference profiles. Usage not routed through a tagged profile falls into the `_untagged` bucket.
+5. **Cost allocation tag activation**: Cost allocation tags must be activated in the AWS Billing console before they appear in Cost Explorer, and they apply only to usage going forward — not retroactively. Newly applied `service` tags report as `_untagged` until activation propagates (up to 24h).
+6. **CloudTrail Lake query cost**: CloudTrail Lake charges per query scan. At high Bedrock call volumes, this cost should be monitored.
+7. **Cost Explorer API cost**: Each `GetCostAndUsage` call costs $0.01. Cost Explorer is queried once per day per run (yesterday + today) — 2 calls per hourly run, roughly $1.50/month regardless of the number of accounts.
+8. **Lambda overrun**: With reserved concurrency of 1 and an hourly trigger, a run exceeding 60 minutes would collide with the next invocation. The 5-minute timeout makes this effectively impossible, but EventBridge invocation failures are surfaced via a CloudWatch alarm.

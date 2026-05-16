@@ -1,0 +1,615 @@
+# Implementation Phases Spec
+
+**Status:** Draft
+**Date:** 2026-05-15
+**Scope:** Phased implementation plan for the Bedrock Cost Dashboard, designed for small-batch delivery
+
+---
+
+## Overview
+
+The project is broken into 6 phases. Each phase is independently testable. Phase 4 (Pages) contains 9 sub-phases — one per page — so each page is a standalone deliverable.
+
+Components are built where they are first needed and reused in subsequent pages.
+
+## Phase Summary
+
+| Phase | Name | Deliverable |
+|---|---|---|
+| 1 | Foundation | Scaffolded project with auth, linting, monitoring, theme |
+| 2 | Layout Shell | Responsive sidebar, top bar, global filters, navigation |
+| 3 | Data Layer | DynamoDB Local, Zod schemas, Route Handlers, TanStack Query |
+| 4 | Pages (4.1–4.9) | All 9 dashboard pages, one sub-phase each |
+| 5 | Polish & Accessibility | Error boundaries, accessibility audit, responsive testing |
+| 6 | AWS Lambda Collector | Serverless data pipeline (separate from Next.js) |
+
+---
+
+## Phase 1 — Foundation
+
+**Goal:** Scaffolded Next.js project with all tooling, auth, monitoring, and theme configured. No pages yet — just the skeleton.
+
+### Tasks
+
+- [ ] Initialize Next.js project with pnpm, TypeScript strict mode, App Router
+- [ ] Configure Tailwind CSS v4 with dark mode theme
+  - Color tokens (CSS variables from design system spec)
+  - Typography (Fira Code + Fira Sans via Google Fonts)
+  - Spacing scale (4px/8px grid)
+- [ ] Initialize shadcn/ui with dark theme
+- [ ] Configure ESLint v9 (flat config, `eslint.config.ts`)
+- [ ] Configure Prettier (paired with ESLint)
+- [ ] Set up Husky + lint-staged (pre-commit: ESLint + Prettier on staged files)
+- [ ] Set up gitleaks (pre-commit: secret scanning)
+- [ ] Set up commitlint (conventional commits)
+- [ ] Configure pre-push hook (`tsc --noEmit`)
+- [ ] Set up Auth.js (NextAuth v5) authentication
+  - Install `next-auth`
+  - Configure the Microsoft Entra ID provider in `auth.ts` (provider-agnostic — swappable in one file)
+  - Configure Auth.js middleware to protect `/dashboard/*` and `/api/*` routes
+  - Build sign-in page (`/sign-in`) — single "Sign in with Microsoft" action; no sign-up (identities managed in Entra ID)
+  - Set up environment variables
+- [ ] Configure @t3-oss/env-nextjs (type-safe env vars with Zod validation)
+- [ ] Integrate Sentry (`@sentry/nextjs`)
+- [ ] Create environment files
+  - `.env.example` (template with all required vars, no values — git tracked)
+  - `.env.local` (local dev values — git ignored)
+  - `.env.test` (test config — git ignored)
+- [ ] Set up GitHub Actions CI pipeline
+  - Lint (ESLint + Prettier check)
+  - Type check (`tsc --noEmit`)
+  - Secret scan (gitleaks)
+  - Build (`next build`)
+- [ ] Verify: project runs with `pnpm dev`, Clerk login works, dark theme renders
+
+### Dependencies
+
+None — this is the starting point.
+
+### Components Built
+
+None — infrastructure only.
+
+---
+
+## Phase 2 — Layout Shell
+
+**Goal:** Responsive layout with sidebar navigation, top bar, global date filter, and command menu. All pages will render inside this shell.
+
+### Tasks
+
+- [ ] Build `Sidebar` component (shadcn/ui)
+  - All 9 navigation items with Lucide icons
+  - Active state highlighting
+  - Collapsible on desktop, overlay on mobile
+- [ ] Build top bar
+  - User menu (avatar, name, sign out, Auth.js session) + organization name
+  - `SyncStatusBadge` placeholder (no real data yet)
+  - `SyncCountdown` placeholder
+- [ ] Build responsive layout structure
+  - Breakpoints: 375 / 768 / 1024 / 1440
+  - Content area max-width 1280px, centered
+  - Mobile: single column, collapsible sidebar
+  - Tablet: sidebar overlay
+  - Desktop: persistent sidebar + content
+- [ ] Build `Breadcrumbs` component (shadcn/ui)
+- [ ] Build `CommandMenu` component (shadcn/ui cmdk)
+  - Cmd+K trigger with `Kbd` hint
+  - Skeleton search — navigates to pages (populated with real data in Phase 4)
+- [ ] Build `DateRangePicker` component
+  - shadcn/ui `Calendar` + `Popover`
+  - Presets: 7 days, 30 days, 90 days, Custom range
+  - Default: last 30 days
+  - Persisted in URL via nuqs
+- [ ] Build page header layout (title + breadcrumbs + date filter)
+- [ ] Create placeholder pages for all 9 routes (empty shells inside layout)
+- [ ] Verify: navigation works, sidebar collapses, date filter persists in URL, responsive at all breakpoints
+
+### Dependencies
+
+Phase 1 (Foundation).
+
+### Components Built
+
+`Sidebar`, `Breadcrumbs`, `CommandMenu`, `Kbd`, `DateRangePicker`, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder)
+
+---
+
+## Phase 3 — Data Layer
+
+**Goal:** DynamoDB Local running, seed data populated, Zod schemas validated, Route Handlers serving data, TanStack Query fetching it.
+
+### Tasks
+
+- [ ] Set up DynamoDB Local via Docker
+  - `docker-compose.yml` with DynamoDB Local service
+  - Document startup instructions in README
+- [ ] Create DynamoDB table setup script (`scripts/create-table.ts`)
+  - Creates `bedrock-usage` table with PK/SK + GSI1
+  - Idempotent (safe to re-run)
+- [ ] Implement Zod v4 validation schemas
+  - `AccountMetaSchema`
+  - `DailyRollupSchema`
+  - `SyncStatusSchema`
+  - `RankingQuerySchema` (dateFrom, dateTo, tab, model, sortBy, order, limit)
+  - `DateRangeQuerySchema` (dateFrom, dateTo, accountId)
+- [ ] Implement shared model ID normalization module (`lib/models.ts`)
+  - Raw Bedrock model ID → canonical key → display name + chart color
+  - Used by both the Next.js app and the Lambda collector (see Data Model spec — Model ID Normalization)
+- [ ] Create seed scripts
+  - `scripts/seed.ts` — realistic data: 3 departments, 5 teams, 10 users, 8 services, 30 days of rollups, multiple models
+  - `scripts/seed-empty.ts` — empty state: accounts exist but no rollups (tests empty states)
+  - `scripts/seed-large.ts` — stress test: 50 accounts, 90 days, 20 users/team, 15 services
+- [ ] Build DynamoDB client (`lib/dynamodb.ts`)
+  - AWS SDK v3 document client
+  - Configurable endpoint (DynamoDB Local vs AWS)
+- [ ] Build data access functions (`lib/data/`)
+  - `getAccountMeta(accountId)`
+  - `getAllAccounts()`
+  - `getAccountsByDepartment(departmentId)`
+  - `getDailyRollups(accountId, dateFrom, dateTo)`
+  - `getRollupsByDate(date)` — must loop on `LastEvaluatedKey` (GSI1 query can exceed DynamoDB's 1MB limit)
+  - `getSyncStatus()` — return a "never synced" state when no item exists, not an error
+- [ ] Build Route Handlers (`app/api/`)
+  - Standardized response format: `{ data: T }` / `{ error: { code, message } }`
+  - Zod validation on all query params
+  - Next.js server cache with 1-hour revalidation
+- [ ] Set up TanStack Query
+  - `QueryClientProvider` in root layout
+  - Default `staleTime`: 5 minutes
+  - Query hooks per data access pattern
+- [ ] Add Vitest + React Testing Library
+  - Unit tests for Zod schemas (valid/invalid inputs)
+  - Unit tests for data access functions (against DynamoDB Local)
+- [ ] Add GitHub Actions: test step (Vitest + DynamoDB Local in CI via Docker)
+- [ ] Verify: seed script populates data, Route Handlers return validated data, TanStack Query hooks work
+
+### Dependencies
+
+Phase 1 (Foundation), Phase 2 (Layout Shell — for rendering data in pages).
+
+### Components Built
+
+None — data infrastructure only.
+
+### Testing Decision: Vitest over Jest
+
+**Decision:** Use Vitest instead of Jest for all testing.
+
+**Rationale:** Vitest is faster, has native TypeScript and ESM support without additional configuration, uses the same Vite-compatible transform pipeline, and provides a Jest-compatible API — making the transition straightforward for developers familiar with Jest. Vitest also integrates better with modern tooling (TanStack, Next.js App Router) and avoids the CommonJS/ESM configuration complexity that Jest requires for TypeScript projects.
+
+---
+
+## Phase 4 — Pages
+
+**Goal:** All 9 dashboard pages, built one at a time. Each sub-phase is independently deliverable. Components are built where first needed and reused in later pages.
+
+### Component Build Order
+
+Components are introduced in the sub-phase where they are first needed:
+
+| Sub-phase | New components introduced |
+|---|---|
+| 4.1 Overview | MetricCard, DeltaBadge, CostTrendChart, ModelBreakdownChart, Skeleton, Suspense boundaries |
+| 4.2 Ranking | UsageTable, RankingList, PercentOfTotalBar, SparklineCell, ModelFilter, SearchInput, ColumnToggle, Pagination, ExportButton, EmptyState |
+| 4.3 Departments | (reuses MetricCard, EmptyState) |
+| 4.4 Department Detail | PeriodComparison (reuses UsageTable, CostTrendChart) |
+| 4.5 Teams | (reuses UsageTable, ModelFilter) |
+| 4.6 Team Detail | ModelBadge, AccountIdBadge, UserAvatar (reuses UsageTable) |
+| 4.7 Services | (reuses UsageTable) |
+| 4.8 Users | (reuses UsageTable, UserAvatar) |
+| 4.9 Settings | TagCoverageBar, CostEstimateIndicator (CRUD forms, new) |
+
+---
+
+### Phase 4.1 — Overview Page (`/dashboard`)
+
+**Goal:** KPI cards, cost trend chart, model breakdown, sync status. This is the heaviest page — introduces core display components.
+
+**Sections (5):**
+1. KPI metric cards row (Total Cost, Total Tokens, Total Invocations, Most Used Model, Active Accounts)
+2. Cost trend: stacked area chart by model (last 30 days)
+3. Top 5 departments by cost: horizontal bar chart
+4. Model distribution: donut chart
+5. Sync status with last update time and countdown
+
+**Tasks:**
+- [ ] Build `MetricCard` component (shadcn Card + icon + value + trend)
+- [ ] Build `DeltaBadge` component ("+12.3%" green / "-5.1%" red)
+- [ ] Build `CostTrendChart` (Recharts stacked area, `next/dynamic` with `ssr: false`, `ResponsiveContainer`)
+- [ ] Build `ModelBreakdownChart` (Recharts donut, `next/dynamic` with `ssr: false`, `ResponsiveContainer`)
+- [ ] Build top departments horizontal bar chart
+- [ ] Connect `SyncStatusBadge` and `SyncCountdown` to real data (SyncStatus entity)
+- [ ] Build `Skeleton` loading states for all 5 sections
+- [ ] Wrap each section in `<Suspense>` with Skeleton fallback
+- [ ] Connect all components to TanStack Query hooks + DateRangePicker filter
+- [ ] Tests: component tests for MetricCard, DeltaBadge; integration test for overview data loading
+- [ ] Verify: page renders with seed data, skeletons show during load, date filter updates all sections
+
+---
+
+### Phase 4.2 — Ranking Page (`/dashboard/ranking`)
+
+**Goal:** Leaderboard with tabs, filters, sortable table. This is the second heaviest page — introduces the core table infrastructure reused by most other pages.
+
+**Sections (2):**
+1. Tabs (Departments / Teams / Services / Users) + filters (Model, Date)
+2. Sortable data table with ranking
+
+**Tasks:**
+- [ ] Build `UsageTable` component (TanStack Table + shadcn Table)
+  - Sortable columns (click header to sort)
+  - `Pagination` (default 20 rows)
+  - `SearchInput` (debounced text filter)
+  - `ColumnToggle` (show/hide columns via shadcn DropdownMenu)
+- [ ] Build `RankingList` variant with medal icons for top 3
+- [ ] Build `PercentOfTotalBar` component (inline proportion bar)
+- [ ] Build `SparklineCell` component (inline trend sparkline)
+- [ ] Build `ModelFilter` component (shadcn Select)
+- [ ] Build `ExportButton` component (CSV export)
+- [ ] Build `EmptyState` component (icon + message + optional CTA)
+- [ ] Implement tab switching via nuqs (URL-persisted)
+- [ ] Connect to Route Handlers: ranking data grouped by department/team/service/user
+- [ ] Table columns: Rank, Name, Cost, Input Tokens, Output Tokens, Invocations, % of Total, Trend
+- [ ] Tests: component tests for UsageTable (sort, filter, paginate); EmptyState rendering
+- [ ] Verify: all 4 tabs load, sorting works, model filter updates results, CSV exports correctly
+
+---
+
+### Phase 4.3 — Departments Page (`/dashboard/departments`)
+
+**Goal:** Department cards grid showing each department's total cost, tokens, and team count.
+
+**Sections (1):**
+1. Department cards grid
+
+**Tasks:**
+- [ ] Build department cards grid layout (responsive: 1 col mobile, 2 tablet, 3 desktop)
+- [ ] Each card: department name, total cost (with DeltaBadge), total tokens, team count, top model
+- [ ] Reuse `MetricCard` pattern for department cards
+- [ ] Link each card to department detail page
+- [ ] `EmptyState` for no departments
+- [ ] Connect to Route Handler: all accounts grouped by department
+- [ ] Tests: grid renders correct number of cards; empty state when no departments
+- [ ] Verify: cards render with seed data, links navigate to detail pages
+
+---
+
+### Phase 4.4 — Department Detail Page (`/dashboard/departments/[id]`)
+
+**Goal:** Deep dive into a single department — teams breakdown, cost over time, top users.
+
+**Sections (4):**
+1. Department header (name, total cost, tokens, invocations with DeltaBadge)
+2. Teams breakdown table (sortable)
+3. Cost over time: stacked area chart by team
+4. Top users in this department: ranked list
+
+**Tasks:**
+- [ ] Build department header with summary stats
+- [ ] Build `PeriodComparison` component ("vs previous 30 days" side-by-side)
+- [ ] Reuse `UsageTable` for teams breakdown
+- [ ] Reuse `CostTrendChart` (stacked by team instead of model)
+- [ ] Top users ranked list (reuse `RankingList`)
+- [ ] Update `Breadcrumbs` (Departments > Engineering)
+- [ ] Connect to Route Handlers: department rollups + team breakdown
+- [ ] Tests: header stats calculation; breadcrumb rendering
+- [ ] Verify: page loads for each department in seed data, charts and tables render correctly
+
+---
+
+### Phase 4.5 — Teams Page (`/dashboard/teams`)
+
+**Goal:** Filterable list of all teams across all departments.
+
+**Sections (1):**
+1. Teams table with department filter
+
+**Tasks:**
+- [ ] Reuse `UsageTable` for teams list
+- [ ] Add department filter dropdown (reuse `ModelFilter` pattern with department data)
+- [ ] Columns: Team Name, Department, Cost, Tokens, Invocations, Services count, Users count
+- [ ] Link team name to team detail page
+- [ ] `EmptyState` for no teams / no results
+- [ ] Connect to Route Handler: all accounts with optional department filter
+- [ ] Tests: department filter works; table sorting and pagination
+- [ ] Verify: all teams from seed data appear, filter narrows results
+
+---
+
+### Phase 4.6 — Team Detail Page (`/dashboard/teams/[id]`)
+
+**Goal:** Deep dive into a single team — services, users, model breakdown.
+
+**Sections (4):**
+1. Team header (name, account ID, total cost, tokens)
+2. Services breakdown table
+3. Users breakdown table
+4. Model usage breakdown: bar chart
+
+**Tasks:**
+- [ ] Build team header with `AccountIdBadge` (formatted AWS account ID with copy button)
+- [ ] Build `ModelBadge` component (model name + assigned color dot)
+- [ ] Build `UserAvatar` component (initials avatar with consistent color)
+- [ ] Reuse `UsageTable` for services breakdown
+- [ ] Reuse `UsageTable` for users breakdown (with `UserAvatar` in name column)
+- [ ] Build model usage bar chart (reuse Recharts, `next/dynamic`)
+- [ ] Update `Breadcrumbs` (Teams > Payments Team)
+- [ ] Connect to Route Handlers: team rollups with byService and byUser data
+- [ ] Tests: AccountIdBadge copy functionality; UserAvatar color consistency
+- [ ] Verify: services and users tables populated from seed data, model chart renders
+
+---
+
+### Phase 4.7 — Services Page (`/dashboard/services`)
+
+**Goal:** All services across all accounts in one table.
+
+**Sections (1):**
+1. Services table
+
+**Tasks:**
+- [ ] Reuse `UsageTable` for services list
+- [ ] Columns: Service Name, Team, Department, Cost, Tokens, Invocations, % of Total
+- [ ] Aggregate byService data across all accounts and date range
+- [ ] Link to parent team detail page
+- [ ] `EmptyState` for no services / all untagged
+- [ ] Connect to Route Handler: aggregated services across all rollups
+- [ ] Tests: cross-account aggregation correctness
+- [ ] Verify: services from all teams appear, sorted by cost
+
+---
+
+### Phase 4.8 — Users Page (`/dashboard/users`)
+
+**Goal:** All users across all accounts in one table.
+
+**Sections (1):**
+1. Users table
+
+**Tasks:**
+- [ ] Reuse `UsageTable` for users list (with `UserAvatar`)
+- [ ] Columns: User (avatar + name), Team, Department, Cost, Tokens, Invocations, % of Total
+- [ ] Aggregate byUser data across all accounts and date range
+- [ ] Cost values carry `CostEstimateIndicator` (all per-user costs are proportional estimates)
+- [ ] Link to parent team detail page
+- [ ] `EmptyState` for no users
+- [ ] Connect to Route Handler: aggregated users across all rollups
+- [ ] Tests: cross-account user aggregation; CostEstimateIndicator appears
+- [ ] Verify: users from all teams appear, estimated cost indicator shown
+
+---
+
+### Phase 4.9 — Settings Page (`/dashboard/settings`)
+
+**Goal:** Admin page for managing account registry, viewing sync status, and monitoring tag coverage. Only page with write operations (CRUD).
+
+**Sections (4):**
+1. Account registry (add / edit / deactivate accounts, map to department/team)
+2. Sync status (last run time, success/error count, next scheduled run)
+3. Tag coverage per team (% of tagged vs untagged usage)
+4. Data retention (TTL configuration display)
+
+**Tasks:**
+- [ ] Build account registry table with add/edit/deactivate actions
+  - Add account form (shadcn Dialog): account ID, name, department, team, region
+  - Edit account form (shadcn Sheet)
+  - Deactivate with confirmation dialog
+  - Zod validation on all form inputs
+  - `next-safe-action` for all Server Actions
+- [ ] Build sync status display
+  - Connect `SyncStatusBadge` and `SyncCountdown` to SyncStatus entity
+  - Show: last run time, status (success/partial/error), accounts processed, duration, errors list
+- [ ] Build `TagCoverageBar` component (progress bar per team)
+  - Calculate from byService data: tagged vs `_untagged` percentage
+- [ ] Build `CostEstimateIndicator` component (subtle badge for estimated costs)
+- [ ] Build data retention display (TTL info, read-only)
+- [ ] Tests: CRUD operations against DynamoDB Local; form validation; tag coverage calculation
+- [ ] Verify: can add/edit/deactivate accounts, sync status displays correctly, tag coverage renders
+
+---
+
+## Phase 5 — Polish & Accessibility
+
+**Goal:** Production-quality error handling, accessibility compliance, and responsive verification across all pages.
+
+### Tasks
+
+- [ ] Add `ErrorBoundary` per section on every page (one chart failing doesn't crash the page)
+- [ ] Accessibility audit
+  - Contrast: 4.5:1 minimum (WCAG AA), target 7:1 (AAA) for key text
+  - Keyboard navigation: all interactive elements reachable via Tab
+  - aria-labels: icon-only buttons, charts, status indicators
+  - Focus rings: 2-4px, visible on all interactive elements
+  - Screen reader: meaningful alt text, aria-live regions for dynamic updates
+- [ ] Responsive testing at all breakpoints (375 / 768 / 1024 / 1440)
+  - No horizontal scroll on any viewport
+  - Charts resize correctly via `ResponsiveContainer`
+  - Sidebar behavior correct per breakpoint
+  - Touch targets: minimum 44x44px on mobile
+- [ ] Empty states for all pages and sections (verify with `seed-empty.ts`)
+- [ ] Performance testing with large dataset (verify with `seed-large.ts`)
+  - Tables paginate correctly at scale
+  - Charts render without lag
+  - No memory issues with 50 accounts x 90 days
+- [ ] Verify `prefers-reduced-motion` is respected (animations disabled/reduced)
+- [ ] Populate `CommandMenu` with real data (departments, teams, users, services)
+- [ ] E2E tests with Playwright
+  - Login flow (Clerk)
+  - Overview page loads
+  - Ranking tab switching
+  - Department → detail drill-down
+  - Settings CRUD flow
+  - Date filter changes update all data
+- [ ] Add Playwright to GitHub Actions CI
+
+### Dependencies
+
+Phase 4 (all sub-phases complete).
+
+---
+
+## Phase 6 — AWS Lambda Collector
+
+**Goal:** Serverless data pipeline that collects real Bedrock usage and cost data hourly and writes to DynamoDB. Runs in a dedicated observability account. This phase is separate from the Next.js app.
+
+### One-Time AWS Setup
+
+- [ ] Provision (or designate) a dedicated observability account — if the org uses Control Tower, its existing *Log Archive* account fits
+- [ ] Enable CloudWatch cross-account observability
+  - Observability account = monitoring account
+  - Enable source links organization-wide so current and future member accounts auto-link
+- [ ] Configure the organization CloudTrail; set the observability account as CloudTrail delegated administrator (CloudTrail Lake event data store queried locally)
+- [ ] Deploy `CostExplorerReadRole` to the management account (single CloudFormation stack)
+  - `ce:GetCostAndUsage`
+  - Trust: `BedrockCollectorLambdaRole` in the observability account
+
+### Tasks
+
+- [ ] Create Lambda project structure (Node.js 22.x, TypeScript) in the observability account
+- [ ] Implement Lambda handler (`bedrock-cost-collector`)
+  - Read account registry from DynamoDB (all active accounts)
+  - Assume `CostExplorerReadRole` in the management account, query Cost Explorer
+    - `GetCostAndUsage` for yesterday (finalized) + today (partial)
+    - Filtered to `AmazonBedrock` service
+    - Grouped by `LINKED_ACCOUNT` and `USAGE_TYPE` (parse usage type → model)
+  - Query CloudTrail Lake locally (org event data store)
+    - `StartQuery`, then poll `GetQueryResults` until complete (async SQL)
+    - Bedrock InvokeModel/InvokeModelWithResponseStream calls grouped by account, SSO username, inference profile (→ service), model ID
+    - Time range: yesterday + today
+  - Query CloudWatch via cross-account observability
+    - `GetMetricData` with account-scoped queries for all source accounts — no role assumption
+    - Per ModelId: InputTokenCount, OutputTokenCount, Invocations, InvocationLatency
+  - Normalize raw Bedrock model IDs to canonical keys (shared `lib/models.ts`)
+  - Merge all three data sources per account per day
+  - Write/overwrite DailyRollup items to DynamoDB via `BatchWriteItem` (25/batch)
+  - Update SyncStatus item
+- [ ] Implement two-day refresh strategy (UTC calendar days)
+  - Yesterday: costFinalized = true
+  - Today: costFinalized = false
+- [ ] Implement per-user and per-service cost estimation
+  - `cost = (entityTokensForModel / accountTotalTokensForModel) x accountModelCost`
+  - All per-user and per-service values: costEstimated = true
+- [ ] Create `BedrockCollectorLambdaRole` (observability account)
+  - cloudwatch:GetMetricData, cloudwatch:ListMetrics
+  - cloudtrail:StartQuery, cloudtrail:GetQueryResults
+  - sts:AssumeRole on `CostExplorerReadRole`
+  - dynamodb:PutItem, BatchWriteItem, GetItem, Query, Scan on bedrock-usage table
+  - logs:CreateLogGroup, CreateLogStream, PutLogEvents
+- [ ] Create EventBridge rule (cron: every 1 hour)
+- [ ] Lambda configuration: 5-minute timeout, 512 MB memory, reserved concurrency 1
+- [ ] Create a CloudWatch alarm on EventBridge invocation failures
+- [ ] Error handling: partial failures (some accounts fail, others succeed → SyncStatus = "partial")
+- [ ] Tests: unit tests for model normalization, data merging, cost estimation formula
+- [ ] Deploy to the observability account
+- [ ] Verify: Lambda runs on schedule, DailyRollup items appear in DynamoDB, SyncStatus updates
+- [ ] Switch Next.js app from DynamoDB Local to the production DynamoDB table
+
+### Dependencies
+
+Phase 3 (Data Layer — Zod schemas, `lib/models.ts`, and DynamoDB table structure shared).
+
+---
+
+## Environment Configuration
+
+### Environment Files
+
+| File | Purpose | Git Tracked |
+|---|---|---|
+| `.env.example` | Template with all required variable names (no values) | Yes |
+| `.env.local` | Local development (Auth.js + Entra ID config, DynamoDB Local endpoint) | No |
+| `.env.test` | Test configuration (DynamoDB Local, mock auth) | No |
+
+### Required Environment Variables
+
+```
+# Auth.js (NextAuth v5)
+AUTH_SECRET=
+AUTH_URL=http://localhost:3000
+
+# Microsoft Entra ID (Auth.js provider)
+AUTH_MICROSOFT_ENTRA_ID_ID=
+AUTH_MICROSOFT_ENTRA_ID_SECRET=
+AUTH_MICROSOFT_ENTRA_ID_ISSUER=
+
+# AWS / DynamoDB
+AWS_REGION=us-east-1
+AWS_PROFILE=                          # AWS SSO profile; run `aws sso login` first. Omit when using DynamoDB Local.
+DYNAMODB_TABLE_NAME=bedrock-usage
+DYNAMODB_ENDPOINT=                    # http://localhost:8000 for DynamoDB Local
+
+# Sentry
+SENTRY_DSN=
+NEXT_PUBLIC_SENTRY_DSN=
+
+# App
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+All validated at build time by @t3-oss/env-nextjs. Missing variables fail the build with a clear error.
+
+## CI/CD — GitHub Actions
+
+### Pipeline
+
+```
+on: [push, pull_request]
+
+jobs:
+  quality:
+    steps:
+      - Checkout
+      - Setup pnpm + Node 22
+      - Install dependencies (pnpm install --frozen-lockfile)
+      - Lint (eslint .)
+      - Format check (prettier --check .)
+      - Type check (tsc --noEmit)
+      - Secret scan (gitleaks detect)
+
+  test:
+    steps:
+      - Checkout
+      - Setup pnpm + Node 22
+      - Start DynamoDB Local (Docker service)
+      - Create table + seed data
+      - Unit + component tests (vitest run)
+      - E2E tests (playwright test) — Phase 5+
+
+  build:
+    needs: [quality, test]
+    steps:
+      - Checkout
+      - Setup pnpm + Node 22
+      - Build (next build)
+```
+
+## Conventions
+
+### Conventional Commits
+
+Enforced by commitlint via Husky:
+
+| Prefix | Usage |
+|---|---|
+| `feat:` | New feature or component |
+| `fix:` | Bug fix |
+| `chore:` | Tooling, deps, config |
+| `refactor:` | Code restructuring without behavior change |
+| `test:` | Adding or updating tests |
+| `docs:` | Documentation changes |
+| `style:` | Formatting, whitespace (no logic change) |
+
+### API Response Format
+
+All Route Handlers return a standardized shape:
+
+```typescript
+// Success
+{ data: T }
+
+// Error
+{ error: { code: string; message: string } }
+```
+
+Validated by Zod on both server (response) and client (TanStack Query).
