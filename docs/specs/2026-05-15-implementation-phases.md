@@ -467,9 +467,10 @@ Phase 4 (all sub-phases complete).
   - Observability account = monitoring account
   - Enable source links organization-wide so current and future member accounts auto-link
 - [ ] Configure the organization CloudTrail; set the observability account as CloudTrail delegated administrator (CloudTrail Lake event data store queried locally)
-- [ ] Deploy `CostExplorerReadRole` to the management account (single CloudFormation stack)
+- [ ] Deploy `CostExplorerReadRole` to the management account (single plain-CloudFormation stack, separate from the collector SAM stack)
   - `ce:GetCostAndUsage`
   - Trust: `BedrockCollectorLambdaRole` in the observability account
+- [ ] Create the GitHub Actions OIDC deploy role(s) — one in the observability account (collector SAM stack) and deploy permissions in the management account (`CostExplorerReadRole` stack); used by the CD `deploy` job, no static AWS keys in CI
 
 ### Tasks
 
@@ -500,18 +501,16 @@ Phase 4 (all sub-phases complete).
 - [ ] Implement per-user and per-service cost estimation
   - `cost = (entityTokensForModel / accountTotalTokensForModel) x accountModelCost`
   - All per-user and per-service values: costEstimated = true
-- [ ] Create `BedrockCollectorLambdaRole` (observability account)
-  - cloudwatch:GetMetricData, cloudwatch:ListMetrics
-  - cloudtrail:StartQuery, cloudtrail:GetQueryResults
-  - sts:AssumeRole on `CostExplorerReadRole`
-  - dynamodb:PutItem, BatchWriteItem, GetItem, Query, Scan on bedrock-usage table
-  - logs:CreateLogGroup, CreateLogStream, PutLogEvents
-- [ ] Create EventBridge rule (cron: every 1 hour)
-- [ ] Lambda configuration: 5-minute timeout, 512 MB memory, reserved concurrency 1
-- [ ] Create a CloudWatch alarm on EventBridge invocation failures
+- [ ] Author the SAM template (`apps/collector/template.yaml`) — see System Architecture spec **Infrastructure as Code**
+  - `AWS::Serverless::Function` `bedrock-cost-collector`: Node.js 22.x, 5-min timeout, 512 MB memory, reserved concurrency 1
+  - Inline `Schedule` event — EventBridge cron, every 1 hour
+  - `BedrockCollectorLambdaRole` execution policy: `cloudwatch:GetMetricData`/`ListMetrics`, `cloudtrail:StartQuery`/`GetQueryResults`, `sts:AssumeRole` on `CostExplorerReadRole`, `dynamodb:PutItem`/`BatchWriteItem`/`GetItem`/`Query`/`Scan` on the `bedrock-usage` table, CloudWatch Logs
+  - `AWS::DynamoDB::Table` `bedrock-usage` (PK/SK + GSI1, TTL on `DailyRollup`) — production table owned by this stack; `scripts/create-table.ts` stays DynamoDB-Local-only
+  - `AWS::CloudWatch::Alarm` on EventBridge/Lambda invocation failures
+- [ ] Configure SAM `BuildMethod: esbuild` to bundle the `@bedrock-usage/shared` workspace dependency into the artifact; verify the built bundle contains the shared code
 - [ ] Error handling: partial failures (some accounts fail, others succeed → SyncStatus = "partial")
 - [ ] Tests: unit tests for model normalization, data merging, cost estimation formula
-- [ ] Deploy to the observability account
+- [ ] Deploy to the observability account via `sam build && sam deploy` (CD `deploy` job, OIDC-assumed role)
 - [ ] Verify: Lambda runs on schedule, DailyRollup items appear in DynamoDB, SyncStatus updates
 - [ ] Switch Next.js app from DynamoDB Local to the production DynamoDB table
 
@@ -592,7 +591,22 @@ jobs:
       - Checkout
       - Setup pnpm + Node 22
       - Build (next build)
+
+  deploy-collector:                    # Phase 6+ — runs on push to main only, never on pull_request
+    needs: [build]
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write                  # OIDC — assume the AWS deploy role, no static keys
+      contents: read
+    steps:
+      - Checkout
+      - Setup pnpm + Node 22
+      - Configure AWS credentials (OIDC role assumption — observability account)
+      - sam build (apps/collector — bundles @bedrock-usage/shared via esbuild)
+      - sam deploy --no-confirm-changeset (bedrock-cost-collector stack)
 ```
+
+The `deploy-collector` job is added in Phase 6 — Phases 1–5 ship the `quality`/`test`/`build` jobs only. Dashboard hosting is a future decision and has no deploy job in v1.
 
 ## Conventions
 

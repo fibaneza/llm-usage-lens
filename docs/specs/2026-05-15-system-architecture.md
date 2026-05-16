@@ -204,7 +204,8 @@ When a new team account joins the organization, it auto-links for CloudWatch obs
 | **Amazon DynamoDB** | Single table: rollups, account registry, sync status | Observability | Runtime |
 | **AWS STS** | Single cross-account hop for Cost Explorer | Observability → Management | Runtime |
 | **AWS IAM** | Collector role + Cost Explorer role | Observability + Management | Setup |
-| **AWS CloudFormation** | `CostExplorerReadRole` stack | Management | Setup (one-time) |
+| **AWS CloudFormation** | `CostExplorerReadRole` stack (plain CFN) | Management | Setup (one-time) |
+| **AWS SAM** | `bedrock-cost-collector` stack — Lambda, EventBridge rule, IAM role, alarm, DynamoDB table | Observability | CD (see Infrastructure as Code) |
 
 ## Future / Optional Services
 
@@ -221,6 +222,25 @@ Not used: **Amazon Security Lake** — a security-operations data lake in OCSF f
 - **Timeout:** 5 minutes (CloudTrail Lake SQL polling plus CloudWatch and Cost Explorer queries can take 2-3 minutes for large orgs)
 - **Memory:** 512 MB (sufficient for in-memory merge of all account data)
 - **Concurrency:** Reserved concurrency 1 (single instance, no parallel invocations needed — hourly cron)
+
+## Infrastructure as Code
+
+Two IaC artifacts, both deployed through the CloudFormation control plane to different accounts:
+
+| Stack | Tool | Account | Resources |
+|-------|------|---------|-----------|
+| `cost-explorer-read-role` | Plain CloudFormation (YAML) | Management | `CostExplorerReadRole` only — trust policy to `BedrockCollectorLambdaRole` |
+| `bedrock-cost-collector` | AWS SAM (`apps/collector/template.yaml`) | Observability | Lambda function, execution role, log group, EventBridge hourly rule, CloudWatch failure alarm, `bedrock-usage` DynamoDB table |
+
+**Why SAM for the collector.** The collector is a pure serverless workload — `AWS::Serverless::Function` collapses the function, its IAM role, log group, and the EventBridge schedule into one resource with an inline `Events:` block. `sam build` bundles the TypeScript; `sam local invoke` exercises the handler against DynamoDB Local before deploy. A SAM template *is* a CloudFormation template (the `Serverless` transform), so it deploys through the same control plane as the plain-CFN role stack — one paradigm, no second IaC tool.
+
+**Why plain CFN for `CostExplorerReadRole`.** A single IAM role in a different account, deployed once. The SAM transform adds nothing — keep it a minimal standalone template.
+
+**DynamoDB table ownership.** The production `bedrock-usage` table is defined in the SAM template (`AWS::DynamoDB::Table`) and owned by the collector stack — PK/SK + GSI1, TTL on `DailyRollup`. `scripts/create-table.ts` is **DynamoDB-Local-only** and never touches AWS. The SAM template is the source of truth for the production schema; the two must be kept in sync by hand.
+
+**Monorepo bundling.** The collector imports `@bedrock-usage/shared` as a `workspace:*` dependency, which cannot be resolved at Lambda runtime. SAM's `BuildMethod: esbuild` must inline the shared package into the artifact — configure `esbuild` with the shared package source on its resolve path, or run `pnpm --filter collector deploy` to produce a flattened `node_modules` before `sam build`. Verify the built bundle contains the shared code in Phase 6.
+
+**Credentials.** Both stacks deploy from GitHub Actions using an OIDC-assumed IAM role — no static AWS keys in CI, consistent with the AWS SDK default credential chain rule. The deploy role itself is created once during one-time setup.
 
 ## Known Limitations
 
