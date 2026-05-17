@@ -18,7 +18,10 @@ The `docs/specs/` directory is the source of truth. Read it before writing any c
 
 Build strictly in phase order (see implementation-phases spec). Phase 4 has 9 sub-phases, one per dashboard page; components are built where first needed and reused later.
 
-Project-specific Claude Code customization (rules, slash commands, the `spec-guardian` reviewer agent, and the `spec-cited` output style) lives under [.claude/](.claude/CLAUDE.md).
+Project-specific Claude Code customization lives under `.claude/`:
+- **Rules** — `.claude/rules/` (numbered `00`–`70`; always loaded)
+- **Slash commands** — `.claude/commands/` (see table below)
+- **Agents** — `.claude/agents/` (`developer`, `tester`, `reviewer`, `spec-guardian`)
 
 ## What This Project Is
 
@@ -27,20 +30,59 @@ Two deliverables in a **pnpm monorepo**, sharing `packages/shared` (Zod schemas,
 1. **Next.js dashboard** (`apps/dashboard`) — reads aggregated Bedrock cost/usage from DynamoDB, displays 9 pages. Built first (Phases 1–5), developed against **DynamoDB Local**.
 2. **AWS Lambda collector** (`apps/collector`, `bedrock-cost-collector`) — serverless hourly pipeline that collects real Bedrock data and writes to DynamoDB. Built last (Phase 6).
 
-## Commands (do not exist yet — establish in Phase 1)
+## Commands
 
-Package manager is **pnpm**. Planned commands from the specs:
+> These commands are defined in specs and will be wired up in Phase 1. Until then, run them via their underlying tools.
 
-- `pnpm dev` — run Next.js dev server
-- `pnpm build` — `next build`
-- `eslint .` — lint (ESLint v9 flat config, `eslint.config.ts`)
-- `prettier --check .` — format check
-- `tsc --noEmit` — type check (also the pre-push hook)
-- `vitest run` — unit + component tests (Vitest, **not Jest** — decided in the Phase 3 spec)
-- `playwright test` — E2E tests (Phase 5+)
-- DynamoDB Local runs via repo-root `docker-compose.yml`; `scripts/create-table.ts` creates the table; `scripts/seed.ts` / `seed-empty.ts` / `seed-large.ts` (optional `seed-ranking.ts`) populate data.
+Package manager is **pnpm**.
+
+| Command | Purpose |
+|---|---|
+| `pnpm dev` | Next.js dev server |
+| `pnpm build` | `next build` |
+| `pnpm exec prettier --check .` | Format check |
+| `pnpm exec eslint .` | Lint (ESLint v9 flat config, `eslint.config.ts`) |
+| `pnpm exec tsc --noEmit` | Type check (also the pre-push hook) |
+| `pnpm exec vitest run` | Unit + component tests (**Vitest**, not Jest) |
+| `pnpm exec vitest run path/to/file.test.ts` | Run a single test file |
+| `playwright test` | E2E tests (Phase 5+) |
+| `docker compose up -d dynamodb-local` | Start DynamoDB Local |
+| `pnpm tsx scripts/create-table.ts` | Create the DynamoDB table (idempotent) |
+| `pnpm tsx scripts/seed.ts` | Seed realistic data |
+| `pnpm tsx scripts/seed-empty.ts` | Seed empty state |
+| `pnpm tsx scripts/seed-large.ts` | Seed large dataset |
 
 Pre-commit (Husky + lint-staged): ESLint fix + Prettier on staged files, plus gitleaks secret scan. Commits must follow Conventional Commits (commitlint).
+
+## Slash commands
+
+| Command | Purpose |
+|---|---|
+| `/feature <description>` | Run developer → tester → reviewer agent loop for a feature |
+| `/lint` | Run prettier + eslint + tsc + vitest sequentially |
+| `/seed [empty\|large\|ranking]` | Bring up DynamoDB Local and load seed data |
+| `/new-route <path>` | Scaffold a Route Handler with all required boilerplate |
+| `/new-data-access <description>` | Scaffold a server-only data-access function |
+| `/new-component <variant> <group> <Name>` | Scaffold a dashboard component (display/interactive/chart) |
+| `/phase-status` | Report current phase progress |
+| `/verify-phase <n>` | Run the spec's Verify checklist for a phase |
+| `/start-phase <n>` | Expand a phase into an ordered TODO list |
+| `/spec <topic>` | Load and summarise a spec or guide |
+| `/commit` | Stage and commit with Conventional Commits |
+
+## Local development environment
+
+A devcontainer (`.devcontainer/`) bundles an observability stack alongside the app:
+
+| Service | Port | Purpose |
+|---|---|---|
+| Next.js / app | 3000 | Dashboard dev server |
+| OpenTelemetry Collector | 4317/4318 | OTLP ingest (gRPC/HTTP) |
+| Prometheus | 9090 | Metrics storage |
+| Loki | 3100 | Logs/events storage |
+| Grafana | 3001 | Dashboards for metrics + logs |
+
+`OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_SERVICE_NAME` are set in the compose file. Running the `claude` CLI inside the devcontainer auto-exports Claude Code telemetry (sessions, token/cost metrics, prompt/tool/API events) to the collector — metrics land in Prometheus, events in Loki. DynamoDB Local is a separate service started with `/seed` or `docker compose up -d dynamodb-local`.
 
 ## Architecture Essentials
 
