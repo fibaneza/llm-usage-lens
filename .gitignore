@@ -145,3 +145,4 @@ vite.config.ts.timestamp-*
 # Claude Code — personal per-user overrides (shared settings.json IS committed)
 .claude/settings.local.json
 
+.DS_Store

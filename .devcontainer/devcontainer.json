@@ -1,0 +1,15 @@
+{
+  "name": "otel-dev",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "forwardPorts": [3000, 4317, 4318, 9090, 3001, 3100],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "grafana.vscode-grafana"
+      ]
+    }
+  }
+}
