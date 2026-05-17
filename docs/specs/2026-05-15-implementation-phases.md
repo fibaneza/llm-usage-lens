@@ -518,6 +518,25 @@ Phase 4 (all sub-phases complete).
 
 Phase 3 (Data Layer — Zod schemas in `packages/shared`, and DynamoDB table structure shared).
 
+> **Build note.** Structure the collector around the `UsageProvider` interface
+> (System Architecture spec — *Alternative usage source: OpenTelemetry*): the
+> CloudWatch + CloudTrail logic above is the v1 `CloudWatchCloudTrailProvider`
+> implementation, and the merge / Cost Explorer / DynamoDB-write steps stay
+> provider-agnostic. This is an internal seam only — it does not change v1
+> behaviour or scope.
+
+---
+
+## Post-v1 — OpenTelemetry usage source (optional)
+
+Documented enhancement, not part of the v1 phase plan. Adds an
+`OtelPrometheusProvider` implementation of the `UsageProvider` interface that
+sources tokens and attribution from OpenTelemetry GenAI metrics via PromQL,
+selected with `USAGE_SOURCE=otel`. Cost Explorer remains the cost source. See
+the System Architecture spec — *Alternative usage source: OpenTelemetry* — for
+the provider abstraction and the application instrumentation contract.
+Prerequisite: organization-wide OTel instrumentation of every Bedrock caller.
+
 ---
 
 ## Environment Configuration

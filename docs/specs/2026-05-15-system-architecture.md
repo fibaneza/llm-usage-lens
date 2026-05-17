@@ -56,6 +56,58 @@ The Lambda collector merges three AWS data sources per run:
 | **Amazon CloudWatch** | Bedrock metrics: InputTokenCount, OutputTokenCount, Invocations, InvocationLatency per ModelId. | CloudWatch cross-account observability — the monitoring account queries all linked source accounts directly. **No role assumption.** |
 | **CloudTrail Lake** | Per-user and per-service Bedrock API calls — SSO username from `userIdentity`, service from the application inference profile in the request, grouped by model. | Org-wide event data store, queried locally in the observability account (CloudTrail delegated administrator). |
 
+### Alternative usage source: OpenTelemetry (optional, post-v1)
+
+The three sources above are AWS's own metering of Bedrock and require **no
+cooperation** from the applications that call Bedrock. An organization that
+instruments its Bedrock-calling applications with OpenTelemetry can use that
+telemetry as an **alternative source for tokens and attribution** — but not
+for cost.
+
+- **OpenTelemetry provides tokens and attribution only — never cost.** Cost
+  Explorer remains the authoritative cost source in every configuration.
+  OTel-sourced rollups still derive cost from Cost Explorer (and from the
+  static price table for today, per *Today's cost fallback*).
+- **It only sees instrumented callers.** CloudWatch and CloudTrail capture
+  every Bedrock call org-wide; OTel sees a call only if the calling
+  application emits it. The OTel source is therefore valid only when **every**
+  Bedrock caller in the organization is instrumented.
+- It is **complementary, not a replacement** — a v1 deployment uses
+  CloudWatch + CloudTrail. The OTel source is a documented post-v1 option.
+
+**`UsageProvider` abstraction.** The Phase 6 collector is built around a
+`UsageProvider` interface that isolates token/attribution acquisition from the
+rest of the pipeline. Given the active account list and a UTC date range, a
+provider returns — per account, per canonical model — token and invocation
+totals plus the `byUser` and `byService` attribution breakdowns (i.e. exactly
+the non-cost half of a `DailyRollup`). The Cost Explorer query, the
+three-source merge, and the DynamoDB `BatchWriteItem` write are
+provider-agnostic. Two implementations are envisaged:
+
+| Provider | Source | Status |
+|---|---|---|
+| `CloudWatchCloudTrailProvider` | CloudWatch `GetMetricData` + CloudTrail Lake | v1 default (`USAGE_SOURCE=cloudwatch`) |
+| `OtelPrometheusProvider` | PromQL against Prometheus / Grafana Mimir | post-v1 option (`USAGE_SOURCE=otel`) |
+
+Because the provider only swaps the token/attribution half, the `bedrock-usage`
+table, the `DailyRollup` schema, the dashboard data-access layer, and every API
+route are unchanged by the choice of source.
+
+**Instrumentation contract (OTel path).** For `OtelPrometheusProvider` to fill
+`byUser` and `byService`, every Bedrock-calling application must:
+
+- emit the OpenTelemetry GenAI metric `gen_ai.client.token.usage` (a token-count
+  histogram) with `gen_ai.system = aws.bedrock` and `gen_ai.request.model` set
+  to the raw Bedrock model ID;
+- attach attributes carrying organizational context: AWS account ID, team,
+  service name, and SSO user ID.
+
+Raw `gen_ai.request.model` values are normalized through the shared model table
+(`packages/shared/src/models.ts`) — the same table CloudWatch/CloudTrail IDs
+use — so the two source paths never drift. The collector remains a **single
+Lambda**: a second Lambda writing the same `DailyRollup` items would clobber
+the first.
+
 ## Architecture Diagram
 
 ```
@@ -213,6 +265,7 @@ When a new team account joins the organization, it auto-links for CloudWatch obs
 |---|---|---|
 | **Amazon S3** | Archive `DailyRollup` items past the 365-day TTL; optional Cost & Usage Report / Data Exports delivery | Optional, not in v1 |
 | **Amazon Athena** | Ad-hoc analytical queries over archived rollups (DynamoDB → S3 → Athena) | Future |
+| **OpenTelemetry / Prometheus** | Alternative token + attribution source via `OtelPrometheusProvider` (see *Alternative usage source: OpenTelemetry*); cost still from Cost Explorer | Optional, post-v1 |
 
 Not used: **Amazon Security Lake** — a security-operations data lake in OCSF format; overkill for a cost/usage dashboard, and CloudTrail Lake is the direct fit. **AWS Control Tower** is contextual governance, not a project dependency — if the organization runs it, the observability account is its existing *Log Archive* account.
 
