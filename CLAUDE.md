@@ -58,7 +58,7 @@ Pre-commit (Husky + lint-staged): ESLint fix + Prettier on staged files, plus gi
 
 | Command | Purpose |
 |---|---|
-| `/feature <description>` | Run developer → tester → reviewer agent loop for a feature |
+| `/build-feature <description>` | Run developer → tester → reviewer agent loop for a feature |
 | `/lint` | Run prettier + eslint + tsc + vitest sequentially |
 | `/seed [empty\|large\|ranking]` | Bring up DynamoDB Local and load seed data |
 | `/new-route <path>` | Scaffold a Route Handler with all required boilerplate |
@@ -69,6 +69,7 @@ Pre-commit (Husky + lint-staged): ESLint fix + Prettier on staged files, plus gi
 | `/start-phase <n>` | Expand a phase into an ordered TODO list |
 | `/spec <topic>` | Load and summarise a spec or guide |
 | `/commit` | Stage and commit with Conventional Commits |
+| `/obsidian-sync` | Sync `.claude/` Markdown to an Obsidian vault via the Obsidian MCP |
 
 ## Local development environment
 

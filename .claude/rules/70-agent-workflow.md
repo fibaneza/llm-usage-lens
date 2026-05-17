@@ -1,7 +1,7 @@
 # Rule 70 — Developer → Tester → Reviewer workflow
 
 Non-trivial feature work runs through a three-agent loop. Run it with the
-`/feature` command; this rule is the contract behind it.
+`/build-feature` command; this rule is the contract behind it.
 
 ## The agents
 
@@ -32,7 +32,7 @@ language and security depth.
 ## Rules
 
 1. **The main session orchestrates.** Claude Code subagents cannot invoke
-   each other — the `/feature` command dispatches each agent and carries
+   each other — the `/build-feature` command dispatches each agent and carries
    results between stages.
 2. **No stage is skipped.** Every change goes developer → tester → review,
    even on a one-line fix.

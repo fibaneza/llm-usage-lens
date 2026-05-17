@@ -3,7 +3,7 @@ description: Build a feature through the developer → tester → reviewer agent
 argument-hint: <feature or task description, e.g. "Phase 4.1 Overview KPI cards">
 ---
 
-# /feature
+# /build-feature
 
 Implement `$ARGUMENTS` by orchestrating the project agent team. You (the main
 session) are the **orchestrator** — Claude Code subagents cannot call each

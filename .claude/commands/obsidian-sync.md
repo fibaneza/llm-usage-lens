@@ -1,14 +1,14 @@
 ---
-name: obsidian-sync
-summary: Sync Markdown files from a Claude project directory to an Obsidian vault using the Obsidian MCP API. Ensures all files are up-to-date, have full content, use Obsidian-style links, and removes obsolete files from the vault.
+description: Sync Markdown files from a Claude project directory to an Obsidian vault via the Obsidian MCP API
+argument-hint: "[sourceDir=.claude/] [vaultDir=<vault root>] [recursive=true]"
 ---
 
-# Claude → Obsidian Vault Sync Skill
+# /obsidian-sync
 
 ## Purpose
 
 Synchronize all Markdown files from a Claude project directory (e.g., `.claude/`) to an Obsidian vault using the Obsidian MCP API. **The project directory is the source of truth.**
-This skill:
+This command:
 - Copies all `.md` files (and optionally subdirectories) to the vault, preserving full file bodies.
 - Converts all internal Markdown links to Obsidian-style links (`[[path/to/file]]`).
 - Removes any Markdown files from the vault that no longer exist in the source directory.
@@ -59,3 +59,5 @@ This skill:
 ## See Also
 - [Obsidian MCP API documentation](https://github.com/obsidianmd/obsidian-mcp)
 - Claude project documentation sync best practices
+
+> Invoked with `/obsidian-sync`; `$ARGUMENTS` carries any `key=value` overrides.
