@@ -7,9 +7,14 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-azuretools.vscode-docker",
-        "grafana.vscode-grafana"
+          "ms-azuretools.vscode-docker",
+          "grafana.vscode-grafana",
+          "anthropic.claude-vscode"
       ]
     }
-  }
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,consistency=cached"
+  ]
 }
