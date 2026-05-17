@@ -3,18 +3,19 @@
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
   "workspaceFolder": "/workspace",
-  "forwardPorts": [3000, 4317, 4318, 9090, 3001, 3100],
+  "remoteUser": "node",
+  "forwardPorts": [3000, 4317, 4318, 8000, 9090, 3001, 3100],
   "customizations": {
     "vscode": {
       "extensions": [
-          "ms-azuretools.vscode-docker",
-          "grafana.vscode-grafana",
-          "anthropic.claude-vscode"
+        "ms-azuretools.vscode-docker",
+        "grafana.vscode-grafana",
+        "anthropic.claude-vscode"
       ]
     }
   },
   "mounts": [
-    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.ssh,target=/home/node/.ssh,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,consistency=cached"
   ]
 }
