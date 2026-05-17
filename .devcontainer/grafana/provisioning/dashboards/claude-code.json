@@ -248,7 +248,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "{service_name=\"claude-code\"}",
+          "expr": "{service_name=\"bedrock-cost-dashboard\"}",
           "refId": "A"
         }
       ]
