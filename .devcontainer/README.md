@@ -1,70 +1,351 @@
-# Devcontainer Observability Stack (HTML Summary)
-<section>
-	<h2>🖥️ Devcontainer Observability Stack (Summary)</h2>
-	<div style="border: 2px solid #f39c12; background-color: #fff3e0; padding: 15px; border-radius: 8px; margin: 10px 0;">
-		<p>
-			<strong>Note:</strong> The devcontainer provides a full observability pipeline for Claude Code and the Next.js dashboard. Telemetry (sessions, tokens, cost, tool use, API events) is exported to the OpenTelemetry Collector, with metrics in Prometheus, logs in Loki, and dashboards in Grafana.
-		</p>
-	</div>
-	<ul>
-		<li><strong>Next.js / app</strong>: Dashboard dev server (port 3000)</li>
-		<li><strong>OpenTelemetry Collector</strong>: OTLP ingest (4317 gRPC / 4318 HTTP)</li>
-		<li><strong>Prometheus</strong>: Metrics storage (9090)</li>
-		<li><strong>Loki</strong>: Log/event storage (3100)</li>
-		<li><strong>Grafana</strong>: Dashboards (3001)</li>
-		<li><strong>DynamoDB Local</strong>: Local DynamoDB (8000, start on demand)</li>
-	</ul>
-	<p>Start the stack:</p>
-	<pre><code>docker compose up -d</code></pre>
-	<p>Start DynamoDB Local only when needed (or use <code>/seed</code>):</p>
-	<pre><code>docker compose up -d dynamodb-local</code></pre>
-	<h3>Verify telemetry is flowing</h3>
-	<ol>
-		<li>Open <a href="http://localhost:9090/targets">Prometheus targets</a> — <code>otel-collector</code> should show <strong>UP</strong>.</li>
-		<li>Run any <code>claude</code> command to generate telemetry.</li>
-		<li>In Prometheus at <a href="http://localhost:9090/graph">/graph</a>, run:<br/>
-			<pre><code>{__name__=~"claude_code.*"}</code></pre>
-			You should see metrics like <code>claude_code_cost_usage_total</code>, <code>claude_code_tokens_usage_total</code>, etc.
-		</li>
-		<li>Open Grafana at <a href="http://localhost:3001">localhost:3001</a> (user: <code>admin</code>, password: from <code>.devcontainer/grafana_admin_password.txt</code>).</li>
-		<li>The <strong>Claude Code Telemetry</strong> dashboard is pre-loaded and auto-refreshes every 30s.</li>
-	</ol>
-	<h3>Telemetry environment variables</h3>
-	<p>Set in <code>.claude/settings.local.json</code> (host) and <code>docker-compose.yml</code> (app service):</p>
-	<pre><code>CLAUDE_CODE_ENABLE_TELEMETRY=1
-OTEL_SERVICE_NAME=claude-code
-OTEL_METRICS_EXPORTER=otlp
-OTEL_LOGS_EXPORTER=otlp
-OTEL_EXPORTER_OTLP_PROTOCOL=grpc
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=cumulative
-OTEL_METRIC_EXPORT_INTERVAL=10000
-</code></pre>
-	<h3>Troubleshooting</h3>
-	<ul>
-		<li><strong>otel-collector fails to start:</strong> Check <code>.devcontainer/otel/otel-collector-config.yaml</code>. Exporter type must be <code>otlphttp</code> (no underscore).</li>
-		<li><strong>Prometheus target is DOWN:</strong> Collector exposes metrics on 8889. Confirm <code>prometheus</code> exporter is in the collector config.</li>
-		<li><strong>No <code>claude_code.*</code> metrics:</strong> Ensure <code>CLAUDE_CODE_ENABLE_TELEMETRY=1</code> and run <code>claude</code> after collector starts.</li>
-		<li><strong>Dashboard shows "No data":</strong> Confirm <code>OTEL_SERVICE_NAME=claude-code</code> is set before running <code>claude</code>.</li>
-	</ul>
-</section>
-
 # Dev Container — Observability Stack
 
-The devcontainer bundles a full observability pipeline alongside the Next.js app. Claude Code telemetry (sessions, tokens, cost, tool use, API events) is automatically exported to the collector when `claude` runs — metrics land in Prometheus, events in Loki, and a pre-built Grafana dashboard surfaces everything.
+## Introduction
 
-## Services
+This dev container gives you a one-command development environment for the
+Bedrock Cost Dashboard. Alongside the Next.js app it bundles a full
+observability pipeline so that **Claude Code telemetry** — sessions, tokens,
+cost, tool use, and API events — is captured automatically while you work.
 
-| Service | Local port | Purpose |
-|---|---|---|
-| Next.js / app | 3000 | Dashboard dev server |
-| OpenTelemetry Collector | 4317 (gRPC) / 4318 (HTTP) | OTLP ingest from the app and Claude Code |
-| Prometheus | 9090 | Metrics storage (scrapes collector:8889) |
-| Loki | 3100 | Log/event storage |
-| Grafana | 3001 | Dashboards — metrics + logs |
-| DynamoDB Local | 8000 | Local DynamoDB (start on demand) |
+Every time the `claude` CLI runs inside the container it exports
+OpenTelemetry data: metrics flow into Prometheus, events/logs flow into Loki,
+and a pre-built Grafana dashboard surfaces all of it. The result is a live,
+local view of what Claude Code is doing and what it costs — no external
+accounts, no SaaS, everything on your machine.
 
-## Start the stack
+DynamoDB Local is included as well, so the dashboard itself can be developed
+end-to-end against a local data store (see the root `CLAUDE.md` and `/seed`).
+
+## Architecture
+
+```
+        ┌─────────────────────────────┐
+        │  app  (devcontainer)        │
+        │  Next.js + claude CLI       │
+        └──────────────┬──────────────┘
+                       │ OTLP / gRPC :4317
+                       ▼
+        ┌─────────────────────────────┐
+        │  otel-collector             │
+        │  receives OTLP, batches,    │
+        │  fans out by signal type    │
+        └───────┬─────────────┬───────┘
+        metrics │             │ logs / events
+   (Prometheus  │             │ (OTLP HTTP)
+    exporter    ▼             ▼
+    :8889) ┌──────────┐  ┌──────────┐
+           │Prometheus│  │   Loki   │
+           │  :9090   │  │  :3100   │
+           └────┬─────┘  └────┬─────┘
+                │             │
+                └──────┬──────┘
+                       ▼
+              ┌─────────────────┐
+              │     Grafana     │
+              │      :3001      │
+              │  Claude Code    │
+              │   dashboard     │
+              └─────────────────┘
+
+   dynamodb-local :8000  ── started on demand, used by the app
+```
+
+### Services
+
+| Service | Image | Local port | Purpose |
+|---|---|---|---|
+| `app` | `devcontainers/javascript-node:22` | 3000 | Dashboard dev server + the `claude` CLI |
+| `otel-collector` | `otel/opentelemetry-collector-contrib:0.107.0` | 4317 (gRPC) / 4318 (HTTP) | OTLP ingest; routes metrics → Prometheus, logs → Loki |
+| `prometheus` | `prom/prometheus:v2.54.1` | 9090 | Metrics storage; scrapes `otel-collector:8889` |
+| `loki` | `grafana/loki:3.1.2` | 3100 | Log/event storage |
+| `grafana` | `grafana/grafana:11.2.2` | 3001 | Dashboards over Prometheus + Loki |
+| `dynamodb-local` | `amazon/dynamodb-local:2.5.4` | 8000 | Local DynamoDB — started on demand |
+
+All images are pinned to explicit tags for reproducible builds. The
+`dynamodb-local` service is optional and not started by default — bring it up
+only when you need to seed or query data.
+
+## How it works
+
+1. **Telemetry is enabled by environment.** The `app` service in
+   `docker-compose.yml` sets `CLAUDE_CODE_ENABLE_TELEMETRY=1` plus the
+   `OTEL_*` exporter variables. Any `claude` command running in the container
+   picks these up automatically — no per-command flags.
+
+2. **Claude Code exports OTLP over gRPC** to `otel-collector:4317`. Metrics
+   are sent with `cumulative` temporality (Claude Code defaults to `delta`;
+   Prometheus requires cumulative counters) and flushed every 10 seconds.
+
+3. **The collector fans out by signal type** (`otel/otel-collector-config.yaml`):
+   - **metrics** → `prometheus` exporter, exposed on `:8889` for scraping.
+   - **logs/events** → `otlphttp/loki` exporter, pushed to Loki's OTLP endpoint.
+   A `batch` processor sits in front of both pipelines.
+
+4. **Prometheus scrapes the collector** every 5 seconds
+   (`prometheus/prometheus.yml`, job `otel-collector`, target
+   `otel-collector:8889`).
+
+5. **Grafana is provisioned at startup** from `grafana/provisioning/`:
+   - Prometheus + Loki data sources (`datasources/datasources.yaml`).
+   - The **Claude Code Telemetry** dashboard under the **Claude Code** folder
+     (`dashboards/claude-code.json`).
+
+> **Label note:** the Grafana dashboard filters metrics by
+> `exported_job="claude-code"`. `exported_job` is the OTLP resource `job`
+> that Claude Code sets *internally* — the Prometheus exporter renames it to
+> `exported_job` because Prometheus's own scrape job is `otel-collector`.
+> This is independent of `OTEL_SERVICE_NAME` (which is set to
+> `bedrock-cost-dashboard` for the app's own telemetry).
+
+## Configuration files
+
+Every service is configured from a file checked into `.devcontainer/`. This
+section is the reference for what each file does.
+
+### `docker-compose.yml`
+
+Defines the whole stack with pinned image tags. Each service has a healthcheck
+and explicit port mappings.
+
+```yaml
+services:
+  app:
+    # Node.js 22 LTS
+    image: mcr.microsoft.com/devcontainers/javascript-node:22
+    volumes:
+      - ..:/workspace:cached
+    command: sleep infinity
+    environment:
+      OTEL_SERVICE_NAME: bedrock-cost-dashboard
+
+      # Claude Code telemetry — exports metrics + events when `claude` runs
+      CLAUDE_CODE_ENABLE_TELEMETRY: "1"
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      # Prometheus needs cumulative counters; Claude Code defaults to delta.
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
+      OTEL_METRIC_EXPORT_INTERVAL: "10000"
+
+      # DynamoDB Local — placeholder values only.
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: us-east-1
+    depends_on:
+      - otel-collector
+    healthcheck:
+      test: ["CMD", "node", "-v"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  dynamodb-local:
+    # Optional — start on demand: `docker compose up -d dynamodb-local`
+    image: amazon/dynamodb-local:2.5.4
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
+    volumes:
+      - dynamodb-data:/data
+    ports:
+      - "8000:8000"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.107.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel/otel-collector-config.yaml:/etc/otelcol/config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - prometheus
+      - loki
+    healthcheck:
+      test: ["CMD", "otelcol-contrib", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  loki:
+    image: grafana/loki:3.1.2
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_admin_password
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+      - loki
+    secrets:
+      - grafana_admin_password
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+secrets:
+  grafana_admin_password:
+    file: ./grafana_admin_password.txt
+
+volumes:
+  dynamodb-data:
+```
+
+### `otel/otel-collector-config.yaml`
+
+Receives OTLP and routes each signal type to the right backend — metrics to
+the Prometheus exporter on `:8889`, logs to Loki — with a `batch` processor in
+front of both pipelines.
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+processors:
+  batch:
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/loki]
+```
+
+> The Loki exporter type must be `otlphttp` (no underscore) — `otlp_http` is
+> invalid and the collector will fail to start.
+
+### `prometheus/prometheus.yml`
+
+Prometheus has a single job: scrape the metrics the collector exposes on port
+`8889`. A tight 5-second interval keeps the dashboard responsive.
+
+```yaml
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]
+```
+
+### `grafana/provisioning/datasources/datasources.yaml`
+
+Registers Prometheus (default) and Loki, each reachable by container name on
+the compose network.
+
+```yaml
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+```
+
+### `grafana/provisioning/dashboards/dashboards.yaml`
+
+Tells Grafana to load any dashboard JSON in the provisioning folder into a
+**Claude Code** folder, re-checking every 30 seconds.
+
+```yaml
+apiVersion: 1
+
+providers:
+  - name: default
+    folder: Claude Code
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+```
+
+### `grafana/provisioning/dashboards/claude-code.json`
+
+The pre-built **Claude Code Telemetry** dashboard, loaded by the provider
+above. It auto-refreshes every 30 seconds, defaults to a 1-hour window, and
+includes:
+
+- Stat panels — total cost, tokens, API requests, and tool uses
+- Cost over time and a token breakdown by type (input / output / cacheRead / cacheCreation)
+- Top tools used — a horizontal bar chart
+- API request latency — p50 and p95
+- Live event log — Claude Code events streamed from Loki
+
+Panels filter metrics by `exported_job="claude-code"` (see the label note
+above).
+
+## Setup
+
+### 1. Open in the dev container
+
+Open the repo in VS Code and **Reopen in Container**. The
+`devcontainer.json` builds the `app` service, mounts the workspace at
+`/workspace`, bind-mounts your `~/.ssh` and `~/.claude` into the container,
+forwards all service ports, and installs the Docker, Grafana, and Claude
+extensions.
+
+### 2. Start the observability stack
+
+The `app` service depends on `otel-collector`, which depends on `prometheus`
+and `loki` — opening the dev container brings those up. To start everything
+manually:
 
 ```bash
 docker compose up -d
@@ -76,17 +357,19 @@ Start DynamoDB Local only when needed (or use `/seed`):
 docker compose up -d dynamodb-local
 ```
 
-## Verify telemetry is flowing
+### 3. Confirm Prometheus is scraping the collector
 
-### 1. Confirm Prometheus is scraping the OTel collector
+Open `http://localhost:9090/targets` — the `otel-collector` job should show
+**UP**.
 
-Open `http://localhost:9090/targets` — the `otel-collector` job should show **UP**.
+![Prometheus targets](../docs/images/openTelemetry_prometheus_targets.png)
 
-### 2. Generate telemetry
+### 4. Generate telemetry
 
-Run any `claude` command. The Claude Code CLI reads the env vars in `.claude/settings.local.json` and exports OTLP over gRPC to `localhost:4317`.
+Run any `claude` command inside the container. It reads the `OTEL_*` env vars
+and exports OTLP over gRPC to the collector.
 
-### 3. Confirm metrics arrived
+### 5. Confirm metrics arrived
 
 In the Prometheus query UI at `http://localhost:9090/graph`, run:
 
@@ -94,16 +377,22 @@ In the Prometheus query UI at `http://localhost:9090/graph`, run:
 {__name__=~"claude_code.*"}
 ```
 
-You should see metrics such as `claude_code_cost_usage_total`, `claude_code_tokens_usage_total`, and `claude_code_tool_use_count_total`.
+You should see metrics such as `claude_code_cost_usage_USD_total`,
+`claude_code_token_usage_tokens_total`, and
+`claude_code_tool_decision_count_total`. Metrics appear only after the first
+10-second export interval.
 
-### 4. Open Grafana
+![Prometheus graph](../docs/images/openTelemetry_prometheus_graph.png)
+
+### 6. Open Grafana
 
 Go to `http://localhost:3001` and log in:
 
 - **Username:** `admin`
 - **Password:** contents of `.devcontainer/grafana_admin_password.txt`
 
-The **Claude Code Telemetry** dashboard is pre-loaded under the **Claude Code** folder. It includes:
+The **Claude Code Telemetry** dashboard is pre-loaded under the **Claude
+Code** folder. It includes:
 
 - Total cost, tokens, API requests, and tool uses (stat panels)
 - Cost over time and token breakdown by type (input / output / cacheRead / cacheCreation)
@@ -111,35 +400,49 @@ The **Claude Code Telemetry** dashboard is pre-loaded under the **Claude Code** 
 - API request latency — p50 and p95
 - Live Claude Code event log (from Loki)
 
-The dashboard auto-refreshes every 30 seconds and defaults to a 1-hour window.
+The dashboard auto-refreshes every 30 seconds and defaults to a 1-hour
+window.
+
+![Grafana dashboard](../docs/images/openTelemetry_grafana-dashboard.png)
 
 ## Claude Code telemetry env vars
 
-Set in `.claude/settings.local.json` (applies when running `claude` on the host):
+Set on the `app` service in `docker-compose.yml` — they apply to every
+`claude` run inside the container:
 
 | Variable | Value | Purpose |
 |---|---|---|
 | `CLAUDE_CODE_ENABLE_TELEMETRY` | `1` | Enables OTLP export |
-| `OTEL_SERVICE_NAME` | `claude-code` | Labels all metrics and logs |
+| `OTEL_SERVICE_NAME` | `bedrock-cost-dashboard` | Service name for the app's own telemetry |
 | `OTEL_METRICS_EXPORTER` | `otlp` | Exports metrics via OTLP |
 | `OTEL_LOGS_EXPORTER` | `otlp` | Exports logs/events via OTLP |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | Uses gRPC (port 4317) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | Collector endpoint (host → container) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` | Collector endpoint (container → container) |
 | `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` | `cumulative` | Required by Prometheus |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `10000` | Export every 10 s |
 
-The same vars are set in `docker-compose.yml` for the `app` service (with `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317` for in-container access).
+When running `claude` on the **host** instead of inside the container, set the
+same vars in `.claude/settings.local.json` but point the endpoint at
+`http://localhost:4317`.
 
 ## Troubleshooting
 
 **otel-collector fails to start**
-Check `.devcontainer/otel/otel-collector-config.yaml`. Exporter type must be `otlphttp` (no underscore) — not `otlp_http`.
+Check `otel/otel-collector-config.yaml`. The Loki exporter type must be
+`otlphttp` (no underscore) — not `otlp_http`.
 
 **Prometheus target is DOWN**
-The collector exposes metrics on port 8889. Confirm the `prometheus` exporter is in the collector config's `service.pipelines.metrics.exporters` list.
+The collector exposes metrics on port 8889. Confirm the `prometheus` exporter
+is in the collector config's `service.pipelines.metrics.exporters` list.
 
 **No `claude_code.*` metrics in Prometheus**
-Ensure `CLAUDE_CODE_ENABLE_TELEMETRY=1` is set and that `claude` was run after the collector started. Metrics only appear after the first export interval (10 s).
+Ensure `CLAUDE_CODE_ENABLE_TELEMETRY=1` is set and that `claude` was run after
+the collector started. Metrics only appear after the first 10 s export
+interval.
 
 **Dashboard shows "No data"**
-The dashboard filters by `service_name="claude-code"`. Confirm `OTEL_SERVICE_NAME=claude-code` is set in the env before running `claude`.
+The dashboard filters by `exported_job="claude-code"`. That label comes from
+Claude Code's internal OTLP `job` resource attribute, surfaced by the
+collector's Prometheus exporter as `exported_job`. If panels are empty,
+confirm `claude_code.*` metrics exist in Prometheus first (step 5) and that
+your dashboard time window covers a recent `claude` run.

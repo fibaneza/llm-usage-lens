@@ -1,5 +1,5 @@
 ---
-description: Build a feature through the developer → tester → reviewer agent loop
+description: Build a feature through the typescript-developer → test-engineer → quality-reviewer agent loop
 argument-hint: <feature or task description, e.g. "Phase 4.1 Overview KPI cards">
 ---
 
@@ -18,20 +18,22 @@ See `.claude/rules/70-agent-workflow.md` for the contract.
 2. Restate the feature as a short, concrete task. If it spans multiple Phase 4
    sub-phases, ask the user to narrow it — one sub-phase per run (Rule 30.4).
 
-## Step 1 — Developer
+## Step 1 — typescript-developer
 
-Dispatch the `developer` agent with the task description. On a rework pass,
-also pass the consolidated REQUEST-CHANGES report from the previous round.
+Dispatch the `typescript-developer` agent with the task description. On a
+rework pass, also pass the consolidated REQUEST-CHANGES report from the
+previous round.
 
-## Step 2 — Tester
+## Step 2 — test-engineer
 
-Dispatch the `tester` agent with the developer's report and changed files.
+Dispatch the `test-engineer` agent with the typescript-developer's report and
+changed files.
 
 ## Step 3 — Review (parallel fan-out)
 
 In a **single message**, dispatch in parallel:
 
-- `reviewer` — holistic spec + rules + standards gatekeeper (always).
+- `quality-reviewer` — holistic spec + rules + standards gatekeeper (always).
 - `spec-guardian` — independent spec audit (always).
 - `ecc:typescript-reviewer` — when `.ts`/`.tsx` changed (almost always).
 - `ecc:security-reviewer` — when auth, Route Handlers, env, or AWS code
@@ -39,7 +41,7 @@ In a **single message**, dispatch in parallel:
 
 ## Step 4 — Aggregate
 
-- If the **tester** FAILED, or **any** reviewer returns REQUEST CHANGES /
+- If the **test-engineer** FAILED, or **any** reviewer returns REQUEST CHANGES /
   lists a BLOCKER → the verdict is **REQUEST CHANGES**.
 - Consolidate every blocker into one deduplicated checklist.
 - Otherwise the verdict is **APPROVE**.
@@ -57,14 +59,14 @@ In a **single message**, dispatch in parallel:
 Print a one-line status per round so the loop is visible:
 
 ```
-Round n: developer → tester <PASS|FAIL> → review <APPROVE|REQUEST CHANGES (k blockers)>
+Round n: typescript-developer → test-engineer <PASS|FAIL> → review <APPROVE|REQUEST CHANGES (k blockers)>
 ```
 
 ## Guardrails
 
-- Never skip the tester or reviewer stage.
+- Never skip the test-engineer or quality-reviewer stage.
 - Never commit, push, or use `--no-verify`.
-- The developer is the **only** agent that edits code; tester edits tests
-  only; reviewer and spec-guardian are read-only.
+- The typescript-developer is the **only** agent that edits code; test-engineer
+  edits tests only; quality-reviewer and spec-guardian are read-only.
 - If the loop cannot converge, the user decides — never lower the bar to
   force an APPROVE.
