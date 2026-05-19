@@ -54,9 +54,9 @@ patterns) and current Next.js App Router guidance.
     arguments (Rule 50.8).
 17. **No silent failures.** Never swallow an error with an empty `catch` or a
     fallback that hides it. Either handle it meaningfully or let it bubble to
-    Sentry. A missing `SyncStatus` item is a *handled state*, not a swallowed
+    OpenTelemetry. A missing `SyncStatus` item is a *handled state*, not a swallowed
     error (Rule 20.9).
-18. **No `console.log` in committed code.** Use Sentry for errors; remove
+18. **No `console.log` in committed code.** Use OpenTelemetry for errors; remove
     debug logging before commit. Never log secrets (Rule 50.6).
 19. **Fail fast on misconfiguration.** Env vars go through
     `@t3-oss/env-nextjs` — never raw `process.env` reads (Rule 50.2).

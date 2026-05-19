@@ -9,7 +9,7 @@ Source: `docs/specs/2026-05-15-design-system.md`.
 - Recharts (charts), TanStack Table (tables), TanStack Query (server state)
 - nuqs (URL state), date-fns (dates), Zod v4 (validation)
 - Auth.js v5 (Microsoft Entra ID), `@t3-oss/env-nextjs`, `next-safe-action`
-- Sentry (`@sentry/nextjs`)
+- OpenTelemetry (`@vercel/otel`)
 - ESLint v9 flat config (`eslint.config.ts`), Prettier, Husky + lint-staged,
   gitleaks, commitlint
 - Tests: **Vitest** (not Jest) + React Testing Library; Playwright for E2E

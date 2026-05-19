@@ -194,7 +194,7 @@ misconfiguration fails at build time. The output is a skeleton: no pages yet.
 - [ ] Build the sign-in page (`/sign-in`) — single "Sign in with Microsoft" action, no sign-up
 - [ ] Protect `/dashboard/*` and `/api/*` routes via Auth.js middleware
 - [ ] Configure `@t3-oss/env-nextjs` (type-safe env vars validated with Zod)
-- [ ] Integrate Sentry (`@sentry/nextjs`)
+- [ ] Integrate OpenTelemetry (`@vercel/otel`)
 - [ ] Create `.env.example` (tracked, no values), `.env.local` (ignored), `.env.test` (ignored)
 - [ ] Set up GitHub Actions CI: lint, type check, secret scan, build
 

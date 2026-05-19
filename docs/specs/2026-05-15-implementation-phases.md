@@ -52,7 +52,9 @@ Components are built where they are first needed and reused in subsequent pages.
   - Build sign-in page (`/sign-in`) — single "Sign in with Microsoft" action; no sign-up (identities managed in Entra ID)
   - Set up environment variables
 - [ ] Configure @t3-oss/env-nextjs (type-safe env vars with Zod validation)
-- [ ] Integrate Sentry (`@sentry/nextjs`)
+- [ ] Integrate OpenTelemetry (`@vercel/otel` + `instrumentation.ts`)
+  - Export errors, traces, and metrics via OTLP to the devcontainer Collector (Prometheus + Loki + Grafana); Grafana Cloud free tier in production
+  - Capture server errors via the Next.js `onRequestError` hook
 - [ ] Create environment files
   - `.env.example` (template with all required vars, no values — git tracked)
   - `.env.local` (local dev values — git ignored)
@@ -567,9 +569,9 @@ AWS_PROFILE=                          # AWS SSO profile; run `aws sso login` fir
 DYNAMODB_TABLE_NAME=bedrock-usage
 DYNAMODB_ENDPOINT=                    # http://localhost:8000 for DynamoDB Local
 
-# Sentry
-SENTRY_DSN=
-NEXT_PUBLIC_SENTRY_DSN=
+# OpenTelemetry
+OTEL_EXPORTER_OTLP_ENDPOINT=          # http://localhost:4318 for the devcontainer Collector
+OTEL_SERVICE_NAME=bedrock-cost-dashboard
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000

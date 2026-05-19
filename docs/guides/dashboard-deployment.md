@@ -86,7 +86,7 @@ Names mirror `.env.example`.
 | `AWS_ACCESS_KEY_ID` | Scoped read-only IAM user key (see §2) |
 | `AWS_SECRET_ACCESS_KEY` | Scoped read-only IAM user secret (see §2) |
 | `DYNAMODB_TABLE_NAME` | `bedrock-usage` |
-| `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` | Sentry error reporting |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME` | OpenTelemetry OTLP export (Grafana Cloud) |
 | `NEXT_PUBLIC_APP_URL` | Deployed site URL |
 
 `DYNAMODB_ENDPOINT` is **not** set in production — it is for DynamoDB Local

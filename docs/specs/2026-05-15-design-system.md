@@ -31,7 +31,7 @@ Enterprise analytics dashboard for tracking AWS Bedrock usage and cost across an
 | **Dates** | date-fns | Tree-shakeable, TypeScript-native |
 | **Class Merging** | tailwind-merge + clsx | Conditional Tailwind classes without conflicts |
 | **AWS SDK** | @aws-sdk/lib-dynamodb | DynamoDB document client |
-| **Monitoring** | Sentry (@sentry/nextjs) | Error tracking, performance, tracing, session replay |
+| **Monitoring** | OpenTelemetry (`@vercel/otel`) | OTLP export of errors, traces, and metrics to the Prometheus/Loki/Grafana stack (Grafana Cloud free tier in production) |
 | **Env Validation** | @t3-oss/env-nextjs | Type-safe environment variables with Zod |
 | **Server Actions** | next-safe-action | Type-safe actions with Zod validation and rate limiting |
 | **Linting** | ESLint v9 | Flat config (`eslint.config.ts`) |
@@ -49,7 +49,7 @@ Decisions on technologies evaluated and excluded, with rationale:
 | **gRPC** | Not used | No service-to-service communication. Browser clients need a gRPC-Web proxy — extra infra for no gain. Dashboard refreshes hourly, not real-time streaming. Single language (TypeScript) across the stack. |
 | **Redux** | Not used | Read-heavy dashboard with minimal client state. TanStack Query handles server state, nuqs handles URL state, React useState handles UI state. Redux would add boilerplate (store, slices, reducers) with nothing to manage. |
 | **Zustand** | Not used | Same reasoning as Redux. No complex shared client state (no shopping cart, drag-and-drop, or real-time collaboration). If needed in the future, Zustand would be the lightweight choice over Redux. |
-| **OpenTelemetry** | Not used (Sentry instead) | Sentry's Next.js SDK is more mature, easier to set up, and provides a dashboard out of the box. If OTel is needed later, Sentry can ingest OTel traces. |
+| **Sentry** | Not used (OpenTelemetry instead) | Sentry's free Developer tier is a 30-day trial only — beyond that it is a paid SaaS. The project already runs an OpenTelemetry Collector + Prometheus + Loki + Grafana stack (devcontainer) for Claude Code telemetry; exporting the dashboard's errors and traces to that same stack reuses existing infrastructure at no cost, with Grafana Cloud's free tier in production. |
 | **DynamoDB DAX** | Not used | Data updates once per hour. Next.js server cache (1hr TTL) already reduces DynamoDB reads to ~1/hour per unique query. DAX adds cost with no benefit at this refresh rate. |
 | **Redis / Valkey** | Not used | Same reasoning as DAX. Next.js built-in cache + TanStack Query client cache are sufficient for hourly-updating data. No extra infrastructure to manage. |
 | **Vite** | Not used | Next.js has its own bundler (Turbopack in dev, Webpack in production). Adding Vite would conflict with Next.js's build pipeline. |

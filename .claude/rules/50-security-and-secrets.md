@@ -22,7 +22,8 @@
 5. **Never bypass git hooks.** Do not run `git commit --no-verify` or
    `git push --no-verify`. Gitleaks runs in pre-commit and must pass.
 6. **Never log or echo secrets.** Don't print env values, OAuth client
-   secrets, `AUTH_SECRET`, or AWS keys to the terminal or to Sentry.
+   secrets, `AUTH_SECRET`, or AWS keys to the terminal or to telemetry
+   (OpenTelemetry spans, logs, or attributes).
 7. **The collector targets `us-east-1` only.** Multi-region is a documented
    future enhancement; do not silently broaden the scope.
 8. **Sanitize input at the system boundary.** Route Handlers validate every
