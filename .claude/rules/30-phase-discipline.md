@@ -26,3 +26,20 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
 6. **Repo state today:** pre-implementation. Only `docs/`, `LICENSE`,
    `.gitignore`, `.github/`, `.claude/`, and `CLAUDE.md` exist. There is no
    `package.json` yet. Phase 1 establishes the toolchain.
+
+## Branching & pull requests
+
+Each phase ships on its own branch and merges via pull request — `main` never
+receives direct commits.
+
+1. **One `feature/` branch per phase.** Branch from an up-to-date `main` at the
+   start of a phase, named `feature/phase-<n>-<slug>` (e.g.
+   `feature/phase-1-foundation`). Phase 4 sub-phases each get their own branch
+   — `feature/phase-4.1-overview`, etc. (Rule 30.4 — one sub-phase per PR).
+2. **A phase's tasks are commits on that branch**, each following Conventional
+   Commits (commitlint).
+3. **Open a PR to `main` once the phase's "Verify" checklist passes.** Run
+   `/verify-phase <n>` first — do not open the PR on a failing checklist.
+4. **One phase (or one Phase 4 sub-phase) per PR.** Never bundle multiple
+   phases into a single branch or PR.
+5. **Never commit or merge directly to `main`.**
