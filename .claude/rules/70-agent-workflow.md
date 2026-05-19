@@ -19,13 +19,13 @@ language and security depth.
 ## The loop
 
 ```
-   ┌────────────────────────────────────────────────┐
-   │                                                │ REQUEST CHANGES
-   ▼                                                │ (consolidated blockers)
+   ┌────────────────────────────────────────────────────┐
+   │                                                    │ REQUEST CHANGES
+   ▼                                                    │ (consolidated blockers)
 typescript-developer ─▶ test-engineer ─▶ review ────────┤
-                                       │ APPROVE     │
-                                       ▼             │
-                                     done ───────────┘
+                                            │ APPROVE   │
+                                            ▼           │
+                                          done ─────────┘
 
 review = quality-reviewer + spec-guardian + ecc reviewers
 ```

@@ -12,7 +12,7 @@
   },
   "permissions": {
     "allow": [
-      "Read(//Users/fernando.ibanez/projects/aws-bedrock-claude-cost-usage/**)",
+      "Read(/Users/fernando.ibanez/projects/aws-bedrock-claude-cost-usage/**)",
       "Bash(pnpm install)",
       "Bash(pnpm install --frozen-lockfile)",
       "Bash(pnpm dev)",
