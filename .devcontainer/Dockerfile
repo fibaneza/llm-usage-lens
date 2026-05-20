@@ -79,6 +79,20 @@ RUN set -eux; \
     apt-get purge -y --auto-remove unzip; \
     rm -rf /var/lib/apt/lists/*
 
+# Bun — required by the claude-mem plugin's stop hook (summarize script).
+# Installed system-wide so it's on PATH for all users. The official installer
+# unpacks a .zip release, so `unzip` is a hard prerequisite — install it for
+# the duration of this layer and purge it at the end (the AWS CLI layer above
+# already removed its own copy).
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends unzip; \
+    curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash; \
+    chmod a+x /usr/local/bin/bun; \
+    ln -sf /usr/local/bin/bun /usr/local/bin/bunx; \
+    apt-get purge -y --auto-remove unzip; \
+    rm -rf /var/lib/apt/lists/*
+
 # Claude Code CLI on PATH. Git is already provided by the base image.
 RUN npm install -g @anthropic-ai/claude-code
 

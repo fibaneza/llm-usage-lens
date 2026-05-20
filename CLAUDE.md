@@ -4,9 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-This repository is **pre-implementation**. Only `docs/`, `LICENSE`, `.gitignore`, `.github/`, `.claude/`, and `CLAUDE.md` exist — no application code, no `package.json`, no build tooling yet. Phase 1 (Foundation) has not started.
+This repository is **pre-implementation** for application code: no `apps/`, no `packages/`, no `package.json`, no build tooling yet. Phase 1 (Foundation) has not started.
 
-The `docs/specs/` directory is the source of truth. Read it before writing any code:
+Pre-Phase-1 infrastructure *is* in place — the devcontainer, the OpenTelemetry/Prometheus/Loki/Grafana observability stack, the `.claude/` rules + agents + commands, and the `.mcp.json` config (Azure MCP) are all wired up. Treat these as ready; do not rebuild them from scratch.
+
+## Reading order
+
+If you're about to touch code, read in this order:
+
+1. `docs/specs/2026-05-15-implementation-phases.md` — confirms which phase the work belongs to and what its Verify checklist requires.
+2. The spec matching your task (see index below).
+3. The numbered rule(s) in `.claude/rules/` that govern the area you're editing.
+
+The `docs/specs/` directory is the source of truth:
 
 - `docs/specs/2026-05-15-system-architecture.md` — AWS serverless pipeline, account layout, data sources, Lambda collector flow
 - `docs/specs/2026-05-15-data-model.md` — DynamoDB single-table design, entities, access patterns, model ID normalization
@@ -85,6 +95,8 @@ A devcontainer (`.devcontainer/`) bundles an observability stack alongside the a
 | Grafana | 3001 | Dashboards for metrics + logs |
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_SERVICE_NAME` are set in the compose file. Running the `claude` CLI inside the devcontainer auto-exports Claude Code telemetry (sessions, token/cost metrics, prompt/tool/API events) to the collector — metrics land in Prometheus, events in Loki. DynamoDB Local is a separate service started with `/seed` or `docker compose up -d dynamodb-local`.
+
+MCP servers are configured in `.mcp.json` at the repo root (currently: Azure MCP via `@azure/mcp`). Add new MCP servers there rather than to per-user Claude Code settings so the whole team gets them.
 
 ## Architecture & conventions
 
