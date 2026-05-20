@@ -3,8 +3,12 @@
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
   "workspaceFolder": "/workspace",
-  "remoteUser": "node",
+  "remoteUser": "${localEnv:USER}",
+  "updateRemoteUserUID": true,
   "forwardPorts": [3000, 4317, 4318, 8000, 9090, 3001, 3100],
+  // Runs on the host before container creation — ensures every bind-mount
+  // source below exists so the mount never fails (the "if exists" guard).
+  "initializeCommand": "mkdir -p \"$HOME/.aws\" \"$HOME/.azure\"",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -15,7 +19,13 @@
     }
   },
   "mounts": [
-    "source=${localEnv:HOME}/.ssh,target=/home/node/.ssh,type=bind,consistency=cached",
-    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,consistency=cached"
-  ]
+    "source=${localEnv:HOME}/.ssh,target=/home/${localEnv:USER}/.ssh,type=bind,consistency=cached",
+    // Share AWS SSO cache + config so `aws sso login` on the host is usable
+    // from inside the container (per Rule 50 — no static AWS keys).
+    "source=${localEnv:HOME}/.aws,target=/home/${localEnv:USER}/.aws,type=bind,consistency=cached",
+    // Share Azure CLI config + token cache so `az login` on the host is usable
+    // from inside the container.
+    "source=${localEnv:HOME}/.azure,target=/home/${localEnv:USER}/.azure,type=bind,consistency=cached"
+  ],
+  "postCreateCommand": "bash .devcontainer/post-create.sh"
 }

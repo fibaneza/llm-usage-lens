@@ -1,7 +1,13 @@
 services:
   app:
-    # Node.js 22 LTS — matches the stack requirement in docs/specs/2026-05-15-design-system.md
-    image: mcr.microsoft.com/devcontainers/javascript-node:22
+    # Built from .devcontainer/Dockerfile — installs the Claude Code CLI and
+    # renames the container user to match the host user (USERNAME build arg).
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Host login name — interpolated from the shell env, not hardcoded.
+        USERNAME: ${USER:-node}
     volumes:
       - ..:/workspace:cached
     command: sleep infinity
@@ -103,7 +109,7 @@ services:
 
 secrets:
   grafana_admin_password:
-    file: ./grafana_admin_password.txt
+    file: ./grafana/grafana_admin_password.txt
 
 volumes:
   dynamodb-data:
