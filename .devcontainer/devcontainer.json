@@ -25,7 +25,7 @@
       "settings": {
         // Prettier is the single formatter; format on save, but only where a
         // Prettier config exists so pre-Phase-1 docs/specs are left untouched.
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.defaultFormatter": null,
         "editor.formatOnSave": true,
         "prettier.requireConfig": true,
         // ESLint v9 flat config in `eslint.config.ts`; apply lint fixes on save.
@@ -34,14 +34,14 @@
         "editor.codeActionsOnSave": {
           "source.fixAll.eslint": "explicit"
         },
-        // Per-language formatter — keep Prettier authoritative across the stack.
-        "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-        "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-        "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-        "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-        "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-        "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-        "[markdown]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        // Per-language formatter — use the supported language-feature formatters.
+        "[typescript]": { "editor.defaultFormatter": "vscode.typescript-language-features" },
+        "[typescriptreact]": { "editor.defaultFormatter": "vscode.typescript-language-features" },
+        "[javascript]": { "editor.defaultFormatter": "vscode.typescript-language-features" },
+        "[json]": { "editor.defaultFormatter": "vscode.json-language-features" },
+        "[jsonc]": { "editor.defaultFormatter": "vscode.json-language-features" },
+        "[css]": { "editor.defaultFormatter": "vscode.css-language-features" },
+        "[markdown]": { "editor.defaultFormatter": "vscode.markdown-language-features" },
         // Use the workspace TypeScript (monorepo) instead of VS Code's bundled.
         "js/ts.tsdk.path": "./node_modules/typescript/lib",
         // Tailwind v4 IntelliSense inside cn()/cva() (shadcn/ui helpers).
