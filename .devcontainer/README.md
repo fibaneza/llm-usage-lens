@@ -367,6 +367,7 @@ tooling agree with the CLI gates.
 | Conventional Commits | `vivaxy.vscode-conventional-commits` | Guided commit messages matching the commitlint gate |
 | YAML | `redhat.vscode-yaml` | Validate `docker-compose.yml` + `otel-collector-config.yaml` |
 | markdownlint | `davidanson.vscode-markdownlint` | Keep `docs/specs/**` consistently formatted |
+| Charmed Nest Icons | `aaa-lt.charmed-nest-icons` | File icon theme — activated via `workbench.iconTheme` |
 
 ### 2. Start the observability stack
 
