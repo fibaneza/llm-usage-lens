@@ -12,10 +12,54 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-azuretools.vscode-docker",
-        "grafana.vscode-grafana",
-        "anthropic.claude-vscode"
-      ]
+        "ms-azuretools.vscode-docker", // Manage the compose stack from the editor
+        "grafana.vscode-grafana", // Author/preview Grafana dashboards
+        "anthropic.claude-vscode", // Claude Code integration
+        "dbaeumer.vscode-eslint", // ESLint v9 flat-config diagnostics (Rule 40)
+        "esbenp.prettier-vscode", // Format-on-save matching the Prettier gate
+        "bradlc.vscode-tailwindcss", // Tailwind CSS v4 class completion
+        "vitest.explorer", // Run/debug Vitest tests in the editor (not Jest)
+        "ms-playwright.playwright", // Run/debug E2E specs (Phase 5+)
+        "yoavbls.pretty-ts-errors" // Readable errors for TypeScript strict mode
+      ],
+      "settings": {
+        // Prettier is the single formatter; format on save, but only where a
+        // Prettier config exists so pre-Phase-1 docs/specs are left untouched.
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "prettier.requireConfig": true,
+        // ESLint v9 flat config in `eslint.config.ts`; apply lint fixes on save.
+        "eslint.useFlatConfig": true,
+        "eslint.workingDirectories": [{ "mode": "auto" }],
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        // Per-language formatter — keep Prettier authoritative across the stack.
+        "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        "[markdown]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        // Use the workspace TypeScript (monorepo) instead of VS Code's bundled.
+        "js/ts.tsdk.path": "./node_modules/typescript/lib",
+        // Tailwind v4 IntelliSense inside cn()/cva() (shadcn/ui helpers).
+        "tailwindCSS.experimental.classRegex": [
+          ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+          ["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
+        ],
+        "editor.quickSuggestions": { "strings": "on" },
+        // Keep the explorer and search fast; these never need indexing.
+        "search.exclude": {
+          "**/node_modules": true,
+          "**/.next": true,
+          "**/pnpm-lock.yaml": true
+        },
+        "files.exclude": {
+          "**/.DS_Store": true
+        }
+      }
     }
   },
   "mounts": [

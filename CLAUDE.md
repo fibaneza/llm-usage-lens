@@ -42,7 +42,7 @@ Two deliverables in a **pnpm monorepo**, sharing `packages/shared` (Zod schemas,
 
 ## Commands
 
-> These commands are defined in specs and will be wired up in Phase 1. Until then, run them via their underlying tools.
+> The `pnpm <script>` shortcuts (`pnpm dev`, `pnpm build`) require a `package.json` and don't exist until Phase 1. The `pnpm exec …` forms below are runnable as soon as dependencies are installed.
 
 Package manager is **pnpm**.
 
@@ -93,10 +93,15 @@ A devcontainer (`.devcontainer/`) bundles an observability stack alongside the a
 | Prometheus | 9090 | Metrics storage |
 | Loki | 3100 | Logs/events storage |
 | Grafana | 3001 | Dashboards for metrics + logs |
+| DynamoDB Local | 8000 | Dashboard's data store in dev (started on demand) |
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_SERVICE_NAME` are set in the compose file. Running the `claude` CLI inside the devcontainer auto-exports Claude Code telemetry (sessions, token/cost metrics, prompt/tool/API events) to the collector — metrics land in Prometheus, events in Loki. DynamoDB Local is a separate service started with `/seed` or `docker compose up -d dynamodb-local`.
 
 MCP servers are configured in `.mcp.json` at the repo root (currently: Azure MCP via `@azure/mcp`). Add new MCP servers there rather than to per-user Claude Code settings so the whole team gets them.
+
+The project's default response voice is the **`spec-cited` output style** (`.claude/output-styles/spec-cited.md`): brief, impersonal, no emoji, citing `docs/specs/**` for non-trivial decisions and rendering file references as workspace-relative Markdown links.
+
+`.claude/settings.json` hard-blocks destructive commands via its `deny` list — `rm -rf`, `git push --force`, `git reset --hard`, `git commit --no-verify`, and all `aws … delete-*` / `aws dynamodb delete-table` / `aws cloudformation delete-stack` / `sam delete`. These will be refused regardless of permission mode; don't attempt to route around them.
 
 ## Architecture & conventions
 

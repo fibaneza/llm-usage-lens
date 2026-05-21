@@ -338,8 +338,27 @@ above).
 Open the repo in VS Code and **Reopen in Container**. The
 `devcontainer.json` builds the `app` service, mounts the workspace at
 `/workspace`, bind-mounts your `~/.ssh` and `~/.claude` into the container,
-forwards all service ports, and installs the Docker, Grafana, and Claude
-extensions.
+forwards all service ports, and installs the recommended VS Code extensions
+(see below).
+
+#### Recommended VS Code extensions
+
+Installed automatically into the container from
+`customizations.vscode.extensions` in `devcontainer.json`. They match the
+project stack (Rule 40) so the editor's lint, format, IntelliSense, and test
+tooling agree with the CLI gates.
+
+| Extension | ID | Purpose |
+|---|---|---|
+| Docker | `ms-azuretools.vscode-docker` | Manage the compose stack from the editor |
+| Grafana | `grafana.vscode-grafana` | Author/preview Grafana dashboards |
+| Claude Code | `anthropic.claude-vscode` | Claude Code integration |
+| ESLint | `dbaeumer.vscode-eslint` | ESLint v9 flat-config diagnostics |
+| Prettier | `esbenp.prettier-vscode` | Format-on-save matching the Prettier gate |
+| Tailwind CSS IntelliSense | `bradlc.vscode-tailwindcss` | Tailwind CSS v4 class completion |
+| Vitest | `vitest.explorer` | Run/debug Vitest tests in the editor (not Jest) |
+| Playwright | `ms-playwright.playwright` | Run/debug E2E specs (Phase 5+) |
+| Pretty TypeScript Errors | `yoavbls.pretty-ts-errors` | Readable errors for TypeScript strict mode |
 
 ### 2. Start the observability stack
 
