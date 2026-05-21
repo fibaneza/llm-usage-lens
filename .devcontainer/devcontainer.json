@@ -29,7 +29,7 @@
         "vivaxy.vscode-conventional-commits", // Guided Conventional Commit messages (commitlint gate)
         "redhat.vscode-yaml", // Validate docker-compose + otel-collector-config.yaml
         "davidanson.vscode-markdownlint", // Keep docs/specs/** consistently formatted
-        "aaa-lt.charmed-nest-icons" // File icon theme (NestJS-flavoured); activated via workbench.iconTheme below
+        "vscode-icons-team.vscode-icons" // File icon theme; activated via workbench.iconTheme below
       ],
       "settings": {
         // Prettier is the single formatter; format on save, but only where a
@@ -45,9 +45,9 @@
           "source.fixAll.eslint": "explicit",
           "source.fixAll.markdownlint": "explicit"
         },
-        // Activate the Charmed Nest file icon theme. If this exact id is wrong,
+        // Activate the VSCode Icons file icon theme. If this exact id is wrong,
         // pick it from the File Icon Theme menu — VS Code writes the correct id here.
-        "workbench.iconTheme": "charmed-nest-icons",
+        "workbench.iconTheme": "vscode-icons",
         // Per-language formatter — use the supported language-feature formatters.
         "[typescript]": { "editor.defaultFormatter": "vscode.typescript-language-features" },
         "[typescriptreact]": { "editor.defaultFormatter": "vscode.typescript-language-features" },
