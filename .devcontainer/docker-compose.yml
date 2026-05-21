@@ -12,7 +12,8 @@ services:
       - ..:/workspace:cached
       # Named volume so ~/.claude (Claude Code state + claude-mem observations)
       # survives image rebuilds without binding to the host's own ~/.claude.
-      - claude-data:/home/${USER:-node}/.claude
+      # - claude-data:/home/${USER:-node}/.claude
+      - user-home-data:/home/${USER:-node}
     command: sleep infinity
     environment:
       OTEL_SERVICE_NAME: bedrock-cost-dashboard
@@ -116,4 +117,5 @@ secrets:
 
 volumes:
   dynamodb-data:
-  claude-data:
+  user-home-data:
+  # claude-data:
