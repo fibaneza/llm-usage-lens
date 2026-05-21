@@ -147,5 +147,6 @@ vite.config.ts.timestamp-*
 
 .DS_Store
 
-# DevContainer secrets — local-only, never commit
-.devcontainer/grafana_admin_password.txt
+# DevContainer secrets — local-only, never commit. Seeded from the tracked
+# .example on first start (see devcontainer.json initializeCommand).
+.devcontainer/grafana/grafana_admin_password.txt

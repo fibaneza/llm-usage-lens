@@ -10,9 +10,12 @@ services:
         USERNAME: ${USER:-node}
     volumes:
       - ..:/workspace:cached
-      # Named volume so ~/.claude (Claude Code state + claude-mem observations)
-      # survives image rebuilds without binding to the host's own ~/.claude.
-      # - claude-data:/home/${USER:-node}/.claude
+      # Persist the whole container home in a named volume so the globally
+      # installed Claude Code CLI, the plugins added by post-create.sh, and
+      # ~/.claude state (settings + claude-mem observations) all survive image
+      # rebuilds — without binding to the host's own home directory.
+      # Note: a persisted home shadows later image changes under /home; remove
+      # the volume (`docker compose down -v`) to re-seed from a fresh build.
       - user-home-data:/home/${USER:-node}
     command: sleep infinity
     environment:
@@ -112,10 +115,12 @@ services:
       retries: 5
 
 secrets:
+  # Gitignored, local-only. Seeded from grafana_admin_password.txt.example on
+  # first start by devcontainer.json's initializeCommand. Running the stack
+  # outside the devcontainer? Copy the .example to this path first.
   grafana_admin_password:
     file: ./grafana/grafana_admin_password.txt
 
 volumes:
-  dynamodb-data:
-  user-home-data:
-  # claude-data:
+  dynamodb-data: # DynamoDB Local table data
+  user-home-data: # Container home (~/) — see the note on the app service's volumes

@@ -1,3 +1,5 @@
+# Auto-load any dashboard JSON in the provisioning dir into a "Claude Code"
+# folder, re-checking every 30s so edits to claude-code.json show up live.
 apiVersion: 1
 
 providers:

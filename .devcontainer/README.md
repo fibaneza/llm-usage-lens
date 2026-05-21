@@ -210,11 +210,14 @@ services:
       retries: 5
 
 secrets:
+  # Gitignored, local-only — seeded from grafana_admin_password.txt.example
+  # on first start by devcontainer.json's initializeCommand.
   grafana_admin_password:
-    file: ./grafana_admin_password.txt
+    file: ./grafana/grafana_admin_password.txt
 
 volumes:
   dynamodb-data:
+  user-home-data:
 ```
 
 ### `otel/otel-collector-config.yaml`
@@ -359,6 +362,11 @@ tooling agree with the CLI gates.
 | Vitest | `vitest.explorer` | Run/debug Vitest tests in the editor (not Jest) |
 | Playwright | `ms-playwright.playwright` | Run/debug E2E specs (Phase 5+) |
 | Pretty TypeScript Errors | `yoavbls.pretty-ts-errors` | Readable errors for TypeScript strict mode |
+| Error Lens | `usernamehw.errorlens` | Inline diagnostics — pairs with Pretty TS Errors under strict mode |
+| AWS Toolkit | `amazonwebservices.aws-toolkit-vscode` | Browse DynamoDB Local + Lambda collector work (Phase 6) |
+| Conventional Commits | `vivaxy.vscode-conventional-commits` | Guided commit messages matching the commitlint gate |
+| YAML | `redhat.vscode-yaml` | Validate `docker-compose.yml` + `otel-collector-config.yaml` |
+| markdownlint | `davidanson.vscode-markdownlint` | Keep `docs/specs/**` consistently formatted |
 
 ### 2. Start the observability stack
 
@@ -408,7 +416,9 @@ You should see metrics such as `claude_code_cost_usage_USD_total`,
 Go to `http://localhost:3001` and log in:
 
 - **Username:** `admin`
-- **Password:** contents of `.devcontainer/grafana_admin_password.txt`
+- **Password:** contents of `.devcontainer/grafana/grafana_admin_password.txt`
+  (gitignored; seeded from `grafana_admin_password.txt.example` — default
+  `admin` — on first start. Edit the file to change it; never commit it.)
 
 The **Claude Code Telemetry** dashboard is pre-loaded under the **Claude
 Code** folder. It includes:

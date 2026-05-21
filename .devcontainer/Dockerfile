@@ -104,14 +104,6 @@ RUN set -eux; \
     printf '{\n  "statusLine": {\n    "type": "command",\n    "command": "/workspace/.devcontainer/claude/statusline-command.sh",\n    "padding": 0\n  }\n}\n' \
         > /etc/claude-code/managed-settings.json
 
-# Pre-create ~/.claude owned by the user. The docker-compose.yml `claude-data`
-# named volume mounts here; Docker seeds a fresh named volume with the
-# ownership/permissions of this image directory, so creating it as $USERNAME
-# now stops the volume from defaulting to root:root and locking the user out.
-RUN set -eux; \
-    mkdir -p "/home/$USERNAME/.claude"; \
-    chown "$USERNAME:$USERNAME" "/home/$USERNAME/.claude"
-
 USER $USERNAME
 
 # Claude Code CLI on PATH. Git is already provided by the base image.

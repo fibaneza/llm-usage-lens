@@ -1,4 +1,8 @@
+# OpenTelemetry Collector — receives OTLP from the Claude Code CLI (and the
+# app) in the devcontainer, then fans each signal out to its backend.
+# See .devcontainer/README.md for the full pipeline diagram.
 receivers:
+  # Accept OTLP over gRPC (4317) and HTTP (4318); the app exports via gRPC.
   otlp:
     protocols:
       grpc:
@@ -7,15 +11,20 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 exporters:
+  # Expose metrics for Prometheus to scrape (prometheus.yml targets :8889).
   prometheus:
     endpoint: "0.0.0.0:8889"
 
+  # Push logs/events to Loki's OTLP endpoint. The exporter type MUST be
+  # `otlphttp` (no underscore) — `otlp_http` is invalid and the collector
+  # will fail to start.
   otlphttp/loki:
     endpoint: http://loki:3100/otlp
     tls:
-      insecure: true
+      insecure: true # Local-only stack; plaintext on the compose network.
 
 processors:
+  # Batch spans/metrics/logs before export to reduce per-request overhead.
   batch:
 
 service:

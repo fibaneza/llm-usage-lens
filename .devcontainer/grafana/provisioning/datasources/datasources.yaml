@@ -1,4 +1,5 @@
-# Example Grafana data source provisioning
+# Grafana data sources auto-provisioned at startup. Both backends are
+# reachable by service name on the compose network.
 apiVersion: 1
 
 datasources:

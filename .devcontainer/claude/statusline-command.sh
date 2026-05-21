@@ -1,4 +1,8 @@
 #!/bin/sh
+# Claude Code statusline — reads the statusLine JSON on stdin and prints two
+# lines: model, effort, context-window bar, session cost, and rate-limit bar;
+# then dir, worktree, and git branch + staged/modified counts. Wired up via
+# /etc/claude-code/managed-settings.json (see .devcontainer/Dockerfile).
 input=$(cat)
 
 model=$(echo "$input" | jq -r '.model.display_name // "Unknown Model"')
