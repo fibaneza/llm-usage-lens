@@ -8,8 +8,9 @@ services:
       args:
         # Host login name — interpolated from the shell env, not hardcoded.
         USERNAME: ${USER:-node}
+        PROJECT_FOLDER_NAME: ${COMPOSE_PROJECT_NAME}
     volumes:
-      - ..:/workspace:cached
+      - ..:/workspace/${COMPOSE_PROJECT_NAME}:cached
       # Persist the whole container home in a named volume so the globally
       # installed Claude Code CLI, the plugins added by post-create.sh, and
       # ~/.claude state (settings + claude-mem observations) all survive image
@@ -19,6 +20,7 @@ services:
       - user-home-data:/home/${USER:-node}
     command: sleep infinity
     environment:
+      PROJECT_FOLDER_NAME: ${COMPOSE_PROJECT_NAME}
       OTEL_SERVICE_NAME: bedrock-cost-dashboard
 
       # Claude Code telemetry — exports metrics + events when `claude` runs
@@ -27,7 +29,7 @@ services:
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_DEFAULT_ENDPOINT}
       # Prometheus needs cumulative counters; Claude Code defaults to delta.
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
       OTEL_METRIC_EXPORT_INTERVAL: "10000"
@@ -41,7 +43,7 @@ services:
     depends_on:
       - otel-collector
     healthcheck:
-      test: ["CMD", "node", "-v"]
+      test: [ "CMD", "node", "-v" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -49,7 +51,7 @@ services:
   dynamodb-local:
     # Optional — start on demand: `docker compose up -d dynamodb-local` or via /seed
     image: amazon/dynamodb-local:2.5.4
-    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
+    command: [ "-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data" ]
     volumes:
       - dynamodb-data:/data
     ports:
@@ -57,7 +59,7 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.107.0
-    command: ["--config=/etc/otelcol/config.yaml"]
+    command: [ "--config=/etc/otelcol/config.yaml" ]
     volumes:
       - ./otel/otel-collector-config.yaml:/etc/otelcol/config.yaml
     ports:
@@ -67,7 +69,7 @@ services:
       - prometheus
       - loki
     healthcheck:
-      test: ["CMD", "otelcol-contrib", "--version"]
+      test: [ "CMD", "otelcol-contrib", "--version" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -79,7 +81,7 @@ services:
     ports:
       - "9090:9090"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:9090/-/healthy"]
+      test: [ "CMD", "wget", "--spider", "http://localhost:9090/-/healthy" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -89,7 +91,7 @@ services:
     ports:
       - "3100:3100"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:3100/ready"]
+      test: [ "CMD", "wget", "--spider", "http://localhost:3100/ready" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -109,7 +111,7 @@ services:
     secrets:
       - grafana_admin_password
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
+      test: [ "CMD", "wget", "--spider", "http://localhost:3000/api/health" ]
       interval: 30s
       timeout: 10s
       retries: 5

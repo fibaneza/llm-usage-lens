@@ -14,6 +14,12 @@ ARG DEBIAN_FRONTEND=noninteractive
 # Not hardcoded — see docker-compose.yml `args: USERNAME: ${USER:-node}`.
 ARG USERNAME=node
 
+# Project folder name, passed from docker-compose (defaults to the compose project name).
+ARG PROJECT_FOLDER_NAME
+
+# Expose the project path as an environment variable for use in the statusline script.
+ENV PROJECT_PATH=/workspace/${PROJECT_FOLDER_NAME}
+
 # Rename the built-in 'node' user to match the host user. The devcontainer
 # `updateRemoteUserUID` setting then syncs this user's UID/GID to the host, so
 # bind-mounted ~/.ssh and ~/.claude are readable and git SSH auth works.
@@ -101,8 +107,10 @@ RUN set -eux; \
 # /workspace/.devcontainer/claude/statusline-command.sh.
 RUN set -eux; \
     mkdir -p /etc/claude-code; \
-    printf '{\n  "statusLine": {\n    "type": "command",\n    "command": "/workspace/.devcontainer/claude/statusline-command.sh",\n    "padding": 0\n  }\n}\n' \
+    printf '{\n  "statusLine": {\n    "type": "command",\n    "command": "${PROJECT_PATH}/.devcontainer/claude/statusline-command.sh",\n    "padding": 0\n  }\n}\n' \
         > /etc/claude-code/managed-settings.json
+    # printf '{\n  "statusLine": {\n    "type": "command",\n    "command": "/workspace/.devcontainer/claude/statusline-command.sh",\n    "padding": 0\n  }\n}\n' \
+    #     > /etc/claude-code/managed-settings.json
 
 USER $USERNAME
 
@@ -111,3 +119,5 @@ USER $USERNAME
 # (not root) — this lets `npm install -g @anthropic-ai/claude-code` updates run
 # at runtime without sudo or hitting EACCES on a root-owned package dir.
 RUN npm install -g @anthropic-ai/claude-code
+
+WORKDIR ${PROJECT_PATH}
