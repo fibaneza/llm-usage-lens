@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Configure git user from environment variables
+git config --global user.name "${GIT_USER_NAME}"
+git config --global user.email "${GIT_USER_EMAIL}"
+
 # Marketplaces — sources Claude Code resolves plugins from.
 claude plugin marketplace add anthropics/claude-code               # First-party Claude Code commands and built-ins
 claude plugin marketplace add thedotmack/claude-mem                # Hosts claude-mem (persistent cross-session memory)

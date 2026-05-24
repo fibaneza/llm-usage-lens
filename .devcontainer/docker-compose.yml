@@ -22,6 +22,8 @@ services:
     environment:
       PROJECT_FOLDER_NAME: ${COMPOSE_PROJECT_NAME}
       OTEL_SERVICE_NAME: bedrock-cost-dashboard
+      GIT_USER_NAME: ${GIT_USER_NAME}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL}
 
       # Claude Code telemetry — exports metrics + events when `claude` runs
       # inside this container. See docs/guides or code.claude.com/docs/en/monitoring-usage.
