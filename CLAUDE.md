@@ -103,6 +103,15 @@ The project's default response voice is the **`spec-cited` output style** (`.cla
 
 `.claude/settings.json` hard-blocks destructive commands via its `deny` list — `rm -rf`, `git push --force`, `git reset --hard`, `git commit --no-verify`, and all `aws … delete-*` / `aws dynamodb delete-table` / `aws cloudformation delete-stack` / `sam delete`. These will be refused regardless of permission mode; don't attempt to route around them.
 
+## Out-of-scope tooling
+
+`tools/bedrock-simulator/` is a **standalone test harness**, not part of the dashboard project. It deploys to a dedicated AWS sandbox account, invokes real Amazon Bedrock models on demand, and generates the CloudWatch / CloudTrail / Cost Explorer / Guardrail / model-invocation-log signals the Phase 6 collector eventually ingests.
+
+- It is **not in the pnpm workspace** (separate `tools/bedrock-simulator/package.json`).
+- It does **not participate in `.claude/rules/30-phase-discipline.md`** — build it independently of the dashboard's phase order.
+- Deploy / run / destroy are GitHub Actions workflows (`workflow_dispatch` only). The `.claude/settings.json` deny list blocks `sam delete` and `aws *delete-*` from Claude Code — these run from the workflow, not from the local Claude session.
+- Spec: `docs/specs/<date>-bedrock-simulator.md`. Operational guide: `docs/guides/bedrock-simulator.md`.
+
 ## Architecture & conventions
 
 Detailed conventions live in `.claude/rules/` (numbered `00`–`70`, always loaded) and in `docs/specs/`. CLAUDE.md does not restate them — read the relevant rule and spec before writing code:
