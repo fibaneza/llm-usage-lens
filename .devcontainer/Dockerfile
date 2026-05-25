@@ -20,6 +20,7 @@ ARG PROJECT_FOLDER_NAME
 # Expose the project path as an environment variable for use in the statusline script.
 ENV PROJECT_PATH=/workspace/${PROJECT_FOLDER_NAME}
 
+# ----------------------------------------------------------------------------------------------
 # Rename the built-in 'node' user to match the host user. The devcontainer
 # `updateRemoteUserUID` setting then syncs this user's UID/GID to the host, so
 # bind-mounted ~/.ssh and ~/.claude are readable and git SSH auth works.
@@ -34,24 +35,10 @@ RUN set -eux; \
         fi; \
     fi
 
-# Python 3 + uv (provides `uvx`) for MCP servers shipped as Python tools.
-# `jq` is also installed here — required by .devcontainer/claude/statusline-command.sh
-# which parses Claude Code's statusLine JSON input.
-# Installed system-wide so they're on PATH for every user in the container.
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends python3 python3-venv jq; \
-    rm -rf /var/lib/apt/lists/*; \
-    curl -LsSf https://astral.sh/uv/install.sh | sh; \
-    cp /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/; \
-    rm -rf /root/.local
-
+# ----------------------------------------------------------------------------------------------
 # Azure CLI (`az`) — follows Microsoft's documented apt install steps:
 # https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-linux?pivots=apt
-# Supported suites today: Debian bullseye/bookworm, Ubuntu jammy/noble.
-# The base image is Debian 13 (trixie), which Microsoft does not publish a
-# repo for yet — their troubleshooting docs ("No package for your
-# distribution") explicitly say to pin `AZ_REPO="bookworm"` in that case.
+# Installing via the devcontainer feature is simpler but uses Microsoft's install script which is less transparent and adds ~3 GB to the image size.
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl apt-transport-https gnupg; \
@@ -66,39 +53,7 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends azure-cli; \
     rm -rf /var/lib/apt/lists/*
 
-# AWS CLI v2 — official bundled installer (the only AWS-supported install
-# method on Debian). Architecture-aware so it works on amd64 and arm64 hosts.
-# `unzip` is purged at the end of the same layer — best-practices guidance is
-# to remove build-only tooling in the layer that introduced it.
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends unzip curl ca-certificates; \
-    case "$(dpkg --print-architecture)" in \
-        amd64) AWS_ARCH=x86_64 ;; \
-        arm64) AWS_ARCH=aarch64 ;; \
-        *) echo "Unsupported arch for AWS CLI" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}.zip" -o /tmp/awscliv2.zip; \
-    unzip -q /tmp/awscliv2.zip -d /tmp; \
-    /tmp/aws/install; \
-    rm -rf /tmp/aws /tmp/awscliv2.zip; \
-    apt-get purge -y --auto-remove unzip; \
-    rm -rf /var/lib/apt/lists/*
-
-# Bun — required by the claude-mem plugin's stop hook (summarize script).
-# Installed system-wide so it's on PATH for all users. The official installer
-# unpacks a .zip release, so `unzip` is a hard prerequisite — install it for
-# the duration of this layer and purge it at the end (the AWS CLI layer above
-# already removed its own copy).
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends unzip; \
-    curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash; \
-    chmod a+x /usr/local/bin/bun; \
-    ln -sf /usr/local/bin/bun /usr/local/bin/bunx; \
-    apt-get purge -y --auto-remove unzip; \
-    rm -rf /var/lib/apt/lists/*
-
+# ----------------------------------------------------------------------------------------------
 # Container-scoped Claude Code settings: enable the project's statusline
 # script. /etc/claude-code/managed-settings.json is the system-managed
 # settings location and is NOT bind-mounted from the host, so this config
@@ -109,15 +64,3 @@ RUN set -eux; \
     mkdir -p /etc/claude-code; \
     printf '{\n  "statusLine": {\n    "type": "command",\n    "command": "${PROJECT_PATH}/.devcontainer/claude/statusline-command.sh",\n    "padding": 0\n  }\n}\n' \
         > /etc/claude-code/managed-settings.json
-    # printf '{\n  "statusLine": {\n    "type": "command",\n    "command": "/workspace/.devcontainer/claude/statusline-command.sh",\n    "padding": 0\n  }\n}\n' \
-    #     > /etc/claude-code/managed-settings.json
-
-USER $USERNAME
-
-# Claude Code CLI on PATH. Git is already provided by the base image.
-# Installed AFTER the USER switch so the global package is owned by $USERNAME
-# (not root) — this lets `npm install -g @anthropic-ai/claude-code` updates run
-# at runtime without sudo or hitting EACCES on a root-owned package dir.
-RUN npm install -g @anthropic-ai/claude-code
-
-WORKDIR ${PROJECT_PATH}
