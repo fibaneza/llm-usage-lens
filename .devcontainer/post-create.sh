@@ -24,10 +24,8 @@ claude plugin install code-review@claude-plugins-official          # Code review
 claude plugin install security-guidance@claude-plugins-official    # Security guidance skills: automated security analysis, suggestions, best practices
 claude plugin install ecc@ecc                                      # The harness-native operator system for agentic work.
 
-# Disable most MCP servers by default to speed up responses
-claude mcp remove plugin:ecc:github
-claude mcp remove plugin:ecc:context7
-claude mcp remove plugin:ecc:memory
-claude mcp remove plugin:ecc:playwright
-claude mcp remove plugin:ecc:sequential-thinking
-claude mcp remove plugin:ecc:exa
+# Disable noisy ecc MCP servers by clearing the plugin's own .mcp.json files.
+# The settings.json "disabled": true override does not suppress plugin-registered servers;
+# directly emptying mcpServers in both the marketplace and cache copies is the only reliable method.
+echo '{"mcpServers":{}}' | jq . > ~/.claude/plugins/marketplaces/ecc/.mcp.json
+find ~/.claude/plugins/cache/ecc -name ".mcp.json" -exec sh -c 'echo "{\"mcpServers\":{}}" | jq . > "$1"' _ {} \;
