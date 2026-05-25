@@ -1,0 +1,170 @@
+name: bedrock-simulator-destroy
+
+# Two-phase teardown of the bedrock-simulator stack:
+#   1. Disable account-level Bedrock model invocation logging (otherwise the
+#      bucket and log group can't be deleted — they're referenced by an
+#      account-level setting CloudFormation doesn't own).
+#   2. Empty InvocationLoggingBucket (delete all objects, all versions, abort
+#      multipart uploads) so CloudFormation can delete the bucket.
+#   3. sam delete --no-prompts.
+#
+# If the stack still lands in DELETE_FAILED, follow Recovery D in
+# docs/guides/bedrock-simulator.md.
+#
+# The literal-string confirmation input prevents accidental dispatch. The
+# GitHub Environment's required-reviewer protection adds a second gate.
+#
+# All untrusted/external inputs are passed via `env:` blocks (never inlined in
+# `run:` strings) to prevent shell-command injection.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type the literal string "destroy bedrock-simulator" to confirm teardown.'
+        required: true
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  STACK_NAME: bedrock-simulator
+  CONFIRM_STRING: 'destroy bedrock-simulator'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    name: Tear down stack
+    runs-on: ubuntu-latest
+    environment: bedrock-simulator-sandbox
+
+    steps:
+      - name: Confirm intent
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "$CONFIRM_STRING" ]; then
+            echo "::error::confirm input must be the literal string defined by CONFIRM_STRING."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve bucket name from CFN outputs
+        id: outputs
+        run: |
+          BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='InvocationLoggingBucketName'].OutputValue" \
+            --output text 2>/dev/null || echo "")
+          if [ -z "$BUCKET_NAME" ] || [ "$BUCKET_NAME" = "None" ]; then
+            echo "::warning::Could not resolve InvocationLoggingBucketName — stack may already be partially deleted. Continuing."
+            BUCKET_NAME=""
+          fi
+          echo "bucket_name=$BUCKET_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Pre-step 1 — Disable Bedrock model invocation logging
+        run: |
+          set +e
+          aws bedrock delete-model-invocation-logging-configuration 2>&1 | tee /tmp/mil-delete.log
+          RC=$?
+          if [ $RC -ne 0 ]; then
+            # ResourceNotFoundException is the expected no-op case if logging was never configured
+            if grep -q "ResourceNotFoundException" /tmp/mil-delete.log; then
+              echo "Model invocation logging already disabled — no-op."
+            else
+              echo "::warning::delete-model-invocation-logging-configuration failed; continuing with destroy."
+            fi
+          else
+            echo "Model invocation logging disabled."
+          fi
+          set -e
+
+      - name: Pre-step 2 — Empty InvocationLoggingBucket
+        env:
+          BUCKET_NAME: ${{ steps.outputs.outputs.bucket_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BUCKET_NAME" ]; then
+            echo "No bucket to empty (already torn down or never created)."
+            exit 0
+          fi
+
+          echo "Removing current-version objects from s3://$BUCKET_NAME..."
+          aws s3 rm "s3://$BUCKET_NAME" --recursive --quiet || true
+
+          echo "Removing noncurrent versions + delete markers..."
+          aws s3api list-object-versions --bucket "$BUCKET_NAME" \
+            --query '{Objects:(Versions[*].{Key:Key,VersionId:VersionId})[?VersionId!=null]}' \
+            --output json > /tmp/versions.json 2>/dev/null || echo '{"Objects":[]}' > /tmp/versions.json
+          if [ "$(jq '.Objects | length' /tmp/versions.json)" -gt 0 ]; then
+            aws s3api delete-objects --bucket "$BUCKET_NAME" --delete file:///tmp/versions.json --quiet || true
+          fi
+
+          aws s3api list-object-versions --bucket "$BUCKET_NAME" \
+            --query '{Objects:(DeleteMarkers[*].{Key:Key,VersionId:VersionId})[?VersionId!=null]}' \
+            --output json > /tmp/markers.json 2>/dev/null || echo '{"Objects":[]}' > /tmp/markers.json
+          if [ "$(jq '.Objects | length' /tmp/markers.json)" -gt 0 ]; then
+            aws s3api delete-objects --bucket "$BUCKET_NAME" --delete file:///tmp/markers.json --quiet || true
+          fi
+
+          echo "Aborting in-progress multipart uploads..."
+          aws s3api list-multipart-uploads --bucket "$BUCKET_NAME" \
+            --query 'Uploads[].[Key,UploadId]' --output text 2>/dev/null \
+            | while read -r key id; do
+                [ -n "$key" ] && [ -n "$id" ] || continue
+                aws s3api abort-multipart-upload --bucket "$BUCKET_NAME" --key "$key" --upload-id "$id" || true
+              done
+
+          echo "Bucket empty."
+
+      - name: sam delete
+        working-directory: tools/bedrock-simulator
+        run: |
+          sam delete --stack-name "$STACK_NAME" --region "$AWS_REGION" --no-prompts
+
+      - name: Verify stack deleted
+        run: |
+          set +e
+          STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].StackStatus' --output text 2>&1)
+          RC=$?
+          set -e
+          if [ $RC -ne 0 ] && echo "$STATUS" | grep -q "does not exist"; then
+            echo "Stack '$STACK_NAME' deleted successfully."
+          else
+            echo "::error::Stack still exists with status: $STATUS. See Recovery D in docs/guides/bedrock-simulator.md."
+            exit 1
+          fi
+
+      - name: Capture diagnostics on failure
+        if: failure()
+        run: |
+          mkdir -p /tmp/diagnostics
+          aws cloudformation describe-stack-events --stack-name "$STACK_NAME" \
+            --output json > /tmp/diagnostics/stack-events.json 2>/dev/null || true
+          aws cloudformation describe-stack-events --stack-name "$STACK_NAME" \
+            --query 'StackEvents[?contains(ResourceStatus,`FAILED`)].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]' \
+            --output table > /tmp/diagnostics/stack-events-failed.txt 2>/dev/null || true
+          cp /tmp/mil-delete.log /tmp/diagnostics/ 2>/dev/null || true
+
+      - name: Upload diagnostics artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bedrock-simulator-destroy-diagnostics
+          path: /tmp/diagnostics/
+          retention-days: 7

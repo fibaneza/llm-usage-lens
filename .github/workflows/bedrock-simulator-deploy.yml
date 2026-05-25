@@ -1,0 +1,251 @@
+name: bedrock-simulator-deploy
+
+# Deploys the bedrock-simulator SAM stack to the sandbox account, then runs
+# three post-deploy checks:
+#   2a) CloudFormation stack-status assertion (CREATE_COMPLETE / UPDATE_COMPLETE)
+#   2b) Resource-existence checks (Lambda Active, inference profiles ACTIVE,
+#       Guardrail READY, model-invocation-logging configured)
+#   2c) Functional smoke test (one Haiku InvokeModel, cost ~$0.001)
+#
+# Bootstrap note: the DeployerRole this workflow assumes is CREATED BY the
+# stack on the first deploy. For the very first deploy in a new sandbox
+# account, an operator must run `sam deploy` once with SSO credentials, then
+# subsequent deploys can use this workflow. See docs/guides/bedrock-simulator.md.
+#
+# All untrusted/external inputs are passed via `env:` blocks (never inlined in
+# `run:` strings) to prevent shell-command injection.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type the literal string "deploy" to confirm this destructive action.'
+        required: true
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  STACK_NAME: bedrock-simulator
+
+permissions:
+  id-token: write   # Required for OIDC token issuance
+  contents: read
+
+jobs:
+  deploy:
+    name: Validate, build, deploy
+    runs-on: ubuntu-latest
+    environment: bedrock-simulator-sandbox   # Required-reviewer protection
+
+    steps:
+      - name: Confirm intent
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "deploy" ]; then
+            echo "::error::confirm input must be the literal string 'deploy'."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install simulator dependencies
+        working-directory: tools/bedrock-simulator
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check + unit tests (pre-deploy gate)
+        working-directory: tools/bedrock-simulator
+        run: |
+          pnpm typecheck
+          pnpm test
+
+      - name: SAM validate
+        working-directory: tools/bedrock-simulator
+        run: sam validate --lint
+
+      - name: SAM build
+        working-directory: tools/bedrock-simulator
+        run: sam build
+
+      - name: SAM deploy
+        working-directory: tools/bedrock-simulator
+        env:
+          SANDBOX_ACCOUNT_ID: ${{ vars.SANDBOX_ACCOUNT_ID }}
+          GH_OWNER: ${{ github.repository_owner }}
+          GH_REPO: ${{ github.event.repository.name }}
+          BUDGET_ALERT_EMAIL: ${{ secrets.BUDGET_ALERT_EMAIL }}
+        run: |
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --resolve-s3 \
+            --parameter-overrides \
+              "SandboxAccountId=$SANDBOX_ACCOUNT_ID" \
+              "GitHubOwner=$GH_OWNER" \
+              "GitHubRepo=$GH_REPO" \
+              "GitHubEnvironment=bedrock-simulator-sandbox" \
+              "BudgetAlertEmail=$BUDGET_ALERT_EMAIL"
+
+      - name: 2a — Stack-status assertion
+        run: |
+          STATUS=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].StackStatus' --output text)
+          echo "Stack status: $STATUS"
+          if [ "$STATUS" != "CREATE_COMPLETE" ] && [ "$STATUS" != "UPDATE_COMPLETE" ]; then
+            echo "::error::Stack status is $STATUS, expected CREATE_COMPLETE or UPDATE_COMPLETE"
+            exit 1
+          fi
+
+      - name: Resolve stack outputs
+        id: outputs
+        run: |
+          aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].Outputs' --output json > /tmp/outputs.json
+          {
+            echo "lambda_name=$(jq -r '.[] | select(.OutputKey=="SimulatorLambdaName") | .OutputValue' /tmp/outputs.json)"
+            echo "bucket_name=$(jq -r '.[] | select(.OutputKey=="InvocationLoggingBucketName") | .OutputValue' /tmp/outputs.json)"
+            echo "log_group_name=$(jq -r '.[] | select(.OutputKey=="InvocationLoggingGroupName") | .OutputValue' /tmp/outputs.json)"
+            echo "guardrail_id=$(jq -r '.[] | select(.OutputKey=="GuardrailId") | .OutputValue' /tmp/outputs.json)"
+            echo "profile_chat_arn=$(jq -r '.[] | select(.OutputKey=="InferenceProfileChatArn") | .OutputValue' /tmp/outputs.json)"
+            echo "profile_summarizer_arn=$(jq -r '.[] | select(.OutputKey=="InferenceProfileSummarizerArn") | .OutputValue' /tmp/outputs.json)"
+            echo "profile_translator_arn=$(jq -r '.[] | select(.OutputKey=="InferenceProfileTranslatorArn") | .OutputValue' /tmp/outputs.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 2b — Resource-existence checks
+        env:
+          LAMBDA_NAME: ${{ steps.outputs.outputs.lambda_name }}
+          BUCKET_NAME: ${{ steps.outputs.outputs.bucket_name }}
+          LOG_GROUP_NAME: ${{ steps.outputs.outputs.log_group_name }}
+          GUARDRAIL_ID: ${{ steps.outputs.outputs.guardrail_id }}
+          PROFILE_CHAT_ARN: ${{ steps.outputs.outputs.profile_chat_arn }}
+          PROFILE_SUMMARIZER_ARN: ${{ steps.outputs.outputs.profile_summarizer_arn }}
+          PROFILE_TRANSLATOR_ARN: ${{ steps.outputs.outputs.profile_translator_arn }}
+        run: |
+          set -euo pipefail
+
+          echo "Checking Lambda is Active..."
+          LAMBDA_STATE=$(aws lambda get-function --function-name "$LAMBDA_NAME" \
+            --query 'Configuration.[State,LastUpdateStatus]' --output text)
+          if [ "$LAMBDA_STATE" != "Active	Successful" ]; then
+            echo "::error::Lambda state=$LAMBDA_STATE, expected 'Active	Successful'"
+            exit 1
+          fi
+
+          for arn in "$PROFILE_CHAT_ARN" "$PROFILE_SUMMARIZER_ARN" "$PROFILE_TRANSLATOR_ARN"; do
+            echo "Checking inference profile $arn is ACTIVE..."
+            PROFILE_STATUS=$(aws bedrock get-inference-profile \
+              --inference-profile-identifier "$arn" \
+              --query 'status' --output text)
+            if [ "$PROFILE_STATUS" != "ACTIVE" ]; then
+              echo "::error::Inference profile $arn status=$PROFILE_STATUS, expected ACTIVE"
+              exit 1
+            fi
+          done
+
+          echo "Checking Guardrail is READY..."
+          GUARDRAIL_STATUS=$(aws bedrock get-guardrail --guardrail-identifier "$GUARDRAIL_ID" \
+            --query 'status' --output text)
+          if [ "$GUARDRAIL_STATUS" != "READY" ]; then
+            echo "::error::Guardrail status=$GUARDRAIL_STATUS, expected READY"
+            exit 1
+          fi
+
+          echo "Checking model invocation logging configuration..."
+          MIL=$(aws bedrock get-model-invocation-logging-configuration --output json)
+          MIL_BUCKET=$(echo "$MIL" | jq -r '.loggingConfig.s3Config.s3BucketName // empty')
+          MIL_LOG_GROUP=$(echo "$MIL" | jq -r '.loggingConfig.cloudWatchConfig.logGroupName // empty')
+          if [ "$MIL_BUCKET" != "$BUCKET_NAME" ]; then
+            echo "::error::MIL bucket='$MIL_BUCKET', expected '$BUCKET_NAME'"
+            exit 1
+          fi
+          if [ "$MIL_LOG_GROUP" != "$LOG_GROUP_NAME" ]; then
+            echo "::error::MIL log group='$MIL_LOG_GROUP', expected '$LOG_GROUP_NAME'"
+            exit 1
+          fi
+
+          echo "All resource-existence checks passed."
+
+      - name: 2c — Functional smoke test (1 Haiku call, no guardrail)
+        env:
+          LAMBDA_NAME: ${{ steps.outputs.outputs.lambda_name }}
+        run: |
+          set -euo pipefail
+          PAYLOAD='{"totalCalls":1,"models":["claude-haiku"],"services":["chat"],"users":["engineering"],"guardrailRatio":0}'
+          aws lambda invoke \
+            --function-name "$LAMBDA_NAME" \
+            --cli-binary-format raw-in-base64-out \
+            --payload "$PAYLOAD" \
+            /tmp/smoke-response.json > /tmp/smoke-invoke.json
+
+          STATUS_CODE=$(jq -r '.StatusCode' /tmp/smoke-invoke.json)
+          if [ "$STATUS_CODE" != "200" ]; then
+            echo "::error::Lambda invoke returned StatusCode $STATUS_CODE, expected 200"
+            cat /tmp/smoke-invoke.json
+            cat /tmp/smoke-response.json
+            exit 1
+          fi
+
+          TOTAL=$(jq -r '.summary.totalCalls' /tmp/smoke-response.json)
+          ERRORED=$(jq -r '.summary.errored' /tmp/smoke-response.json)
+          echo "Smoke result: totalCalls=$TOTAL, errored=$ERRORED"
+          if [ "$TOTAL" != "1" ] || [ "$ERRORED" != "0" ]; then
+            echo "::error::Smoke test failed: expected totalCalls=1 errored=0, got totalCalls=$TOTAL errored=$ERRORED"
+            cat /tmp/smoke-response.json
+            exit 1
+          fi
+          echo 'Smoke test passed (~$0.001).'
+
+      - name: Capture diagnostics on failure
+        if: failure()
+        env:
+          LAMBDA_NAME: ${{ steps.outputs.outputs.lambda_name }}
+        run: |
+          mkdir -p /tmp/diagnostics
+          aws cloudformation describe-stack-events --stack-name "$STACK_NAME" \
+            --output json > /tmp/diagnostics/stack-events.json 2>/dev/null || true
+          aws cloudformation describe-stack-events --stack-name "$STACK_NAME" \
+            --query 'StackEvents[?contains(ResourceStatus,`FAILED`)].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]' \
+            --output table > /tmp/diagnostics/stack-events-failed.txt 2>/dev/null || true
+
+          if [ -n "$LAMBDA_NAME" ]; then
+            aws logs tail "/aws/lambda/$LAMBDA_NAME" \
+              --since 10m --format short \
+              > /tmp/diagnostics/lambda-logs.txt 2>/dev/null || true
+          fi
+
+          cp /tmp/smoke-response.json /tmp/diagnostics/smoke-response.json 2>/dev/null || true
+          cp /tmp/smoke-invoke.json /tmp/diagnostics/smoke-invoke.json 2>/dev/null || true
+
+      - name: Upload diagnostics artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bedrock-simulator-deploy-diagnostics
+          path: /tmp/diagnostics/
+          retention-days: 7

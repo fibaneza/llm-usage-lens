@@ -1,0 +1,9 @@
+# CODEOWNERS — required reviewers per path.
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+
+# Bedrock simulator: prompt fixtures must be security-reviewed on every change.
+# The simulator's design depends on prompts being synthetic — see the
+# "Synthetic-data-only constraint" in docs/specs/<date>-bedrock-simulator.md
+# and docs/guides/bedrock-simulator.md. Real-looking PII or data that could
+# represent a real person must never land in this file.
+tools/bedrock-simulator/src/prompts.ts @fibanez6

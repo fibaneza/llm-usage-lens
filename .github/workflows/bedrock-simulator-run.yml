@@ -1,0 +1,144 @@
+name: bedrock-simulator-run
+
+# Invokes the deployed Bedrock simulator Lambda once with the full
+# (model × service × user) matrix and operator-chosen totalCalls + guardrailRatio.
+# Always passes the full matrix — Lambda contract is fixed in code, not at
+# dispatch time. See docs/specs/2026-05-24-bedrock-simulator.md "Lambda contract".
+#
+# All untrusted/external inputs are passed via `env:` blocks (never inlined in
+# `run:` strings) to prevent shell-command injection.
+
+on:
+  workflow_dispatch:
+    inputs:
+      totalCalls:
+        description: 'Number of InvokeModel calls to fan out (1–50).'
+        required: true
+        type: number
+        default: 10
+      guardrailRatio:
+        description: 'Fraction of calls routed via the Guardrail (0.0–1.0).'
+        required: true
+        type: string
+        default: '0.2'
+
+env:
+  AWS_REGION: us-east-1
+  STACK_NAME: bedrock-simulator
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  run:
+    name: Invoke simulator
+    runs-on: ubuntu-latest
+    environment: bedrock-simulator-sandbox
+
+    steps:
+      - name: Validate inputs
+        env:
+          TOTAL_CALLS: ${{ inputs.totalCalls }}
+          RATIO: ${{ inputs.guardrailRatio }}
+        run: |
+          if ! [[ "$TOTAL_CALLS" =~ ^[0-9]+$ ]] || [ "$TOTAL_CALLS" -lt 1 ] || [ "$TOTAL_CALLS" -gt 50 ]; then
+            echo "::error::totalCalls must be an integer 1–50"
+            exit 1
+          fi
+          if ! [[ "$RATIO" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]]; then
+            echo "::error::guardrailRatio must be a number 0.0–1.0"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve Lambda function name from CFN outputs
+        id: outputs
+        run: |
+          LAMBDA_NAME=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='SimulatorLambdaName'].OutputValue" \
+            --output text)
+          if [ -z "$LAMBDA_NAME" ] || [ "$LAMBDA_NAME" = "None" ]; then
+            echo "::error::Could not resolve SimulatorLambdaName from stack '$STACK_NAME'. Has it been deployed?"
+            exit 1
+          fi
+          echo "lambda_name=$LAMBDA_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Build invocation payload (full matrix)
+        env:
+          TOTAL_CALLS: ${{ inputs.totalCalls }}
+          RATIO: ${{ inputs.guardrailRatio }}
+        run: |
+          jq -n \
+            --argjson totalCalls "$TOTAL_CALLS" \
+            --argjson ratio "$RATIO" \
+            '{
+              totalCalls: $totalCalls,
+              guardrailRatio: $ratio,
+              models:   ["claude-opus", "claude-sonnet", "claude-haiku", "other"],
+              services: ["chat", "summarizer", "translator"],
+              users:    ["engineering", "research", "marketing"]
+            }' > /tmp/payload.json
+          echo "Payload:"
+          cat /tmp/payload.json
+
+      - name: Invoke Lambda
+        id: invoke
+        env:
+          LAMBDA_NAME: ${{ steps.outputs.outputs.lambda_name }}
+        run: |
+          set -euo pipefail
+          aws lambda invoke \
+            --function-name "$LAMBDA_NAME" \
+            --cli-binary-format raw-in-base64-out \
+            --payload "file:///tmp/payload.json" \
+            /tmp/response.json > /tmp/invoke-meta.json
+
+          STATUS_CODE=$(jq -r '.StatusCode' /tmp/invoke-meta.json)
+          FUNCTION_ERROR=$(jq -r '.FunctionError // ""' /tmp/invoke-meta.json)
+
+          echo "status_code=$STATUS_CODE" >> "$GITHUB_OUTPUT"
+          echo "function_error=$FUNCTION_ERROR" >> "$GITHUB_OUTPUT"
+
+          if [ "$STATUS_CODE" != "200" ] || [ -n "$FUNCTION_ERROR" ]; then
+            echo "::error::Lambda invoke failed: StatusCode=$STATUS_CODE FunctionError='$FUNCTION_ERROR'"
+            cat /tmp/response.json
+            exit 1
+          fi
+
+      - name: Summarise results in workflow summary
+        env:
+          LAMBDA_NAME: ${{ steps.outputs.outputs.lambda_name }}
+          TOTAL_CALLS: ${{ inputs.totalCalls }}
+          RATIO: ${{ inputs.guardrailRatio }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Bedrock simulator run"
+            echo ""
+            printf '**Lambda:** `%s`  \n' "$LAMBDA_NAME"
+            printf '**Inputs:** totalCalls=%s, guardrailRatio=%s\n' "$TOTAL_CALLS" "$RATIO"
+            echo ""
+            echo "### Summary"
+            echo ""
+            jq -r '.summary | "- totalCalls: \(.totalCalls)\n- success: \(.success)\n- errored: \(.errored)\n- guardrailBlocked: \(.guardrailBlocked)"' /tmp/response.json
+            echo ""
+            echo "### Per-call results"
+            echo ""
+            echo "| user | service | model | status | inputTokens | outputTokens | latencyMs | errorCode |"
+            echo "|---|---|---|---|---|---|---|---|"
+            jq -r '.results[] | "| \(.user) | \(.service) | \(.model) | \(.status) | \(.inputTokens // "") | \(.outputTokens // "") | \(.latencyMs) | \(.errorCode // "") |"' /tmp/response.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full response artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bedrock-simulator-run-response
+          path: /tmp/response.json
+          retention-days: 7

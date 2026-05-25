@@ -1,0 +1,31 @@
+# Copy to samconfig.toml and fill in the placeholders for your sandbox account.
+# samconfig.toml is gitignored. Do NOT commit real account IDs.
+
+version = 0.1
+
+[default]
+[default.global.parameters]
+stack_name = "bedrock-simulator"
+
+[default.build.parameters]
+parallel = true
+cached = true
+
+[default.deploy.parameters]
+# Replace placeholder values below. Use "000000000000" while developing locally
+# so gitleaks does not flag a real 12-digit AWS account ID by accident.
+region = "us-east-1"
+capabilities = "CAPABILITY_NAMED_IAM"
+confirm_changeset = false
+resolve_s3 = true
+fail_on_empty_changeset = false
+
+# BUDGET_ALERT_EMAIL is provided by the GitHub Actions workflow at deploy time
+# (via --parameter-overrides), never written here. The CFN parameter has
+# NoEcho: true so it is not echoed to deploy logs.
+parameter_overrides = [
+  "SandboxAccountId=000000000000",
+  "GitHubOwner=REPLACE_ME",
+  "GitHubRepo=REPLACE_ME",
+  "GitHubEnvironment=bedrock-simulator-sandbox"
+]
