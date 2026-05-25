@@ -20,6 +20,9 @@
   // out); (2) seed the gitignored Grafana admin password from its tracked
   // .example on first start, so the stack comes up without manual setup.
   "initializeCommand": "mkdir -p \"$HOME/.ssh\" \"$HOME/.aws\" \"$HOME/.azure\"; f=.devcontainer/grafana/grafana_admin_password.txt; [ -f \"$f\" ] || cp \"$f.example\" \"$f\"",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
   "customizations": {
     "vscode": {
       "extensions": [
