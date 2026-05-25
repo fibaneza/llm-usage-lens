@@ -2,10 +2,18 @@
   "name": "otel-dev",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
-  "workspaceFolder": "/workspace",
+  "workspaceFolder": "/workspace/aws-bedrock-cost-tracker",
   "remoteUser": "${localEnv:USER}",
   "updateRemoteUserUID": true,
-  "forwardPorts": [3000, 4317, 4318, 8000, 9090, 3001, 3100],
+  "forwardPorts": [
+    3000,
+    4317,
+    4318,
+    8000,
+    9090,
+    3001,
+    3100
+  ],
   // Runs on the host before container creation. Two jobs: (1) ensure every
   // bind-mount source below exists so the mount never fails (Docker would
   // otherwise create a missing source as a root-owned directory, or error
@@ -18,6 +26,7 @@
         "ms-azuretools.vscode-docker", // Manage the compose stack from the editor
         "grafana.vscode-grafana", // Author/preview Grafana dashboards
         "anthropic.claude-vscode", // Claude Code integration
+        "github.vscode-github-actions", // Github Actions
         "dbaeumer.vscode-eslint", // ESLint v9 flat-config diagnostics (Rule 40)
         "esbenp.prettier-vscode", // Format-on-save matching the Prettier gate
         "bradlc.vscode-tailwindcss", // Tailwind CSS v4 class completion
@@ -32,6 +41,7 @@
         "vscode-icons-team.vscode-icons" // File icon theme; activated via workbench.iconTheme below
       ],
       "settings": {
+        "files.autoSave": "afterDelay",
         // Prettier is the single formatter; format on save, but only where a
         // Prettier config exists so pre-Phase-1 docs/specs are left untouched.
         "editor.defaultFormatter": null,
@@ -39,7 +49,11 @@
         "prettier.requireConfig": true,
         // ESLint v9 flat config in `eslint.config.ts`; apply lint fixes on save.
         "eslint.useFlatConfig": true,
-        "eslint.workingDirectories": [{ "mode": "auto" }],
+        "eslint.workingDirectories": [
+          {
+            "mode": "auto"
+          }
+        ],
         // Apply ESLint + markdownlint autofixes on save (markdownlint keeps docs/specs/** tidy).
         "editor.codeActionsOnSave": {
           "source.fixAll.eslint": "explicit",
@@ -49,22 +63,46 @@
         // pick it from the File Icon Theme menu — VS Code writes the correct id here.
         "workbench.iconTheme": "vscode-icons",
         // Per-language formatter — use the supported language-feature formatters.
-        "[typescript]": { "editor.defaultFormatter": "vscode.typescript-language-features" },
-        "[typescriptreact]": { "editor.defaultFormatter": "vscode.typescript-language-features" },
-        "[javascript]": { "editor.defaultFormatter": "vscode.typescript-language-features" },
-        "[json]": { "editor.defaultFormatter": "vscode.json-language-features" },
-        "[jsonc]": { "editor.defaultFormatter": "vscode.json-language-features" },
-        "[css]": { "editor.defaultFormatter": "vscode.css-language-features" },
-        "[markdown]": { "editor.defaultFormatter": "vscode.markdown-language-features" },
-        "[yaml]": { "editor.defaultFormatter": "redhat.vscode-yaml" },
+        "[typescript]": {
+          "editor.defaultFormatter": "vscode.typescript-language-features"
+        },
+        "[typescriptreact]": {
+          "editor.defaultFormatter": "vscode.typescript-language-features"
+        },
+        "[javascript]": {
+          "editor.defaultFormatter": "vscode.typescript-language-features"
+        },
+        "[json]": {
+          "editor.defaultFormatter": "vscode.json-language-features"
+        },
+        "[jsonc]": {
+          "editor.defaultFormatter": "vscode.json-language-features"
+        },
+        "[css]": {
+          "editor.defaultFormatter": "vscode.css-language-features"
+        },
+        "[markdown]": {
+          "editor.defaultFormatter": "vscode.markdown-language-features"
+        },
+        "[yaml]": {
+          "editor.defaultFormatter": "redhat.vscode-yaml"
+        },
         // Use the workspace TypeScript (monorepo) instead of VS Code's bundled.
         "js/ts.tsdk.path": "./node_modules/typescript/lib",
         // Tailwind v4 IntelliSense inside cn()/cva() (shadcn/ui helpers).
         "tailwindCSS.experimental.classRegex": [
-          ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
-          ["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
+          [
+            "cva\\(([^)]*)\\)",
+            "[\"'`]([^\"'`]*).*?[\"'`]"
+          ],
+          [
+            "cn\\(([^)]*)\\)",
+            "[\"'`]([^\"'`]*).*?[\"'`]"
+          ]
         ],
-        "editor.quickSuggestions": { "strings": "on" },
+        "editor.quickSuggestions": {
+          "strings": "on"
+        },
         // Keep the explorer and search fast; these never need indexing.
         "search.exclude": {
           "**/node_modules": true,
@@ -73,11 +111,13 @@
         },
         "files.exclude": {
           "**/.DS_Store": true
-        }
+        },
+        "terminal.integrated.cwd": "${workspaceFolder}"
       }
     }
   },
   "mounts": [
+    // "source=${localWorkspaceFolder},target=/workspace/${localEnv:COMPOSE_PROJECT_NAME},type=bind,consistency=cached",
     "source=${localEnv:HOME}/.ssh,target=/home/${localEnv:USER}/.ssh,type=bind,consistency=cached",
     // Share AWS SSO cache + config so `aws sso login` on the host is usable
     // from inside the container (per Rule 50 — no static AWS keys).

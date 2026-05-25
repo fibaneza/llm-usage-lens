@@ -159,3 +159,4 @@ tools/bedrock-simulator/samconfig.toml
 tools/bedrock-simulator/node_modules/
 tools/bedrock-simulator/dist/
 tools/bedrock-simulator/coverage/
+.devcontainer/.env
