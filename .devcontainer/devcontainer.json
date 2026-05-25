@@ -6,13 +6,13 @@
   "remoteUser": "${localEnv:USER}",
   "updateRemoteUserUID": true,
   "forwardPorts": [
-    3000,
-    4317,
-    4318,
-    8000,
-    9090,
-    3001,
-    3100
+    3000, // Grafana
+    4317, // OTLP gRPC
+    4318, // OTLP HTTP
+    8000, // Prometheus
+    9090, // Alertmanager
+    3001, // Tempo
+    3100  // Loki
   ],
   // Runs on the host before container creation. Two jobs: (1) ensure every
   // bind-mount source below exists so the mount never fails (Docker would
