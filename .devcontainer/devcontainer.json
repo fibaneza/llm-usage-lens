@@ -21,27 +21,43 @@
   // .example on first start, so the stack comes up without manual setup.
   "initializeCommand": "mkdir -p \"$HOME/.ssh\" \"$HOME/.aws\" \"$HOME/.azure\"; f=.devcontainer/grafana/grafana_admin_password.txt; [ -f \"$f\" ] || cp \"$f.example\" \"$f\"",
   "features": {
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    // The default node user (renamed to match the host user) already contains a lot of common utils, but for now skipping the common-utils feature to save time during image build.
+    // "ghcr.io/devcontainers/features/common-utils:2": {
+    //     "installZsh": "true",
+    //     "installOhMyZsh": "true",
+    //     "installOhMyZshConfig": "true",
+    //     "username": "${localEnv:USER}",
+    //     "upgradePackages": "true"
+    // },
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/jsburckhardt/devcontainer-features/uv:1": {}, // Python 3 + uv (provides `uvx`) for MCP servers shipped as Python tools.
+    "ghcr.io/devcontainers/features/aws-cli:1": {},
+    // "ghcr.io/devcontainers/features/azure-cli:1": {}, Too big ~3 GB - Only need for `az login` to populate the token cache, so bind-mounting the host config + cache dirs is sufficient (see mounts below).
+    "ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {}, // jq, yq, gojq, xq, jaq — various structured-data query tools used in scripts and debugging
+    "ghcr.io/customink/codespaces-features/sam-cli:1": {},
+    "ghcr.io/stu-bell/devcontainer-features/claude-code:0": {},
+    "ghcr.io/shyim/devcontainers-features/bun:0": {} // required by the claude-mem plugin's stop hook (summarize script)
   },
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-azuretools.vscode-docker", // Manage the compose stack from the editor
-        "grafana.vscode-grafana", // Author/preview Grafana dashboards
+        "amazonwebservices.aws-toolkit-vscode", // Browse DynamoDB Local + Lambda collector work (Phase 6)
         "anthropic.claude-vscode", // Claude Code integration
-        "github.vscode-github-actions", // Github Actions
+        "bradlc.vscode-tailwindcss", // Tailwind CSS v4 class completion
+        "davidanson.vscode-markdownlint", // Keep docs/specs/** consistently formatted
         "dbaeumer.vscode-eslint", // ESLint v9 flat-config diagnostics (Rule 40)
         "esbenp.prettier-vscode", // Format-on-save matching the Prettier gate
-        "bradlc.vscode-tailwindcss", // Tailwind CSS v4 class completion
-        "vitest.explorer", // Run/debug Vitest tests in the editor (not Jest)
+        "grafana.vscode-grafana", // Author/preview Grafana dashboards
+        "github.vscode-github-actions", // Github Actions
+        "ms-azuretools.vscode-docker", // Manage the compose stack from the editor
         "ms-playwright.playwright", // Run/debug E2E specs (Phase 5+)
-        "yoavbls.pretty-ts-errors", // Readable errors for TypeScript strict mode
-        "usernamehw.errorlens", // Inline diagnostics — pairs with pretty-ts-errors under strict mode
-        "amazonwebservices.aws-toolkit-vscode", // Browse DynamoDB Local + Lambda collector work (Phase 6)
-        "vivaxy.vscode-conventional-commits", // Guided Conventional Commit messages (commitlint gate)
         "redhat.vscode-yaml", // Validate docker-compose + otel-collector-config.yaml
-        "davidanson.vscode-markdownlint", // Keep docs/specs/** consistently formatted
-        "vscode-icons-team.vscode-icons" // File icon theme; activated via workbench.iconTheme below
+        "usernamehw.errorlens", // Inline diagnostics — pairs with pretty-ts-errors under strict mode
+        "vitest.explorer", // Run/debug Vitest tests in the editor (not Jest)
+        "vivaxy.vscode-conventional-commits", // Guided Conventional Commit messages (commitlint gate)
+        "vscode-icons-team.vscode-icons", // File icon theme; activated via workbench.iconTheme below
+        "yoavbls.pretty-ts-errors" // Readable errors for TypeScript strict mode
       ],
       "settings": {
         "files.autoSave": "afterDelay",
