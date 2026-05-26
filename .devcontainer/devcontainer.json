@@ -57,7 +57,8 @@
         "vitest.explorer", // Run/debug Vitest tests in the editor (not Jest)
         "vivaxy.vscode-conventional-commits", // Guided Conventional Commit messages (commitlint gate)
         "vscode-icons-team.vscode-icons", // File icon theme; activated via workbench.iconTheme below
-        "yoavbls.pretty-ts-errors" // Readable errors for TypeScript strict mode
+        "vstirbu.vscode-mermaid-preview", // Preview Mermaid diagrams (used in docs/specs) directly in VS Code
+        "yoavbls.pretty-ts-errors" // Readable errors for TypeScript strict mode,
       ],
       "settings": {
         "files.autoSave": "afterDelay",
