@@ -12,8 +12,12 @@
     8000, // Prometheus
     9090, // Alertmanager
     3001, // Tempo
-    3100  // Loki
+    3100 // Loki
   ],
+  "containerEnv": {
+    // "TZ": "${localEnv:TZ}" // fails on macOS because macOS doesn't use the standard /etc/timezone file found on Linux.
+    "TZ": "Australia/Melbourne"
+  },
   // Runs on the host before container creation. Two jobs: (1) ensure every
   // bind-mount source below exists so the mount never fails (Docker would
   // otherwise create a missing source as a root-owned directory, or error
