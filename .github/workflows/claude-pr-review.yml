@@ -40,38 +40,7 @@ jobs:
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_BEFORE: ${{ github.event.before }}
           CURRENT_SHA: ${{ github.sha }}
-        run: |
-          # synchronize with a real base → incremental correctness only.
-          # Everything else (opened/reopened/ready_for_review/force-push) → full
-          # correctness + security in a single Claude invocation.
-          if [[ "$EVENT_ACTION" == "synchronize" && "$EVENT_BEFORE" != "0000000000000000000000000000000000000000" ]]; then
-            FILES=$(gh api "repos/${REPO}/compare/${EVENT_BEFORE}...${CURRENT_SHA}" \
-              --jq '[.files[].filename] | join(", ")' 2>/dev/null || echo "")
-            echo "type=incremental" >> "$GITHUB_OUTPUT"
-            echo "files=${FILES}" >> "$GITHUB_OUTPUT"
-            echo "**Scope:** incremental — \`${FILES}\`" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "type=full" >> "$GITHUB_OUTPUT"
-            echo "**Scope:** full (\`${EVENT_ACTION}\`)" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          # Security-sensitive paths drive whether the full review's prompt
-          # also includes the security audit block (and emits a
-          # `security-summary` for issue creation). Derived from Rules 10/50:
-          # Auth.js entry points, the server-only DynamoDB boundary, Route
-          # Handlers, the collector, env/auth schemas, lockfiles, .env*, and
-          # workflows. Adjust as the layout settles.
-          SENSITIVE='^(apps/dashboard/(auth\.ts|middleware\.ts|app/api/|lib/data/|lib/dynamodb\.ts|lib/auth)|apps/collector/|infrastructure/|packages/shared/src/(env|auth)|.*\.env(\..+)?$|package\.json$|pnpm-lock\.yaml$|\.github/workflows/)'
-          HITS=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate \
-            --jq '.[].filename' \
-            | grep -Ec "$SENSITIVE" || true)
-          if [[ "$HITS" -gt 0 ]]; then
-            echo "security_relevant=true" >> "$GITHUB_OUTPUT"
-            echo "**Security audit:** running (${HITS} sensitive file(s) changed)" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "security_relevant=false" >> "$GITHUB_OUTPUT"
-            echo "**Security audit:** skipped (no sensitive paths changed)" >> "$GITHUB_STEP_SUMMARY"
-          fi
+        run: bash .github/scripts/pr-determine-scope.sh
 
       # Full event, sensitive paths: correctness + security in ONE Claude call.
       - name: Full review (code + security)
@@ -120,7 +89,7 @@ jobs:
             ```
 
       # Full event, no sensitive paths touched: correctness only — no
-      # security audit, no security-summary block (the issue-creation step
+      # security audit, no security-summary block (the comment step
       # below sees this step skipped and stays quiet on its own).
       - name: Full review (code only)
         id: full_code_only
@@ -182,86 +151,5 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const output = process.env.REVIEW_OUTPUT ?? '';
-            const block = output.match(/```security-summary\n([\s\S]*?)```/);
-            if (!block) {
-              console.log('No security-summary block found.');
-              return;
-            }
-            const text = block[1];
-
-            const prNumber = parseInt(process.env.PR_NUMBER, 10);
-            const sha = process.env.HEAD_SHA;
-            const repo = process.env.REPO;
-            const prUrl = `https://github.com/${repo}/pull/${prNumber}`;
-
-            const tiers = [
-              { name: 'HIGH', heading: 'High-Severity' },
-              { name: 'MEDIUM', heading: 'Medium-Severity' },
-            ];
-
-            let highCount = 0;
-            const sections = [];
-
-            for (const tier of tiers) {
-              const countMatch = text.match(new RegExp(`^${tier.name}:\\s*(\\d+)`, 'm'));
-              const count = countMatch ? parseInt(countMatch[1], 10) : 0;
-              if (tier.name === 'HIGH') highCount = count;
-              if (count === 0) {
-                console.log(`No ${tier.name} findings.`);
-                continue;
-              }
-
-              const findingsRe = new RegExp(`${tier.name}_FINDINGS:\\n([\\s\\S]*?)(?=\\n[A-Z_]+:|$)`);
-              const findingsMatch = text.match(findingsRe);
-              const findings = findingsMatch
-                ? findingsMatch[1].trim().split('\n')
-                    .map(l => l.trim())
-                    .filter(l => l && l !== '- none' && l !== 'none')
-                : [];
-
-              sections.push(`### ${tier.heading} Findings (${count})`);
-              sections.push(...findings.map(f => `- ${f}`));
-              sections.push('');
-            }
-
-            if (sections.length === 0) {
-              console.log('No HIGH/MEDIUM findings — no PR comment or review.');
-              return;
-            }
-
-            const commentBody = [
-              `## Security review`,
-              ``,
-              `**PR:** [#${prNumber}](${prUrl}) — \`${process.env.HEAD_REF}\` → \`${process.env.BASE_REF}\` @ \`${sha.slice(0, 7)}\``,
-              ``,
-              ...sections,
-              `See inline review comments for file/line context and suggested fixes.`,
-            ].join('\n');
-
-            const { data: comment } = await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body: commentBody,
-            });
-
-            if (highCount > 0) {
-              try {
-                await github.rest.pulls.createReview({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: prNumber,
-                  event: 'REQUEST_CHANGES',
-                  body: `${highCount} HIGH severity security finding(s) detected. See ${comment.html_url} for details.`,
-                });
-              } catch (err) {
-                console.log(`REQUEST_CHANGES review failed (${err.status}): ${err.message}`);
-              }
-              core.setFailed(`${highCount} HIGH severity security finding(s) — rejecting PR`);
-            }
-
-            await core.summary
-              .addHeading('Security Review')
-              .addLink('PR comment with findings', comment.html_url)
-              .write();
+            const run = require('./.github/scripts/pr-comment-and-reject.cjs');
+            await run({ github, context, core, env: process.env });
