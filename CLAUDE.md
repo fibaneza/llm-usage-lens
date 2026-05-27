@@ -111,6 +111,7 @@ Detailed conventions live in `.claude/rules/` (numbered `00`–`70`, always load
 - **Rule 10** — server-only data boundary (DynamoDB and the AWS SDK in server code only)
 - **Rule 20** — data model conventions (single table, model-first rollups, UTC, cost provenance)
 - **Rule 30** — phase discipline (strict build order)
+- **Rule 31** — GitHub Flow (branching strategy, squash-merge, release tagging)
 - **Rule 40** — design system & stack (dark mode default, no raw hex, lazy-loaded charts)
 - **Rule 50** — security & secrets (two credential concerns, no static AWS keys)
 - **Rule 60** — coding standards (TypeScript strict, validate at the boundary, Vitest)
