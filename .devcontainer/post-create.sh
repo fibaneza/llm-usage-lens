@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export ECC_DISABLED_MCPS="github,context7,exa,playwright,sequential-thinking,memory"
+
 # Configure git user from environment variables
 git config --global user.name "${GIT_USER_NAME}"
 git config --global user.email "${GIT_USER_EMAIL}"
@@ -33,80 +35,5 @@ claude plugin install ui-ux-pro-max@ui-ux-pro-max-skill            	# UI/UX desi
 # Disable noisy ecc MCP servers by clearing the plugin's own .mcp.json files.
 # The settings.json "disabled": true override does not suppress plugin-registered servers;
 # directly emptying mcpServers in both the marketplace and cache copies is the only reliable method.
-echo '{"mcpServers":{}}' | jq . > ~/.claude/plugins/marketplaces/ecc/.mcp.json
-find ~/.claude/plugins/cache/ecc -name ".mcp.json" -exec sh -c 'echo "{\"mcpServers\":{}}" | jq . > "$1"' _ {} \;
-
-###############################
-### ECC Custom Installation ###
-### Repo: https://github.com/affaan-m/ECC#option-2-manual-installation
-###############################
-export ECC_DISABLED_MCPS="github,context7,exa,playwright,sequential-thinking,memory"
-
-# Clone the ECC repository for local development and reference.
-git clone https://github.com/affaan-m/ECC.git ~/ECC
-cd ~/ECC
-
-# Install dependencies (pick your package manager)
-bun install || npm install
-
-# Copy agents to your Claude config
-mkdir -p ~/.claude/agents/ecc
-cp agents/e2e-runner.md ~/.claude/agents/ecc/
-cp agents/security-reviewer.md ~/.claude/agents/ecc/
-cp agents/seo-specialist.md ~/.claude/agents/ecc/
-cp agents/silent-failure-hunter.md ~/.claude/agents/ecc/
-cp agents/tdd-guide.md ~/.claude/agents/ecc/
-cp agents/typescript-reviewer.md ~/.claude/agents/ecc/
-
-# Copy rules directories (common + language-specific)
-mkdir -p ~/.claude/rules/ecc
-cp -R rules/common ~/.claude/rules/ecc/
-cp -R rules/typescript ~/.claude/rules/ecc/
-
-# Copy skills first (primary workflow surface)
-# Recommended (new users): core/general skills only
-mkdir -p ~/.claude/skills/ecc
-cp -r .agents/skills/agent-sort ~/.claude/skills/ecc/
-cp -r .agents/skills/article-writing  ~/.claude/skills/ecc/
-cp -r .agents/skills/coding-standards  ~/.claude/skills/ecc/
-cp -r .agents/skills/e2e-testing  ~/.claude/skills/ecc/
-cp -r .agents/skills/frontend-patterns  ~/.claude/skills/ecc/
-cp -r .agents/skills/mcp-server-patterns  ~/.claude/skills/ecc/
-cp -r .agents/skills/nextjs-turbopack  ~/.claude/skills/ecc/
-cp -r .agents/skills/security-review  ~/.claude/skills/ecc/
-cp -r .agents/skills/tdd-workflow  ~/.claude/skills/ecc/
-
-cp -r skills/ai-regression-testing  ~/.claude/skills/ecc/
-cp -r skills/configure-ecc  ~/.claude/skills/ecc/
-cp -r skills/dashboard-builder  ~/.claude/skills/ecc/
-cp -r skills/deployment-patterns  ~/.claude/skills/ecc/
-cp -r skills/design-system  ~/.claude/skills/ecc/
-cp -r skills/e2e-testing  ~/.claude/skills/ecc/
-cp -r skills/frontend-design-direction  ~/.claude/skills/ecc/
-cp -r skills/frontend-patterns  ~/.claude/skills/ecc/
-cp -r skills/git-workflow  ~/.claude/skills/ecc/
-cp -r skills/mcp-server-patterns  ~/.claude/skills/ecc/
-cp -r skills/nextjs-turbopack  ~/.claude/skills/ecc/
-cp -r skills/parallel-execution-optimizer ~/.claude/skills/ecc/
-cp -r skills/prompt-optimizer ~/.claude/skills/ecc/
-cp -r skills/safety-guard ~/.claude/skills/ecc/
-cp -r skills/security-review ~/.claude/skills/ecc/
-cp -r skills/security-scan ~/.claude/skills/ecc/
-cp -r skills/seo ~/.claude/skills/ecc/
-cp -r skills/tdd-workflow ~/.claude/skills/ecc/
-cp -r skills/team-builder ~/.claude/skills/ecc/
-
-# Optional: keep maintained slash-command compatibility during migration
-mkdir -p ~/.claude/commands/ecc
-cp commands/cost-report.md ~/.claude/commands/ecc/
-cp commands/ecc-guide.md ~/.claude/commands/ecc/
-cp commands/feature-dev.md ~/.claude/commands/ecc/
-cp commands/harness-audit.md ~/.claude/commands/ecc/
-cp commands/instinct-status.md ~/.claude/commands/ecc/
-cp commands/quality-gate.md ~/.claude/commands/ecc/
-cp commands/refactor-clean.md ~/.claude/commands/ecc/
-cp commands/test-coverage.md ~/.claude/commands/ecc/
-cp commands/update-docs.md ~/.claude/commands/ecc/
-
-# website: https://ecc.tools/skills
-# npm i -g ecc-universal
+# echo '{"mcpServers":{}}' | jq . > ~/.claude/plugins/marketplaces/ecc/.mcp.json
+# find ~/.claude/plugins/cache/ecc -name ".mcp.json" -exec sh -c 'echo "{\"mcpServers\":{}}" | jq . > "$1"' _ {} \;

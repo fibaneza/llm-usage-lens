@@ -64,16 +64,5 @@
       "Bash(sam delete*)"
     ]
   },
-  "enableAllProjectMcpServers": true,
-  "enabledPlugins": {
-    "ecc@ecc": false
-  },
-  "extraKnownMarketplaces": {
-    "ecc": {
-      "source": {
-        "source": "github",
-        "repo": "affaan-m/ecc"
-      }
-    }
-  }
+  "enableAllProjectMcpServers": true
 }
