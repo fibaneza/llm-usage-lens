@@ -1,0 +1,21 @@
+# CODEOWNERS — aspirational on a single-owner repo.
+# Rules take effect once a collaborator is added OR "Require review from Code Owners"
+# is enabled under Settings → Branches. Paths that don't exist yet (Phase 1+) sit
+# dormant until the file lands.
+
+# Catchall — everything not matched below.
+* @fibaneza
+
+# Security-sensitive paths (mirror of the SENSITIVE regex in .github/scripts/lib/sensitive-paths.sh).
+# Update here when the project layout shifts.
+/apps/dashboard/auth.ts @fibaneza
+/apps/dashboard/middleware.ts @fibaneza
+/apps/dashboard/app/api/ @fibaneza
+/apps/dashboard/lib/data/ @fibaneza
+/apps/collector/ @fibaneza
+/infrastructure/ @fibaneza
+
+# Configuration and CI — changes here affect every contributor.
+/.github/ @fibaneza
+/.claude/ @fibaneza
+/docs/specs/ @fibaneza
