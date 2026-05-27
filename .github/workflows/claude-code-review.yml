@@ -1,8 +1,11 @@
 name: Claude Code Review
 
 on:
-  pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
+  push:
+    branches: [main, master, develop]
+    # tags:
+    #   - '*-rc*'
+    #   - '*-beta*'
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
@@ -11,61 +14,93 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
 
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number }}
+  group: claude-code-review-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  review:
-    # Drafts never trigger work — saves runner time and Claude tokens.
-    # `ready_for_review` re-enters this job when the PR is marked ready.
-    if: github.event.pull_request.draft == false
+  audit:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
-      contents: read
-      pull-requests: write
+      contents: write
       issues: write
       id-token: none
     env:
-      PR_NUMBER: ${{ github.event.pull_request.number }}
       REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 1
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Determine scope
         id: scope
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EVENT_ACTION: ${{ github.event.action }}
-          EVENT_BEFORE: ${{ github.event.before }}
           CURRENT_SHA: ${{ github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          # synchronize with a real base → incremental correctness only.
-          # Everything else (opened/reopened/ready_for_review/force-push) → full
-          # correctness + security in a single Claude invocation.
-          if [[ "$EVENT_ACTION" == "synchronize" && "$EVENT_BEFORE" != "0000000000000000000000000000000000000000" ]]; then
-            FILES=$(gh api "repos/${REPO}/compare/${EVENT_BEFORE}...${CURRENT_SHA}" \
-              --jq '[.files[].filename] | join(", ")' 2>/dev/null || echo "")
-            echo "type=incremental" >> "$GITHUB_OUTPUT"
-            echo "files=${FILES}" >> "$GITHUB_OUTPUT"
-            echo "**Scope:** incremental — \`${FILES}\`" >> "$GITHUB_STEP_SUMMARY"
+          TAG="audit/last-success/${BRANCH}"
+
+          # Detect whether the marker tag exists locally (fetched above).
+          if git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null 2>&1; then
+            BASE=$(git rev-parse "refs/tags/${TAG}")
+            echo "**Scope:** incremental from tag \`${TAG}\` @ \`${BASE:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$BEFORE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            # Brand-new branch — scope to the tip commit only.
+            BASE=""
+            echo "**Scope:** bootstrap (new branch) — tip commit only" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "type=full" >> "$GITHUB_OUTPUT"
-            echo "**Scope:** full (\`${EVENT_ACTION}\`)" >> "$GITHUB_STEP_SUMMARY"
+            BASE="$BEFORE_SHA"
+            echo "**Scope:** bootstrap (no tag yet) — full push delta from \`${BASE:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          # Security-sensitive paths drive whether the full review's prompt
-          # also includes the security audit block (and emits a
-          # `security-summary` for issue creation). Derived from Rules 10/50:
-          # Auth.js entry points, the server-only DynamoDB boundary, Route
-          # Handlers, the collector, env/auth schemas, lockfiles, .env*, and
-          # workflows. Adjust as the layout settles.
+          # If already audited (e.g. manual re-run on same SHA), skip.
+          if [[ -n "$BASE" && "$BASE" == "$CURRENT_SHA" ]]; then
+            echo "skip_audit=true" >> "$GITHUB_OUTPUT"
+            echo "**Result:** already audited — skipping" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Compute changed files via GitHub compare API (or git show for tip-only).
+          if [[ -z "$BASE" ]]; then
+            KEPT=$(git show --name-status --pretty="" "$CURRENT_SHA" \
+              | awk '$1 != "D" { print $2 }')
+            REMOVED=$(git show --name-status --pretty="" "$CURRENT_SHA" \
+              | awk '$1 == "D" { print $2 }')
+          else
+            KEPT=$(gh api "repos/${REPO}/compare/${BASE}...${CURRENT_SHA}" \
+              --jq '.files[] | select(.status != "removed") | if .status == "renamed" then .filename else .filename end' \
+              2>/dev/null || echo "")
+            REMOVED=$(gh api "repos/${REPO}/compare/${BASE}...${CURRENT_SHA}" \
+              --jq '[.files[] | select(.status == "removed") | .filename] | join("\n")' \
+              2>/dev/null || echo "")
+          fi
+
+          if [[ -z "$KEPT" && -z "$REMOVED" ]]; then
+            echo "skip_audit=true" >> "$GITHUB_OUTPUT"
+            echo "**Result:** no files changed — skipping" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Write multi-line outputs via heredoc form.
+          {
+            echo "files<<EOF"
+            echo "$KEPT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "removed_files<<EOF"
+            echo "$REMOVED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "skip_audit=false" >> "$GITHUB_OUTPUT"
+
+          # Determine security relevance (applies to kept + removed paths).
           SENSITIVE='^(apps/dashboard/(auth\.ts|middleware\.ts|app/api/|lib/data/|lib/dynamodb\.ts|lib/auth)|apps/collector/|infrastructure/|packages/shared/src/(env|auth)|.*\.env(\..+)?$|package\.json$|pnpm-lock\.yaml$|\.github/workflows/)'
-          HITS=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate \
-            --jq '.[].filename' \
-            | grep -Ec "$SENSITIVE" || true)
+          ALL_FILES=$(printf '%s\n%s' "$KEPT" "$REMOVED")
+          HITS=$(echo "$ALL_FILES" | grep -Ec "$SENSITIVE" || true)
           if [[ "$HITS" -gt 0 ]]; then
             echo "security_relevant=true" >> "$GITHUB_OUTPUT"
             echo "**Security audit:** running (${HITS} sensitive file(s) changed)" >> "$GITHUB_STEP_SUMMARY"
@@ -74,106 +109,92 @@ jobs:
             echo "**Security audit:** skipped (no sensitive paths changed)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Full event, sensitive paths: correctness + security in ONE Claude call.
-      - name: Full review (code + security)
-        id: full
-        if: steps.scope.outputs.type == 'full' && steps.scope.outputs.security_relevant == 'true'
+          KEPT_COUNT=$(echo "$KEPT" | grep -c . || true)
+          REMOVED_COUNT=$(echo "$REMOVED" | grep -c . || true)
+          echo "**Files:** ${KEPT_COUNT} changed, ${REMOVED_COUNT} removed" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post-merge audit (code review + security)
+        id: audit
+        if: steps.scope.outputs.skip_audit != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
           claude_args: |
             --max-turns 8
             --model claude-sonnet-4-6
-            --allowed-tools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),mcp__github_inline_comment__create_inline_comment"
+            --allowed-tools "Read,Glob,Grep,Bash(gh api:*)"
           prompt: |
-            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+            You are performing a post-merge code audit on the `${{ github.ref_name }}` branch at commit `${{ github.sha }}`.
 
-            Then audit for security (OWASP Top 10 + project-specific):
-            - Hardcoded secrets, API keys, credentials
-            - Missing Auth.js session checks in Route Handlers (must return 401)
-            - Server-only boundary violations: `@aws-sdk/*` or DynamoDB client in client/shared code
-            - Static AWS keys (project uses SSO + AWS_PROFILE — Rule 50)
-            - Secrets in logs or telemetry
-            - Vulnerable dependencies introduced by this PR
+            This is NOT a PR review — there is no open pull request. Post no PR comments or inline diff annotations.
+            Instead, report findings in your response only; issue creation is handled downstream.
 
-            Severity: HIGH = directly exploitable; MEDIUM = exploitable under specific conditions; LOW = best-practice.
+            Follow these project rules when reviewing (you may read them from `.claude/rules/` using the Read tool):
+            - Rule 10 (server-only boundary): DynamoDB and AWS SDK only in server code
+            - Rule 20 (data model conventions): UTC, USD, model-first breakdown, response shape
+            - Rule 40 (design system & stack): no raw hex, lazy-load charts, dark mode default
+            - Rule 50 (security & secrets): no static AWS keys, Auth.js session checks, no logging secrets
+            - Rule 60 (coding standards): strict TypeScript, no @ts-ignore, no console.log, 80%+ test coverage
 
-            Post inline comments per finding. End your response with this exact fenced block (no prose after):
+            ## Files to review at HEAD
+            The following files were added, modified, or renamed in this push. If this list is empty, the push was deletions-only — skip this section.
+            ${{ steps.scope.outputs.files }}
+
+            ## Removed files
+            The following files were deleted. Grep the rest of the tree for leftover imports or dead references. If empty, no files were removed.
+            ${{ steps.scope.outputs.removed_files }}
+
+            ## Security audit
+            Security audit required: ${{ steps.scope.outputs.security_relevant }}
+            ${{ steps.scope.outputs.security_relevant == 'true' && 'Audit the changed files for OWASP Top 10 + project-specific issues: hardcoded secrets/API keys/credentials; missing Auth.js session checks in Route Handlers (must return 401); server-only boundary violations (@aws-sdk/* or DynamoDB client in client/shared code); static AWS keys (project uses SSO + AWS_PROFILE per Rule 50); secrets in logs or telemetry; vulnerable dependencies introduced by this push.' || 'No security audit required for this push — skip security findings.' }}
+
+            Severity scale: HIGH = directly exploitable; MEDIUM = exploitable under specific conditions; LOW = best-practice.
+
+            ## Output format
+
+            End your response with BOTH of these fenced blocks (emit empty sections — zero counts — when nothing found).
+            Only HIGH-severity code-review findings appear in `code-review-summary`; discuss MEDIUM/LOW in prose only.
 
             ```security-summary
             HIGH: <count>
             MEDIUM: <count>
             LOW: <count>
             HIGH_FINDINGS:
-            - <one-line per HIGH, or "none" if 0>
+            - <one-line per HIGH, or "none">
             MEDIUM_FINDINGS:
-            - <one-line per MEDIUM, or "none" if 0>
+            - <one-line per MEDIUM, or "none">
             ```
 
-      # Full event, no sensitive paths touched: correctness only — no
-      # security audit, no security-summary block (the issue-creation step
-      # below sees this step skipped and stays quiet on its own).
-      - name: Full review (code only)
-        id: full_code_only
-        if: steps.scope.outputs.type == 'full' && steps.scope.outputs.security_relevant == 'false'
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          claude_args: |
-            --max-turns 8
-            --model claude-sonnet-4-6
-            --allowed-tools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),mcp__github_inline_comment__create_inline_comment"
-          prompt: |
-            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+            ```code-review-summary
+            HIGH: <count>
+            HIGH_FINDINGS:
+            - <one-line per HIGH, or "none">
+            ```
 
-      # Subsequent push: scope correctness review to changed files only.
-      - name: Incremental review (latest push only)
-        if: steps.scope.outputs.type == 'incremental'
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          claude_args: |
-            --max-turns 5
-            --model claude-sonnet-4-6
-            --allowed-tools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),mcp__github_inline_comment__create_inline_comment"
-          prompt: |
-            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
-
-            Scope to ONLY files changed in this push:
-            ${{ steps.scope.outputs.files }}
-
-            Skip files not in that list unless directly called by the changed code.
-
-      - name: Create issues for security findings
-        if: steps.scope.outputs.type == 'full' && steps.full.conclusion == 'success'
+      - name: Create issues for HIGH/MEDIUM security + HIGH code-review findings
+        if: steps.audit.conclusion == 'success'
         uses: actions/github-script@v7
         env:
-          REVIEW_OUTPUT: ${{ steps.full.outputs.result }}
-          HEAD_REF: ${{ github.head_ref }}
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          AUDIT_OUTPUT: ${{ steps.audit.outputs.result }}
+          COMMIT_SHA: ${{ github.sha }}
+          BRANCH_REF: ${{ github.ref_name }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const output = process.env.REVIEW_OUTPUT ?? '';
-            const block = output.match(/```security-summary\n([\s\S]*?)```/);
-            if (!block) {
-              console.log('No security-summary block found.');
-              return;
-            }
-            const text = block[1];
+            const output = process.env.AUDIT_OUTPUT ?? '';
+            const sha = process.env.COMMIT_SHA;
+            const shortSha = sha.slice(0, 7);
+            const branch = process.env.BRANCH_REF;
+            const repo = process.env.REPO;
+            const commitUrl = `https://github.com/${repo}/commit/${sha}`;
+            const created = [];
 
-            // Ensure the shared label and the two severity labels exist (idempotent).
+            // Ensure labels exist (idempotent).
             for (const [name, color, description] of [
               ['security', 'E4E669', 'Security-related issue'],
               ['high-severity', 'D93F0B', 'High severity finding'],
               ['medium-severity', 'FBCA04', 'Medium severity finding'],
+              ['code-review', 'D4C5F9', 'Code review finding from automated audit'],
             ]) {
               try {
                 await github.rest.issues.createLabel({
@@ -184,61 +205,110 @@ jobs:
               } catch (_) { /* label exists */ }
             }
 
-            const prNumber = parseInt(process.env.PR_NUMBER, 10);
-            const sha = process.env.HEAD_SHA;
-            const repo = process.env.REPO;
-            const prUrl = `https://github.com/${repo}/pull/${prNumber}`;
-            const created = [];
+            function parseBlock(output, fence) {
+              const re = new RegExp('```' + fence + '\\n([\\s\\S]*?)```');
+              const m = output.match(re);
+              return m ? m[1] : null;
+            }
 
-            const tiers = [
-              { name: 'HIGH', label: 'high-severity', heading: 'High-Severity' },
-              { name: 'MEDIUM', label: 'medium-severity', heading: 'Medium-Severity' },
-            ];
-
-            for (const tier of tiers) {
-              const countMatch = text.match(new RegExp(`^${tier.name}:\\s*(\\d+)`, 'm'));
+            function parseTier(text, tierName) {
+              const countMatch = text.match(new RegExp(`^${tierName}:\\s*(\\d+)`, 'm'));
               const count = countMatch ? parseInt(countMatch[1], 10) : 0;
-              if (count === 0) {
-                console.log(`No ${tier.name} findings.`);
-                continue;
-              }
-
-              const findingsRe = new RegExp(`${tier.name}_FINDINGS:\\n([\\s\\S]*?)(?=\\n[A-Z_]+:|$)`);
+              const findingsRe = new RegExp(`${tierName}_FINDINGS:\\n([\\s\\S]*?)(?=\\n[A-Z_]+:|$)`);
               const findingsMatch = text.match(findingsRe);
               const findings = findingsMatch
                 ? findingsMatch[1].trim().split('\n')
                     .map(l => l.trim())
                     .filter(l => l && l !== '- none' && l !== 'none')
                 : [];
+              return { count, findings };
+            }
 
-              const body = [
-                `## ${tier.heading} Security Findings`,
-                ``,
-                `**PR:** [#${prNumber}](${prUrl}) — \`${process.env.HEAD_REF}\` → \`${process.env.BASE_REF}\` @ \`${sha.slice(0, 7)}\``,
-                ``,
-                `### Findings (${count} ${tier.name})`,
-                ...findings.map(f => `- ${f}`),
-                ``,
-                `Address each finding, push fixes (security re-audits on the next full event — opened/reopened/ready_for_review), then close once resolved.`,
-              ].join('\n');
+            const commitLine = `**Commit:** [\`${shortSha}\`](${commitUrl}) on branch \`${branch}\``;
+            const closingLine = `Investigate and fix on a follow-up branch; the audit re-runs on every push to the protected branches.`;
 
-              const { data: issue } = await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: `[Security] ${tier.name} findings in PR #${prNumber} (${sha.slice(0, 7)})`,
-                body,
-                labels: ['security', tier.label],
-                assignees: ['fibanez6'],
-              });
+            // --- Security findings ---
+            const secBlock = parseBlock(output, 'security-summary');
+            if (!secBlock) {
+              console.log('No security-summary block found.');
+            } else {
+              for (const tier of [
+                { name: 'HIGH', label: 'high-severity', heading: 'High-Severity' },
+                { name: 'MEDIUM', label: 'medium-severity', heading: 'Medium-Severity' },
+              ]) {
+                const { count, findings } = parseTier(secBlock, tier.name);
+                if (count === 0) { console.log(`No ${tier.name} security findings.`); continue; }
 
-              core.warning(`${tier.name} security issue created: ${issue.html_url}`);
-              created.push({ tier: tier.name, url: issue.html_url });
+                const body = [
+                  `## ${tier.heading} Security Findings`,
+                  ``,
+                  commitLine,
+                  ``,
+                  `### Findings (${count} ${tier.name})`,
+                  ...findings.map(f => `- ${f}`),
+                  ``,
+                  closingLine,
+                ].join('\n');
+
+                const { data: issue } = await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: `[Security] ${tier.name} findings on \`${branch}\` @ ${shortSha}`,
+                  body,
+                  labels: ['security', tier.label],
+                  assignees: ['fibanez6'],
+                });
+                core.warning(`${tier.name} security issue created: ${issue.html_url}`);
+                created.push({ label: `Security ${tier.name}`, url: issue.html_url });
+              }
+            }
+
+            // --- Code-review findings (HIGH only) ---
+            const crBlock = parseBlock(output, 'code-review-summary');
+            if (!crBlock) {
+              console.log('No code-review-summary block found.');
+            } else {
+              const { count, findings } = parseTier(crBlock, 'HIGH');
+              if (count === 0) {
+                console.log('No HIGH code-review findings.');
+              } else {
+                const body = [
+                  `## High-Severity Code Review Findings`,
+                  ``,
+                  commitLine,
+                  ``,
+                  `### Findings (${count} HIGH)`,
+                  ...findings.map(f => `- ${f}`),
+                  ``,
+                  closingLine,
+                ].join('\n');
+
+                const { data: issue } = await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: `[Code Review] HIGH findings on \`${branch}\` @ ${shortSha}`,
+                  body,
+                  labels: ['code-review', 'high-severity'],
+                  assignees: ['fibanez6'],
+                });
+                core.warning(`HIGH code-review issue created: ${issue.html_url}`);
+                created.push({ label: 'Code Review HIGH', url: issue.html_url });
+              }
             }
 
             if (created.length > 0) {
-              const summary = core.summary.addHeading('Security Issues Created');
-              for (const { tier, url } of created) {
-                summary.addLink(`${tier} findings`, url);
+              const summary = core.summary.addHeading('Issues Created');
+              for (const { label, url } of created) {
+                summary.addLink(label, url);
               }
               await summary.write();
             }
+
+      - name: Update last-success marker tag
+        if: steps.audit.conclusion == 'success' && steps.scope.outputs.skip_audit != 'true'
+        env:
+          BRANCH: ${{ github.ref_name }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          git tag -f "audit/last-success/${BRANCH}" "$CURRENT_SHA"
+          git push --force origin "refs/tags/audit/last-success/${BRANCH}"
