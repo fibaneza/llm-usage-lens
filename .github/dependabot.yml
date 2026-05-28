@@ -1,0 +1,10 @@
+version: 2
+updates:
+  # Keep GitHub Actions versions pinned and up-to-date.
+  # npm ecosystem blocks are added in Phase 1 once package.json exists.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "chore"

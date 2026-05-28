@@ -160,3 +160,6 @@ tools/bedrock-simulator/node_modules/
 tools/bedrock-simulator/dist/
 tools/bedrock-simulator/coverage/
 .devcontainer/.env
+
+# Git directories
+/worktrees

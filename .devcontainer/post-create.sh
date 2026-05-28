@@ -16,7 +16,7 @@ claude plugin marketplace add obra/superpowers                          # obra's
 claude plugin marketplace add thedotmack/claude-mem                     # Hosts claude-mem (persistent cross-session memory)
 
 # Plugins — installed into this devcontainer's ~/.claude.
-claude plugin install auth0@claude-plugins-official    	                # Add authentication to any app with Auth0. 
+claude plugin install auth0@claude-plugins-official    	                # Add authentication to any app with Auth0.
 claude plugin install aws-agents                                   	    # AWS AgentCore workflows: build / deploy / debug / harden / optimize / connect
 claude plugin install aws-serverless@claude-plugins-official    	    # Design, build, deploy, test, and debug serverless applications with AWS Serverless services.
 claude plugin install claude-md-management@claude-plugins-official      # Tools to maintain and improve CLAUDE.md files
@@ -42,3 +42,6 @@ claude plugin install ui-ux-pro-max@ui-ux-pro-max-skill            	    # UI/UX 
 # directly emptying mcpServers in both the marketplace and cache copies is the only reliable method.
 # echo '{"mcpServers":{}}' | jq . > ~/.claude/plugins/marketplaces/ecc/.mcp.json
 # find ~/.claude/plugins/cache/ecc -name ".mcp.json" -exec sh -c 'echo "{\"mcpServers\":{}}" | jq . > "$1"' _ {} \;
+
+# Tools — installed system-wide for workflow linting.
+bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) latest /usr/local/bin  # Lint .github/workflows/*.yml with: actionlint

@@ -29,6 +29,8 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
 
 ## Branching & pull requests
 
+> See [Rule 31](31-github-flow.md) for the overall GitHub Flow convention; the naming below is a specialisation of it.
+
 Each phase ships on its own branch and merges via pull request — `main` never
 receives direct commits.
 
