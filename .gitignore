@@ -151,3 +151,6 @@ vite.config.ts.timestamp-*
 # .example on first start (see devcontainer.json initializeCommand).
 .devcontainer/grafana/grafana_admin_password.txt
 .devcontainer/.env
+
+# Git directories
+/worktrees
