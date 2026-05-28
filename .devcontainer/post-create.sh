@@ -21,3 +21,6 @@ claude plugin install superpowers@claude-plugins-official          # Process ski
 claude plugin install frontend-design@claude-plugins-official      # Frontend design skills: UI components, layouts, accessibility
 claude plugin install code-review@claude-plugins-official          # Code review skills: automated code analysis, suggestions, best practices
 claude plugin install security-guidance@claude-plugins-official    # Security guidance skills: automated security analysis, suggestions, best practices
+
+# Tools — installed system-wide for workflow linting.
+bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) latest /usr/local/bin  # Lint .github/workflows/*.yml with: actionlint
