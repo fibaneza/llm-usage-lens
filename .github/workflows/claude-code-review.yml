@@ -104,7 +104,7 @@ jobs:
 
       - name: Create issues for HIGH/MEDIUM security + HIGH code-review findings
         if: steps.audit.conclusion == 'success'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           AUDIT_OUTPUT: ${{ steps.audit.outputs.result }}
           COMMIT_SHA: ${{ github.sha }}

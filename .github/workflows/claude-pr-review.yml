@@ -142,7 +142,7 @@ jobs:
 
       - name: Comment + reject on security findings
         if: steps.scope.outputs.type == 'full' && steps.full.conclusion == 'success'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           REVIEW_OUTPUT: ${{ steps.full.outputs.result }}
           HEAD_REF: ${{ github.head_ref }}
