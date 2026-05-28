@@ -28,6 +28,7 @@ claude plugin install context7@claude-plugins-official             	    # Up-to-
 claude plugin install deploy-on-aws@claude-plugins-official    	        # Deploy applications to AWS with architecture recommendations, cost estimates, and IaC deployment.
 claude plugin install feature-dev@claude-plugins-official               # Specialized agents for codebase exploration, architecture design, and quality review
 claude plugin install frontend-design@claude-plugins-official      	    # Frontend design skills: UI components, layouts, accessibility
+claude plugin install github@claude-plugins-official      	            # GitHub integration skills: repository management, issues, pull requests/compa
 claude plugin install hookify@claude-plugins-official            	    # Easily create custom hooks to prevent unwanted behaviors by analyzing conversation patterns or from explicit instructions.
 claude plugin install mcp-server-dev@claude-plugins-official    	    # Skills for designing and building MCP servers that work seamlessly with Claude.
 claude plugin install pr-review-toolkit@claude-plugins-official         # Pull request review toolkit: automated PR analysis, suggestions, best practices
