@@ -1,0 +1,77 @@
+name: Empty S3 bucket
+description: Removes all objects, noncurrent versions, delete markers, and in-progress multipart uploads from an S3 bucket so it can be deleted by CloudFormation.
+
+inputs:
+  bucket-name:
+    required: true
+    description: Name of the S3 bucket to empty.
+  region:
+    required: false
+    description: AWS region where the bucket lives.
+    default: us-east-1
+
+runs:
+  using: composite
+  steps:
+    - name: Empty bucket
+      shell: bash
+      env:
+        BUCKET_NAME: ${{ inputs.bucket-name }}
+        AWS_DEFAULT_REGION: ${{ inputs.region }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "$BUCKET_NAME" ]]; then
+          echo "No bucket name provided — skipping."
+          exit 0
+        fi
+
+        # Cleanup is best-effort: a single failed call shouldn't abort the
+        # whole teardown, but errors must still surface as warnings so an
+        # underlying credential / permission problem isn't masked behind a
+        # subsequent "BucketNotEmpty" sam delete failure.
+        # Using `if !` (rather than `|| true`) keeps `set -e` armed for any
+        # bug that isn't an expected AWS-call failure.
+
+        echo "Removing current-version objects from s3://$BUCKET_NAME..."
+        if ! aws s3 rm "s3://$BUCKET_NAME" --recursive --quiet; then
+          echo "::warning::s3 rm failed (continuing teardown)"
+        fi
+
+        echo "Removing noncurrent versions..."
+        aws s3api list-object-versions --bucket "$BUCKET_NAME" \
+          --query '{Objects:(Versions[*].{Key:Key,VersionId:VersionId})[?VersionId!=null]}' \
+          --output json > /tmp/versions.json 2>/dev/null || echo '{"Objects":[]}' > /tmp/versions.json
+        if [[ "$(jq '.Objects | length' /tmp/versions.json)" -gt 0 ]]; then
+          if ! aws s3api delete-objects --bucket "$BUCKET_NAME" --delete file:///tmp/versions.json --quiet; then
+            echo "::warning::delete-objects (versions) failed"
+          fi
+        fi
+
+        echo "Removing delete markers..."
+        aws s3api list-object-versions --bucket "$BUCKET_NAME" \
+          --query '{Objects:(DeleteMarkers[*].{Key:Key,VersionId:VersionId})[?VersionId!=null]}' \
+          --output json > /tmp/markers.json 2>/dev/null || echo '{"Objects":[]}' > /tmp/markers.json
+        if [[ "$(jq '.Objects | length' /tmp/markers.json)" -gt 0 ]]; then
+          if ! aws s3api delete-objects --bucket "$BUCKET_NAME" --delete file:///tmp/markers.json --quiet; then
+            echo "::warning::delete-objects (markers) failed"
+          fi
+        fi
+
+        echo "Aborting in-progress multipart uploads..."
+        # JSON output handles keys containing whitespace correctly (text
+        # output would split on the tab inside the key).
+        aws s3api list-multipart-uploads --bucket "$BUCKET_NAME" \
+          --query 'Uploads[].{Key:Key,UploadId:UploadId}' --output json 2>/dev/null \
+          > /tmp/uploads.json || echo '[]' > /tmp/uploads.json
+        jq -c '.[]?' /tmp/uploads.json | while IFS= read -r upload; do
+          key=$(echo "$upload" | jq -r '.Key')
+          id=$(echo "$upload" | jq -r '.UploadId')
+          [[ -n "$key" && -n "$id" ]] || continue
+          if ! aws s3api abort-multipart-upload \
+                 --bucket "$BUCKET_NAME" --key "$key" --upload-id "$id"; then
+            echo "::warning::abort-multipart-upload failed for key=$key"
+          fi
+        done
+
+        echo "Bucket $BUCKET_NAME emptied."

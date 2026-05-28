@@ -1,3 +1,19 @@
+# claude-code-review.yml
+#
+# Release audit: runs a full code + security review whenever a release tag is
+# pushed (v*, *-rc*, *-beta*), scoped to commits since the previous release tag.
+# Also triggerable via workflow_dispatch for ad-hoc audits.
+#
+# Findings create GitHub issues rather than PR comments (no open PR at release time).
+# HIGH/MEDIUM security findings and HIGH code-review findings each become their own issue.
+#
+# Steps:
+#   1. Checkout (full history + tags for git describe)
+#   2. Load sensitive-paths regex from lib/sensitive-paths.sh
+#   3. Determine release scope (base tag, changed files, skip_audit flag)
+#   4. Release audit via Claude (conditional on skip_audit != 'true')
+#   5. Create GitHub issues for HIGH/MEDIUM security + HIGH code-review findings
+
 name: Claude Code Review
 
 on:
@@ -35,25 +51,31 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Determine scope
+      - name: Load sensitive-paths regex
+        id: regex
+        run: |
+          source .github/scripts/claude/lib/sensitive-paths.sh
+          echo "value=$SENSITIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Determine release scope
         id: scope
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CURRENT_SHA: ${{ github.sha }}
           INPUT_FROM_REF: ${{ inputs.from_ref }}
           INPUT_TO_REF: ${{ inputs.to_ref }}
-        run: bash .github/scripts/release-determine-scope.sh
+          SENSITIVE: ${{ steps.regex.outputs.value }}
+        run: bash .github/scripts/claude/release-determine-scope.sh
 
       - name: Release audit (code review + security)
         id: audit
         if: steps.scope.outputs.skip_audit != 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: ./.github/actions/github-review
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: |
-            --max-turns 8
-            --model claude-sonnet-4-6
-            --allowed-tools "Read,Glob,Grep,Bash(gh api:*)"
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          model: claude-sonnet-4-6
+          max-turns: 8
+          allowed-tools: 'Read,Glob,Grep,Bash(gh api:*)'
           prompt: |
             You are performing a release audit on tag `${{ github.ref_name }}` at commit `${{ github.sha }}`.
 
@@ -104,13 +126,11 @@ jobs:
 
       - name: Create issues for HIGH/MEDIUM security + HIGH code-review findings
         if: steps.audit.conclusion == 'success'
-        uses: actions/github-script@v9
-        env:
-          AUDIT_OUTPUT: ${{ steps.audit.outputs.result }}
-          COMMIT_SHA: ${{ github.sha }}
-          RELEASE_TAG: ${{ github.ref_name }}
+        uses: ./.github/actions/github-create-audit-issues
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const run = require('./.github/scripts/release-create-issues.cjs');
-            await run({ github, context, core, env: process.env });
+          audit-output: ${{ steps.audit.outputs.result }}
+          commit-sha: ${{ github.sha }}
+          release-tag: ${{ github.ref_name }}
+          repo: ${{ github.repository }}
+          assignee: fibaneza
+          gh-token: ${{ secrets.GITHUB_TOKEN }}

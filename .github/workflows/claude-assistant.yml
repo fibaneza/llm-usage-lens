@@ -1,4 +1,15 @@
-name: Claude Code
+# claude-assistant.yml
+#
+# On-demand Claude assistant triggered by @claude mentions in issues,
+# PR review comments, PR reviews, and newly opened/assigned issues.
+# Unlike the automated review workflows, this bot responds to freeform
+# requests — Claude interprets the triggering comment as its instructions.
+#
+# Steps:
+#   1. Checkout repository (shallow)
+#   2. Run Claude Code (prompt derived from the @claude mention body)
+
+name: Claude Assistant
 
 on:
   issue_comment:

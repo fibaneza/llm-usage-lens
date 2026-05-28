@@ -48,13 +48,13 @@ if [[ "$BASE" == "$HEAD" ]]; then
   exit 0
 fi
 
-# Compute changed files via GitHub compare API.
+# Compute changed files via GitHub compare API. Failing gh api here would
+# silently set skip_audit=true (no files → skip), which would suppress the
+# entire release audit on a transient error. Let pipefail surface it instead.
 KEPT=$(gh api "repos/${REPO}/compare/${BASE}...${HEAD}" --paginate \
-  --jq '.files[] | select(.status != "removed") | .filename' \
-  2>/dev/null || echo "")
+  --jq '.files[] | select(.status != "removed") | .filename')
 REMOVED=$(gh api "repos/${REPO}/compare/${BASE}...${HEAD}" --paginate \
-  --jq '[.files[] | select(.status == "removed") | .filename] | join("\n")' \
-  2>/dev/null || echo "")
+  --jq '[.files[] | select(.status == "removed") | .filename] | join("\n")')
 
 if [[ -z "$KEPT" && -z "$REMOVED" ]]; then
   echo "skip_audit=true" >> "$GITHUB_OUTPUT"

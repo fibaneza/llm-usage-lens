@@ -1,0 +1,72 @@
+name: Invoke Lambda function
+description: Invokes a Lambda function with a JSON payload, validates the HTTP status code, and exposes the response for downstream steps.
+
+inputs:
+  function-name:
+    required: true
+    description: Lambda function name or ARN.
+  payload:
+    required: true
+    description: JSON string to send as the invocation payload.
+  region:
+    required: false
+    description: AWS region where the function lives.
+    default: us-east-1
+  expected-status-code:
+    required: false
+    description: Expected HTTP status code from the invoke API call (not the function return value).
+    default: '200'
+  response-path:
+    required: false
+    description: File path to write the function response body to.
+    default: /tmp/lambda-response.json
+
+outputs:
+  status-code:
+    description: HTTP status code returned by the Lambda invoke API.
+    value: ${{ steps.invoke.outputs.status_code }}
+  function-error:
+    description: FunctionError field from the invoke response (empty string if no error).
+    value: ${{ steps.invoke.outputs.function_error }}
+  response-path:
+    description: Path to the file containing the function response body.
+    value: ${{ inputs.response-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Invoke
+      id: invoke
+      shell: bash
+      env:
+        FUNCTION_NAME: ${{ inputs.function-name }}
+        PAYLOAD: ${{ inputs.payload }}
+        REGION: ${{ inputs.region }}
+        EXPECTED_STATUS: ${{ inputs.expected-status-code }}
+        RESPONSE_PATH: ${{ inputs.response-path }}
+      run: |
+        set -euo pipefail
+
+        # Write payload to a temp file to avoid shell-quoting issues with large JSON.
+        printf '%s' "$PAYLOAD" > /tmp/lambda-payload.json
+
+        aws lambda invoke \
+          --function-name "$FUNCTION_NAME" \
+          --region "$REGION" \
+          --cli-binary-format raw-in-base64-out \
+          --payload file:///tmp/lambda-payload.json \
+          "$RESPONSE_PATH" > /tmp/lambda-invoke-meta.json
+
+        STATUS_CODE=$(jq -r '.StatusCode' /tmp/lambda-invoke-meta.json)
+        FUNCTION_ERROR=$(jq -r '.FunctionError // ""' /tmp/lambda-invoke-meta.json)
+
+        echo "status_code=$STATUS_CODE" >> "$GITHUB_OUTPUT"
+        echo "function_error=$FUNCTION_ERROR" >> "$GITHUB_OUTPUT"
+
+        if [[ "$STATUS_CODE" != "$EXPECTED_STATUS" ]] || [[ -n "$FUNCTION_ERROR" ]]; then
+          echo "::error::Lambda invoke failed: StatusCode=$STATUS_CODE FunctionError='$FUNCTION_ERROR'"
+          cat "$RESPONSE_PATH" || true
+          exit 1
+        fi
+
+        echo "Lambda invoke succeeded: StatusCode=$STATUS_CODE"
