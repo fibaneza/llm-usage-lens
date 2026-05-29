@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/fibaneza/aws-bedrock-cost-tracker/blob/main/.github/SECURITY.md
+    about: Do not open a public issue for security problems. Follow the disclosure process in SECURITY.md.
+  - name: Contributing & local development
+    url: https://github.com/fibaneza/aws-bedrock-cost-tracker/blob/main/.github/CONTRIBUTING.md
+    about: Setup, branching, and PR conventions before you file an issue.

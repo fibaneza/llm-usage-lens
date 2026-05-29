@@ -25,6 +25,8 @@ The `docs/specs/` directory is the source of truth:
 - `docs/guides/auth-setup.md` — Auth.js + Microsoft Entra ID and AWS credential setup
 - `docs/guides/aws-infrastructure.md` — operational runbook: collector design, SAM deploy/undeploy CLI
 - `docs/guides/dashboard-deployment.md` — operational runbook: Next.js dashboard on Netlify, deploy/undeploy CLI
+- `docs/guides/dynamic-workflows.md` — where Opus 4.8 dynamic workflows fit (and don't fit) the phase plan; not adopted in v1
+- `docs/guides/github-best-practices.md` — general GitHub/Actions practice reconciled to this project's GitHub Flow, SAM, and pnpm conventions
 
 Build strictly in phase order (see implementation-phases spec). Phase 4 has 9 sub-phases, one per dashboard page; components are built where first needed and reused later.
 
@@ -81,6 +83,30 @@ Pre-commit (Husky + lint-staged): ESLint fix + Prettier on staged files, plus gi
 | `/spec <topic>` | Load and summarise a spec or guide |
 | `/commit` | Stage and commit with Conventional Commits |
 | `/obsidian-sync` | Sync `.claude/` Markdown to an Obsidian vault via the Obsidian MCP |
+
+## CI & PR automation
+
+GitHub-side automation lives in `.github/`; [`.github/README.md`](.github/README.md)
+is the source of truth — read it before touching any workflow.
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `claude-pr-review.yml` | PR opened / synchronize / ready / reopened | Inline review + security findings; HIGH findings submit a `REQUEST_CHANGES` review |
+| `claude-code-review.yml` | release tag push / `workflow_dispatch` | Release audit scoped to commits since the previous tag; files issues |
+| `pr-title-lint.yml` | PR opened / edited / reopened | Conventional-Commits check on the PR title (the squash-merge commit on `main`) |
+| `claude-assistant.yml` | `@claude` mention | On-demand reactive bot |
+
+Reusable logic is factored into composite actions (`.github/actions/`) and
+scripts (`.github/scripts/claude/`).
+
+Two non-obvious constraints:
+- **Workflow-editing PRs can't self-approve.** `claude-code-action` refuses to
+  run on a PR that modifies the review workflow; the check only passes once the
+  change is on `main`.
+- **Branch protection is documented but not enforced** on the current free
+  private repo — classic branch protection and rulesets both require GitHub Pro
+  or a public repo. The "required checks" in [Rule 31](.claude/rules/31-github-flow.md)
+  are advisory until then.
 
 ## Local development environment
 
