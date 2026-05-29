@@ -10,10 +10,14 @@ This folder holds the project's GitHub-side automation.
 | [`workflows/bedrock-simulator-destroy.yml`](workflows/bedrock-simulator-destroy.yml) | `workflow_dispatch` (confirm = "destroy bedrock-simulator") | Tears down the bedrock-simulator stack (disables MIL, empties bucket, sam delete) |
 | [`workflows/bedrock-simulator-run.yml`](workflows/bedrock-simulator-run.yml) | `workflow_dispatch` (totalCalls, guardrailRatio) | Invokes the deployed simulator Lambda with the full model × service × user matrix |
 | [`workflows/pr-title-lint.yml`](workflows/pr-title-lint.yml) | PR opened / edited / reopened | Validates PR title against Conventional Commits (required — PR title becomes the squash-merge commit on `main`) |
-| [`workflows/claude-assistant.yml`](workflows/claude-assistant.yml) | `@claude` mention in PR/issue comments | On-demand reactive bot |
+| [`workflows/claude-assistant.yml`](workflows/claude-assistant.yml) | `@claude` mention on an **issue** (opened/assigned or issue comment) | On-demand reactive bot for issue triage / Q&A; PRs are out of scope (covered by `claude-pr-review.yml` + local Claude Code) |
 
-The on-demand `claude-assistant.yml` is intentionally minimal. The rest of this
-document walks through the **automated review workflows** in detail.
+The on-demand `claude-assistant.yml` is intentionally minimal and **scoped to
+issues only** — it does not run on pull requests, where `claude-pr-review.yml`
+and local Claude Code already cover the work. It carries the same cost
+discipline as the review workflows (a `--max-turns` cap and a read-only
+`--allowed-tools` allowlist). The rest of this document walks through the
+**automated review workflows** in detail.
 
 ---
 
@@ -114,6 +118,59 @@ Rule 50.5 ("never `--no-verify`").
 
 ---
 
+## Required GitHub Environment for bedrock-simulator
+
+The three `bedrock-simulator-*` workflows each declare
+`environment: bedrock-simulator-sandbox`
+([deploy](workflows/bedrock-simulator-deploy.yml),
+[run](workflows/bedrock-simulator-run.yml),
+[destroy](workflows/bedrock-simulator-destroy.yml)). That line only *names*
+the environment — the environment itself is **not** defined in YAML and must
+be created once in the GitHub UI before any of those workflows can run.
+
+A [GitHub Actions Environment](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment)
+is a named scope, configured under **Settings → Environments**, that holds
+its own secrets/variables and gates any job referencing it behind protection
+rules.
+
+### Why it exists here
+
+The simulator deploys to a dedicated AWS **sandbox** account, invokes **real
+Amazon Bedrock models** (real spend), and the destroy workflow tears down live
+infrastructure (`sam delete`) — all `workflow_dispatch`-only. Scoping these to
+an environment (a) keeps the sandbox's AWS access and budget-alert details out
+of repo-wide secrets, and (b) lets a **required-reviewer** rule put a human in
+the loop before anything touches the account.
+
+### Required-reviewer protection
+
+With **Required reviewers** enabled on the environment, any job that targets it
+**pauses in a "Waiting" state before its first step** until a named reviewer
+clicks **Approve** in the Actions UI. If rejected, the job is cancelled. This
+means no one can deploy, spend, or destroy in the sandbox — even via a manual
+dispatch — without a second person approving the run. It is the human gate on
+the typed-confirmation inputs (`confirm = "deploy"` / `"destroy bedrock-simulator"`).
+
+### How to set it up
+
+1. **Settings → Environments → New environment** → name it exactly
+   `bedrock-simulator-sandbox` (must match the workflows' `environment:` value).
+2. Under **Deployment protection rules**, tick **Required reviewers** and add
+   yourself / the team.
+3. Add the environment-scoped values the workflows read:
+
+   | Kind | Name | Used by | Purpose |
+   | --- | --- | --- | --- |
+   | Variable | `SANDBOX_ACCOUNT_ID` | all three | Builds the OIDC role ARN `arn:aws:iam::<id>:role/bedrock-simulator-deployer` |
+   | Secret | `BUDGET_ALERT_EMAIL` | deploy | `BudgetAlertEmail` SAM parameter for the budget alarm |
+
+> First-deploy bootstrap: the `bedrock-simulator-deployer` OIDC role is created
+> *by* the stack on the first `sam deploy`, so the very first deploy in a fresh
+> sandbox account must be run locally with SSO credentials — see
+> [`docs/guides/bedrock-simulator.md`](../docs/guides/bedrock-simulator.md).
+
+---
+
 ## Why these workflows exist
 
 Reviewing every pull request manually doesn't scale, and asking a human
@@ -151,7 +208,7 @@ flowchart TD
     B -->|pull_request<br/>opened / synchronize /<br/>ready_for_review / reopened| PR[claude-pr-review.yml]
     B -->|push of release tag<br/>v* · *-rc* · *-beta*| RA[claude-code-review.yml]
     B -->|workflow_dispatch| RA
-    B -->|issue_comment with<br/>'@claude ...'| BOT[claude-assistant.yml]
+    B -->|issue or issue comment with<br/>'@claude ...'<br/>PRs excluded| BOT[claude-assistant.yml]
     PR --> PR1[Inline diff comments<br/>+ PR comment for HIGH/MEDIUM security<br/>+ REQUEST_CHANGES review on HIGH]
     RA --> RA1[Issues: HIGH/MEDIUM security<br/>+ HIGH code-review]
     BOT --> BOT1[Reactive reply in thread]
