@@ -45,7 +45,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      id-token: none
+      id-token: write # Required: claude-code-action performs an OIDC token exchange on startup
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       REPO: ${{ github.repository }}

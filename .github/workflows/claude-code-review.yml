@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-      id-token: none
+      id-token: write # Required: claude-code-action performs an OIDC token exchange on startup
     env:
       REPO: ${{ github.repository }}
     steps:
