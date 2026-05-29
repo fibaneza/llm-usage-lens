@@ -1,0 +1,73 @@
+name: Create GitHub issues from release audit
+description: Parses Claude security-summary and code-review-summary blocks from a release audit and creates GitHub issues for HIGH/MEDIUM security and HIGH code-review findings.
+
+inputs:
+  audit-output:
+    required: true
+    description: Full text output from the Claude release-audit step (steps.X.outputs.result).
+  commit-sha:
+    required: true
+    description: Full commit SHA of the audited release (github.sha).
+  release-tag:
+    required: true
+    description: Release tag name that triggered the audit (github.ref_name).
+  repo:
+    required: true
+    description: Repository in owner/repo format (github.repository).
+  assignee:
+    required: false
+    description: Comma-separated list of GitHub usernames to assign created issues to. Leave empty to skip assignment.
+    default: ''
+  labels-security:
+    required: false
+    description: Label name for security issues.
+    default: security
+  labels-high:
+    required: false
+    description: Label name for high-severity findings.
+    default: high-severity
+  labels-medium:
+    required: false
+    description: Label name for medium-severity findings.
+    default: medium-severity
+  labels-code-review:
+    required: false
+    description: Label name for code-review findings.
+    default: code-review
+  gh-token:
+    required: true
+    description: GitHub token with issues:write permission.
+
+outputs:
+  created-count:
+    description: Number of issues created.
+    value: ${{ steps.create.outputs.created_count }}
+  issue-urls:
+    description: JSON array of created issue URLs.
+    value: ${{ steps.create.outputs.issue_urls }}
+
+runs:
+  using: composite
+  steps:
+    - name: Create issues
+      id: create
+      uses: actions/github-script@v9
+      env:
+        AUDIT_OUTPUT: ${{ inputs.audit-output }}
+        COMMIT_SHA: ${{ inputs.commit-sha }}
+        RELEASE_TAG: ${{ inputs.release-tag }}
+        REPO: ${{ inputs.repo }}
+        ASSIGNEE: ${{ inputs.assignee }}
+        LABELS_SECURITY: ${{ inputs.labels-security }}
+        LABELS_HIGH: ${{ inputs.labels-high }}
+        LABELS_MEDIUM: ${{ inputs.labels-medium }}
+        LABELS_CODE_REVIEW: ${{ inputs.labels-code-review }}
+      with:
+        github-token: ${{ inputs.gh-token }}
+        script: |
+          const run = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/claude/release-create-issues.cjs`);
+          const result = (await run({ github, context, core, env: process.env })) ?? {};
+          // Always emit both outputs so downstream `if:` checks against them
+          // never observe an empty string when the script returned early.
+          core.setOutput('created_count', result.createdCount ?? 0);
+          core.setOutput('issue_urls', JSON.stringify(result.issueUrls ?? []));

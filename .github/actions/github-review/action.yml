@@ -1,0 +1,50 @@
+name: Claude code review
+description: Runs a Claude Code review via anthropics/claude-code-action and exposes the result for downstream processing.
+
+inputs:
+  oauth-token:
+    required: true
+    description: Claude Code OAuth token (CLAUDE_CODE_OAUTH_TOKEN secret).
+  prompt:
+    required: true
+    description: Full prompt to pass to Claude.
+  model:
+    required: false
+    description: Claude model identifier.
+    default: claude-sonnet-4-6
+  max-turns:
+    required: false
+    description: Maximum conversation turns for Claude.
+    default: '8'
+  allowed-tools:
+    required: true
+    description: Comma-separated list of tools Claude is permitted to use.
+  plugin-marketplaces:
+    required: false
+    description: Space-separated plugin marketplace URLs (e.g. https://github.com/anthropics/claude-code.git).
+    default: ''
+  plugins:
+    required: false
+    description: Space-separated plugin identifiers to load (e.g. code-review@claude-code-plugins).
+    default: ''
+
+outputs:
+  result:
+    description: Full text output from Claude's review response.
+    value: ${{ steps.review.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run Claude review
+      id: review
+      uses: anthropics/claude-code-action@v1
+      with:
+        claude_code_oauth_token: ${{ inputs.oauth-token }}
+        plugin_marketplaces: ${{ inputs.plugin-marketplaces }}
+        plugins: ${{ inputs.plugins }}
+        claude_args: |
+          --model ${{ inputs.model }}
+          --max-turns ${{ inputs.max-turns }}
+          --allowed-tools "${{ inputs.allowed-tools }}"
+        prompt: ${{ inputs.prompt }}

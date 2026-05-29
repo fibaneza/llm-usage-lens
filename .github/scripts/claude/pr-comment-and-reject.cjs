@@ -23,7 +23,11 @@ module.exports = async function run({ github, context, core, env }) {
   }
 
   const prNumber = parseInt(env.PR_NUMBER, 10);
-  const sha = env.HEAD_SHA;
+  if (!Number.isFinite(prNumber)) {
+    throw new Error(`Invalid PR_NUMBER env var: '${env.PR_NUMBER}'`);
+  }
+  const sha = env.HEAD_SHA ?? '';
+  const shortSha = sha.slice(0, 7) || '(unknown)';
   const repo = env.REPO;
   const prUrl = `https://github.com/${repo}/pull/${prNumber}`;
 
@@ -56,7 +60,7 @@ module.exports = async function run({ github, context, core, env }) {
   const commentBody = [
     `## Security review`,
     ``,
-    `**PR:** [#${prNumber}](${prUrl}) — \`${env.HEAD_REF}\` → \`${env.BASE_REF}\` @ \`${sha.slice(0, 7)}\``,
+    `**PR:** [#${prNumber}](${prUrl}) — \`${env.HEAD_REF}\` → \`${env.BASE_REF}\` @ \`${shortSha}\``,
     ``,
     ...sections,
     `See inline review comments for file/line context and suggested fixes.`,
@@ -79,6 +83,8 @@ module.exports = async function run({ github, context, core, env }) {
         body: `${highCount} HIGH severity security finding(s) detected. See ${comment.html_url} for details.`,
       });
     } catch (err) {
+      // A failed createReview must not prevent setFailed below — the
+      // workflow gate is the authoritative reject signal. Log and continue.
       console.log(`REQUEST_CHANGES review failed (${err.status}): ${err.message}`);
     }
     core.setFailed(`${highCount} HIGH severity security finding(s) — rejecting PR`);

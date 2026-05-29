@@ -12,5 +12,8 @@
 #
 # Update here when the project layout shifts — both scope scripts source this.
 
-SENSITIVE='^(apps/dashboard/(auth\.ts|middleware\.ts|app/api/|lib/data/|lib/dynamodb\.ts|lib/auth)|apps/collector/|infrastructure/|packages/shared/src/(env|auth)|.*\.env(\..+)?$|package\.json$|pnpm-lock\.yaml$|\.github/workflows/)'
+# If SENSITIVE is already set in the environment (passed by a workflow that
+# sources this file and then passes $SENSITIVE on to the scope scripts),
+# honour that value so callers can supply a project-specific override.
+SENSITIVE="${SENSITIVE:-^(apps/dashboard/(auth\.ts|middleware\.ts|app/api/|lib/data/|lib/dynamodb\.ts|lib/auth)|apps/collector/|infrastructure/|packages/shared/src/(env|auth)|.*\.env(\..+)?$|package\.json$|pnpm-lock\.yaml$|\.github/workflows/)}"
 export SENSITIVE
