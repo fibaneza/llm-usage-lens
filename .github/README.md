@@ -137,7 +137,7 @@ calls (fetching changed files, creating PR comments/reviews, creating issues).
 | Item | Why it matters | How to set it |
 | --- | --- | --- |
 | **Actions enabled** | Obviously the workflows can't run otherwise. | Settings → Actions → General → "Allow all actions and reusable workflows". |
-| **Workflow permissions** | `claude-pr-review.yml` writes PR comments; `claude-code-review.yml` creates issues. | Settings → Actions → General → Workflow permissions → "Read and write permissions". Each workflow also declares a per-job `permissions:` block. |
+| **Workflow permissions** | `claude-pr-review.yml` writes PR comments; `claude-code-review.yml` creates issues. | Settings → Actions → General → Workflow permissions → "Read and write permissions". Each job declares its own least-privilege `permissions:` block — only the job that needs a scope holds it. |
 | **`fibaneza` is a collaborator** | Security and code-review issues are auto-assigned to this user. | Settings → Collaborators → Add people. If you fork this repo, change the assignee in `.github/scripts/release-create-issues.cjs` (search for `assignees:`). |
 
 ### What gets created automatically — don't pre-create these
@@ -165,6 +165,24 @@ Rule 50.1 forbids static AWS keys — OIDC is the only acceptable upgrade path.
 At a high level: when a PR event arrives, the workflow first decides whether
 it should run at all, then figures out how much of the PR to look at, then
 picks one of three review modes.
+
+### Job structure — a `scope → review → security-gate` pipeline
+
+The workflow is **three jobs wired with `needs:`**, so the Actions run page
+renders it as a connected graph rather than a single box:
+
+| Job | Depends on | Does | Permissions (least-privilege) |
+| --- | --- | --- | --- |
+| `scope` | — | Checkout, load the `SENSITIVE` regex, run `pr-determine-scope.sh`, and log the files in scope to the run summary. The draft-PR `if` lives here (Step 1). | `contents:read`, `pull-requests:read` |
+| `review` | `scope` | Runs exactly one of the three review modes via the `github-review` action (Step 3). | `contents:read`, `pull-requests:write`, `id-token:write` |
+| `security-gate` | `scope`, `review` | Posts the security PR comment and `REQUEST_CHANGES` on HIGH findings (Step 4). Runs only for full+security reviews. | `contents:read`, `pull-requests:write` |
+
+Each job declares only the permissions it uses — the OIDC `id-token:write`
+token is held solely by the `review` job that performs the Claude token
+exchange, and write access to pull requests is held only where comments are
+posted. Data flows between jobs through job `outputs:` (scope's `type` /
+`files` / `security_relevant`, and the review's `review_result`). The "Step"
+headings below map onto these jobs.
 
 ### Step 1: should the workflow run at all?
 
@@ -279,6 +297,18 @@ authoritative safety net for anything that slips through.
 This workflow fires when a release tag is pushed to `main`. Its job is to
 audit only the code added since the previous release — using the previous
 release tag as the diff base.
+
+It mirrors the PR reviewer's shape: **three jobs wired with `needs:`**.
+
+| Job | Depends on | Does | Permissions (least-privilege) |
+| --- | --- | --- | --- |
+| `scope` | — | Checkout (full history + tags for `git describe`), load the `SENSITIVE` regex, run `release-determine-scope.sh`, and log the changed/removed files to the run summary. | `contents:read` |
+| `audit` | `scope` | Runs the release audit via the `github-review` action. Skipped when `skip_audit == 'true'` (bootstrap or no changes). | `contents:read`, `id-token:write` |
+| `create-issues` | `scope`, `audit` | Creates issues for HIGH/MEDIUM security + HIGH code-review findings. Runs only when the audit succeeded. | `contents:read`, `issues:write` |
+
+The audit's `result` passes to `create-issues` via a job output; `issues:write`
+is held only by the job that files issues, and `id-token:write` only by the
+audit job.
 
 ```mermaid
 flowchart TD
@@ -430,7 +460,7 @@ Four scenarios showing both workflows in action:
 | --- | --- | --- |
 | `paths-ignore` | top of file, under `on.pull_request` | Globs that skip the workflow entirely |
 | `concurrency.group` | top-level (`claude-pr-review-<pr>`) | One in-flight review per PR |
-| `timeout-minutes` | `jobs.review` | Hard ceiling per run (25 min) |
+| `timeout-minutes` | per job | 25 min on `jobs.review`; 5 min on `jobs.scope` and `jobs.security-gate` |
 | `--max-turns` | `claude_args` blocks | 8 for full reviews, 5 for incrementals |
 | `--model` | `claude_args` blocks | Currently `claude-sonnet-4-6` |
 | `--allowed-tools` | `claude_args` blocks | Allowlist: `Read`, `Glob`, `Grep`, `gh pr …`, `mcp__github_inline_comment__create_inline_comment` |
@@ -442,7 +472,7 @@ Four scenarios showing both workflows in action:
 | --- | --- | --- |
 | `tags` | `on.push` trigger | Release tag patterns that trigger the audit |
 | `concurrency.group` | top-level (`claude-code-review-<ref>`) | One in-flight audit per tag |
-| `timeout-minutes` | `jobs.audit` | Hard ceiling per run (25 min) |
+| `timeout-minutes` | per job | 25 min on `jobs.audit`; 5 min on `jobs.scope` and `jobs.create-issues` |
 | `--max-turns` | `claude_args` | 8 for the combined audit |
 | `--model` | `claude_args` | Currently `claude-sonnet-4-6` |
 | `--allowed-tools` | `claude_args` | `Read`, `Glob`, `Grep`, `Bash(gh api:*)` — no PR tools |
@@ -522,10 +552,11 @@ wrong Anthropic account. Run `claude setup-token` locally to mint a fresh
 one and replace the secret value.
 
 **The security audit didn't run on a change you expected to be sensitive.**
-The `Determine scope` step writes its decision (and the count of sensitive
-files matched) to the job summary. If your file isn't matched, the `SENSITIVE`
-regex needs extending. Edit `.github/scripts/lib/sensitive-paths.sh` — one
-change, both scope scripts pick it up.
+The `scope` job's `List files in scope` step prints the exact file set under
+review (and the mode + security-audit decision) to both the step log and the
+run summary. If your file isn't matched, the `SENSITIVE` regex needs extending.
+Edit `.github/scripts/lib/sensitive-paths.sh` — one change, both scope scripts
+pick it up.
 
 **A `synchronize` push introduced a security issue but no PR comment /
 `REQUEST_CHANGES` happened.**

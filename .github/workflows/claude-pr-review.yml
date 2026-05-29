@@ -12,14 +12,16 @@
 # After any full+security review, HIGH findings trigger a PR comment and a
 # REQUEST_CHANGES review submission.
 #
-# Steps:
-#   1. Checkout (shallow)
-#   2. Load sensitive-paths regex from lib/sensitive-paths.sh
-#   3. Determine PR scope (full vs incremental, security-relevant flag)
-#   4. Full review: code + security  (conditional)
-#   5. Full review: code only        (conditional)
-#   6. Incremental review            (conditional)
-#   7. Post security findings comment + REQUEST_CHANGES if HIGH > 0
+# Jobs (a scope → review → security-gate pipeline, wired with needs:):
+#   scope          Checkout, load sensitive-paths regex, determine PR scope
+#                  (full vs incremental, security-relevant flag), and log the
+#                  files in scope. Holds only contents:read + pull-requests:read.
+#   review         needs: scope. Runs exactly one of the three review modes via
+#                  the github-review action. Holds id-token:write (OIDC) +
+#                  pull-requests:write (inline comments).
+#   security-gate  needs: [scope, review]. Posts the security comment and
+#                  REQUEST_CHANGES on HIGH findings, only for full+security
+#                  reviews. Holds pull-requests:write.
 
 name: Claude PR Review
 
@@ -38,21 +40,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  review:
+  scope:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: write
-      id-token: write # Required: claude-code-action performs an OIDC token exchange on startup
+      pull-requests: read # pr-determine-scope.sh reads PR files via gh api
+    outputs:
+      type: ${{ steps.scope.outputs.type }}
+      files: ${{ steps.scope.outputs.files }}
+      security_relevant: ${{ steps.scope.outputs.security_relevant }}
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       REPO: ${{ github.repository }}
-      # Single source of truth for the tools the review agent may use.
-      # Drift across the three review modes below caused subtle behaviour
-      # differences in earlier iterations — keep them identical here.
-      REVIEW_TOOLS: 'Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),mcp__github_inline_comment__create_inline_comment'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -74,9 +75,58 @@ jobs:
           SENSITIVE: ${{ steps.regex.outputs.value }}
         run: bash .github/scripts/claude/pr-determine-scope.sh
 
+      - name: List files in scope
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCOPE_TYPE: ${{ steps.scope.outputs.type }}
+          SCOPE_FILES: ${{ steps.scope.outputs.files }}
+          SECURITY_RELEVANT: ${{ steps.scope.outputs.security_relevant }}
+        run: |
+          {
+            echo "## Claude PR Review — files in scope"
+            echo ""
+            echo "- **Mode:** \`$SCOPE_TYPE\`"
+            echo "- **Security audit:** \`$SECURITY_RELEVANT\`"
+            echo ""
+            echo "### Files to review"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$SCOPE_TYPE" = "incremental" ]; then
+            # Incremental: scope already resolved the changed-file list (comma-separated).
+            printf '%s\n' "$SCOPE_FILES" | tr ',' '\n' | sed '/^$/d' | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            # Full: scope passes no file list (Claude fetches the diff itself), so
+            # enumerate the PR's changed files purely for visibility here.
+            gh pr diff "$PR_NUMBER" --repo "$REPO" --name-only | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+  review:
+    needs: scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      pull-requests: write # inline review comments
+      id-token: write # Required: claude-code-action performs an OIDC token exchange on startup
+    outputs:
+      # Only the full+security step emits a result; empty otherwise, which is
+      # exactly when the downstream security-gate must not fire.
+      review_result: ${{ steps.full.outputs.result }}
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+      # Single source of truth for the tools the review agent may use.
+      # Drift across the three review modes below caused subtle behaviour
+      # differences in earlier iterations — keep them identical here.
+      REVIEW_TOOLS: 'Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),mcp__github_inline_comment__create_inline_comment'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
       - name: Full review (code + security)
         id: full
-        if: steps.scope.outputs.type == 'full' && steps.scope.outputs.security_relevant == 'true'
+        if: needs.scope.outputs.type == 'full' && needs.scope.outputs.security_relevant == 'true'
         uses: ./.github/actions/github-review
         with:
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -120,7 +170,7 @@ jobs:
 
       - name: Full review (code only)
         id: full_code_only
-        if: steps.scope.outputs.type == 'full' && steps.scope.outputs.security_relevant == 'false'
+        if: needs.scope.outputs.type == 'full' && needs.scope.outputs.security_relevant == 'false'
         uses: ./.github/actions/github-review
         with:
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -141,7 +191,7 @@ jobs:
 
       - name: Incremental review (latest push only)
         id: incremental
-        if: steps.scope.outputs.type == 'incremental'
+        if: needs.scope.outputs.type == 'incremental'
         uses: ./.github/actions/github-review
         with:
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -161,15 +211,27 @@ jobs:
               ```
 
             Scope to ONLY files changed in this push:
-            ${{ steps.scope.outputs.files }}
+            ${{ needs.scope.outputs.files }}
 
             Skip files not in that list unless directly called by the changed code.
 
+  security-gate:
+    needs: [scope, review]
+    if: needs.scope.outputs.type == 'full' && needs.scope.outputs.security_relevant == 'true' && needs.review.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
       - name: Comment + reject on security findings
-        if: steps.scope.outputs.type == 'full' && steps.full.conclusion == 'success'
         uses: ./.github/actions/github-post-pr-security-comment
         with:
-          review-output: ${{ steps.full.outputs.result }}
+          review-output: ${{ needs.review.outputs.review_result }}
           pr-number: ${{ github.event.pull_request.number }}
           repo: ${{ github.repository }}
           head-ref: ${{ github.head_ref }}
