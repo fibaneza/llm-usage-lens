@@ -1,0 +1,43 @@
+name: Post PR security findings comment
+description: Parses a Claude security-summary block, posts findings as a PR comment, and submits REQUEST_CHANGES if any HIGH findings are present.
+
+inputs:
+  review-output:
+    required: true
+    description: Full text output from the Claude review step (steps.X.outputs.result).
+  pr-number:
+    required: true
+    description: Pull request number to comment on.
+  repo:
+    required: true
+    description: Repository in owner/repo format (github.repository).
+  head-ref:
+    required: true
+    description: Source branch of the PR (github.head_ref).
+  base-ref:
+    required: true
+    description: Target branch of the PR (github.base_ref).
+  head-sha:
+    required: true
+    description: HEAD commit SHA of the PR (github.event.pull_request.head.sha).
+  gh-token:
+    required: true
+    description: GitHub token with pull-requests:write permission.
+
+runs:
+  using: composite
+  steps:
+    - name: Post comment and request changes
+      uses: actions/github-script@v9
+      env:
+        REVIEW_OUTPUT: ${{ inputs.review-output }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        REPO: ${{ inputs.repo }}
+        HEAD_REF: ${{ inputs.head-ref }}
+        BASE_REF: ${{ inputs.base-ref }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+      with:
+        github-token: ${{ inputs.gh-token }}
+        script: |
+          const run = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/claude/pr-comment-and-reject.cjs`);
+          await run({ github, context, core, env: process.env });

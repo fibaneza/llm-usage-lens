@@ -23,8 +23,11 @@ source "$(dirname "$0")/lib/sensitive-paths.sh"
 # Everything else (opened/reopened/ready_for_review/force-push) → full
 # correctness + security in a single Claude invocation.
 if [[ "$EVENT_ACTION" == "synchronize" && "$EVENT_BEFORE" != "0000000000000000000000000000000000000000" ]]; then
+  # Distinguish "no files changed" (legitimate, empty output) from "gh api failed"
+  # (transient error, must not silently drop scope). gh api exits non-zero on
+  # error; pipefail surfaces it here.
   FILES=$(gh api "repos/${REPO}/compare/${EVENT_BEFORE}...${CURRENT_SHA}" \
-    --jq '[.files[].filename] | join(", ")' 2>/dev/null || echo "")
+    --jq '[.files[].filename] | join(", ")')
   echo "type=incremental" >> "$GITHUB_OUTPUT"
   echo "files=${FILES}" >> "$GITHUB_OUTPUT"
   echo "**Scope:** incremental — \`${FILES}\`" >> "$GITHUB_STEP_SUMMARY"
@@ -35,10 +38,10 @@ fi
 
 # Security-sensitive paths drive whether the full review's prompt also
 # includes the security audit block (and emits a security-summary for
-# downstream comment/reject handling).
-HITS=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate \
-  --jq '.[].filename' \
-  | grep -Ec "$SENSITIVE" || true)
+# downstream comment/reject handling). A gh api failure here would silently
+# downgrade the audit, so capture the file list first and fail loudly.
+FILE_LIST=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename')
+HITS=$(echo "$FILE_LIST" | grep -Ec "$SENSITIVE" || true)
 if [[ "$HITS" -gt 0 ]]; then
   echo "security_relevant=true" >> "$GITHUB_OUTPUT"
   echo "**Security audit:** running (${HITS} sensitive file(s) changed)" >> "$GITHUB_STEP_SUMMARY"
