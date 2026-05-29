@@ -1,9 +1,14 @@
 # claude-assistant.yml
 #
-# On-demand Claude assistant triggered by @claude mentions in issues,
-# PR review comments, PR reviews, and newly opened/assigned issues.
-# Unlike the automated review workflows, this bot responds to freeform
-# requests — Claude interprets the triggering comment as its instructions.
+# On-demand Claude assistant triggered by @claude mentions on ISSUES only —
+# either a newly opened/assigned issue or a comment on an issue. Pull requests
+# are intentionally out of scope: PRs are covered by claude-pr-review.yml
+# (automated review) and by local Claude Code. Unlike the review workflows,
+# this bot responds to freeform requests — Claude interprets the triggering
+# issue/comment body as its instructions (issue triage, Q&A, repro guidance).
+#
+# Cost discipline mirrors the review workflows: --max-turns cap and a
+# read-only --allowed-tools allowlist (no Write/Edit/commit).
 #
 # Steps:
 #   1. Checkout repository (shallow)
@@ -14,27 +19,21 @@ name: Claude Assistant
 on:
   issue_comment:
     types: [created]
-  pull_request_review_comment:
-    types: [created]
   issues:
     types: [opened, assigned]
-  pull_request_review:
-    types: [submitted]
 
 jobs:
   claude:
+    # `issue_comment` fires on PR comments too — `!github.event.issue.pull_request`
+    # restricts this job to real issues, keeping PRs out of scope.
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issue_comment' && !github.event.issue.pull_request && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
       issues: read
       id-token: write
-      actions: read # Required for Claude to read CI results on PRs
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -47,15 +46,10 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
-          # This is an optional setting that allows Claude to read CI results on PRs
-          additional_permissions: |
-            actions: read
+          # Cost caps: bound the turn count and restrict to read-only tools plus
+          # issue interaction. No Write/Edit/Bash beyond `gh issue`.
+          claude_args: '--max-turns 10 --allowed-tools "Read,Glob,Grep,Bash(gh issue:*)"'
 
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
-
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
+          # Prompt is intentionally unset — Claude follows the instructions in the
+          # issue/comment that mentioned @claude.
 
