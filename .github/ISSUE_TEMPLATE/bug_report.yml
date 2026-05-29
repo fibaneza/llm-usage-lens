@@ -1,0 +1,71 @@
+name: Bug report
+description: Report incorrect or unexpected behaviour in the dashboard, collector, or tooling.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: confirm the behaviour contradicts a spec in `docs/specs/**`
+        or a documented expectation. Do not report security vulnerabilities here —
+        see SECURITY.md.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is wrong, in one or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps. Include the command, route, or seed dataset used.
+      placeholder: |
+        1. Run `pnpm tsx scripts/seed.ts`
+        2. Open /dashboard/ranking
+        3. Sort by Cost
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      description: What you expected to happen, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Dashboard (apps/dashboard)
+        - Collector (apps/collector)
+        - Shared package (packages/shared)
+        - Scripts / seeds
+        - CI / GitHub Actions
+        - Docs
+        - Other / unsure
+    validations:
+      required: true
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase (if known)
+      description: Which build phase the affected code belongs to (see implementation-phases spec).
+      options:
+        - "Unsure"
+        - "1 — Foundation"
+        - "2 — Layout Shell"
+        - "3 — Data Layer"
+        - "4 — Pages"
+        - "5 — Polish & Accessibility"
+        - "6 — Collector"
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Branch/commit, Node version, DynamoDB Local vs real AWS, browser if relevant.
+    validations:
+      required: false

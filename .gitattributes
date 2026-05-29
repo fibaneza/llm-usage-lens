@@ -1,0 +1,21 @@
+# Normalize line endings: store text as LF in the repo, check out LF everywhere.
+# Matches .editorconfig (end_of_line = lf) and Prettier.
+* text=auto eol=lf
+
+# Binary assets — never normalize or diff as text.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
+*.pdf   binary
+
+# Lockfile: generated, so collapse in diffs and don't count toward language stats.
+# (Arrives in Phase 1 with the pnpm workspace; rule sits dormant until then.)
+pnpm-lock.yaml linguist-generated=true -diff
+
+# Treat docs as documentation for language stats.
+docs/** linguist-documentation
