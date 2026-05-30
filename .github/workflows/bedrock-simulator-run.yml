@@ -5,17 +5,12 @@
 # Always passes the full matrix — the Lambda contract is fixed in code, not at
 # dispatch time. See docs/specs/2026-05-24-bedrock-simulator.md "Lambda contract".
 #
+# Pipeline (one job per stage so the Actions UI renders a graph):
+#   validate → range-check the dispatch inputs (no AWS credentials)
+#   invoke   → resolve the Lambda, fan out the matrix, summarise + upload results
+#
 # All untrusted/external inputs are passed via `env:` blocks (never inlined in
 # `run:` strings) to prevent shell-command injection.
-#
-# Steps:
-#   1. Validate inputs (totalCalls 1–50, guardrailRatio 0.0–1.0)
-#   2. Checkout + configure AWS credentials via OIDC
-#   3. Get SimulatorLambdaName from CFN outputs
-#   4. Build invocation payload (full matrix) into /tmp/payload.json
-#   5. Invoke Lambda (inline — payload already on disk)
-#   6. Summarise results in workflow summary
-#   7. Upload full response as artifact
 
 name: bedrock-simulator run
 
@@ -37,15 +32,13 @@ env:
   AWS_REGION: us-east-1
   STACK_NAME: bedrock-simulator
 
-permissions:
-  id-token: write
-  contents: read
-
 jobs:
-  run:
-    name: Invoke simulator
+  validate:
+    name: Validate inputs
     runs-on: ubuntu-latest
-    environment: bedrock-simulator-sandbox
+    timeout-minutes: 5
+    permissions:
+      contents: read
 
     steps:
       - name: Validate inputs
@@ -62,6 +55,17 @@ jobs:
             exit 1
           fi
 
+  invoke:
+    name: Invoke simulator
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: bedrock-simulator-sandbox
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
       - name: Checkout
         uses: actions/checkout@v6
 

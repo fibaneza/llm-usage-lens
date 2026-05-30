@@ -1,0 +1,30 @@
+name: Setup SAM toolchain
+description: Installs Node.js, pnpm, and the AWS SAM CLI for SAM build/deploy jobs.
+
+inputs:
+  node-version:
+    required: false
+    description: Node.js version to install.
+    default: '22'
+  pnpm-version:
+    required: false
+    description: pnpm major version to install.
+    default: '9'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: ${{ inputs.pnpm-version }}
+
+    - name: Setup AWS SAM CLI
+      uses: aws-actions/setup-sam@v2
+      with:
+        use-installer: true

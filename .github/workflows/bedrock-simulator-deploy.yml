@@ -3,6 +3,13 @@
 # Deploys the bedrock-simulator SAM stack to the sandbox account and verifies
 # that the deployed resources are healthy.
 #
+# Pipeline (one job per stage so the Actions UI renders a graph):
+#   gate    → confirm intent, install deps, type-check + unit tests, sam validate
+#             (no AWS credentials — a test failure never touches AWS)
+#   deploy  → sam build + sam deploy, then pluck stack outputs for downstream jobs
+#   verify  → assert Lambda/Bedrock resources healthy + smoke-test the Lambda
+#   diagnostics → on any failure, capture CloudFormation events + Lambda logs
+#
 # Bootstrap note: the DeployerRole this workflow assumes is CREATED BY the
 # stack on the first deploy. For the very first deploy in a new sandbox
 # account, an operator must run `sam deploy` once with SSO credentials.
@@ -10,19 +17,6 @@
 #
 # All untrusted/external inputs are passed via `env:` blocks (never inlined in
 # `run:` strings) to prevent shell-command injection.
-#
-# Steps:
-#   1. Confirm intent (dispatch input must equal "deploy")
-#   2. Checkout + set up Node.js, pnpm, AWS SAM CLI
-#   3. Configure AWS credentials via OIDC
-#   4. Install simulator dependencies
-#   5. Type-check + unit tests (pre-deploy gate)
-#   6. SAM validate --lint + SAM build
-#   7. SAM deploy with parameter overrides
-#   8. Describe stack + assert status + pluck outputs
-#   9. Assert Lambda + Bedrock resources healthy
-#  10. Smoke-test the deployed Lambda (1 Haiku chat call, ~$0.001)
-#  11. On failure: capture CloudFormation events + Lambda logs as artifact
 
 name: bedrock-simulator deploy
 
@@ -38,15 +32,13 @@ env:
   AWS_REGION: us-east-1
   STACK_NAME: bedrock-simulator
 
-permissions:
-  id-token: write
-  contents: read
-
 jobs:
-  deploy:
-    name: Validate, build, deploy
+  gate:
+    name: Gate (tests + lint)
     runs-on: ubuntu-latest
-    environment: bedrock-simulator-sandbox
+    timeout-minutes: 10
+    permissions:
+      contents: read
 
     steps:
       - name: Confirm intent
@@ -61,26 +53,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup AWS SAM CLI
-        uses: aws-actions/setup-sam@v2
-        with:
-          use-installer: true
-
-      - name: Configure AWS credentials via OIDC
-        uses: ./.github/actions/aws-configure-oidc
-        with:
-          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
-          aws-region: ${{ env.AWS_REGION }}
+      - name: Setup SAM toolchain
+        uses: ./.github/actions/setup-sam-toolchain
 
       - name: Install simulator dependencies
         working-directory: tools/bedrock-simulator
@@ -92,11 +66,48 @@ jobs:
           pnpm typecheck
           pnpm test
 
-      - name: SAM validate + build
+      - name: SAM validate
         working-directory: tools/bedrock-simulator
-        run: |
-          sam validate --lint
-          sam build
+        run: sam validate --lint
+
+  deploy:
+    name: Build + deploy
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: bedrock-simulator-sandbox
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      lambda_name: ${{ steps.outputs.outputs.lambda_name }}
+      bucket_name: ${{ steps.outputs.outputs.bucket_name }}
+      log_group_name: ${{ steps.outputs.outputs.log_group_name }}
+      guardrail_id: ${{ steps.outputs.outputs.guardrail_id }}
+      profile_chat_arn: ${{ steps.outputs.outputs.profile_chat_arn }}
+      profile_summarizer_arn: ${{ steps.outputs.outputs.profile_summarizer_arn }}
+      profile_translator_arn: ${{ steps.outputs.outputs.profile_translator_arn }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup SAM toolchain
+        uses: ./.github/actions/setup-sam-toolchain
+
+      - name: Configure AWS credentials via OIDC
+        uses: ./.github/actions/aws-configure-oidc
+        with:
+          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install simulator dependencies
+        working-directory: tools/bedrock-simulator
+        run: pnpm install --frozen-lockfile
+
+      - name: SAM build
+        working-directory: tools/bedrock-simulator
+        run: sam build
 
       - name: SAM deploy
         uses: ./.github/actions/aws-sam-deploy
@@ -151,15 +162,35 @@ jobs:
             echo "profile_translator_arn=$(pluck InferenceProfileTranslatorArn)"
           } >> "$GITHUB_OUTPUT"
 
+  verify:
+    name: Verify resources + smoke test
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: bedrock-simulator-sandbox
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials via OIDC
+        uses: ./.github/actions/aws-configure-oidc
+        with:
+          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Assert Lambda + Bedrock resources healthy
         env:
-          LAMBDA_NAME: ${{ steps.outputs.outputs.lambda_name }}
-          BUCKET_NAME: ${{ steps.outputs.outputs.bucket_name }}
-          LOG_GROUP_NAME: ${{ steps.outputs.outputs.log_group_name }}
-          GUARDRAIL_ID: ${{ steps.outputs.outputs.guardrail_id }}
-          PROFILE_CHAT_ARN: ${{ steps.outputs.outputs.profile_chat_arn }}
-          PROFILE_SUMMARIZER_ARN: ${{ steps.outputs.outputs.profile_summarizer_arn }}
-          PROFILE_TRANSLATOR_ARN: ${{ steps.outputs.outputs.profile_translator_arn }}
+          LAMBDA_NAME: ${{ needs.deploy.outputs.lambda_name }}
+          BUCKET_NAME: ${{ needs.deploy.outputs.bucket_name }}
+          LOG_GROUP_NAME: ${{ needs.deploy.outputs.log_group_name }}
+          GUARDRAIL_ID: ${{ needs.deploy.outputs.guardrail_id }}
+          PROFILE_CHAT_ARN: ${{ needs.deploy.outputs.profile_chat_arn }}
+          PROFILE_SUMMARIZER_ARN: ${{ needs.deploy.outputs.profile_summarizer_arn }}
+          PROFILE_TRANSLATOR_ARN: ${{ needs.deploy.outputs.profile_translator_arn }}
         run: |
           set -euo pipefail
 
@@ -210,16 +241,36 @@ jobs:
       - name: Smoke test (1 Haiku call, no guardrail)
         uses: ./.github/actions/aws-lambda-invoke
         with:
-          function-name: ${{ steps.outputs.outputs.lambda_name }}
+          function-name: ${{ needs.deploy.outputs.lambda_name }}
           payload: '{"totalCalls":1,"models":["claude-haiku"],"services":["chat"],"users":["engineering"],"guardrailRatio":0}'
           region: ${{ env.AWS_REGION }}
           response-path: /tmp/smoke-response.json
 
-      - name: Capture diagnostics on failure
-        if: failure()
+  diagnostics:
+    name: Capture diagnostics on failure
+    needs: [gate, deploy, verify]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: bedrock-simulator-sandbox
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials via OIDC
+        uses: ./.github/actions/aws-configure-oidc
+        with:
+          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Capture diagnostics
         uses: ./.github/actions/aws-capture-diagnostics
         with:
           stack-name: ${{ env.STACK_NAME }}
-          lambda-name: ${{ steps.outputs.outputs.lambda_name }}
+          lambda-name: ${{ needs.deploy.outputs.lambda_name }}
           artifact-name: bedrock-simulator-deploy-diagnostics
           region: ${{ env.AWS_REGION }}

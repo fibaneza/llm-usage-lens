@@ -7,22 +7,16 @@
 #   2. Empty InvocationLoggingBucket so CloudFormation can delete the bucket.
 #   3. sam delete --no-prompts.
 #
+# Pipeline (one job per stage so the Actions UI renders a graph):
+#   confirm  → guard the dispatch input (no AWS credentials)
+#   teardown → disable logging, empty bucket, sam delete, verify deleted
+#   diagnostics → on any failure, capture CloudFormation events
+#
 # If the stack still lands in DELETE_FAILED, follow Recovery D in
 # docs/guides/bedrock-simulator.md.
 #
 # All untrusted/external inputs are passed via `env:` blocks (never inlined in
 # `run:` strings) to prevent shell-command injection.
-#
-# Steps:
-#   1. Confirm intent (dispatch input must equal "destroy bedrock-simulator")
-#   2. Checkout + set up AWS SAM CLI
-#   3. Configure AWS credentials via OIDC
-#   4. Get InvocationLoggingBucketName from CFN outputs
-#   5. Disable Bedrock model invocation logging (idempotent)
-#   6. Empty InvocationLoggingBucket
-#   7. SAM delete
-#   8. Verify stack deleted
-#   9. On failure: capture CloudFormation events as artifact
 
 name: bedrock-simulator destroy
 
@@ -39,15 +33,13 @@ env:
   STACK_NAME: bedrock-simulator
   CONFIRM_STRING: 'destroy bedrock-simulator'
 
-permissions:
-  id-token: write
-  contents: read
-
 jobs:
-  destroy:
-    name: Tear down stack
+  confirm:
+    name: Confirm intent
     runs-on: ubuntu-latest
-    environment: bedrock-simulator-sandbox
+    timeout-minutes: 5
+    permissions:
+      contents: read
 
     steps:
       - name: Confirm intent
@@ -59,6 +51,17 @@ jobs:
             exit 1
           fi
 
+  teardown:
+    name: Tear down stack
+    needs: confirm
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: bedrock-simulator-sandbox
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -128,8 +131,28 @@ jobs:
             exit 1
           fi
 
-      - name: Capture diagnostics on failure
-        if: failure()
+  diagnostics:
+    name: Capture diagnostics on failure
+    needs: [confirm, teardown]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: bedrock-simulator-sandbox
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials via OIDC
+        uses: ./.github/actions/aws-configure-oidc
+        with:
+          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Capture diagnostics
         uses: ./.github/actions/aws-capture-diagnostics
         with:
           stack-name: ${{ env.STACK_NAME }}
