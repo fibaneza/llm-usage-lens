@@ -3,12 +3,18 @@
 # Deploys the bedrock-simulator SAM stack to the sandbox account and verifies
 # that the deployed resources are healthy.
 #
-# Pipeline (one job per stage so the Actions UI renders a graph):
-#   gate    → confirm intent, install deps, type-check + unit tests, sam validate
-#             (no AWS credentials — a test failure never touches AWS)
-#   deploy  → sam build + sam deploy, then pluck stack outputs for downstream jobs
-#   verify  → assert Lambda/Bedrock resources healthy + smoke-test the Lambda
-#   diagnostics → on any failure, capture CloudFormation events + Lambda logs
+# Pipeline (multi-job so the Actions UI renders a graph):
+#   gate   → confirm intent, install deps, type-check + unit tests, sam validate
+#            (no AWS credentials — a test failure never touches AWS)
+#   deploy → sam build + deploy, assert resources healthy, smoke-test the Lambda
+#
+# Only `deploy` enters the bedrock-simulator-sandbox Environment, so the
+# required-reviewer gate prompts exactly ONCE per run. Every step that needs
+# AWS lives in this single job: the OIDC role's trust policy scopes `sub` to
+# `…:environment:bedrock-simulator-sandbox` (tools/bedrock-simulator/template.yaml),
+# so an AWS step in any other job would both fail to assume the role AND add a
+# second approval prompt. Verify + smoke + failure-diagnostics therefore stay
+# inside `deploy`.
 #
 # Bootstrap note: the DeployerRole this workflow assumes is CREATED BY the
 # stack on the first deploy. For the very first deploy in a new sandbox
@@ -71,22 +77,14 @@ jobs:
         run: sam validate --lint
 
   deploy:
-    name: Build + deploy
+    name: Build, deploy + verify
     needs: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     environment: bedrock-simulator-sandbox
     permissions:
       id-token: write
       contents: read
-    outputs:
-      lambda_name: ${{ steps.outputs.outputs.lambda_name }}
-      bucket_name: ${{ steps.outputs.outputs.bucket_name }}
-      log_group_name: ${{ steps.outputs.outputs.log_group_name }}
-      guardrail_id: ${{ steps.outputs.outputs.guardrail_id }}
-      profile_chat_arn: ${{ steps.outputs.outputs.profile_chat_arn }}
-      profile_summarizer_arn: ${{ steps.outputs.outputs.profile_summarizer_arn }}
-      profile_translator_arn: ${{ steps.outputs.outputs.profile_translator_arn }}
 
     steps:
       - name: Checkout
@@ -162,35 +160,15 @@ jobs:
             echo "profile_translator_arn=$(pluck InferenceProfileTranslatorArn)"
           } >> "$GITHUB_OUTPUT"
 
-  verify:
-    name: Verify resources + smoke test
-    needs: deploy
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: bedrock-simulator-sandbox
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Configure AWS credentials via OIDC
-        uses: ./.github/actions/aws-configure-oidc
-        with:
-          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
-          aws-region: ${{ env.AWS_REGION }}
-
       - name: Assert Lambda + Bedrock resources healthy
         env:
-          LAMBDA_NAME: ${{ needs.deploy.outputs.lambda_name }}
-          BUCKET_NAME: ${{ needs.deploy.outputs.bucket_name }}
-          LOG_GROUP_NAME: ${{ needs.deploy.outputs.log_group_name }}
-          GUARDRAIL_ID: ${{ needs.deploy.outputs.guardrail_id }}
-          PROFILE_CHAT_ARN: ${{ needs.deploy.outputs.profile_chat_arn }}
-          PROFILE_SUMMARIZER_ARN: ${{ needs.deploy.outputs.profile_summarizer_arn }}
-          PROFILE_TRANSLATOR_ARN: ${{ needs.deploy.outputs.profile_translator_arn }}
+          LAMBDA_NAME: ${{ steps.outputs.outputs.lambda_name }}
+          BUCKET_NAME: ${{ steps.outputs.outputs.bucket_name }}
+          LOG_GROUP_NAME: ${{ steps.outputs.outputs.log_group_name }}
+          GUARDRAIL_ID: ${{ steps.outputs.outputs.guardrail_id }}
+          PROFILE_CHAT_ARN: ${{ steps.outputs.outputs.profile_chat_arn }}
+          PROFILE_SUMMARIZER_ARN: ${{ steps.outputs.outputs.profile_summarizer_arn }}
+          PROFILE_TRANSLATOR_ARN: ${{ steps.outputs.outputs.profile_translator_arn }}
         run: |
           set -euo pipefail
 
@@ -241,36 +219,16 @@ jobs:
       - name: Smoke test (1 Haiku call, no guardrail)
         uses: ./.github/actions/aws-lambda-invoke
         with:
-          function-name: ${{ needs.deploy.outputs.lambda_name }}
+          function-name: ${{ steps.outputs.outputs.lambda_name }}
           payload: '{"totalCalls":1,"models":["claude-haiku"],"services":["chat"],"users":["engineering"],"guardrailRatio":0}'
           region: ${{ env.AWS_REGION }}
           response-path: /tmp/smoke-response.json
 
-  diagnostics:
-    name: Capture diagnostics on failure
-    needs: [gate, deploy, verify]
-    if: failure()
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: bedrock-simulator-sandbox
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Configure AWS credentials via OIDC
-        uses: ./.github/actions/aws-configure-oidc
-        with:
-          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Capture diagnostics
+      - name: Capture diagnostics on failure
+        if: failure()
         uses: ./.github/actions/aws-capture-diagnostics
         with:
           stack-name: ${{ env.STACK_NAME }}
-          lambda-name: ${{ needs.deploy.outputs.lambda_name }}
+          lambda-name: ${{ steps.outputs.outputs.lambda_name }}
           artifact-name: bedrock-simulator-deploy-diagnostics
           region: ${{ env.AWS_REGION }}

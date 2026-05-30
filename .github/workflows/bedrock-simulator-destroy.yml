@@ -7,10 +7,16 @@
 #   2. Empty InvocationLoggingBucket so CloudFormation can delete the bucket.
 #   3. sam delete --no-prompts.
 #
-# Pipeline (one job per stage so the Actions UI renders a graph):
+# Pipeline (multi-job so the Actions UI renders a graph):
 #   confirm  → guard the dispatch input (no AWS credentials)
 #   teardown → disable logging, empty bucket, sam delete, verify deleted
-#   diagnostics → on any failure, capture CloudFormation events
+#
+# Only `teardown` enters the bedrock-simulator-sandbox Environment, so the
+# required-reviewer gate prompts exactly ONCE per run. Every AWS step (plus
+# failure-diagnostics) lives in this single job: the OIDC role's trust policy
+# scopes `sub` to `…:environment:bedrock-simulator-sandbox`
+# (tools/bedrock-simulator/template.yaml), so an AWS step in any other job
+# would both fail to assume the role AND add a second approval prompt.
 #
 # If the stack still lands in DELETE_FAILED, follow Recovery D in
 # docs/guides/bedrock-simulator.md.
@@ -131,28 +137,8 @@ jobs:
             exit 1
           fi
 
-  diagnostics:
-    name: Capture diagnostics on failure
-    needs: [confirm, teardown]
-    if: failure()
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: bedrock-simulator-sandbox
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Configure AWS credentials via OIDC
-        uses: ./.github/actions/aws-configure-oidc
-        with:
-          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Capture diagnostics
+      - name: Capture diagnostics on failure
+        if: failure()
         uses: ./.github/actions/aws-capture-diagnostics
         with:
           stack-name: ${{ env.STACK_NAME }}
