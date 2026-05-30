@@ -38,8 +38,12 @@
     "ghcr.io/jsburckhardt/devcontainer-features/uv:1": {}, // Python 3 + uv (provides `uvx`) for MCP servers shipped as Python tools.
     "ghcr.io/devcontainers/features/aws-cli:1": {},
     // "ghcr.io/devcontainers/features/azure-cli:1": {}, Too big ~3 GB - Only need for `az login` to populate the token cache, so bind-mounting the host config + cache dirs is sufficient (see mounts below).
-    "ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {}, // jq, yq, gojq, xq, jaq — various structured-data query tools used in scripts and debugging
-    "ghcr.io/customink/codespaces-features/sam-cli:1": {},
+    "ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {
+      "jqVersion": "latest",
+      "yqVersion": "latest"
+    }, // jq, yq, gojq, xq, jaq — various structured-data query tools used in scripts and debugging
+    // "ghcr.io/devcontainer-community/devcontainer-features/yq:1": {}, // yq v4 for YAML processing in scripts (separate from the jq-likes version to get the latest)
+    "ghcr.io/customink/codespaces-features/sam-cli:1": {}, 
     "ghcr.io/stu-bell/devcontainer-features/claude-code:0": {},
     "ghcr.io/shyim/devcontainers-features/bun:0": {} // required by the claude-mem plugin's stop hook (summarize script)
   },
