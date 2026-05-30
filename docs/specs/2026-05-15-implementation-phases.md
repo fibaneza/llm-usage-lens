@@ -45,6 +45,9 @@ Components are built where they are first needed and reused in subsequent pages.
 - [ ] Set up gitleaks (pre-commit: secret scanning)
 - [ ] Set up commitlint (conventional commits)
 - [ ] Configure pre-push hook (`tsc --noEmit`)
+- [ ] Wire the two project Claude Code hooks in `.claude/settings.json` — deferred to here because before Phase 1 there is no `package.json`, so the commands would fail (the agent workflow in [Rule 70](../../.claude/rules/70-agent-workflow.md) is likewise dormant until now). These complement the git hooks above, they do not replace them:
+  - **PostToolUse(`Write|Edit`)** → `prettier --write` the changed file, for format-on-edit feedback ahead of the lint-staged pre-commit pass
+  - **PreToolUse(`Write|Edit`)** scoped to `apps/dashboard/**/*.tsx` → guard the [Rule 10](../../.claude/rules/10-server-only-boundary.md) server-only boundary: block an `@aws-sdk/*` or `lib/data/**` import landing in a `"use client"` module (Rule 10 calls this a security bug). This is the one check the git hooks and the `settings.json` deny list cannot easily do at write time
 - [ ] Set up Auth.js (NextAuth v5) authentication
   - Install `next-auth`
   - Configure the Microsoft Entra ID provider in `auth.ts` (provider-agnostic — swappable in one file)
