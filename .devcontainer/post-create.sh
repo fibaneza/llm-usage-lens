@@ -16,7 +16,7 @@ claude plugin marketplace add obra/superpowers                          # obra's
 claude plugin marketplace add thedotmack/claude-mem                     # Hosts claude-mem (persistent cross-session memory)
 
 # Plugins — installed into this devcontainer's ~/.claude.
-claude plugin install auth0@claude-plugins-official    	                # Add authentication to any app with Auth0.
+# claude plugin install auth0@claude-plugins-official    	            # Add authentication to any app with Auth0.
 claude plugin install aws-agents                                   	    # AWS AgentCore workflows: build / deploy / debug / harden / optimize / connect
 claude plugin install aws-serverless@claude-plugins-official    	    # Design, build, deploy, test, and debug serverless applications with AWS Serverless services.
 claude plugin install claude-md-management@claude-plugins-official      # Tools to maintain and improve CLAUDE.md files
@@ -35,7 +35,7 @@ claude plugin install pr-review-toolkit@claude-plugins-official         # Pull r
 claude plugin install security-guidance@claude-plugins-official    	    # Security guidance skills: automated security analysis, suggestions, best practices
 claude plugin install skill-creator@claude-plugins-official          	# Create new skills, improve existing skills, and measure skill performance.
 claude plugin install superpowers@claude-plugins-official          	    # Process skills: brainstorming, TDD, debugging, code review, plans
-claude plugin install typescript-lsp@claude-plugins-official    	    # TypeScript/JavaScript language server for enhanced code intelligence
+# claude plugin install typescript-lsp@claude-plugins-official    	    # TypeScript/JavaScript language server for enhanced code intelligence
 claude plugin install ui-ux-pro-max@ui-ux-pro-max-skill            	    # UI/UX design system intelligence (styles, palettes, components, charts)
 
 # Disable noisy ecc MCP servers by clearing the plugin's own .mcp.json files.
