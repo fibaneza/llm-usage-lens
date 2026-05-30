@@ -1,25 +1,26 @@
 # bedrock-simulator-deploy.yml
 #
-# Deploys the bedrock-simulator SAM stack to the sandbox account and verifies
-# that the deployed resources are healthy.
+# Deploys a PREVIOUSLY BUILT bedrock-simulator artifact to the sandbox account
+# and verifies that the deployed resources are healthy. Building happens in
+# bedrock-simulator-build.yml; this workflow only downloads a bundle and runs
+# `sam deploy`, so a known-good build can be re-deployed (rollback) without
+# rebuilding or re-testing.
 #
-# Pipeline (multi-job so the Actions UI renders a graph):
-#   gate   → confirm intent, install deps, type-check + unit tests, sam validate
-#            (no AWS credentials — a test failure never touches AWS)
-#   deploy → sam build + deploy, assert resources healthy, smoke-test the Lambda
+# Which bundle is deployed (precedence release_tag > build_run_id > latest):
+#   - release_tag=vX.Y.Z → the durable sam-build.tgz asset on that GitHub Release
+#   - build_run_id=<id>  → that build run's 7-day Actions artifact
+#   - neither            → the latest successful build's Actions artifact
 #
-# Only `deploy` enters the bedrock-simulator-sandbox Environment, so the
-# required-reviewer gate prompts exactly ONCE per run. Every step that needs
-# AWS lives in this single job: the OIDC role's trust policy scopes `sub` to
-# `…:environment:bedrock-simulator-sandbox` (tools/bedrock-simulator/template.yaml),
-# so an AWS step in any other job would both fail to assume the role AND add a
-# second approval prompt. Verify + smoke + failure-diagnostics therefore stay
-# inside `deploy`.
+# Only the `deploy` job enters the bedrock-simulator-sandbox Environment, so the
+# required-reviewer gate prompts exactly ONCE per run. The OIDC role's trust
+# policy scopes `sub` to `…:environment:bedrock-simulator-sandbox` AND pins
+# job_workflow_ref to this exact filename (tools/bedrock-simulator/template.yaml);
+# keep the filename and keep all AWS work in this one job.
 #
 # Bootstrap note: the DeployerRole this workflow assumes is CREATED BY the
 # stack on the first deploy. For the very first deploy in a new sandbox
 # account, an operator must run `sam deploy` once with SSO credentials.
-# Subsequent deploys can use this workflow. See docs/guides/bedrock-simulator.md.
+# See docs/guides/bedrock-simulator.md.
 #
 # All untrusted/external inputs are passed via `env:` blocks (never inlined in
 # `run:` strings) to prevent shell-command injection.
@@ -33,79 +34,132 @@ on:
         description: 'Type the literal string "deploy" to confirm this destructive action.'
         required: true
         type: string
+      release_tag:
+        description: 'Optional: redeploy a release by tag (e.g. v1.2.3) from its durable asset. Leave blank to use a build.'
+        required: false
+        type: string
+        default: ''
+      build_run_id:
+        description: 'Optional: redeploy a specific build run id (7-day artifact). Leave blank for the latest successful build.'
+        required: false
+        type: string
+        default: ''
 
 env:
   AWS_REGION: us-east-1
   STACK_NAME: bedrock-simulator
 
 jobs:
-  gate:
-    name: Gate (tests + lint)
+  confirm:
+    name: Confirm intent
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
       contents: read
 
     steps:
-      - name: Confirm intent
+      - name: Confirm intent + validate selectors
         env:
           CONFIRM: ${{ inputs.confirm }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
         run: |
+          set -euo pipefail
           if [ "$CONFIRM" != "deploy" ]; then
             echo "::error::confirm input must be the literal string 'deploy'."
             exit 1
           fi
-
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup SAM toolchain
-        uses: ./.github/actions/setup-sam-toolchain
-
-      - name: Install simulator dependencies
-        working-directory: tools/bedrock-simulator
-        run: pnpm install --frozen-lockfile
-
-      - name: Type-check + unit tests (pre-deploy gate)
-        working-directory: tools/bedrock-simulator
-        run: |
-          pnpm typecheck
-          pnpm test
-
-      - name: SAM validate
-        working-directory: tools/bedrock-simulator
-        run: sam validate --lint
+          if [ -n "$RELEASE_TAG" ] && [ -n "$BUILD_RUN_ID" ]; then
+            echo "::error::Set at most one of release_tag / build_run_id (precedence is release_tag > build_run_id > latest)."
+            exit 1
+          fi
+          if [ -n "$RELEASE_TAG" ] && ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::release_tag must look like a release tag, e.g. v1.2.3."
+            exit 1
+          fi
+          if [ -n "$BUILD_RUN_ID" ] && ! [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::build_run_id must be a numeric GitHub Actions run id."
+            exit 1
+          fi
 
   deploy:
-    name: Build, deploy + verify
-    needs: gate
+    name: Deploy + verify
+    needs: confirm
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: bedrock-simulator-sandbox
     permissions:
       id-token: write
       contents: read
+      actions: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup SAM toolchain
-        uses: ./.github/actions/setup-sam-toolchain
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Resolve + fetch build bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$RELEASE_TAG" ]; then
+            echo "Fetching release asset for $RELEASE_TAG"
+            gh release download "$RELEASE_TAG" --pattern sam-build.tgz --repo "$GITHUB_REPOSITORY" \
+              || { echo "::error::No sam-build.tgz asset on release '$RELEASE_TAG'. Was the release built by bedrock-simulator-build.yml?"; exit 1; }
+          else
+            RUN_ID="$BUILD_RUN_ID"
+            if [ -z "$RUN_ID" ]; then
+              echo "No build_run_id given — resolving latest successful build on main."
+              RUN_ID=$(gh run list --workflow bedrock-simulator-build.yml --branch main \
+                --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' \
+                --repo "$GITHUB_REPOSITORY")
+              if [ -z "$RUN_ID" ]; then
+                echo "::error::No successful bedrock-simulator-build run found on main. Run the build workflow first."
+                exit 1
+              fi
+            fi
+            echo "Downloading artifact from build run $RUN_ID"
+            gh run download "$RUN_ID" --name sam-build --repo "$GITHUB_REPOSITORY" \
+              || { echo "::error::Could not download artifact from run $RUN_ID — it may have expired (7-day retention). Rebuild or pick another."; exit 1; }
+          fi
+
+          tar xzf sam-build.tgz -C tools/bedrock-simulator
+          if [ ! -f tools/bedrock-simulator/.aws-sam/build/template.yaml ]; then
+            echo "::error::Bundle did not contain .aws-sam/build/template.yaml."
+            exit 1
+          fi
+
+      - name: Show build provenance
+        run: |
+          set -euo pipefail
+          INFO=tools/bedrock-simulator/.aws-sam/BUILD_INFO.txt
+          {
+            echo "## Bedrock simulator deploy"
+            echo ""
+            if [ -f "$INFO" ]; then
+              echo "Deploying build:"
+              echo ""
+              echo '```'
+              cat "$INFO"
+              echo '```'
+            else
+              echo "_No BUILD_INFO.txt in the bundle._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Configure AWS credentials via OIDC
         uses: ./.github/actions/aws-configure-oidc
         with:
           role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Install simulator dependencies
-        working-directory: tools/bedrock-simulator
-        run: pnpm install --frozen-lockfile
-
-      - name: SAM build
-        working-directory: tools/bedrock-simulator
-        run: sam build
 
       - name: SAM deploy
         uses: ./.github/actions/aws-sam-deploy

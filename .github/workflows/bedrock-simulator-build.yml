@@ -1,0 +1,148 @@
+# bedrock-simulator-build.yml
+#
+# Builds the bedrock-simulator SAM artifact and publishes it for a later
+# deploy. Split out from bedrock-simulator-deploy.yml so a previously built
+# artifact can be re-deployed (rollback) without rebuilding.
+#
+# Touches NO AWS — it uses only the GitHub token. It is therefore NOT bound to
+# the bedrock-simulator-sandbox Environment (no approval) and is deliberately
+# absent from the DeployerRole's OIDC trust (tools/bedrock-simulator/template.yaml).
+#
+# Pipeline:
+#   gate          → type-check + unit tests + sam validate (no credentials)
+#   build         → sam build, package .aws-sam/ as sam-build.tgz, upload as a
+#                   7-day Actions artifact
+#   publish-asset → on a release, also attach sam-build.tgz as a durable
+#                   GitHub Release asset (assets don't expire → rollback forever)
+#
+# Two ways the bundle reaches deploy:
+#   - Actions artifact (7-day): manual `workflow_dispatch` builds. deploy pulls
+#     it by run id, or the latest successful build.
+#   - Release asset (durable): when a vX.Y.Z release is published. deploy pulls
+#     it by release_tag.
+
+name: bedrock-simulator build
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+env:
+  # sam validate --lint resolves a region even without credentials.
+  AWS_REGION: us-east-1
+
+jobs:
+  gate:
+    name: Gate (tests + lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup SAM toolchain
+        uses: ./.github/actions/setup-sam-toolchain
+
+      - name: Install simulator dependencies
+        working-directory: tools/bedrock-simulator
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check + unit tests
+        working-directory: tools/bedrock-simulator
+        run: |
+          pnpm typecheck
+          pnpm test
+
+      - name: SAM validate
+        working-directory: tools/bedrock-simulator
+        run: sam validate --lint
+
+  build:
+    name: Build artifact
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup SAM toolchain
+        uses: ./.github/actions/setup-sam-toolchain
+
+      - name: Install simulator dependencies
+        working-directory: tools/bedrock-simulator
+        run: pnpm install --frozen-lockfile
+
+      - name: SAM build
+        working-directory: tools/bedrock-simulator
+        run: sam build
+
+      - name: Record build provenance
+        working-directory: tools/bedrock-simulator
+        env:
+          GIT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "ref=$GIT_REF"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > .aws-sam/BUILD_INFO.txt
+          cat .aws-sam/BUILD_INFO.txt
+
+      - name: Package .aws-sam bundle
+        working-directory: tools/bedrock-simulator
+        run: tar czf "$GITHUB_WORKSPACE/sam-build.tgz" .aws-sam
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sam-build
+          path: sam-build.tgz
+          retention-days: 7
+
+      - name: Summarise build
+        env:
+          GIT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Bedrock simulator build"
+            echo ""
+            printf '**Run id:** `%s`  \n' "$GITHUB_RUN_ID"
+            printf '**Commit:** `%s`  \n' "$(git rev-parse HEAD)"
+            printf '**Ref:** `%s`\n' "$GIT_REF"
+            echo ""
+            echo "Deploy this build with \`bedrock-simulator-deploy.yml\`:"
+            echo ""
+            printf '    gh workflow run bedrock-simulator-deploy.yml -f confirm=deploy -f build_run_id=%s\n' "$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-asset:
+    name: Attach release asset
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sam-build
+
+      - name: Attach sam-build.tgz to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" sam-build.tgz --clobber --repo "$GITHUB_REPOSITORY"

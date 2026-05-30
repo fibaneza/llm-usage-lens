@@ -89,23 +89,57 @@ aws cloudtrail get-event-selectors --trail-name <org-trail-name> \
 
 Expected result includes a selector with `eventCategory = Data` and a `resources.type` matching `AWS::Bedrock::*` (or an inclusive selector). If empty, this needs to be added — coordinate with whoever owns the org trail. **Flag this to the Phase 6 owner**: the dashboard's `docs/specs/2026-05-15-system-architecture.md` implies but does not explicitly require this configuration.
 
-## Deploy / run / destroy
+## Build / deploy / run / destroy
 
-Every workflow is `workflow_dispatch` only, bound to the `bedrock-simulator-sandbox` GitHub Environment (required-reviewer protection). Trigger from the GitHub Actions UI or `gh workflow run`.
+`run` and `destroy` are `workflow_dispatch` only and bound to the `bedrock-simulator-sandbox` GitHub Environment (required-reviewer protection). `deploy` is the same. `build` touches no AWS, so it is **not** bound to the Environment (no approval, runnable from any branch). Trigger from the GitHub Actions UI or `gh workflow run`.
+
+Build and deploy are **separate workflows** so a known-good build can be re-deployed (rollback) without rebuilding — see [Rollback / redeploy](#rollback--redeploy).
+
+### Build
+
+```bash
+gh workflow run bedrock-simulator-build.yml
+gh run watch
+```
+
+The workflow runs `gate` → `build`:
+
+1. `pnpm typecheck` + `pnpm test` + `sam validate --lint` — fails fast before building.
+2. `sam build` — bundles the Lambda handlers.
+3. Packages `.aws-sam/` as `sam-build.tgz` and uploads it as a **7-day** Actions artifact. The run summary prints the `build_run_id` to pass to deploy.
+
+When a `vX.Y.Z` **release** is published, build also fires on `release: [published]` and attaches `sam-build.tgz` to that GitHub Release as a **durable** asset (release assets don't expire), so any release stays redeployable.
 
 ### Deploy
 
 ```bash
+# Deploy the latest successful build:
 gh workflow run bedrock-simulator-deploy.yml -f confirm=deploy
+# Deploy a specific build run (7-day artifact):
+gh workflow run bedrock-simulator-deploy.yml -f confirm=deploy -f build_run_id=<run-id>
+# Redeploy a release by tag (durable asset):
+gh workflow run bedrock-simulator-deploy.yml -f confirm=deploy -f release_tag=v1.2.3
 gh run watch
 ```
 
-The workflow runs, in order:
+Deploy downloads a *previously built* bundle and deploys it — it does **not** rebuild or re-test. Which bundle (precedence `release_tag` > `build_run_id` > latest):
 
-1. `sam validate --lint` — fails fast on template errors before any AWS call.
-2. `sam build` — bundles the Lambda handlers.
-3. `sam deploy --no-confirm-changeset` — creates or updates the stack.
-4. **Post-deploy verification** (see below). On failure, the stack remains so you can inspect it.
+- `release_tag=vX.Y.Z` → the durable `sam-build.tgz` asset on that release.
+- `build_run_id=<id>` → that build run's 7-day Actions artifact.
+- neither → the latest successful build on `main`.
+
+It then runs, in order:
+
+1. Resolves + downloads the bundle, extracts `.aws-sam/`, and prints the build's provenance (commit SHA) to the run summary.
+2. `sam deploy --no-confirm-changeset` against the prebuilt `.aws-sam/build/template.yaml` — creates or updates the stack.
+3. **Post-deploy verification** (see below). On failure, the stack remains so you can inspect it.
+
+### Rollback / redeploy
+
+To roll back, deploy points at an earlier bundle instead of the current source:
+
+- **Within 7 days** — `-f build_run_id=<run-id>` (from the build run's summary or the Actions UI). Once the artifact expires, re-run the build workflow on that commit.
+- **Any release, anytime** — `-f release_tag=vX.Y.Z`. Release assets are durable, so a release built once stays redeployable indefinitely.
 
 ### Run (generate Bedrock traffic)
 
@@ -197,9 +231,13 @@ sequenceDiagram
     CCD->>CCD: Rule 70 loop<br/>(typescript-developer → test-engineer → quality-reviewer)
     CCD->>Repo: Open PR with template + code changes
     Dev->>Repo: Review, merge to main
-    Dev->>GA: workflow_dispatch bedrock-simulator-deploy.yml
+    Dev->>GA: workflow_dispatch bedrock-simulator-build.yml
+    Note over GA: build touches no AWS — no Environment, no approval
+    GA->>GA: gate (tests + lint) → sam build → upload sam-build.tgz
+    Dev->>GA: workflow_dispatch bedrock-simulator-deploy.yml (build_run_id / release_tag / latest)
     Note over GA: Required-reviewer protection from the GitHub Environment
-    GA->>AWS: sam validate / build / deploy
+    GA->>GA: download the chosen sam-build.tgz bundle
+    GA->>AWS: sam deploy (prebuilt artifact)
     GA->>AWS: 2a describe-stacks (assert CREATE_COMPLETE)
     GA->>AWS: 2b resource-existence checks
     GA->>AWS: 2c smoke test (1 InvokeModel; Lambda assumes a SimUserRole)
@@ -313,7 +351,10 @@ aws cloudformation describe-stack-events --stack-name bedrock-simulator \
 aws cloudformation delete-stack --stack-name bedrock-simulator
 aws cloudformation wait stack-delete-complete --stack-name bedrock-simulator
 
-# 4. Fix the root cause from step 2, then re-trigger bedrock-simulator-deploy.yml
+# 4. Fix the root cause from step 2, re-run bedrock-simulator-build.yml, then
+#    deploy that build. To get unblocked immediately, deploy a known-good
+#    earlier build/release instead: bedrock-simulator-deploy.yml with
+#    build_run_id=<prior-run> or release_tag=vX.Y.Z.
 ```
 
 ### Recovery B — `UPDATE_ROLLBACK_COMPLETE`
@@ -330,7 +371,9 @@ aws cloudformation describe-stack-events --stack-name bedrock-simulator \
   --query 'StackEvents[?ResourceStatus==`UPDATE_FAILED`].[LogicalResourceId,ResourceStatusReason]' \
   --output table
 
-# 3. Fix the template change, then re-trigger bedrock-simulator-deploy.yml — no delete needed
+# 3. Fix the template change, re-run bedrock-simulator-build.yml, then deploy that
+#    build — no delete needed. (Or roll back now: deploy build_run_id=<prior-run>
+#    or release_tag=vX.Y.Z.)
 ```
 
 ### Recovery C — `UPDATE_ROLLBACK_FAILED`
