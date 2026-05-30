@@ -5,22 +5,22 @@
 # arrives (concurrency cancel-in-progress).
 #
 # Three review modes driven by scope detection:
-#   full + security  — opened/reopened/ready events touching sensitive paths
-#   full code-only   — opened/reopened/ready events on non-sensitive paths
-#   incremental      — subsequent pushes (synchronize events) scoped to changed files
+#   full-pr + security — opened/reopened/ready events touching sensitive paths
+#   full-pr code-only  — opened/reopened/ready events on non-sensitive paths
+#   incremental        — subsequent pushes (synchronize events) scoped to changed files
 #
-# After any full+security review, HIGH findings trigger a PR comment and a
+# After any full-pr + security review, HIGH findings trigger a PR comment and a
 # REQUEST_CHANGES review submission.
 #
 # Jobs (a scope → review → security-gate pipeline, wired with needs:):
 #   scope          Checkout, load sensitive-paths regex, determine PR scope
-#                  (full vs incremental, security-relevant flag), and log the
+#                  (full-pr vs incremental, security-relevant flag), and log the
 #                  files in scope. Holds only contents:read + pull-requests:read.
 #   review         needs: scope. Runs exactly one of the three review modes via
 #                  the github-review action. Holds id-token:write (OIDC) +
 #                  pull-requests:write (inline comments).
 #   security-gate  needs: [scope, review]. Posts the security comment and
-#                  REQUEST_CHANGES on HIGH findings, only for full+security
+#                  REQUEST_CHANGES on HIGH findings, only for full-pr + security
 #                  reviews. Holds pull-requests:write.
 
 name: Claude PR Review
@@ -75,31 +75,6 @@ jobs:
           SENSITIVE: ${{ steps.regex.outputs.value }}
         run: bash .github/scripts/claude/pr-determine-scope.sh
 
-      - name: List files in scope
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SCOPE_TYPE: ${{ steps.scope.outputs.type }}
-          SCOPE_FILES: ${{ steps.scope.outputs.files }}
-          SECURITY_RELEVANT: ${{ steps.scope.outputs.security_relevant }}
-        run: |
-          {
-            echo "## Claude PR Review — files in scope"
-            echo ""
-            echo "- **Mode:** \`$SCOPE_TYPE\`"
-            echo "- **Security audit:** \`$SECURITY_RELEVANT\`"
-            echo ""
-            echo "### Files to review"
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-
-          if [ "$SCOPE_TYPE" = "incremental" ]; then
-            # Incremental: scope already resolved the changed-file list (comma-separated).
-            printf '%s\n' "$SCOPE_FILES" | tr ',' '\n' | sed '/^$/d' | tee -a "$GITHUB_STEP_SUMMARY"
-          else
-            # Full: scope passes no file list (Claude fetches the diff itself), so
-            # enumerate the PR's changed files purely for visibility here.
-            gh pr diff "$PR_NUMBER" --repo "$REPO" --name-only | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
-
   review:
     needs: scope
     runs-on: ubuntu-latest
@@ -109,9 +84,9 @@ jobs:
       pull-requests: write # inline review comments
       id-token: write # Required: claude-code-action performs an OIDC token exchange on startup
     outputs:
-      # Only the full+security step emits a result; empty otherwise, which is
-      # exactly when the downstream security-gate must not fire.
-      review_result: ${{ steps.full.outputs.result }}
+      # Only the full-pr + security step emits a result; empty otherwise, which
+      # is exactly when the downstream security-gate must not fire.
+      review_result: ${{ steps.full_pr.outputs.result }}
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       REPO: ${{ github.repository }}
@@ -124,9 +99,9 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Full review (code + security)
-        id: full
-        if: needs.scope.outputs.type == 'full' && needs.scope.outputs.security_relevant == 'true'
+      - name: Full-PR review (code + security)
+        id: full_pr
+        if: needs.scope.outputs.type == 'full-pr' && needs.scope.outputs.security_relevant == 'true'
         uses: ./.github/actions/github-review
         with:
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -168,9 +143,9 @@ jobs:
             - <one-line per MEDIUM, or "none" if 0>
             ```
 
-      - name: Full review (code only)
-        id: full_code_only
-        if: needs.scope.outputs.type == 'full' && needs.scope.outputs.security_relevant == 'false'
+      - name: Full-PR review (code only)
+        id: full_pr_code_only
+        if: needs.scope.outputs.type == 'full-pr' && needs.scope.outputs.security_relevant == 'false'
         uses: ./.github/actions/github-review
         with:
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -217,7 +192,7 @@ jobs:
 
   security-gate:
     needs: [scope, review]
-    if: needs.scope.outputs.type == 'full' && needs.scope.outputs.security_relevant == 'true' && needs.review.result == 'success'
+    if: needs.scope.outputs.type == 'full-pr' && needs.scope.outputs.security_relevant == 'true' && needs.review.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

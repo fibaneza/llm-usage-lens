@@ -173,9 +173,9 @@ renders it as a connected graph rather than a single box:
 
 | Job | Depends on | Does | Permissions (least-privilege) |
 | --- | --- | --- | --- |
-| `scope` | — | Checkout, load the `SENSITIVE` regex, run `pr-determine-scope.sh`, and log the files in scope to the run summary. The draft-PR `if` lives here (Step 1). | `contents:read`, `pull-requests:read` |
+| `scope` | — | Checkout, load the `SENSITIVE` regex, run `pr-determine-scope.sh` — which renders one scope summary (mode, security decision, collapsed file list) to the run summary and step log. The draft-PR `if` lives here (Step 1). | `contents:read`, `pull-requests:read` |
 | `review` | `scope` | Runs exactly one of the three review modes via the `github-review` action (Step 3). | `contents:read`, `pull-requests:write`, `id-token:write` |
-| `security-gate` | `scope`, `review` | Posts the security PR comment and `REQUEST_CHANGES` on HIGH findings (Step 4). Runs only for full+security reviews. | `contents:read`, `pull-requests:write` |
+| `security-gate` | `scope`, `review` | Posts the security PR comment and `REQUEST_CHANGES` on HIGH findings (Step 4). Runs only for full-PR + security reviews. | `contents:read`, `pull-requests:write` |
 
 Each job declares only the permissions it uses — the OIDC `id-token:write`
 token is held solely by the `review` job that performs the Claude token
@@ -205,20 +205,20 @@ Two early exits keep tokens off the table:
 A `concurrency` block (group: `claude-pr-review-<pr-number>`) cancels any
 in-flight review when a newer push arrives.
 
-### Step 2: full or incremental? sensitive or not?
+### Step 2: full-PR or incremental? sensitive or not?
 
 ```mermaid
 flowchart TD
     D[Determine scope step] --> E{Event action}
     E -->|synchronize with<br/>real base SHA| F[type = incremental]
-    E -->|opened / reopened /<br/>ready_for_review /<br/>force-push| G[type = full]
+    E -->|opened / reopened /<br/>ready_for_review /<br/>force-push| G[type = full-pr]
     G --> H{Sensitive paths<br/>changed?}
     H -->|yes| I[security_relevant = true]
     H -->|no| J[security_relevant = false]
 ```
 
 - **`type`** is `incremental` for a `synchronize` event with a real base
-  commit. Everything else is `full`.
+  commit. Everything else is `full-pr`.
 - **`security_relevant`** is `true` when any changed file matches the
   `SENSITIVE` regex (see [Sensitive paths](#sensitive-paths-current-regex)).
 
@@ -228,9 +228,9 @@ flowchart TD
 flowchart TD
     S[scope outputs] --> T{type}
     T -->|incremental| INC[Incremental review<br/>--max-turns 5<br/>inline comments + suggestions]
-    T -->|full| U{security_relevant}
-    U -->|true| FS[Full review:<br/>code + security<br/>--max-turns 8<br/>emits security-summary]
-    U -->|false| FC[Full review:<br/>code only<br/>--max-turns 8<br/>inline comments + suggestions]
+    T -->|full-pr| U{security_relevant}
+    U -->|true| FS[Full-PR review:<br/>code + security<br/>--max-turns 8<br/>emits security-summary]
+    U -->|false| FC[Full-PR review:<br/>code only<br/>--max-turns 8<br/>inline comments + suggestions]
     FS --> SEC{Parse security-summary}
     SEC -->|HIGH == 0<br/>and MEDIUM == 0| QUIET[No PR comment, no review<br/>job green]
     SEC -->|MEDIUM only| MED[Post PR comment<br/>job green]
@@ -261,7 +261,7 @@ from the PR comment.
 
 ### Step 4: PR comment and reject on security findings
 
-When the full-plus-security review produces a `security-summary` block:
+When the full-PR + security review produces a `security-summary` block:
 
 1. If `HIGH == 0 && MEDIUM == 0` — no PR comment is posted, no review is
    submitted, the job concludes green. Findings are still visible as inline
@@ -280,11 +280,11 @@ responsibility of the release audit.
 #### Known limitation — incremental pushes and security findings
 
 Incremental review steps do **not** emit a `security-summary` block, so
-the PR-comment / `REQUEST_CHANGES` flow only triggers on full events
+the PR-comment / `REQUEST_CHANGES` flow only triggers on full-PR events
 (opened, reopened, ready\_for\_review, force-push). A `synchronize` push
 that introduces a new HIGH security finding will surface it as an inline
-comment only; the PR comment / reject flow won't fire until the next full
-event.
+comment only; the PR comment / reject flow won't fire until the next
+full-PR event.
 
 This is deliberate: adding the security checklist to every incremental run
 would roughly double its per-push token cost. The release audit is the
@@ -302,7 +302,7 @@ It mirrors the PR reviewer's shape: **three jobs wired with `needs:`**.
 
 | Job | Depends on | Does | Permissions (least-privilege) |
 | --- | --- | --- | --- |
-| `scope` | — | Checkout (full history + tags for `git describe`), load the `SENSITIVE` regex, run `release-determine-scope.sh`, and log the changed/removed files to the run summary. | `contents:read` |
+| `scope` | — | Checkout (full history + tags for `git describe`), load the `SENSITIVE` regex, run `release-determine-scope.sh` — which renders one scope summary (base→head, security decision, collapsed changed/removed file lists) to the run summary and step log. | `contents:read` |
 | `audit` | `scope` | Runs the release audit via the `github-review` action. Skipped when `skip_audit == 'true'` (bootstrap or no changes). | `contents:read`, `id-token:write` |
 | `create-issues` | `scope`, `audit` | Creates issues for HIGH/MEDIUM security + HIGH code-review findings. Runs only when the audit succeeded. | `contents:read`, `issues:write` |
 
@@ -428,18 +428,18 @@ Four scenarios showing both workflows in action:
    Cost: 0 tokens. The PR merges; no tag is pushed, so the release audit
    does not run. Total cost: 0 tokens.
 
-2. **PR adding a chart component under `apps/dashboard/components/`.** Full
+2. **PR adding a chart component under `apps/dashboard/components/`.** Full-PR
    review (code only) runs — non-sensitive paths, correctness review only.
    Inline suggestions posted. No security PR comment. PR merges. When `v1.1.0`
    is eventually tagged, the release audit reviews the chart files (and
    everything else merged since `v1.0.0`). No HIGH findings → no issues.
 
-3. **PR adding a Route Handler that forgets the Auth.js check.** Full review
+3. **PR adding a Route Handler that forgets the Auth.js check.** Full-PR review
    (code + security) runs; Claude finds a HIGH finding (missing session
    check). PR comment with `### High-Severity Findings` posted; `REQUEST_CHANGES`
    review from `github-actions[bot]` blocks merge; job check fails red.
    Author fixes, pushes → incremental review runs (inline comments only,
-   no PR comment). Author marks PR ready → full review (code + security)
+   no PR comment). Author marks PR ready → full-PR review (code + security)
    runs again → no HIGH → PR comment cleared (new comment), job green,
    merge unblocked.
 
@@ -461,7 +461,7 @@ Four scenarios showing both workflows in action:
 | `paths-ignore` | top of file, under `on.pull_request` | Globs that skip the workflow entirely |
 | `concurrency.group` | top-level (`claude-pr-review-<pr>`) | One in-flight review per PR |
 | `timeout-minutes` | per job | 25 min on `jobs.review`; 5 min on `jobs.scope` and `jobs.security-gate` |
-| `--max-turns` | `claude_args` blocks | 8 for full reviews, 5 for incrementals |
+| `--max-turns` | `claude_args` blocks | 8 for full-PR reviews, 5 for incrementals |
 | `--model` | `claude_args` blocks | Currently `claude-sonnet-4-6` |
 | `--allowed-tools` | `claude_args` blocks | Allowlist: `Read`, `Glob`, `Grep`, `gh pr …`, `mcp__github_inline_comment__create_inline_comment` |
 | `SENSITIVE` regex | `.github/scripts/lib/sensitive-paths.sh` | Which file paths trigger the security audit |
@@ -513,7 +513,7 @@ The security audit runs when any of the following paths change. Update
 | `concurrency` with `cancel-in-progress` | Rapid pushes cancel the older in-flight review |
 | Always-incremental on PR `synchronize` | Subsequent pushes to a PR review only the push delta |
 | Path-aware `security_relevant` | PRs/releases touching only components or tests skip the security audit |
-| `--max-turns` cap | Hard ceiling: 5 for incremental, 8 for full/audit |
+| `--max-turns` cap | Hard ceiling: 5 for incremental, 8 for full-PR/audit |
 | `--allowed-tools` allowlist | Action can't burn turns on speculative `Write`, `Edit`, or shell |
 | `timeout-minutes: 25` | A stuck run dies after 25 minutes, not GitHub's 6-hour default |
 | **Release-tag scoping** | After the first release, each tag audits only the delta from the previous tag. Five merges in a sprint → one audit covering the combined diff rather than five per-merge audits |
@@ -529,7 +529,7 @@ for the upstream recommendations.
 | You want to… | Do this |
 | --- | --- |
 | Skip PR review on a specific PR | Mark it as a draft. Convert back to ready when you want the review. |
-| Get a fresh PR review without pushing | Close and reopen the PR — fires `reopened`, which is a full event. |
+| Get a fresh PR review without pushing | Close and reopen the PR — fires `reopened`, which is a full-PR event. |
 | Force a release audit on an arbitrary range | Trigger `claude-code-review.yml` from the Actions tab via `workflow_dispatch`, providing `from_ref` and `to_ref`. |
 | Run the release audit between tags (no real release) | Use `workflow_dispatch` — no tag push needed. |
 | Block the workflow on a file class | Add the glob to `paths-ignore` at the top of `claude-pr-review.yml`. |
@@ -552,17 +552,18 @@ wrong Anthropic account. Run `claude setup-token` locally to mint a fresh
 one and replace the secret value.
 
 **The security audit didn't run on a change you expected to be sensitive.**
-The `scope` job's `List files in scope` step prints the exact file set under
-review (and the mode + security-audit decision) to both the step log and the
-run summary. If your file isn't matched, the `SENSITIVE` regex needs extending.
-Edit `.github/scripts/lib/sensitive-paths.sh` — one change, both scope scripts
-pick it up.
+The `scope` job's `Determine scope` step prints the scope summary — mode,
+security-audit decision (with the sensitive-file count), and the file set under
+review — to both the step log and the run summary. If your file isn't matched,
+the `SENSITIVE` regex needs extending. Edit
+`.github/scripts/lib/sensitive-paths.sh` — one change, both scope scripts pick
+it up.
 
 **A `synchronize` push introduced a security issue but no PR comment /
 `REQUEST_CHANGES` happened.**
 Expected behaviour — incremental review steps do not emit a `security-summary`
 block. Look for the finding in the inline review comments. To trigger the
-full PR-comment / reject flow, fire a full event: close + reopen the PR, or
+full PR-comment / reject flow, fire a full-PR event: close + reopen the PR, or
 push with `--force`.
 
 **The release audit ran but no issues were created.**
