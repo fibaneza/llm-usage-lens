@@ -1,6 +1,6 @@
 # claude-code-review.yml
 #
-# Release audit: runs a full code + security review whenever a release tag is
+# Release audit: runs a code + security review whenever a release tag is
 # pushed (v*, *-rc*, *-beta*), scoped to commits since the previous release tag.
 # Also triggerable via workflow_dispatch for ad-hoc audits.
 #
@@ -71,27 +71,6 @@ jobs:
           INPUT_TO_REF: ${{ inputs.to_ref }}
           SENSITIVE: ${{ steps.regex.outputs.value }}
         run: bash .github/scripts/claude/release-determine-scope.sh
-
-      - name: List files in scope
-        env:
-          SKIP_AUDIT: ${{ steps.scope.outputs.skip_audit }}
-          SECURITY_RELEVANT: ${{ steps.scope.outputs.security_relevant }}
-          SCOPE_FILES: ${{ steps.scope.outputs.files }}
-          REMOVED_FILES: ${{ steps.scope.outputs.removed_files }}
-        run: |
-          {
-            echo "## Claude Code Review — release audit scope"
-            echo ""
-            echo "- **Tag:** \`${{ github.ref_name }}\`"
-            echo "- **Skip audit:** \`$SKIP_AUDIT\`"
-            echo "- **Security audit:** \`$SECURITY_RELEVANT\`"
-            echo ""
-            echo "### Files to review"
-            printf '%s\n' "${SCOPE_FILES:-(none)}"
-            echo ""
-            echo "### Removed files"
-            printf '%s\n' "${REMOVED_FILES:-(none)}"
-          } | tee -a "$GITHUB_STEP_SUMMARY"
 
   audit:
     needs: scope

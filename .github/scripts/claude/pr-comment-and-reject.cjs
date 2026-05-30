@@ -7,7 +7,7 @@ const { parseBlock, parseTier } = require('./lib/parse-summary.cjs');
  *
  * Injected by actions/github-script:
  *   { github, context, core, env }
- *   env.REVIEW_OUTPUT  - steps.full.outputs.result
+ *   env.REVIEW_OUTPUT  - review job's review_result output (full-PR + security step)
  *   env.PR_NUMBER      - github.event.pull_request.number
  *   env.REPO           - github.repository
  *   env.HEAD_REF       - github.head_ref

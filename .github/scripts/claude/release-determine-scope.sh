@@ -21,6 +21,8 @@ source "$(dirname "$0")/lib/sensitive-paths.sh"
 
 HEAD="${INPUT_TO_REF:-${CURRENT_SHA}}"
 
+echo "### Claude Code Review — scope" >> "$GITHUB_STEP_SUMMARY"
+
 # Resolve base ref: prefer explicit dispatch input, then previous release tag.
 if [[ -n "${INPUT_FROM_REF:-}" ]]; then
   BASE="$INPUT_FROM_REF"
@@ -88,4 +90,17 @@ fi
 
 KEPT_COUNT=$(echo "$KEPT" | grep -c . || true)
 REMOVED_COUNT=$(echo "$REMOVED" | grep -c . || true)
-echo "**Files:** ${KEPT_COUNT} changed, ${REMOVED_COUNT} removed" >> "$GITHUB_STEP_SUMMARY"
+
+# Collapsed file list (mirrored to the step log) so a large release delta
+# doesn't flood the run summary.
+{
+  echo "<details><summary><b>Files to review (${KEPT_COUNT}) · removed (${REMOVED_COUNT})</b></summary>"
+  echo ""
+  echo "**Changed**"
+  if [[ -n "$KEPT" ]]; then echo "$KEPT" | sed '/^$/d; s/^/- /'; else echo "_none_"; fi
+  echo ""
+  echo "**Removed**"
+  if [[ -n "$REMOVED" ]]; then echo "$REMOVED" | sed '/^$/d; s/^/- /'; else echo "_none_"; fi
+  echo ""
+  echo "</details>"
+} | tee -a "$GITHUB_STEP_SUMMARY"
