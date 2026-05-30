@@ -42,6 +42,21 @@ Two deliverables in a **pnpm monorepo**, sharing `packages/shared` (Zod schemas,
 1. **Next.js dashboard** (`apps/dashboard`) — reads aggregated Bedrock cost/usage from DynamoDB, displays 9 pages. Built first (Phases 1–5), developed against **DynamoDB Local**.
 2. **AWS Lambda collector** (`apps/collector`, `bedrock-cost-collector`) — serverless hourly pipeline that collects real Bedrock data and writes to DynamoDB. Built last (Phase 6).
 
+## Cost posture
+
+Keep AWS spend as low as possible — prefer free-tier and no-cost resources where
+they do the job (self-hosted OpenTelemetry/Grafana over paid SaaS, DynamoDB Local
+in dev, Grafana Cloud's free tier in production). But the project unavoidably
+deploys some paid resources (KMS CMK, Lambda, Bedrock on-demand calls, DynamoDB),
+and that cost is **accepted, not avoided**. This is a guiding principle, **not a
+strict rule**: document a cost where it is introduced (e.g. the simulator spec's
+["Cost expectations"](docs/specs/2026-05-24-bedrock-simulator.md)) rather than
+incurring it silently.
+
+"Touches no AWS" / "non-AWS" (e.g. the bedrock-simulator build workflow) is about
+**credentials and access** — the workflow holds no AWS credentials — and never
+means "free of cost."
+
 ## Commands
 
 > The `pnpm <script>` shortcuts (`pnpm dev`, `pnpm build`) require a `package.json` and don't exist until Phase 1. The `pnpm exec …` forms below are runnable as soon as dependencies are installed.

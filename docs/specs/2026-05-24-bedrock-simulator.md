@@ -120,7 +120,7 @@ Single SAM stack `bedrock-simulator`. All resources in the sandbox member accoun
 
 CFN `Outputs:` section must export every name the workflows need (Lambda function name, bucket name, log group name, guardrail ID, inference profile ARNs). Workflows resolve these at runtime — nothing is hard-coded in workflow YAML.
 
-**Build / deploy split (artifact-based rollback).** Building is separated from deploying so a known-good build can be re-deployed without rebuilding. `bedrock-simulator-build.yml` (non-AWS) runs the gate + `sam build`, packages `.aws-sam/` as `sam-build.tgz`, and publishes it two ways: a **7-day GitHub Actions artifact** (every dispatch build), and — on `release: [published]` — a **durable GitHub Release asset** (assets do not expire). `bedrock-simulator-deploy.yml` downloads a chosen bundle and runs `sam deploy` against it (no rebuild, no re-test), selecting by precedence `release_tag` (durable asset) > `build_run_id` (7-day artifact) > latest successful build. The build workflow's only elevated scope is `contents: write` on its `publish-asset` job (the GitHub token, used for `gh release upload`) — it never obtains AWS credentials.
+**Build / deploy split (artifact-based rollback).** Building is separated from deploying so a known-good build can be re-deployed without rebuilding. `bedrock-simulator-build.yml` (holds no AWS credentials — an access boundary, not a cost claim) runs the gate + `sam build`, packages `.aws-sam/` as `sam-build.tgz`, and publishes it two ways: a **7-day GitHub Actions artifact** (every dispatch build), and — on `release: [published]` — a **durable GitHub Release asset** (assets do not expire). `bedrock-simulator-deploy.yml` downloads a chosen bundle and runs `sam deploy` against it (no rebuild, no re-test), selecting by precedence `release_tag` (durable asset) > `build_run_id` (7-day artifact) > latest successful build. The build workflow's only elevated scope is `contents: write` on its `publish-asset` job (the GitHub token, used for `gh release upload`) — it never obtains AWS credentials.
 
 ## Bedrock access mode — on-demand only
 
@@ -316,6 +316,8 @@ All cost claims in this spec rely on hard caps in code:
 Raising any of these constants invalidates the cost claims and requires updating the Cost section.
 
 ## Cost expectations
+
+Per [Cost posture](../../CLAUDE.md): paid resources here (KMS CMK, Lambda, Bedrock on-demand calls) are accepted, not avoided — the figures below document every cost so none is silent.
 
 Figures are **illustrative at spec-author date**. Verify against current Bedrock pricing at https://aws.amazon.com/bedrock/pricing/ before running.
 

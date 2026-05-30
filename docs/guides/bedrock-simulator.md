@@ -91,7 +91,7 @@ Expected result includes a selector with `eventCategory = Data` and a `resources
 
 ## Build / deploy / run / destroy
 
-`run` and `destroy` are `workflow_dispatch` only and bound to the `bedrock-simulator-sandbox` GitHub Environment (required-reviewer protection). `deploy` is the same. `build` touches no AWS, so it is **not** bound to the Environment (no approval, runnable from any branch). Trigger from the GitHub Actions UI or `gh workflow run`.
+`run` and `destroy` are `workflow_dispatch` only and bound to the `bedrock-simulator-sandbox` GitHub Environment (required-reviewer protection). `deploy` is the same. `build` holds no AWS credentials (an access boundary, not a cost claim), so it is **not** bound to the Environment (no approval, runnable from any branch). Trigger from the GitHub Actions UI or `gh workflow run`.
 
 Build and deploy are **separate workflows** so a known-good build can be re-deployed (rollback) without rebuilding — see [Rollback / redeploy](#rollback--redeploy).
 
@@ -476,7 +476,7 @@ stateDiagram-v2
 
 ## Cost guardrails
 
-These caps protect the sandbox account from surprise spend.
+Per [Cost posture](../../CLAUDE.md), the paid resources here (KMS CMK, Lambda, Bedrock calls) are accepted and documented, not hidden. These caps protect the sandbox account from surprise spend.
 
 | Guardrail | Where |
 |---|---|
