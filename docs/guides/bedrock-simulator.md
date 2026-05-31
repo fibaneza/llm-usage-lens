@@ -131,16 +131,11 @@ Expected result includes a selector with `eventCategory = Data` and a `resources
 ```bash
 cd tools/bedrock-simulator
 pnpm install --frozen-lockfile
-pnpm build   # tsc + esbuild → dist/*.mjs — MUST run before sam build
-sam build
+pnpm build   # tsc + esbuild → dist/*.mjs + sam build packages .aws-sam/
 sam deploy --guided --profile Sandbox-AdministratorAccess-469515554732
 ```
 
-`sam build` only *packages* the prebuilt `dist/` (the Lambdas use `CodeUri: dist/`
-with no `Metadata: BuildMethod`) — it does not transpile TypeScript. Skip
-`pnpm build` and the Lambdas ship raw/stale code and fail at runtime with
-`Cannot find module`. Re-run `pnpm build` after every `src/` change. See the
-[tool README](../../tools/bedrock-simulator/README.md) for the full rationale.
+`pnpm build` chains type-check → esbuild → `sam build` in one command. Re-run it after every `src/` change. See the [tool README](../../tools/bedrock-simulator/README.md) for details.
 
 `sam deploy --guided` will prompt for each parameter. Use these values (accept defaults for the rest):
 
@@ -177,9 +172,8 @@ gh run watch
 The workflow runs `gate` → `build`:
 
 1. `pnpm typecheck` + `pnpm test` + `sam validate --lint` — fails fast before building.
-2. `pnpm build` — `tsc --noEmit` + esbuild bundles `src/*.ts` → `dist/*.mjs`. This is the actual build and **must** precede `sam build`.
-3. `sam build` — packages the prebuilt `dist/` into `.aws-sam/` (it does not transpile).
-4. Packages `.aws-sam/` as `sam-build.tgz` and uploads it as a **7-day** Actions artifact. The run summary prints the `build_run_id` to pass to deploy.
+2. `pnpm build` — `tsc --noEmit` + esbuild bundles `src/*.ts` → `dist/*.mjs`, then chains `sam build` to package `dist/` into `.aws-sam/`.
+3. Packages `.aws-sam/` as `sam-build.tgz` and uploads it as a **7-day** Actions artifact. The run summary prints the `build_run_id` to pass to deploy.
 
 When a `vX.Y.Z` **release** is published, build also fires on `release: [published]` and attaches `sam-build.tgz` to that GitHub Release as a **durable** asset (release assets don't expire), so any release stays redeployable.
 
@@ -306,7 +300,7 @@ sequenceDiagram
     Dev->>Repo: Review, merge to main
     Dev->>GA: workflow_dispatch bedrock-simulator-build.yml
     Note over GA: build touches no AWS — no Environment, no approval
-    GA->>GA: gate (tests + lint) → sam build → upload sam-build.tgz
+    GA->>GA: gate (tests + lint) → pnpm build → upload sam-build.tgz
     Dev->>GA: workflow_dispatch bedrock-simulator-deploy.yml (build_run_id / release_tag / latest)
     Note over GA: Required-reviewer protection from the GitHub Environment
     GA->>GA: download the chosen sam-build.tgz bundle

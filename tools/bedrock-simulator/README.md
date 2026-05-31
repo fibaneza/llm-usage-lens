@@ -21,7 +21,7 @@ All `workflow_dispatch` only. `deploy` / `run` / `destroy` are bound to the
 
 | Workflow | Purpose |
 |---|---|
-| [`bedrock-simulator-build.yml`](../../.github/workflows/bedrock-simulator-build.yml) | Gate (typecheck + tests + `sam validate`), then `pnpm build` → `sam build`, package `.aws-sam/` as a reusable artifact. |
+| [`bedrock-simulator-build.yml`](../../.github/workflows/bedrock-simulator-build.yml) | Gate (typecheck + tests + `sam validate`), then `pnpm build` (type-check + bundle + sam build), package `.aws-sam/` as a reusable artifact. |
 | [`bedrock-simulator-deploy.yml`](../../.github/workflows/bedrock-simulator-deploy.yml) | Deploy a previously built artifact (by run id or release tag); post-deploy stack-status + resource + smoke checks. |
 | [`bedrock-simulator-run.yml`](../../.github/workflows/bedrock-simulator-run.yml) | Invoke the deployed Lambda once with operator-chosen `totalCalls` / `guardrailRatio`. |
 | [`bedrock-simulator-destroy.yml`](../../.github/workflows/bedrock-simulator-destroy.yml) | Empty the logging bucket, disable model invocation logging, then `sam delete`. |
@@ -33,38 +33,23 @@ Run from `tools/bedrock-simulator/`. None of these touch AWS except `sam deploy`
 | Command | What it does |
 |---|---|
 | `pnpm install --frozen-lockfile` | Install dependencies against the committed lockfile |
-| `pnpm build` | **The actual build:** `tsc --noEmit` type-check, then esbuild bundles `src/*.ts` → `dist/*.mjs` |
+| `pnpm build` | **Full pipeline:** `tsc --noEmit` type-check → esbuild bundles `src/*.ts` → `dist/*.mjs` → `sam build` packages `dist/` into `.aws-sam/` |
 | `pnpm typecheck` | Type-check only (`tsc --noEmit`) |
 | `pnpm test` | Unit tests (Vitest) |
 | `pnpm sam:validate` | `sam validate --lint` |
 | `pnpm sam:build` | `sam build` — **packages `dist/` only; does not transpile** |
 
-## Build before you package — `sam build` does not transpile
+## How the build works
 
-The SAM template points both Lambdas at the **pre-built** bundle:
+`pnpm build` chains three steps in sequence:
 
-```yaml
-CodeUri: dist/
-Runtime: nodejs22.x
-```
+1. **`tsc --noEmit`** — type-check; fails fast before touching the filesystem.
+2. **`node build.mjs`** — esbuild bundles `src/*.ts` → `dist/*.mjs` (AWS SDK excluded; provided by the Lambda runtime).
+3. **`sam build`** — copies `dist/` into `.aws-sam/` for packaging.
 
-There is **no `Metadata: BuildMethod`** on the functions, so `sam build` simply
-copies `dist/` into `.aws-sam/`. It does **not** run `tsc`, does **not** run
-esbuild, and does **not** run any `package.json` script. If `dist/` is missing or
-stale, the Lambdas ship raw/old code and fail at runtime with
-`Cannot find module`.
+The SAM template uses `CodeUri: dist/` with no `Metadata: BuildMethod`, so `sam build` only copies the pre-built bundle — it does not transpile. `pnpm build` is the single entry point: run it after every `src/` change.
 
-Therefore **`pnpm build` must run before `sam build`** — locally and in CI alike
-(`.github/workflows/bedrock-simulator-build.yml` enforces the same order).
-
-Re-run `pnpm build` after **every** change to `src/` — `sam build` will not notice
-stale `dist/`.
-
-> `sam build` *can* transpile TypeScript via `Metadata: BuildMethod: esbuild`, but
-> that path was deliberately removed: it fails to resolve esbuild under pnpm's
-> symlinked layout, duplicates the esbuild flags into the template, and skips the
-> `tsc` type-check. Keeping one `pnpm build` script as the single source of truth
-> avoids all three.
+`pnpm sam:build` is kept as a convenience for cases where `dist/` is already current and only the SAM template changed.
 
 ## Local build & deploy loop
 
@@ -86,19 +71,17 @@ cp samconfig.toml.example samconfig.toml    # then edit stack name / params
 
 # 3. Build → package → deploy.
 pnpm install --frozen-lockfile   # only if deps aren't installed
-pnpm build                       # tsc + esbuild → dist/   ← the actual build
-sam build                        # copies dist/ → .aws-sam/
+pnpm build                       # tsc + esbuild → dist/ + sam build → .aws-sam/
 sam deploy                       # reads samconfig.toml (use --guided the first time)
 ```
 
 The minimal loop after editing `src/`:
 
 ```bash
-pnpm build && sam build && sam deploy
+pnpm build && sam deploy
 ```
 
-**Credentials:** only `sam deploy` needs them; `pnpm build` and `sam build` run
-offline.
+**Credentials:** only `sam deploy` needs them; `pnpm build` (including the chained `sam build`) runs offline.
 
 **Teardown is CI-only.** `.claude/settings.json` denies `sam delete`,
 `aws …delete-*`, and `cloudformation delete-stack` from local shells — tear the
