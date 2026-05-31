@@ -10,8 +10,8 @@
 #
 # Pipeline:
 #   gate          → type-check + unit tests + sam validate (no credentials)
-#   build         → sam build, package .aws-sam/ as sam-build.tgz, upload as a
-#                   7-day Actions artifact
+#   build         → pnpm build (type-check + bundle + sam build), package
+#                   .aws-sam/ as sam-build.tgz, upload as a 7-day Actions artifact
 #   publish-asset → on a release, also attach sam-build.tgz as a durable
 #                   GitHub Release asset (assets don't expire → rollback forever)
 #
@@ -80,17 +80,9 @@ jobs:
         working-directory: tools/bedrock-simulator
         run: pnpm install --frozen-lockfile
 
-      # esbuild bundles src/*.ts → dist/*.mjs. The template's CodeUri is dist/,
-      # so this MUST run before sam build (which only packages dist/, it does
-      # not transpile). Without it the Lambdas ship raw .ts and fail at runtime
-      # with "Cannot find module".
-      - name: Build Lambda bundles
+      - name: Build
         working-directory: tools/bedrock-simulator
         run: pnpm build
-
-      - name: SAM build
-        working-directory: tools/bedrock-simulator
-        run: sam build
 
       - name: Record build provenance
         working-directory: tools/bedrock-simulator
