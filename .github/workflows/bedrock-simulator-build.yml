@@ -80,6 +80,14 @@ jobs:
         working-directory: tools/bedrock-simulator
         run: pnpm install --frozen-lockfile
 
+      # esbuild bundles src/*.ts → dist/*.mjs. The template's CodeUri is dist/,
+      # so this MUST run before sam build (which only packages dist/, it does
+      # not transpile). Without it the Lambdas ship raw .ts and fail at runtime
+      # with "Cannot find module".
+      - name: Build Lambda bundles
+        working-directory: tools/bedrock-simulator
+        run: pnpm build
+
       - name: SAM build
         working-directory: tools/bedrock-simulator
         run: sam build

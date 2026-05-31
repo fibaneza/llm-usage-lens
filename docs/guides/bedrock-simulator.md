@@ -14,7 +14,10 @@ Required for the simulator itself. The CloudWatch cross-account observability li
 
 ```bash
 # Verify the sandbox is in the org (run in management account)
-aws organizations list-accounts --query 'Accounts[?Status==`ACTIVE`].[Id,Name]' --output table
+aws organizations list-accounts \
+  [--profile <your-profile-name>] \
+  --query 'Accounts[?Status==`ACTIVE`].[Id,Name]' \
+  --output table
 
 # Later, when the observability account exists, enrol the sandbox as a CWO source.
 # (Not done today.)
@@ -22,16 +25,46 @@ aws organizations list-accounts --query 'Accounts[?Status==`ACTIVE`].[Id,Name]' 
 
 ### 2. Bedrock model access
 
-Approve every model in `tools/bedrock-simulator/src/models.ts`. **For cross-region inference profiles (`us.*`), approve in every region the profile spans — `us-east-1`, `us-west-2`, and `us-east-2`.** Approving only in `us-east-1` will succeed for Haiku and the bare "other" model but fail with `AccessDeniedException` when a Claude 4 call routes to one of the other regions.
+**As of mid-2025, the Bedrock Model Access page has been retired.** Serverless foundation models are now automatically enabled on first invocation — no manual activation required. For Anthropic models, first-time users in a new account may be prompted to submit use case details before the first call succeeds; follow the console link in the error response if that happens.
+
+The template defaults (after updating from the original Claude 4 May 2025 IDs) are:
+
+| Canonical key | Model ID | Invocation | Regions needed |
+|---|---|---|---|
+| `claude-opus` | `anthropic.claude-sonnet-4-6` | `us.*` cross-region profile | auto-enabled on first call in each region |
+| `claude-sonnet` | `anthropic.claude-sonnet-4-6` | `us.*` cross-region profile | auto-enabled on first call in each region |
+| `claude-haiku` | `anthropic.claude-haiku-4-5-20251001-v1:0` | `us.*` cross-region profile | auto-enabled on first call in each region |
+| `other` | `meta.llama3-3-70b-instruct-v1:0` | bare ID, `us-east-1` only | auto-enabled on first call |
+
+The `us.*` cross-region profiles for Sonnet route across `us-east-1`, `us-west-2`, and `us-east-2` — access activates in each region on first routing there, which the deploy workflow's smoke test triggers automatically.
 
 ```bash
-# List the models you currently have access to in this region:
+# Verify active models in the sandbox account (sanity check):
 aws bedrock list-foundation-models --region us-east-1 \
-  --query 'modelSummaries[?modelLifecycle.status==`ACTIVE`].[modelId]' --output text
+  --profile <aws-profile> \
+  --query 'modelSummaries[?modelLifecycle.status==`ACTIVE` && contains(modelId,`anthropic`)].[modelId]' \
+  --output text
 
-# Anthropic models require a one-time access request via the Bedrock console:
-#   https://console.aws.amazon.com/bedrock/home?region=us-east-1#/modelaccess
-# Repeat in us-west-2 and us-east-2 for cross-region-routed models.
+# Optional: trigger a first invocation to surface any use-case-details prompt early.
+# Claude 4.x models (including Haiku 4.5) require the us.* cross-region inference
+# profile prefix — bare model IDs fail with "on-demand throughput isn't supported".
+# Use the Converse API (bedrock-runtime converse) rather than invoke-model for
+# newer models; it handles the request/response envelope automatically.
+aws bedrock-runtime converse \
+  --profile <aws-profile> \
+  --region us-east-1 \
+  --model-id us.anthropic.claude-haiku-4-5-20251001-v1:0 \
+  --messages '[{"role":"user","content":[{"text":"hi"}]}]'
+
+# With inference config
+aws bedrock-runtime converse \
+    --profile <aws-profile> \
+    --model-id arn:aws:bedrock:us-east-1:469515554732:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0 \
+    --messages '[{"role":"user","content":[{"text":"hi"}]}]' \
+    --inference-config '{"maxTokens":32000,"stopSequences":[],"temperature":1}' \
+    --additional-model-request-fields '{"top_k":250}' \
+    --performance-config '{"latency":"standard"}' \
+    --region us-east-1
 ```
 
 ### 3. Bedrock per-region service quotas
@@ -88,6 +121,37 @@ aws cloudtrail get-event-selectors --trail-name <org-trail-name> \
 ```
 
 Expected result includes a selector with `eventCategory = Data` and a `resources.type` matching `AWS::Bedrock::*` (or an inclusive selector). If empty, this needs to be added — coordinate with whoever owns the org trail. **Flag this to the Phase 6 owner**: the dashboard's `docs/specs/2026-05-15-system-architecture.md` implies but does not explicitly require this configuration.
+
+## Bootstrap: first deploy
+
+`DeployerRole` is defined inside the SAM stack — it does not exist until the stack is deployed for the first time. This creates a chicken/egg problem: the OIDC-based GitHub Actions workflow assumes `DeployerRole`, but the role cannot exist until after the first deploy. The solution is a one-time manual deploy using operator SSO credentials.
+
+**Do this once only.** After the stack exists, all subsequent deploys go through `bedrock-simulator-deploy.yml`.
+
+```bash
+cd tools/bedrock-simulator
+sam build
+sam deploy --guided --profile Sandbox-AdministratorAccess-469515554732
+```
+
+`sam deploy --guided` will prompt for each parameter. Use these values (accept defaults for the rest):
+
+| Parameter | Value |
+|---|---|
+| Stack name | `bedrock-simulator` |
+| AWS Region | `us-east-1` |
+| `SandboxAccountId` | `469515554732` |
+| `GitHubOwner` | your GitHub org/username |
+| `GitHubRepo` | `aws-bedrock-cost-tracker` |
+| `GitHubEnvironment` | `bedrock-simulator-sandbox` (default) |
+| `BudgetAlertEmail` | your alert email address |
+
+Accept the generated `samconfig.toml` when prompted — it is gitignored and must not be committed. Once you save it, future `sam deploy` calls in this directory pick it up automatically (used only for manual recovery runs, not the normal workflow).
+
+After the deploy completes:
+- Run the post-deploy verification checks (2a–2c below) by hand to confirm the stack is healthy.
+- Click the SNS email confirmation link (Prereq #5).
+- From this point on, use `bedrock-simulator-build.yml` → `bedrock-simulator-deploy.yml` for all subsequent deploys.
 
 ## Build / deploy / run / destroy
 
@@ -214,7 +278,7 @@ aws lambda invoke \
 
 Pass criteria: `StatusCode == 200`; the response JSON has `summary.totalCalls == 1` and `summary.errored == 0`. Cost ~$0.001.
 
-Failure causes (typical): Bedrock model access not yet granted in the sandbox (most common — see Prereq #2), inference profile region mismatch, guardrail still provisioning. Re-running the workflow usually clears transient issues.
+Failure causes (typical): first-time Anthropic use-case-details prompt not yet submitted (see Prereq #2), inference profile region mismatch, guardrail still provisioning. Re-running the workflow usually clears transient issues.
 
 ## Deploy/verify/fix sequence (Diagram 2)
 
@@ -324,7 +388,7 @@ Per-call errors appear in the Lambda response's `results[]` with `errorCode` pop
 |---|---|---|
 | `AccessDeniedException` on `AssumeRole` | `SimUserRole-*` trust policy doesn't list `SimulatorLambdaRole`'s ARN | Re-deploy; trust is set in the template |
 | `ValidationException: Invocation of model ID … with on-demand throughput isn't supported` | Model needs a cross-region wrapper, missing from `models.ts` | Add the `us.*` cross-region profile ID to `models.ts`; redeploy |
-| `AccessDeniedException` on `InvokeModel` for a Claude 4 model | Cross-region routing landed in a region without model access | Approve the model in `us-west-2` and `us-east-2` (see Prereq #2) |
+| `AccessDeniedException` on `InvokeModel` for a Claude model | First-time Anthropic invocation in a new account may require use case details | Follow the console link in the error response; re-run after submitting |
 | `ThrottlingException` | Per-region Bedrock TPM/RPM limit | Lower `totalCalls` or request quota increase (see Prereq #3) |
 | `guardrailIntervention: true`, `status: "guardrailBlocked"` | Call blocked by guardrail policy | Working as intended — the simulator's job is to produce these for the dashboard to display |
 | Smoke test fails with `Cost is bounded by …` workflow error | `prompts.ts` has been edited and exceeds the ≤500 input-token cap | Shorten the prompt or revert; the cap is enforced by the build |

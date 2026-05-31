@@ -156,6 +156,8 @@ vite.config.ts.timestamp-*
 # leave the local machine or the GitHub Actions runner.
 tools/bedrock-simulator/.aws-sam/
 tools/bedrock-simulator/samconfig.toml
+tools/bedrock-simulator/samconfig.toml.management
+tools/bedrock-simulator/samconfig.toml.sandbox
 tools/bedrock-simulator/node_modules/
 tools/bedrock-simulator/dist/
 tools/bedrock-simulator/coverage/
