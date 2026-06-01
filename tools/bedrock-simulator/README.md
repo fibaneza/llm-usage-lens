@@ -51,6 +51,29 @@ The SAM template uses `CodeUri: dist/` with no `Metadata: BuildMethod`, so `sam 
 
 `pnpm sam:build` is kept as a convenience for cases where `dist/` is already current and only the SAM template changed.
 
+## Git hooks
+
+A `pre-push` hook in `.hooks/pre-push` runs `pnpm typecheck`, `pnpm test`, and a
+secret scan whenever simulator files are in the commits being pushed. It is a
+no-op for pushes that touch other paths only.
+
+**Install once** (from `tools/bedrock-simulator/`):
+
+```bash
+pnpm hooks:install
+```
+
+**Remove** when Phase 1's Husky setup is wired up — Husky sets `core.hooksPath`
+to `.husky/`, which bypasses `.git/hooks/` entirely, so the installed hook
+becomes inactive anyway. Husky's `pre-push` will incorporate the simulator check.
+
+```bash
+pnpm hooks:uninstall
+```
+
+See [`docs/guides/git-hooks.md`](../../docs/guides/git-hooks.md) for the full
+hooks strategy, secret detection approach, and the Phase 1 Husky plan.
+
 ## Local build & deploy loop
 
 The **canonical** deploy path is GitHub Actions (see the

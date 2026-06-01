@@ -1,0 +1,56 @@
+#!/usr/bin/env sh
+# tools/bedrock-simulator/.hooks/pre-push
+#
+# Runs typecheck, unit tests, and a secret scan when simulator files are in
+# the commits being pushed.  A no-op for pushes that touch other paths only.
+#
+# Install once (from tools/bedrock-simulator/):  pnpm hooks:install
+# Remove (when Phase 1 Husky supersedes this):   pnpm hooks:uninstall
+# See docs/guides/git-hooks.md for the full hooks strategy.
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+ZERO=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+RANGES=""
+
+while IFS=" " read -r local_ref local_oid remote_ref remote_oid; do
+  [ "$local_oid" = "$ZERO" ] && continue
+  if [ "$remote_oid" = "$ZERO" ]; then
+    RANGES="$RANGES $local_oid"
+  else
+    RANGES="$RANGES $remote_oid..$local_oid"
+  fi
+done
+
+[ -z "$RANGES" ] && exit 0
+
+# Skip entirely when no simulator files are in the commits being pushed.
+# shellcheck disable=SC2086
+git diff --name-only $RANGES 2>/dev/null | grep -q "^tools/bedrock-simulator/" || exit 0
+
+echo "→ bedrock-simulator: typecheck"
+(cd "$REPO_ROOT/tools/bedrock-simulator" && pnpm typecheck)
+
+echo "→ bedrock-simulator: tests"
+(cd "$REPO_ROOT/tools/bedrock-simulator" && pnpm test)
+
+echo "→ secret scan"
+if command -v gitleaks >/dev/null 2>&1; then
+  # Scan each push range separately so new-branch pushes are handled correctly.
+  # shellcheck disable=SC2086
+  for range in $RANGES; do
+    (cd "$REPO_ROOT" && gitleaks git --no-banner --log-opts="$range")
+  done
+else
+  echo "  ⚠  gitleaks not found — grep fallback active (install gitleaks for full coverage)"
+  echo "     brew install gitleaks   |   https://github.com/gitleaks/gitleaks"
+  # shellcheck disable=SC2086
+  if git diff $RANGES -- "tools/bedrock-simulator/" \
+      | grep -En 'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|-----BEGIN (RSA|EC|OPENSSH|DSA|PGP) PRIVATE KEY|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]\s*=\s*\S{8,}|[Ss][Ee][Cc][Rr][Ee][Tt]\s*[=:]\s*\S{8,}'; then
+    echo "⛔  Possible secret detected in diff — review and remove before pushing."
+    exit 1
+  fi
+fi
+
+echo "→ all checks passed"
