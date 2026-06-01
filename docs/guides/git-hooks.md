@@ -29,7 +29,14 @@ A push that only touches other paths exits immediately without running anything.
 
 1. `pnpm typecheck` — `tsc --noEmit`; fails fast before any I/O.
 2. `pnpm test` — Vitest unit suite; mocked, no network, runs in seconds.
-3. Secret scan — gitleaks preferred; grep patterns as fallback.
+3. Dependency health — **warn-only**, never blocks the push: `pnpm outdated`
+   (behind latest), `pnpm audit` (known vulnerabilities), and
+   `pnpm dedupe --check` (duplicate versions). Enforcement lives in CI — the
+   `bedrock-simulator build` gate **fails** on any vulnerability, and
+   `bedrock-simulator deps` is an on-demand full report (see
+   [`.github/README.md`](../../.github/README.md)). These three steps reach the
+   network; offline they print a warning and the push still proceeds.
+4. Secret scan — gitleaks preferred; grep patterns as fallback.
 
 **Install / remove** (run from `tools/bedrock-simulator/`):
 

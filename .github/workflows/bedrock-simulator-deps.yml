@@ -1,0 +1,61 @@
+# On-demand advisory report (outdated + audit + dedupe) to the run summary.
+# Never fails — enforcement is the blocking audit in bedrock-simulator-build.yml.
+# Touches no AWS.
+
+name: bedrock-simulator deps
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    name: Dependency health report (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9'
+
+      - name: Install simulator dependencies
+        working-directory: tools/bedrock-simulator
+        run: pnpm install --frozen-lockfile
+
+      - name: Dependency health report
+        working-directory: tools/bedrock-simulator
+        run: |
+          {
+            echo "## bedrock-simulator dependency health"
+            echo ""
+            echo "### Outdated"
+            echo '```'
+            pnpm outdated || true
+            echo '```'
+            echo ""
+            echo "### Security audit"
+            echo '```'
+            pnpm audit || true
+            echo '```'
+            echo ""
+            echo "### Duplicate versions"
+            if pnpm dedupe --check; then
+              echo "Lockfile is flat — no duplicate versions."
+            else
+              echo "\`pnpm dedupe --check\` reports the lockfile could be flattened — run \`pnpm dedupe\`."
+            fi
+            echo ""
+            echo "_Advisory only. To remediate, from \`tools/bedrock-simulator/\`: \`pnpm up --latest\` (freshness), \`pnpm up <pkg>@latest\` then re-run \`pnpm audit\` (security), \`pnpm dedupe\` (duplicates). Commit \`package.json\` + the lockfile._"
+          } >> "$GITHUB_STEP_SUMMARY"

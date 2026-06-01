@@ -169,11 +169,22 @@ gh workflow run bedrock-simulator-build.yml
 gh run watch
 ```
 
-The workflow runs `gate` → `build`:
+The workflow runs `gate` + `deps` in parallel, then `build` (which needs both):
 
-1. `pnpm typecheck` + `pnpm test` + `sam validate --lint` — fails fast before building.
-2. `pnpm build` — `tsc --noEmit` + esbuild bundles `src/*.ts` → `dist/*.mjs`, then chains `sam build` to package `dist/` into `.aws-sam/`.
-3. Packages `.aws-sam/` as `sam-build.tgz` and uploads it as a **7-day** Actions artifact. The run summary prints the `build_run_id` to pass to deploy.
+```mermaid
+flowchart LR
+    gate["gate<br/>typecheck · test · sam validate"]
+    deps["deps<br/>outdated · dedupe (advisory)<br/>pnpm audit (BLOCKING)"]
+    build["build<br/>pnpm build → sam-build.tgz"]
+    publish["publish-asset<br/>(release only)"]
+    gate --> build
+    deps --> build
+    build --> publish
+```
+
+1. `gate` — `pnpm typecheck` + `pnpm test` + `sam validate --lint`.
+2. `deps` — `pnpm outdated` + `pnpm dedupe --check` (advisory, to the run summary) and `pnpm audit` (**blocking**: any vulnerability fails the job, so no artifact ships with a known CVE). Both jobs cache the pnpm store.
+3. `build` — needs `gate` **and** `deps`; runs `pnpm build` (`tsc --noEmit` + esbuild → `dist/*.mjs`, then `sam build`), packages `.aws-sam/` as `sam-build.tgz`, and uploads it as a **7-day** Actions artifact. The run summary prints the `build_run_id` to pass to deploy.
 
 When a `vX.Y.Z` **release** is published, build also fires on `release: [published]` and attaches `sam-build.tgz` to that GitHub Release as a **durable** asset (release assets don't expire), so any release stays redeployable.
 
@@ -300,7 +311,7 @@ sequenceDiagram
     Dev->>Repo: Review, merge to main
     Dev->>GA: workflow_dispatch bedrock-simulator-build.yml
     Note over GA: build touches no AWS — no Environment, no approval
-    GA->>GA: gate (tests + lint) → pnpm build → upload sam-build.tgz
+    GA->>GA: gate (tests + lint) ‖ deps (audit blocks on vuln) → build → upload sam-build.tgz
     Dev->>GA: workflow_dispatch bedrock-simulator-deploy.yml (build_run_id / release_tag / latest)
     Note over GA: Required-reviewer protection from the GitHub Environment
     GA->>GA: download the chosen sam-build.tgz bundle

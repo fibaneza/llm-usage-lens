@@ -46,6 +46,8 @@ jobs:
 
       - name: Setup SAM toolchain
         uses: ./.github/actions/setup-sam-toolchain
+        with:
+          cache-pnpm: 'true'
 
       - name: Install simulator dependencies
         working-directory: tools/bedrock-simulator
@@ -61,9 +63,70 @@ jobs:
         working-directory: tools/bedrock-simulator
         run: sam validate --lint
 
+  deps:
+    name: Dependency health
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    # Parallel with `gate`; `build` needs both, so a vulnerability here blocks
+    # the artifact. Own checkout/install (fresh runner) — pnpm store is cached.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup SAM toolchain
+        uses: ./.github/actions/setup-sam-toolchain
+        with:
+          cache-pnpm: 'true'
+
+      - name: Install simulator dependencies
+        working-directory: tools/bedrock-simulator
+        run: pnpm install --frozen-lockfile
+
+      # Advisory — written to the run summary, never fails. Dependabot opens the PRs.
+      - name: Dependency report (advisory)
+        working-directory: tools/bedrock-simulator
+        run: |
+          {
+            echo "## bedrock-simulator dependency health"
+            echo ""
+            echo "### Outdated (advisory)"
+            echo '```'
+            pnpm outdated || true
+            echo '```'
+            echo ""
+            echo "### Duplicate versions (advisory)"
+            if pnpm dedupe --check; then
+              echo "Lockfile is flat — no duplicate versions."
+            else
+              echo "\`pnpm dedupe --check\` reports the lockfile could be flattened — run \`pnpm dedupe\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # BLOCKING — any vulnerability fails the build. Raise to `--audit-level high` if noisy.
+      - name: Security audit (blocking)
+        working-directory: tools/bedrock-simulator
+        run: |
+          set +e
+          pnpm audit | tee audit.txt
+          status=${PIPESTATUS[0]}
+          {
+            echo "### Security audit (blocking)"
+            echo '```'
+            cat audit.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then
+            echo "⛔ Known vulnerabilities found — failing the build." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "✅ No known vulnerabilities." >> "$GITHUB_STEP_SUMMARY"
+
   build:
     name: Build artifact
-    needs: gate
+    needs: [gate, deps]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -75,6 +138,8 @@ jobs:
 
       - name: Setup SAM toolchain
         uses: ./.github/actions/setup-sam-toolchain
+        with:
+          cache-pnpm: 'true'
 
       - name: Install simulator dependencies
         working-directory: tools/bedrock-simulator

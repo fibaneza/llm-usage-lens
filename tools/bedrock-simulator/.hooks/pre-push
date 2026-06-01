@@ -35,6 +35,22 @@ echo "→ bedrock-simulator: typecheck"
 echo "→ bedrock-simulator: tests"
 (cd "$REPO_ROOT/tools/bedrock-simulator" && pnpm test)
 
+# Dependency health — warn-only (network; offline just prints). Enforcement is
+# the blocking audit in bedrock-simulator-build.yml.
+SIM="$REPO_ROOT/tools/bedrock-simulator"
+
+echo "→ bedrock-simulator: dependency freshness (warn-only)"
+(cd "$SIM" && pnpm outdated) \
+  || echo "  ⚠  Dependencies behind latest (table above). Non-blocking — 'pnpm up --latest' to refresh."
+
+echo "→ bedrock-simulator: security audit (warn-only)"
+(cd "$SIM" && pnpm audit) \
+  || echo "  ⚠  Vulnerabilities found (above). Non-blocking — 'pnpm up <pkg>@latest', then re-run 'pnpm audit'."
+
+echo "→ bedrock-simulator: duplicate versions (warn-only)"
+(cd "$SIM" && pnpm dedupe --check) \
+  || echo "  ⚠  Lockfile could be flattened. Non-blocking — run 'pnpm dedupe'."
+
 echo "→ secret scan"
 if command -v gitleaks >/dev/null 2>&1; then
   # Scan each push range separately so new-branch pushes are handled correctly.
