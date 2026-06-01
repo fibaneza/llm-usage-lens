@@ -6,9 +6,11 @@ This folder holds the project's GitHub-side automation.
 | --- | --- | --- |
 | [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) | Pull request events | Inline review comments + PR comment with HIGH/MEDIUM security findings; HIGH findings submit a REQUEST_CHANGES review and fail the check |
 | [`workflows/claude-code-review.yml`](workflows/claude-code-review.yml) | Push of release tags (`v*`, `*-rc*`, `*-beta*`) and `workflow_dispatch` | Release audit (code review + security) scoped to commits since the previous release tag; files GitHub issues for HIGH/MEDIUM security and HIGH code-review findings |
+| [`workflows/bedrock-simulator-build.yml`](workflows/bedrock-simulator-build.yml) | `workflow_dispatch`; `release: published` | Builds the simulator SAM artifact. `gate` (typecheck + tests + `sam validate`) and `deps` (freshness/duplicates report + **blocking `pnpm audit`**) run in parallel; `build` needs both, so a vulnerability blocks the artifact. pnpm store cached. Touches no AWS |
 | [`workflows/bedrock-simulator-deploy.yml`](workflows/bedrock-simulator-deploy.yml) | `workflow_dispatch` (confirm = "deploy") | Deploys the bedrock-simulator SAM stack and runs post-deploy health checks + smoke test |
 | [`workflows/bedrock-simulator-destroy.yml`](workflows/bedrock-simulator-destroy.yml) | `workflow_dispatch` (confirm = "destroy bedrock-simulator") | Tears down the bedrock-simulator stack (disables MIL, empties bucket, sam delete) |
 | [`workflows/bedrock-simulator-run.yml`](workflows/bedrock-simulator-run.yml) | `workflow_dispatch` (totalCalls, guardrailRatio) | Invokes the deployed simulator Lambda with the full model × service × user matrix |
+| [`workflows/bedrock-simulator-deps.yml`](workflows/bedrock-simulator-deps.yml) | `workflow_dispatch` (on demand) | Full dependency-health report to the run summary: `pnpm outdated` (freshness), `pnpm audit` (vulnerabilities), `pnpm dedupe --check` (duplicate versions). **Advisory — never fails.** For inspection without a build; enforcement is the `bedrock-simulator-build.yml` gate. Touches no AWS |
 | [`workflows/pr-title-lint.yml`](workflows/pr-title-lint.yml) | PR opened / edited / reopened | Validates PR title against Conventional Commits (required — PR title becomes the squash-merge commit on `main`) |
 | [`workflows/claude-assistant.yml`](workflows/claude-assistant.yml) | `@claude` mention on an **issue** (opened/assigned or issue comment) | On-demand reactive bot for issue triage / Q&A; PRs are out of scope (covered by `claude-pr-review.yml` + local Claude Code) |
 
@@ -19,6 +21,23 @@ discipline as the review workflows (a `--max-turns` cap and a read-only
 `--allowed-tools` allowlist). The rest of this document walks through the
 **automated review workflows** in detail.
 
+### `bedrock-simulator-build.yml` job graph
+
+`gate` and `deps` run in parallel; `build` needs both, so a `pnpm audit`
+vulnerability in `deps` blocks the artifact. `publish-asset` runs only on a
+release. The pnpm store is cached across the three jobs.
+
+```mermaid
+flowchart LR
+    gate["gate<br/>typecheck · test · sam validate"]
+    deps["deps<br/>outdated · dedupe (advisory)<br/>pnpm audit (BLOCKING)"]
+    build["build<br/>pnpm build → sam-build.tgz"]
+    publish["publish-asset<br/>(release only)"]
+    gate --> build
+    deps --> build
+    build --> publish
+```
+
 ---
 
 ## Community health and meta files
@@ -28,7 +47,7 @@ discipline as the review workflows (a `--max-turns` cap and a read-only
 | [`CODEOWNERS`](CODEOWNERS) | Required-reviewer routing per path. The `/.github/` rule covers this entire directory (workflows, actions, scripts) recursively. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Single contributor entrypoint — branching, commit format, PR process. GitHub surfaces it as "Contributing guidelines" when a new PR is opened. |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting policy. GitHub renders it under the repository's *Security policy* tab. |
-| [`dependabot.yml`](dependabot.yml) | Dependabot schedule — currently bumps GitHub Actions versions weekly. |
+| [`dependabot.yml`](dependabot.yml) | Dependabot schedule — weekly GitHub Actions bumps, plus weekly npm bumps for `tools/bedrock-simulator` (minor/patch grouped into one PR; majors and security updates separate). PR titles are `chore`-prefixed to pass `pr-title-lint`. |
 | [`pull_request_template.md`](pull_request_template.md) | Auto-populated PR description scaffold (Summary, Linked issue, Test plan, Reviewer guidance, Phase). |
 
 **Why these live in `.github/` and not the repo root.** GitHub auto-discovers

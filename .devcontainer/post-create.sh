@@ -7,6 +7,10 @@ export ECC_DISABLED_MCPS="github,context7,exa,playwright,sequential-thinking,mem
 git config --global user.name "${GIT_USER_NAME}"
 git config --global user.email "${GIT_USER_EMAIL}"
 
+# Keep pnpm's store on the container home (native ext4 volume), not the repo
+# root — pnpm's copyfile throws ESTALE (-116) on the Docker host bind mount.
+pnpm config set store-dir "$HOME/.pnpm-store" --location=user
+
 # Marketplaces — sources Claude Code resolves plugins from.
 claude plugin marketplace add anthropics/claude-code                    # First-party Claude Code commands and built-ins
 claude plugin marketplace add anthropics/claude-plugins-official        # Anthropic's curated plugin index (context7, superpowers, ...)
