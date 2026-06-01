@@ -41,9 +41,13 @@ Never bypass the commit-msg hook (`--no-verify`) — Rule 50.5.
 
 1. Branch from `main`.
 2. Commit with Conventional Commits.
-3. Open as a draft while work is in progress (optional).
-4. Mark ready-for-review when the branch is complete.
-5. Claude PR review runs automatically (`claude-pr-review.yml`).
+3. **Open as a draft by default** (`gh pr create --draft`). New PRs start as
+   drafts so work-in-progress doesn't trigger the Claude PR review or signal
+   readiness prematurely.
+4. Mark ready-for-review (`gh pr ready`) when the branch is complete and its
+   checklist passes.
+5. Claude PR review runs automatically once the PR is marked ready
+   (`claude-pr-review.yml` skips drafts).
 6. Human review (required — see branch protection below).
 7. **Squash-merge** into `main`. The PR title becomes the sole commit
    message on `main`, so **PR titles MUST follow Conventional Commits**.

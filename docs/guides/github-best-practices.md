@@ -192,6 +192,12 @@ Advantages:
 
 ## Pull Request Best Practices
 
+> **In this project.** Open PRs as **drafts by default** — `gh pr create --draft`.
+> A draft keeps the automated Claude review and the "ready" signal off until the
+> branch is actually complete; mark it ready with `gh pr ready` (or the GitHub
+> UI) when the phase's Verify checklist passes. See
+> [Rule 31 — PR lifecycle](../../.claude/rules/31-github-flow.md).
+
 ### 7. Keep PRs Small
 
 Ideal PR:

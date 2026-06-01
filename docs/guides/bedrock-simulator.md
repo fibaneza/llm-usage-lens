@@ -307,7 +307,7 @@ sequenceDiagram
 
     Dev->>CCD: /build-feature "change X"
     CCD->>CCD: Rule 70 loop<br/>(typescript-developer → test-engineer → quality-reviewer)
-    CCD->>Repo: Open PR with template + code changes
+    CCD->>Repo: Open draft PR with template + code changes
     Dev->>Repo: Review, merge to main
     Dev->>GA: workflow_dispatch bedrock-simulator-build.yml
     Note over GA: build touches no AWS — no Environment, no approval

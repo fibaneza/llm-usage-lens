@@ -40,8 +40,10 @@ receives direct commits.
    — `feature/phase-4.1-overview`, etc. (Rule 30.4 — one sub-phase per PR).
 2. **A phase's tasks are commits on that branch**, each following Conventional
    Commits (commitlint).
-3. **Open a PR to `main` once the phase's "Verify" checklist passes.** Run
-   `/verify-phase <n>` first — do not open the PR on a failing checklist.
+3. **Open a PR to `main` as a draft by default** (`gh pr create --draft`; see
+   [Rule 31](31-github-flow.md)). Mark it ready (`gh pr ready`) once the phase's
+   "Verify" checklist passes — run `/verify-phase <n>` first; do not mark it
+   ready on a failing checklist.
 4. **One phase (or one Phase 4 sub-phase) per PR.** Never bundle multiple
    phases into a single branch or PR.
 5. **Never commit or merge directly to `main`.**
