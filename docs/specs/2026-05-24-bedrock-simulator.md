@@ -324,8 +324,8 @@ Figures are **illustrative at spec-author date**. Verify against current Bedrock
 ### Setup — $0
 CFN stack ops, IAM, S3 bucket creation, CWL group creation, Bedrock model access enablement, inference profile creation, Guardrail creation, model-invocation-logging enablement — all free at create.
 
-### Idle (deployed, no runs) — under $0.10/month
-S3 bucket: <$0.01 with 7-day lifecycle. CWL log group: <$0.05 at low call volume + 7-day retention. KMS key: $1/month per CMK in use (one CMK here). Everything else free at rest. **Recommended posture: leave deployed between runs.**
+### Idle (deployed, no runs) — under $0.10/month (default) or ~$1.10/month (KMS on)
+S3 bucket: <$0.01 with 7-day lifecycle. CWL log group: <$0.05 at low call volume + 7-day retention. KMS key: $1/month per CMK — only incurred when `UseKmsEncryption=true` (default: false; S3 falls back to SSE-S3/AES256, encrypted at rest, no CMK cost). Everything else free at rest. **Recommended posture: leave deployed between runs.**
 
 ### Per-run cost — main variable
 

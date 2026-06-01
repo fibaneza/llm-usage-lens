@@ -33,4 +33,8 @@ parameter_overrides = [
   "ClaudeSonnetModelId=anthropic.claude-sonnet-4-6",
   "ClaudeHaikuModelId=anthropic.claude-haiku-4-5-20251001-v1:0",
   "OtherModelId=meta.llama3-3-70b-instruct-v1:0",
+  # Set to "true" to encrypt invocation logs with a customer-managed KMS key
+  # ($1/month at rest). Default "false" uses SSE-S3 (AES256) — encrypted at
+  # rest, no CMK cost. Recommended: keep false for personal sandbox use.
+  "UseKmsEncryption=false",
 ]

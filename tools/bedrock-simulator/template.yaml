@@ -32,6 +32,19 @@ Parameters:
       SNS topic at deploy time; confirmation is manual.
     MinLength: 5
 
+  UseKmsEncryption:
+    Type: String
+    Description: >-
+      Encrypt invocation logs (S3 + CloudWatch Logs) and the budget SNS topic
+      with a customer-managed KMS key (CMK). Adds $1/month at rest. When false
+      (default), the S3 bucket uses SSE-S3 (AES256) — encrypted at rest, no
+      CMK cost. Set to true for production deployments.
+      See docs/specs/2026-05-24-bedrock-simulator.md — "Cost expectations".
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+
   ClaudeOpusModelId:
     Type: String
     # NOTE: deliberately mapped to Sonnet, not a real Opus model. The simulator
@@ -62,6 +75,9 @@ Parameters:
       us.* cross-region profile.
     Default: meta.llama3-3-70b-instruct-v1:0
 
+Conditions:
+  KmsEnabled: !Equals [!Ref UseKmsEncryption, 'true']
+
 Globals:
   Function:
     Runtime: nodejs22.x
@@ -72,12 +88,16 @@ Globals:
 
 Resources:
   # ---------------------------------------------------------------------------
-  # Encryption — single CMK for the S3 logging bucket, the CWL log group, and
-  # the budget SNS topic. Annual rotation; service-principal grants are scoped
-  # by aws:SourceAccount to mitigate confused-deputy.
+  # Encryption — optional CMK (UseKmsEncryption=true) for the S3 logging
+  # bucket, the CWL log group, and the budget SNS topic. Annual rotation;
+  # service-principal grants scoped by aws:SourceAccount (confused-deputy
+  # mitigation). When disabled (default), S3 uses SSE-S3 (AES256) and CWL +
+  # SNS are unencrypted at rest — appropriate for personal sandbox use.
+  # Cost: $1/month per CMK. See "Cost expectations" in the simulator spec.
   # ---------------------------------------------------------------------------
   InvocationLoggingKey:
     Type: AWS::KMS::Key
+    Condition: KmsEnabled
     Properties:
       Description: CMK for Bedrock invocation logging destinations and the budget SNS topic.
       EnableKeyRotation: true
@@ -131,6 +151,7 @@ Resources:
 
   InvocationLoggingKeyAlias:
     Type: AWS::KMS::Alias
+    Condition: KmsEnabled
     Properties:
       AliasName: alias/bedrock-simulator-logging
       TargetKeyId: !Ref InvocationLoggingKey
@@ -152,10 +173,10 @@ Resources:
         RestrictPublicBuckets: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
-          - BucketKeyEnabled: true
+          - BucketKeyEnabled: !If [KmsEnabled, true, false]
             ServerSideEncryptionByDefault:
-              SSEAlgorithm: aws:kms
-              KMSMasterKeyID: !GetAtt InvocationLoggingKey.Arn
+              SSEAlgorithm: !If [KmsEnabled, 'aws:kms', 'AES256']
+              KMSMasterKeyID: !If [KmsEnabled, !GetAtt InvocationLoggingKey.Arn, !Ref AWS::NoValue]
       VersioningConfiguration:
         Status: Suspended
       LifecycleConfiguration:
@@ -197,7 +218,7 @@ Resources:
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref SandboxAccountId
-                s3:x-amz-server-side-encryption: aws:kms
+                s3:x-amz-server-side-encryption: !If [KmsEnabled, 'aws:kms', 'AES256']
           - Sid: AllowBedrockLoggingRoleWrites
             Effect: Allow
             Principal:
@@ -214,7 +235,7 @@ Resources:
     Properties:
       LogGroupName: /aws/bedrock/invocation-logs/bedrock-simulator
       RetentionInDays: 7
-      KmsKeyId: !GetAtt InvocationLoggingKey.Arn
+      KmsKeyId: !If [KmsEnabled, !GetAtt InvocationLoggingKey.Arn, !Ref AWS::NoValue]
 
   InvocationLoggingGroupResourcePolicy:
     Type: AWS::Logs::ResourcePolicy
@@ -271,11 +292,14 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !GetAtt InvocationLoggingGroup.Arn
-              - Effect: Allow
-                Action:
-                  - kms:GenerateDataKey*
-                  - kms:Encrypt
-                Resource: !GetAtt InvocationLoggingKey.Arn
+              - !If
+                - KmsEnabled
+                - Effect: Allow
+                  Action:
+                    - kms:GenerateDataKey*
+                    - kms:Encrypt
+                  Resource: !GetAtt InvocationLoggingKey.Arn
+                - !Ref AWS::NoValue
 
   # ---------------------------------------------------------------------------
   # SimulatorLambda — fans out InvokeModel calls.
@@ -993,7 +1017,7 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: bedrock-simulator-budget-alerts
-      KmsMasterKeyId: !Ref InvocationLoggingKey
+      KmsMasterKeyId: !If [KmsEnabled, !Ref InvocationLoggingKey, !Ref AWS::NoValue]
 
   SimulatorBudgetSnsTopicPolicy:
     Type: AWS::SNS::TopicPolicy
