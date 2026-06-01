@@ -1,0 +1,45 @@
+name: Chore
+description: Maintenance — dependencies, config, CI, tooling. No product behaviour change.
+labels: ["type: chore"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Chores keep the repo healthy: dependency bumps, config, CI, devcontainer,
+        repo metadata. Dependency-upgrade PRs are usually opened automatically by
+        Dependabot — file a chore only for work it does not cover.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What maintenance is needed, in one or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: rationale
+    attributes:
+      label: What & why
+      description: The change and the reason for it (security advisory, drift, deprecation, cleanup).
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Dependencies
+        - CI / GitHub Actions
+        - Config / tooling (eslint, prettier, tsconfig, etc.)
+        - Devcontainer / observability stack
+        - Repo metadata (.github, CODEOWNERS, templates)
+        - Tooling (tools/bedrock-simulator)
+        - Other / unsure
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk & rollback
+      description: Anything that could break, and how to revert. Leave blank if trivial.
+    validations:
+      required: false

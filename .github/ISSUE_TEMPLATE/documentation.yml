@@ -1,0 +1,44 @@
+name: Documentation
+description: Docs-only work — fix, clarify, or extend specs, guides, rules, or READMEs.
+labels: ["type: documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `docs/specs/**` is the source of truth for this project (Rule 00). If a
+        doc and the code disagree, say so — the fix may be to the code, not the
+        doc. Do not report security issues here; see SECURITY.md.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is wrong, missing, or unclear, in one or two sentences.
+    validations:
+      required: true
+  - type: dropdown
+    id: doc
+    attributes:
+      label: Which document(s)
+      options:
+        - docs/specs/** (source of truth)
+        - docs/guides/**
+        - .claude/rules/**
+        - CLAUDE.md
+        - README / .github docs
+        - Other / unsure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's wrong or missing
+      description: Quote the passage or name the gap. If a doc contradicts the code, link both.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed update
+      description: Suggested wording or the correct information, if you have it.
+    validations:
+      required: false

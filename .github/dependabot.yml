@@ -8,7 +8,7 @@ updates:
     schedule:
       interval: "weekly"
     labels:
-      - "chore"
+      - "type: chore"
     # `prefix` is prepended to the PR title so it passes pr-title-lint
     # (Conventional Commits — the squash-merge commit on `main`).
     commit-message:
@@ -24,7 +24,7 @@ updates:
     schedule:
       interval: "weekly"
     labels:
-      - "chore"
+      - "type: chore"
     commit-message:
       prefix: "chore"
       include: "scope"

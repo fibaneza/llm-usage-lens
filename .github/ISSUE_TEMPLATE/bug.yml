@@ -1,6 +1,6 @@
 name: Bug report
 description: Report incorrect or unexpected behaviour in the dashboard, collector, or tooling.
-labels: [bug]
+labels: ["type: bug"]
 body:
   - type: markdown
     attributes:
@@ -31,6 +31,18 @@ body:
     attributes:
       label: Expected vs actual
       description: What you expected to happen, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is the impact? Triage assigns the final `priority:` / severity label.
+      options:
+        - "Critical — production down or data loss"
+        - "High — core feature broken, no workaround"
+        - "Medium — feature degraded, workaround exists"
+        - "Low — minor or cosmetic defect"
     validations:
       required: true
   - type: dropdown

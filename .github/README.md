@@ -12,6 +12,7 @@ This folder holds the project's GitHub-side automation.
 | [`workflows/bedrock-simulator-run.yml`](workflows/bedrock-simulator-run.yml) | `workflow_dispatch` (totalCalls, guardrailRatio) | Invokes the deployed simulator Lambda with the full model × service × user matrix |
 | [`workflows/bedrock-simulator-deps.yml`](workflows/bedrock-simulator-deps.yml) | `workflow_dispatch` (on demand) | Full dependency-health report to the run summary: `pnpm outdated` (freshness), `pnpm audit` (vulnerabilities), `pnpm dedupe --check` (duplicate versions). **Advisory — never fails.** For inspection without a build; enforcement is the `bedrock-simulator-build.yml` gate. Touches no AWS |
 | [`workflows/pr-title-lint.yml`](workflows/pr-title-lint.yml) | PR opened / edited / reopened | Validates PR title against Conventional Commits (required — PR title becomes the squash-merge commit on `main`) |
+| [`workflows/labels.yml`](workflows/labels.yml) | Push to `main` touching [`labels.yml`](labels.yml) / the workflow; `workflow_dispatch` | Syncs repository labels from [`.github/labels.yml`](labels.yml) (create/update only — `skip-delete: true` protects labels created by the release audit) |
 | [`workflows/claude-assistant.yml`](workflows/claude-assistant.yml) | `@claude` mention on an **issue** (opened/assigned or issue comment) | On-demand reactive bot for issue triage / Q&A; PRs are out of scope (covered by `claude-pr-review.yml` + local Claude Code) |
 
 The on-demand `claude-assistant.yml` is intentionally minimal and **scoped to
@@ -274,8 +275,12 @@ calls (fetching changed files, creating PR comments/reviews, creating issues).
 
 ### What gets created automatically — don't pre-create these
 
-- **Issue labels** (`security`, `high-severity`, `medium-severity`,
+- **Audit issue labels** (`security`, `high-severity`, `medium-severity`,
   `code-review`) are created idempotently by the release audit on first use.
+  They are also listed in [`labels.yml`](labels.yml) for documentation; the
+  label-sync workflow runs `skip-delete: true` so it never removes them. The
+  rest of the repo's labels (the `type:` taxonomy and community labels) are
+  managed by that file — see [Labels](#labels).
 - **The `code-review` Claude plugin** is installed automatically by
   `claude-pr-review.yml` via its `plugin_marketplaces` and `plugins` inputs.
   `claude-code-review.yml` does NOT install the plugin — it uses direct
@@ -526,6 +531,52 @@ there is no open PR at release time:
 
 All issues are assigned to `fibaneza` and link to the release commit. The
 closing instruction asks the assignee to fix on a follow-up branch.
+
+---
+
+## Labels
+
+[`labels.yml`](labels.yml) is the source of truth for repository labels.
+[`workflows/labels.yml`](workflows/labels.yml) applies it on push to `main`
+(create/update only — `skip-delete: true`, so labels created out-of-band are
+never removed). Edit a color or description there, push to `main`, and the sync
+applies it; rename via the GitHub UI first (renames preserve history), then
+update the name in the file.
+
+### Type taxonomy — one per issue
+
+Each issue form sets exactly one `type:` label automatically. These replace the
+GitHub defaults `bug` and `enhancement`, which are retired (the sync leaves any
+existing copies in place; remove them manually if you want them gone).
+
+| Label | Template | Purpose |
+| --- | --- | --- |
+| `type: bug` | [`bug.yml`](ISSUE_TEMPLATE/bug.yml) | Something is broken or behaving unexpectedly |
+| `type: feature` | [`feature.yml`](ISSUE_TEMPLATE/feature.yml) | New functionality or capability |
+| `type: task` | [`task.yml`](ISSUE_TEMPLATE/task.yml) | Defined unit of work with no user-facing change |
+| `type: chore` | [`chore.yml`](ISSUE_TEMPLATE/chore.yml) | Maintenance, dependencies, config, CI/CD |
+| `type: refactor` | [`refactor.yml`](ISSUE_TEMPLATE/refactor.yml) | Internal code improvement with no behaviour change |
+| `type: documentation` | [`documentation.yml`](ISSUE_TEMPLATE/documentation.yml) | Docs, guides, README, or inline comments |
+| `type: spike` | (manual) | Research, proof-of-concept, or investigation |
+| `type: security` | (manual) | Vulnerability, auth issue, or security improvement |
+
+Dependabot applies `type: chore` to its upgrade PRs (set in
+[`dependabot.yml`](dependabot.yml)).
+
+### Other label groups
+
+Labels beyond `type:` are applied manually and are orthogonal — stack them freely:
+
+| Group | Labels | When to use |
+| --- | --- | --- |
+| `priority:` | `critical` / `high` / `medium` / `low` | Signal urgency when triaging |
+| `status:` | `triage` / `ready` / `in progress` / `blocked` / `needs review` / `on hold` | Track workflow state when not using a Project board |
+| `area:` | `frontend` / `backend` / `database` / `infrastructure` / `auth` / `testing` / `ci/cd` / `performance` | Scope the affected system area |
+| `effort:` | `XS` / `S` / `M` / `L` / `XL` | T-shirt size estimate before picking up an issue |
+| meta | `good first issue` / `help wanted` / `wontfix` / `duplicate` / `invalid` / `tech-debt` / `breaking change` / `needs: more info` / `needs: design` / `needs: discussion` | Process and housekeeping signals |
+
+The audit labels (`security`, `high-severity`, `medium-severity`, `code-review`)
+are documented above under [Issue creation](#issue-creation).
 
 ---
 

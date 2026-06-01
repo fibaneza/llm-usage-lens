@@ -1,0 +1,53 @@
+name: Task
+description: Development work with no user-facing change (wiring, setup, internal plumbing).
+labels: ["type: task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A task is dev work that ships no user-visible behaviour — wiring config,
+        adding a script, setting up infrastructure. If it changes what a user
+        sees, file a Feature request instead.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What needs doing, in one or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Concrete work involved. Reference files, scripts, or commands where relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: spec-alignment
+    attributes:
+      label: Spec & phase alignment
+      description: Which spec section in `docs/specs/**` and which phase this serves (Rule 00, Rule 30). Note if it is a prerequisite for later phase work.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Dashboard (apps/dashboard)
+        - Collector (apps/collector)
+        - Shared package (packages/shared)
+        - Scripts / seeds
+        - CI / GitHub Actions
+        - Tooling (tools/bedrock-simulator)
+        - Docs
+        - Other / unsure
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How we know the task is done (commands that pass, artifacts that exist).
+    validations:
+      required: false

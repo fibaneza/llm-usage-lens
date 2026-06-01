@@ -1,0 +1,75 @@
+name: Feature request
+description: Propose a change or addition. Non-trivial features must align with a spec and phase.
+labels: ["type: feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Features are built in strict phase order (Rule 30). A request that fits a
+        future phase is fine — note the phase so it can be scheduled, not built early.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What need or gap does this address? Who is affected? Frame it as a user need where you can.
+      placeholder: "As a [user type], I find it difficult to [do X] because [reason Y]."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you want to happen. Reference components, routes, or entities where relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: spec-alignment
+    attributes:
+      label: Spec & phase alignment
+      description: Which spec section in `docs/specs/**` and which phase this belongs to (Rule 00). If it requires a spec change, say so.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Dashboard (apps/dashboard)
+        - Collector (apps/collector)
+        - Shared package (packages/shared)
+        - Scripts / seeds
+        - CI / GitHub Actions
+        - Tooling (tools/bedrock-simulator)
+        - Docs
+        - Other / unsure
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (your perspective)
+      description: Your view of urgency. Triage assigns the final `priority:` label.
+      options:
+        - "High — blocking my workflow"
+        - "Medium — would significantly improve things"
+        - "Low — nice to have"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How we know this is done. List testable conditions.
+      placeholder: |
+        - [ ] Given X, when Y, then Z
+        - [ ] Covered by tests
+        - [ ] Documented where relevant
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you weighed and why you discarded them.
+    validations:
+      required: false

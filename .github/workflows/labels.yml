@@ -1,0 +1,33 @@
+name: Sync Labels
+
+# Applies .github/labels.yml to the repository's labels. Create/update only —
+# no skip-delete keeps labels created out-of-band (the release audit's security /
+# severity / code-review labels) from being removed. Runs on push to main when
+# the definitions or this workflow change, and on demand.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/labels.yml"
+      - ".github/workflows/labels.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Sync labels from .github/labels.yml
+        uses: crazy-max/ghaction-github-labeler@v5
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          yaml-file: .github/labels.yml
+          skip-delete: true
+          dry-run: false
