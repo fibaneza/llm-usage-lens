@@ -807,6 +807,12 @@ Resources:
                   - bedrock:PutModelInvocationLoggingConfiguration
                   - bedrock:DeleteModelInvocationLoggingConfiguration
                 Resource: '*'
+              - Sid: KmsKeyCleanup
+                Effect: Allow
+                Action:
+                  - kms:DescribeKey
+                  - kms:DisableKey
+                Resource: '*'
               - Sid: EmptyLoggingBucketDuringDestroy
                 Effect: Allow
                 Action:
@@ -964,6 +970,7 @@ Resources:
                 Action:
                   - kms:CreateKey
                   - kms:DescribeKey
+                  - kms:DisableKey
                   - kms:EnableKeyRotation
                   - kms:DisableKeyRotation
                   - kms:GetKeyPolicy
@@ -1089,6 +1096,15 @@ Outputs:
     Value: !Ref InvocationLoggingBucket
     Export:
       Name: !Sub ${AWS::StackName}-InvocationLoggingBucketName
+
+  InvocationLoggingKeyArn:
+    Condition: KmsEnabled
+    Description: >-
+      KMS CMK ARN for invocation log encryption. Present only when
+      UseKmsEncryption=true. bedrock-simulator-destroy.yml reads this to
+      disable the key before sam delete; CloudFormation schedules it for
+      deletion (7-day pending window) as part of the stack teardown.
+    Value: !GetAtt InvocationLoggingKey.Arn
 
   InvocationLoggingGroupName:
     Description: CloudWatch Logs group receiving Bedrock invocation log payloads.
