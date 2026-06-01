@@ -970,7 +970,6 @@ Resources:
                 Action:
                   - kms:CreateKey
                   - kms:DescribeKey
-                  - kms:DisableKey
                   - kms:EnableKeyRotation
                   - kms:DisableKeyRotation
                   - kms:GetKeyPolicy

@@ -141,8 +141,13 @@ jobs:
             --query 'KeyMetadata.KeyState' --output text 2>/dev/null || echo "")
           case "$STATE" in
             Enabled)
-              aws kms disable-key --key-id "$KEY_ARN"
-              echo "KMS key disabled: $KEY_ARN"
+              # Best-effort: sam delete schedules key deletion regardless of
+              # enabled state, so a failed disable must not abort teardown.
+              if aws kms disable-key --key-id "$KEY_ARN"; then
+                echo "KMS key disabled: $KEY_ARN"
+              else
+                echo "::warning::disable-key failed; sam delete will still schedule deletion. Continuing."
+              fi
               ;;
             Disabled)
               echo "KMS key already disabled — no action needed."
