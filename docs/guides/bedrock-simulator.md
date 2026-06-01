@@ -148,6 +148,7 @@ sam deploy --guided --profile Sandbox-AdministratorAccess-469515554732
 | `GitHubRepo` | `aws-bedrock-cost-tracker` |
 | `GitHubEnvironment` | `bedrock-simulator-sandbox` (default) |
 | `BudgetAlertEmail` | your alert email address |
+| `UseKmsEncryption` | `false` (default) — SSE-S3 (AES256), free. Set `true` to add a CMK ($1/month) for production-grade encryption of invocation logs + SNS. |
 
 Accept the generated `samconfig.toml` when prompted — it is gitignored and must not be committed. Once you save it, future `sam deploy` calls in this directory pick it up automatically (used only for manual recovery runs, not the normal workflow).
 
@@ -554,7 +555,7 @@ stateDiagram-v2
 
 ## Cost guardrails
 
-Per [Cost posture](../../CLAUDE.md), the paid resources here (KMS CMK, Lambda, Bedrock calls) are accepted and documented, not hidden. These caps protect the sandbox account from surprise spend.
+Per [Cost posture](../../CLAUDE.md), the paid resources here (Lambda, Bedrock calls, and optionally a KMS CMK) are accepted and documented, not hidden. These caps protect the sandbox account from surprise spend.
 
 | Guardrail | Where |
 |---|---|
