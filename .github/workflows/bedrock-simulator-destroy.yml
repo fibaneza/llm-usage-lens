@@ -42,6 +42,12 @@ env:
   STACK_NAME: bedrock-simulator
   CONFIRM_STRING: 'destroy bedrock-simulator'
 
+# Shared with deploy/run so the stack is mutated by at most one workflow at a
+# time. cancel-in-progress is false — never kill an in-flight sam delete.
+concurrency:
+  group: bedrock-simulator-stack
+  cancel-in-progress: false
+
 jobs:
   confirm:
     name: Confirm intent

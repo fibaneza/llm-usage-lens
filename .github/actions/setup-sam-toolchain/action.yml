@@ -23,17 +23,17 @@ runs:
   using: composite
   steps:
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.node-version }}
 
     - name: Setup pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@v6
       with:
         version: ${{ inputs.pnpm-version }}
 
     - name: Setup AWS SAM CLI
-      uses: aws-actions/setup-sam@v2
+      uses: aws-actions/setup-sam@v3
       with:
         use-installer: true
 
