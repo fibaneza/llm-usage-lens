@@ -168,7 +168,7 @@ jobs:
         run: tar czf "$GITHUB_WORKSPACE/sam-build.tgz" .aws-sam
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sam-build
           path: sam-build.tgz
