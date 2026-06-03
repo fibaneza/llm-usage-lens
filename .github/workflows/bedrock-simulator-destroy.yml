@@ -1,0 +1,220 @@
+# bedrock-simulator-destroy.yml
+#
+# Two-phase teardown of the bedrock-simulator stack:
+#   1. Disable account-level Bedrock model invocation logging (otherwise the
+#      bucket and log group can't be deleted — they're referenced by an
+#      account-level setting CloudFormation doesn't own).
+#   2. Disable the KMS CMK (if UseKmsEncryption=true) so no new encrypt/decrypt
+#      operations are possible during the 7-day pending-deletion window.
+#   3. Empty InvocationLoggingBucket so CloudFormation can delete the bucket.
+#   4. sam delete --no-prompts — CloudFormation schedules the CMK for deletion
+#      (7-day pending window) as part of stack teardown.
+#
+# Pipeline (multi-job so the Actions UI renders a graph):
+#   confirm  → guard the dispatch input (no AWS credentials)
+#   teardown → disable logging, empty bucket, sam delete, verify deleted
+#
+# Only `teardown` enters the bedrock-simulator-sandbox Environment, so the
+# required-reviewer gate prompts exactly ONCE per run. Every AWS step (plus
+# failure-diagnostics) lives in this single job: the OIDC role's trust policy
+# scopes `sub` to `…:environment:bedrock-simulator-sandbox`
+# (tools/bedrock-simulator/template.yaml), so an AWS step in any other job
+# would both fail to assume the role AND add a second approval prompt.
+#
+# If the stack still lands in DELETE_FAILED, follow Recovery D in
+# docs/guides/bedrock-simulator.md.
+#
+# All untrusted/external inputs are passed via `env:` blocks (never inlined in
+# `run:` strings) to prevent shell-command injection.
+
+name: bedrock-simulator destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type the literal string "destroy bedrock-simulator" to confirm teardown.'
+        required: true
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  STACK_NAME: bedrock-simulator
+  CONFIRM_STRING: 'destroy bedrock-simulator'
+
+jobs:
+  confirm:
+    name: Confirm intent
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Confirm intent
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "$CONFIRM_STRING" ]; then
+            echo "::error::confirm input must be the literal string defined by CONFIRM_STRING."
+            exit 1
+          fi
+
+  teardown:
+    name: Tear down stack
+    needs: confirm
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: bedrock-simulator-sandbox
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Configure AWS credentials via OIDC
+        uses: ./.github/actions/aws-configure-oidc
+        with:
+          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get CFN outputs (bucket name + KMS key ARN)
+        id: outputs
+        run: |
+          set -euo pipefail
+          # Stack may already be partially deleted (Recovery D from
+          # bedrock-simulator.md). Discard CLI errors but keep warnings so the
+          # operator sees why subsequent steps are no-ops.
+          STACK_OUTPUTS=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs" --output json 2>/dev/null || echo "[]")
+
+          BUCKET_NAME=$(echo "$STACK_OUTPUTS" \
+            | jq -r '.[] | select(.OutputKey=="InvocationLoggingBucketName") | .OutputValue // empty')
+          if [ -z "$BUCKET_NAME" ]; then
+            echo "::warning::Could not resolve InvocationLoggingBucketName — stack may already be partially deleted. Continuing."
+          fi
+
+          KEY_ARN=$(echo "$STACK_OUTPUTS" \
+            | jq -r '.[] | select(.OutputKey=="InvocationLoggingKeyArn") | .OutputValue // empty')
+          if [ -n "$KEY_ARN" ]; then
+            echo "KMS key found: $KEY_ARN"
+          else
+            echo "No KMS key in stack outputs (UseKmsEncryption=false or stack partially deleted)."
+          fi
+
+          echo "bucket_name=$BUCKET_NAME" >> "$GITHUB_OUTPUT"
+          echo "key_arn=$KEY_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Disable Bedrock model invocation logging (idempotent)
+        run: |
+          set +e
+          aws bedrock delete-model-invocation-logging-configuration 2>&1 | tee /tmp/mil-delete.log
+          RC=$?
+          if [ $RC -ne 0 ]; then
+            if grep -q "ResourceNotFoundException" /tmp/mil-delete.log; then
+              echo "Model invocation logging already disabled — no-op."
+            else
+              echo "::warning::delete-model-invocation-logging-configuration failed; continuing with destroy."
+            fi
+          else
+            echo "Model invocation logging disabled."
+          fi
+          set -e
+
+      - name: Disable KMS key
+        env:
+          KEY_ARN: ${{ steps.outputs.outputs.key_arn }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEY_ARN" ]; then
+            echo "No KMS key to disable — skipping."
+            exit 0
+          fi
+          STATE=$(aws kms describe-key --key-id "$KEY_ARN" \
+            --query 'KeyMetadata.KeyState' --output text 2>/dev/null || echo "")
+          case "$STATE" in
+            Enabled)
+              # Best-effort: sam delete schedules key deletion regardless of
+              # enabled state, so a failed disable must not abort teardown.
+              if aws kms disable-key --key-id "$KEY_ARN"; then
+                echo "KMS key disabled: $KEY_ARN"
+              else
+                echo "::warning::disable-key failed; sam delete will still schedule deletion. Continuing."
+              fi
+              ;;
+            Disabled)
+              echo "KMS key already disabled — no action needed."
+              ;;
+            PendingDeletion)
+              echo "KMS key already scheduled for deletion — no action needed."
+              ;;
+            "")
+              echo "::warning::Could not describe KMS key — may already be deleted. Continuing."
+              ;;
+            *)
+              echo "::warning::Unexpected key state '$STATE' — continuing without disabling."
+              ;;
+          esac
+
+      - name: Empty InvocationLoggingBucket
+        uses: ./.github/actions/aws-s3-bucket-empty
+        with:
+          bucket-name: ${{ steps.outputs.outputs.bucket_name }}
+          region: ${{ env.AWS_REGION }}
+
+      - name: SAM delete
+        run: sam delete --stack-name "$STACK_NAME" --region "$AWS_REGION" --no-prompts
+
+      - name: Verify stack deleted
+        run: |
+          set +e
+          STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].StackStatus' --output text 2>&1)
+          RC=$?
+          set -e
+          if [ $RC -ne 0 ] && echo "$STATUS" | grep -q "does not exist"; then
+            echo "Stack '$STACK_NAME' deleted successfully."
+          else
+            echo "::error::Stack still exists with status: $STATUS. See Recovery D in docs/guides/bedrock-simulator.md."
+            exit 1
+          fi
+
+      - name: Report KMS key pending deletion
+        if: always()
+        env:
+          KEY_ARN: ${{ steps.outputs.outputs.key_arn }}
+        run: |
+          set -euo pipefail
+          [ -z "$KEY_ARN" ] && exit 0
+          METADATA=$(aws kms describe-key --key-id "$KEY_ARN" --output json 2>/dev/null || echo "")
+          if [ -z "$METADATA" ]; then
+            echo "KMS key $KEY_ARN no longer exists."
+            exit 0
+          fi
+          STATE=$(echo "$METADATA" | jq -r '.KeyMetadata.KeyState')
+          DELETION_DATE=$(echo "$METADATA" | jq -r '.KeyMetadata.DeletionDate // "not yet scheduled"')
+          {
+            echo "## KMS key pending deletion"
+            echo ""
+            printf '**Key ARN:** `%s`  \n' "$KEY_ARN"
+            printf '**State:** `%s`  \n' "$STATE"
+            printf '**Scheduled deletion:** `%s`\n' "$DELETION_DATE"
+            echo ""
+            echo "The 7-day pending window is enforced by AWS — the key cannot be used or recovered after the deletion date."
+            echo "To cancel deletion before that date: \`aws kms cancel-key-deletion --key-id $KEY_ARN\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture diagnostics on failure
+        if: failure()
+        uses: ./.github/actions/aws-capture-diagnostics
+        with:
+          stack-name: ${{ env.STACK_NAME }}
+          artifact-name: bedrock-simulator-destroy-diagnostics
+          region: ${{ env.AWS_REGION }}

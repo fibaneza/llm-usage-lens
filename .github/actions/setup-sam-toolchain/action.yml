@@ -1,0 +1,53 @@
+name: Setup SAM toolchain
+description: Installs Node.js, pnpm, and the AWS SAM CLI for SAM build/deploy jobs.
+
+inputs:
+  node-version:
+    required: false
+    description: Node.js version to install.
+    default: '22'
+  pnpm-version:
+    required: false
+    description: pnpm major version to install.
+    default: '9'
+  cache-pnpm:
+    required: false
+    description: When 'true', cache the pnpm store keyed on the lockfile. Opt-in; default leaves other workflows unchanged.
+    default: 'false'
+  cache-dependency-path:
+    required: false
+    description: Lockfile whose hash keys the pnpm store cache.
+    default: tools/bedrock-simulator/pnpm-lock.yaml
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: ${{ inputs.pnpm-version }}
+
+    - name: Setup AWS SAM CLI
+      uses: aws-actions/setup-sam@v2
+      with:
+        use-installer: true
+
+    # Guarded — skipped entirely when cache-pnpm != 'true'.
+    - name: Resolve pnpm store path
+      if: inputs.cache-pnpm == 'true'
+      shell: bash
+      run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+    - name: Cache pnpm store
+      if: inputs.cache-pnpm == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.PNPM_STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-${{ hashFiles(inputs.cache-dependency-path) }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-

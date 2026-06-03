@@ -1,0 +1,174 @@
+# ============================================================
+# GitHub Labels — Declarative Configuration
+# Synced by: crazy-max/ghaction-github-labeler (flat list, no root key)
+#
+# Local dry-run (requires gh-label-sync extension):
+#   gh extension install scttfrdmn/gh-label-sync
+#   gh label-sync sync --file .github/labels.yml --dry-run
+#
+# CI sync: .github/workflows/labels.yml — create/update only (skip-delete: true)
+# so labels created out-of-band by the release audit are preserved.
+#
+# Label groups:
+#   type      — what kind of work is this?
+#   priority  — how urgent is it?
+#   status    — where is it in the workflow?
+#   area      — what part of the system does it affect?
+#   effort    — rough size / complexity estimate
+#   meta      — process and housekeeping signals
+#   automation — created on demand by the release audit (listed for documentation)
+# ============================================================
+
+# ── TYPE — What kind of work is this? ───────────────────────────────────────
+# One per issue. Set automatically by the matching issue-form template.
+# Replaces the GitHub defaults `bug` and `enhancement` (retired).
+- name: "type: bug"
+  color: "d73a4a"
+  description: "Something is broken or behaving unexpectedly"
+- name: "type: feature"
+  color: "0075ca"
+  description: "New functionality or capability"
+- name: "type: task"
+  color: "e4e669"
+  description: "Defined unit of work with no user-facing change"
+- name: "type: chore"
+  color: "fef2c0"
+  description: "Maintenance, dependencies, config, CI/CD"
+- name: "type: refactor"
+  color: "c5def5"
+  description: "Internal code improvement with no behaviour change"
+- name: "type: spike"
+  color: "bfd4f2"
+  description: "Research, proof-of-concept, or investigation"
+- name: "type: documentation"
+  color: "0052cc"
+  description: "Docs, guides, README, or inline comments"
+- name: "type: security"
+  color: "b60205"
+  description: "Vulnerability, auth issue, or security improvement"
+
+# ── PRIORITY — How urgent / impactful is this? ──────────────────────────────
+- name: "priority: critical"
+  color: "b60205"
+  description: "Production down or data loss — fix immediately"
+- name: "priority: high"
+  color: "e4002b"
+  description: "Significant impact, should be addressed this sprint"
+- name: "priority: medium"
+  color: "f9a825"
+  description: "Moderate impact, can wait for next sprint"
+- name: "priority: low"
+  color: "0e8a16"
+  description: "Nice to have, address when time permits"
+
+# ── STATUS — Where is this issue in the workflow? ───────────────────────────
+- name: "status: triage"
+  color: "ededed"
+  description: "Needs review before it can be worked on"
+- name: "status: ready"
+  color: "c2e0c6"
+  description: "Fully defined and ready to be picked up"
+- name: "status: in progress"
+  color: "fbca04"
+  description: "Actively being worked on"
+- name: "status: blocked"
+  color: "e11d48"
+  description: "Cannot proceed — waiting on external dependency"
+- name: "status: needs review"
+  color: "d4c5f9"
+  description: "Work done, awaiting code review or approval"
+- name: "status: on hold"
+  color: "cccccc"
+  description: "Intentionally paused, not abandoned"
+
+# ── AREA — What part of the system does this affect? ────────────────────────
+- name: "area: frontend"
+  color: "1d76db"
+  description: "UI, client-side rendering, styles"
+- name: "area: backend"
+  color: "0052cc"
+  description: "API, services, business logic"
+- name: "area: database"
+  color: "5319e7"
+  description: "Queries, migrations, schema changes"
+- name: "area: infrastructure"
+  color: "006b75"
+  description: "Cloud, containers, networking, IaC"
+- name: "area: auth"
+  color: "b60205"
+  description: "Authentication, authorisation, sessions"
+- name: "area: testing"
+  color: "0e8a16"
+  description: "Unit, integration, e2e, or test tooling"
+- name: "area: ci/cd"
+  color: "f9d0c4"
+  description: "Pipelines, workflows, build, deploy"
+- name: "area: performance"
+  color: "e4669e"
+  description: "Speed, memory, throughput, or resource usage"
+
+# ── EFFORT — Rough size / complexity (T-shirt sizing) ───────────────────────
+- name: "effort: XS"
+  color: "c2e0c6"
+  description: "Trivial change, under 1 hour"
+- name: "effort: S"
+  color: "9be9a8"
+  description: "Small, half a day or less"
+- name: "effort: M"
+  color: "fbca04"
+  description: "Medium, 1–2 days"
+- name: "effort: L"
+  color: "f9a825"
+  description: "Large, 3–5 days"
+- name: "effort: XL"
+  color: "e4002b"
+  description: "Extra large — consider breaking down before starting"
+
+# ── META — Process and housekeeping signals ──────────────────────────────────
+- name: "good first issue"
+  color: "7057ff"
+  description: "Good entry point for new contributors"
+- name: "help wanted"
+  color: "008672"
+  description: "Extra attention or outside contribution welcome"
+- name: "wontfix"
+  color: "ffffff"
+  description: "Acknowledged but will not be addressed"
+- name: "duplicate"
+  color: "cfd3d7"
+  description: "This issue or PR already exists elsewhere"
+- name: "invalid"
+  color: "e4e669"
+  description: "Not a valid issue — off-topic, user error, etc."
+- name: "needs: more info"
+  color: "d4c5f9"
+  description: "Cannot proceed without further details from the reporter"
+- name: "needs: design"
+  color: "f9d0c4"
+  description: "Requires design decision or mockup before implementation"
+- name: "needs: discussion"
+  color: "c5def5"
+  description: "Open question — needs team alignment before progressing"
+- name: "tech-debt"
+  color: "bfd4f2"
+  description: "Known shortcut that needs to be paid back"
+- name: "breaking change"
+  color: "b60205"
+  description: "Introduces an API or behaviour incompatibility"
+
+# ── AUTOMATION — Created on demand by the release audit ─────────────────────
+# Listed for documentation. release-create-issues.cjs creates these idempotently
+# with these exact colors; keep them in sync if you change them there.
+# skip-delete: true means removing them here would NOT delete them from the repo.
+- name: "security"
+  color: "e4e669"
+  description: "Security-related issue"
+- name: "high-severity"
+  color: "d93f0b"
+  description: "High severity finding"
+- name: "medium-severity"
+  color: "fbca04"
+  description: "Medium severity finding"
+- name: "code-review"
+  color: "d4c5f9"
+  description: "Code review finding from automated audit"

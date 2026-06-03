@@ -61,13 +61,15 @@ workflow both enforce this. Never bypass hooks with `--no-verify` (Rule 50.5).
 
 ## Pull requests
 
-1. **Open as draft** while the work is in progress (the PR review skips drafts).
+1. **Open as a draft by default** — `gh pr create --draft`. New PRs start as
+   drafts (the PR review skips drafts), so work-in-progress stays quiet until
+   you explicitly mark it ready.
 2. **Fill in the PR template** — Summary, Linked issue, Test plan, Reviewer guidance, Phase. The template pre-fills on every new PR; see [`pull_request_template.md`](./pull_request_template.md).
 3. **PR title must follow Conventional Commits** — the title becomes the
    sole commit message on `main` after squash-merge, and
    [`pr-title-lint.yml`](./workflows/pr-title-lint.yml) blocks non-CC titles.
-4. **Mark ready-for-review** when the branch is complete. This fires the
-   full Claude PR review.
+4. **Mark ready-for-review** (`gh pr ready`) when the branch is complete. This
+   fires the full Claude PR review.
 5. **One phase / one Phase 4 sub-phase per PR** (Rule 30.4). Don't bundle.
 
 ## Review process
@@ -126,6 +128,16 @@ not open public GitHub issues for security findings.
 For non-security bugs and feature requests, open a GitHub issue. Include
 reproduction steps, expected vs actual behaviour, and any relevant logs or
 screenshots.
+
+At triage, issues get an `effort:` label estimating size:
+
+| Label | Meaning |
+|---|---|
+| `effort: XS` | Trivial change, under 1 hour |
+| `effort: S` | Small, half a day or less |
+| `effort: M` | Medium, 1–2 days |
+| `effort: L` | Large, 3–5 days |
+| `effort: XL` | Extra large — consider breaking down before starting |
 
 ## Further reading
 

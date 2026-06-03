@@ -19,3 +19,10 @@
 /.github/ @fibaneza
 /.claude/ @fibaneza
 /docs/specs/ @fibaneza
+
+# Bedrock simulator: prompt fixtures must be security-reviewed on every change.
+# The simulator's design depends on prompts being synthetic — see the
+# "Synthetic-data-only constraint" in docs/specs/<date>-bedrock-simulator.md
+# and docs/guides/bedrock-simulator.md. Real-looking PII or data that could
+# represent a real person must never land in this file.
+tools/bedrock-simulator/src/prompts.ts @fibaneza

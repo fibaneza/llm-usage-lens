@@ -26,13 +26,13 @@ ENV PROJECT_PATH=/workspace/${PROJECT_FOLDER_NAME}
 # bind-mounted ~/.ssh and ~/.claude are readable and git SSH auth works.
 RUN set -eux; \
     if [ "$USERNAME" != "node" ]; then \
-        usermod -l "$USERNAME" node; \
-        groupmod -n "$USERNAME" node; \
-        usermod -d "/home/$USERNAME" -m "$USERNAME"; \
-        if [ -f /etc/sudoers.d/node ]; then \
-            mv /etc/sudoers.d/node "/etc/sudoers.d/$USERNAME"; \
-            sed -i "s/node/$USERNAME/g" "/etc/sudoers.d/$USERNAME"; \
-        fi; \
+    usermod -l "$USERNAME" node; \
+    groupmod -n "$USERNAME" node; \
+    usermod -d "/home/$USERNAME" -m "$USERNAME"; \
+    if [ -f /etc/sudoers.d/node ]; then \
+    mv /etc/sudoers.d/node "/etc/sudoers.d/$USERNAME"; \
+    sed -i "s/node/$USERNAME/g" "/etc/sudoers.d/$USERNAME"; \
+    fi; \
     fi
 
 # ----------------------------------------------------------------------------------------------
@@ -44,11 +44,11 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends ca-certificates curl apt-transport-https gnupg; \
     mkdir -p /etc/apt/keyrings; \
     curl -sLS https://packages.microsoft.com/keys/microsoft.asc \
-        | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg; \
+    | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg; \
     chmod go+r /etc/apt/keyrings/microsoft.gpg; \
     printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/azure-cli/\nSuites: bookworm\nComponents: main\nArchitectures: %s\nSigned-by: /etc/apt/keyrings/microsoft.gpg\n' \
-        "$(dpkg --print-architecture)" \
-        > /etc/apt/sources.list.d/azure-cli.sources; \
+    "$(dpkg --print-architecture)" \
+    > /etc/apt/sources.list.d/azure-cli.sources; \
     apt-get update; \
     apt-get install -y --no-install-recommends azure-cli; \
     rm -rf /var/lib/apt/lists/*
@@ -63,4 +63,4 @@ RUN set -eux; \
 RUN set -eux; \
     mkdir -p /etc/claude-code; \
     printf '{\n  "statusLine": {\n    "type": "command",\n    "command": "${PROJECT_PATH}/.devcontainer/claude/statusline-command.sh",\n    "padding": 0\n  }\n}\n' \
-        > /etc/claude-code/managed-settings.json
+    > /etc/claude-code/managed-settings.json

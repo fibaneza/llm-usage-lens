@@ -1,10 +1,38 @@
 version: 2
 updates:
   # Keep GitHub Actions versions pinned and up-to-date.
-  # npm ecosystem blocks are added in Phase 1 once package.json exists.
+  # The dashboard's npm ecosystem block is added in Phase 1 once its
+  # package.json exists; the standalone simulator already has one (below).
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     labels:
-      - "chore"
+      - "type: chore"
+    # `prefix` is prepended to the PR title so it passes pr-title-lint
+    # (Conventional Commits — the squash-merge commit on `main`).
+    commit-message:
+      prefix: "chore"
+
+  # bedrock-simulator (standalone pnpm package — not in the dashboard workspace).
+  # Dependabot's "npm" ecosystem reads its pnpm-lock.yaml. This complements the
+  # advisory bedrock-simulator-deps.yml workflow: Dependabot opens upgrade PRs
+  # within semver ranges (plus out-of-cycle security PRs); the workflow only
+  # surfaces drift in a comment.
+  - package-ecosystem: "npm"
+    directory: "/tools/bedrock-simulator"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "type: chore"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    # One PR per week for routine minor/patch bumps; majors and security
+    # updates still come as their own PRs so breaking changes are reviewed alone.
+    groups:
+      simulator-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"

@@ -150,6 +150,17 @@ vite.config.ts.timestamp-*
 # DevContainer secrets — local-only, never commit. Seeded from the tracked
 # .example on first start (see devcontainer.json initializeCommand).
 .devcontainer/grafana/grafana_admin_password.txt
+
+# Bedrock simulator (tools/bedrock-simulator/) — independent of the dashboard
+# pnpm workspace. Build/deploy artifacts and the sandbox-account config never
+# leave the local machine or the GitHub Actions runner.
+tools/bedrock-simulator/.aws-sam/
+tools/bedrock-simulator/samconfig.toml
+tools/bedrock-simulator/samconfig.toml.management
+tools/bedrock-simulator/samconfig.toml.sandbox
+tools/bedrock-simulator/node_modules/
+tools/bedrock-simulator/dist/
+tools/bedrock-simulator/coverage/
 .devcontainer/.env
 
 # Git directories

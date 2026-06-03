@@ -42,6 +42,21 @@ Two deliverables in a **pnpm monorepo**, sharing `packages/shared` (Zod schemas,
 1. **Next.js dashboard** (`apps/dashboard`) — reads aggregated Bedrock cost/usage from DynamoDB, displays 9 pages. Built first (Phases 1–5), developed against **DynamoDB Local**.
 2. **AWS Lambda collector** (`apps/collector`, `bedrock-cost-collector`) — serverless hourly pipeline that collects real Bedrock data and writes to DynamoDB. Built last (Phase 6).
 
+## Cost posture
+
+Keep AWS spend as low as possible — prefer free-tier and no-cost resources where
+they do the job (self-hosted OpenTelemetry/Grafana over paid SaaS, DynamoDB Local
+in dev, Grafana Cloud's free tier in production). But the project unavoidably
+deploys some paid resources (KMS CMK, Lambda, Bedrock on-demand calls, DynamoDB),
+and that cost is **accepted, not avoided**. This is a guiding principle, **not a
+strict rule**: document a cost where it is introduced (e.g. the simulator spec's
+["Cost expectations"](docs/specs/2026-05-24-bedrock-simulator.md)) rather than
+incurring it silently.
+
+"Touches no AWS" / "non-AWS" (e.g. the bedrock-simulator build workflow) is about
+**credentials and access** — the workflow holds no AWS credentials — and never
+means "free of cost."
+
 ## Commands
 
 > The `pnpm <script>` shortcuts (`pnpm dev`, `pnpm build`) require a `package.json` and don't exist until Phase 1. The `pnpm exec …` forms below are runnable as soon as dependencies are installed.
@@ -128,6 +143,15 @@ MCP servers are configured in `.mcp.json` at the repo root (currently: Azure MCP
 The project's default response voice is the **`spec-cited` output style** (`.claude/output-styles/spec-cited.md`): brief, impersonal, no emoji, citing `docs/specs/**` for non-trivial decisions and rendering file references as workspace-relative Markdown links.
 
 `.claude/settings.json` hard-blocks destructive commands via its `deny` list — `rm -rf`, `git push --force`, `git reset --hard`, `git commit --no-verify`, and all `aws … delete-*` / `aws dynamodb delete-table` / `aws cloudformation delete-stack` / `sam delete`. These will be refused regardless of permission mode; don't attempt to route around them.
+
+## Out-of-scope tooling
+
+`tools/bedrock-simulator/` is a **standalone test harness**, not part of the dashboard project. It deploys to a dedicated AWS sandbox account, invokes real Amazon Bedrock models on demand, and generates the CloudWatch / CloudTrail / Cost Explorer / Guardrail / model-invocation-log signals the Phase 6 collector eventually ingests.
+
+- It is **not in the pnpm workspace** (separate `tools/bedrock-simulator/package.json`).
+- It does **not participate in `.claude/rules/30-phase-discipline.md`** — build it independently of the dashboard's phase order.
+- Deploy / run / destroy are GitHub Actions workflows (`workflow_dispatch` only). The `.claude/settings.json` deny list blocks `sam delete` and `aws *delete-*` from Claude Code — these run from the workflow, not from the local Claude session.
+- Spec: `docs/specs/<date>-bedrock-simulator.md`. Operational guide: `docs/guides/bedrock-simulator.md`.
 
 ## Architecture & conventions
 

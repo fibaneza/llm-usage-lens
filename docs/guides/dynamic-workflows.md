@@ -5,10 +5,10 @@ project's phase plan. It records where the feature would help, where it would
 not, and the guardrail any pilot must keep — so a future contributor can decide
 whether to use it without re-deriving the trade-offs.
 
-> Source of truth for the build plan: [docs/specs/2026-05-15-implementation-phases.md](docs/specs/2026-05-15-implementation-phases.md).
-> Governance: [Rule 30](.claude/rules/30-phase-discipline.md) (phase discipline),
-> [Rule 31](.claude/rules/31-github-flow.md) (GitHub Flow),
-> [Rule 70](.claude/rules/70-agent-workflow.md) (agent workflow).
+> Source of truth for the build plan: [docs/specs/2026-05-15-implementation-phases.md](../specs/2026-05-15-implementation-phases.md).
+> Governance: [Rule 30](../../.claude/rules/30-phase-discipline.md) (phase discipline),
+> [Rule 31](../../.claude/rules/31-github-flow.md) (GitHub Flow),
+> [Rule 70](../../.claude/rules/70-agent-workflow.md) (agent workflow).
 > This guide *navigates* those — it does not change them (Rule 00.3).
 
 ---

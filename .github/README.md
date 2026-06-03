@@ -6,11 +6,91 @@ This folder holds the project's GitHub-side automation.
 | --- | --- | --- |
 | [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) | Pull request events | Inline review comments + PR comment with HIGH/MEDIUM security findings; HIGH findings submit a REQUEST_CHANGES review and fail the check |
 | [`workflows/claude-code-review.yml`](workflows/claude-code-review.yml) | Push of release tags (`v*`, `*-rc*`, `*-beta*`) and `workflow_dispatch` | Release audit (code review + security) scoped to commits since the previous release tag; files GitHub issues for HIGH/MEDIUM security and HIGH code-review findings |
+| [`workflows/bedrock-simulator-build.yml`](workflows/bedrock-simulator-build.yml) | `workflow_dispatch`; `release: published` | Builds the simulator SAM artifact. `gate` (typecheck + tests + `sam validate`) and `deps` (freshness/duplicates report + **blocking `pnpm audit`**) run in parallel; `build` needs both, so a vulnerability blocks the artifact. pnpm store cached. Touches no AWS |
+| [`workflows/bedrock-simulator-deploy.yml`](workflows/bedrock-simulator-deploy.yml) | `workflow_dispatch` (confirm = "deploy") | Deploys the bedrock-simulator SAM stack and runs post-deploy health checks + smoke test |
+| [`workflows/bedrock-simulator-destroy.yml`](workflows/bedrock-simulator-destroy.yml) | `workflow_dispatch` (confirm = "destroy bedrock-simulator") | Tears down the bedrock-simulator stack (disables MIL, empties bucket, sam delete) |
+| [`workflows/bedrock-simulator-run.yml`](workflows/bedrock-simulator-run.yml) | `workflow_dispatch` (totalCalls, guardrailRatio) | Invokes the deployed simulator Lambda with the full model × service × user matrix |
+| [`workflows/bedrock-simulator-deps.yml`](workflows/bedrock-simulator-deps.yml) | `workflow_dispatch` (on demand) | Full dependency-health report to the run summary: `pnpm outdated` (freshness), `pnpm audit` (vulnerabilities), `pnpm dedupe --check` (duplicate versions). **Advisory — never fails.** For inspection without a build; enforcement is the `bedrock-simulator-build.yml` gate. Touches no AWS |
 | [`workflows/pr-title-lint.yml`](workflows/pr-title-lint.yml) | PR opened / edited / reopened | Validates PR title against Conventional Commits (required — PR title becomes the squash-merge commit on `main`) |
-| [`workflows/claude.yml`](workflows/claude.yml) | `@claude` mention in PR/issue comments | On-demand reactive bot (unchanged) |
+| [`workflows/labels.yml`](workflows/labels.yml) | Push to `main` touching [`labels.yml`](labels.yml) / the workflow; `workflow_dispatch` | Syncs repository labels from [`.github/labels.yml`](labels.yml) (create/update only — `skip-delete: true` protects labels created by the release audit) |
+| [`workflows/claude-assistant.yml`](workflows/claude-assistant.yml) | `@claude` mention on an **issue** (opened/assigned or issue comment) | On-demand reactive bot for issue triage / Q&A; PRs are out of scope (covered by `claude-pr-review.yml` + local Claude Code) |
 
-The on-demand `claude.yml` is intentionally minimal. The rest of this
-document walks through the **automated review workflows** in detail.
+The on-demand `claude-assistant.yml` is intentionally minimal and **scoped to
+issues only** — it does not run on pull requests, where `claude-pr-review.yml`
+and local Claude Code already cover the work. It carries the same cost
+discipline as the review workflows (a `--max-turns` cap and a read-only
+`--allowed-tools` allowlist). The rest of this document walks through the
+**automated review workflows** in detail.
+
+### `bedrock-simulator-build.yml` job graph
+
+`gate` and `deps` run in parallel; `build` needs both, so a `pnpm audit`
+vulnerability in `deps` blocks the artifact. `publish-asset` runs only on a
+release. The pnpm store is cached across the three jobs.
+
+```mermaid
+flowchart LR
+    gate["gate<br/>typecheck · test · sam validate"]
+    deps["deps<br/>outdated · dedupe (advisory)<br/>pnpm audit (BLOCKING)"]
+    build["build<br/>pnpm build → sam-build.tgz"]
+    publish["publish-asset<br/>(release only)"]
+    gate --> build
+    deps --> build
+    build --> publish
+```
+
+---
+
+## Community health and meta files
+
+| File | Purpose |
+| --- | --- |
+| [`CODEOWNERS`](CODEOWNERS) | Required-reviewer routing per path. The `/.github/` rule covers this entire directory (workflows, actions, scripts) recursively. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Single contributor entrypoint — branching, commit format, PR process. GitHub surfaces it as "Contributing guidelines" when a new PR is opened. |
+| [`SECURITY.md`](SECURITY.md) | Vulnerability reporting policy. GitHub renders it under the repository's *Security policy* tab. |
+| [`dependabot.yml`](dependabot.yml) | Dependabot schedule — weekly GitHub Actions bumps, plus weekly npm bumps for `tools/bedrock-simulator` (minor/patch grouped into one PR; majors and security updates separate). PR titles are `chore`-prefixed to pass `pr-title-lint`. |
+| [`pull_request_template.md`](pull_request_template.md) | Auto-populated PR description scaffold (Summary, Linked issue, Test plan, Reviewer guidance, Phase). |
+
+**Why these live in `.github/` and not the repo root.** GitHub auto-discovers
+all three of `CODEOWNERS`, `CONTRIBUTING.md`, and `SECURITY.md` in any of
+`/`, `.github/`, or `docs/` with identical UI behaviour — the *Security
+policy* tab, *Contributing guidelines* prompt on new PRs, and code-owner
+review requests all fire regardless of which of the three locations is used.
+Keeping them under `.github/` groups every GitHub-meta concern in one place
+and keeps the repo root reserved for source code and top-level project
+documentation. Move them to the root only if a future contributor convention
+calls for it; nothing in GitHub's tooling requires it.
+
+---
+
+## Composite actions
+
+Reusable logic is extracted into composite actions under `.github/actions/`.
+Each action can be called with `./.github/actions/<name>` and is designed to
+be generically portable to a shared repository (see [Future work](#future-work)).
+
+### `aws-*` family
+
+| Action | Inputs (required \*) | Outputs | Purpose |
+| --- | --- | --- | --- |
+| `aws-configure-oidc` | `role-arn`\*, `aws-region` (default `us-east-1`), `role-duration-seconds` (default `1200`) | — | Assumes an IAM role via OIDC + verifies with `aws sts get-caller-identity`. Used in 3 workflows. |
+| `aws-sam-deploy` | `stack-name`\*, `region`\*, `working-directory`, `parameters` (multiline `KEY=value`), `capabilities`, `resolve-s3` | — | `sam deploy` with parameter-override escaping and idempotent changeset handling. |
+| `aws-s3-bucket-empty` | `bucket-name`\*, `region` | — | 4-pass cleanup: current objects → noncurrent versions → delete markers → in-progress multipart uploads. |
+| `aws-lambda-invoke` | `function-name`\*, `payload`\*, `region`, `expected-status-code`, `response-path` | `status-code`, `function-error`, `response-path` | `aws lambda invoke` with payload written to a temp file internally. Used in 2 workflows. |
+| `aws-capture-diagnostics` | `stack-name`\*, `lambda-name` (optional), `artifact-name`\*, `retention-days`, `region`, `output-dir` | — | Collects CloudFormation stack events + Lambda logs and uploads as an artifact on failure. Used in 2 workflows. |
+
+### `github-*` family
+
+| Action | Inputs (required \*) | Outputs | Purpose |
+| --- | --- | --- | --- |
+| `github-review` | `oauth-token`\*, `prompt`\*, `model`, `max-turns`, `allowed-tools`\*, `plugin-marketplaces`, `plugins` | `result` | Wraps `anthropics/claude-code-action@v1`. Used 4 times across 2 workflows. |
+| `github-post-pr-security-comment` | `review-output`\*, `pr-number`\*, `repo`\*, `head-ref`\*, `base-ref`\*, `head-sha`\*, `gh-token`\* | — | Parses the Claude `security-summary` block, posts a PR comment, submits REQUEST_CHANGES if HIGH > 0. |
+| `github-create-audit-issues` | `audit-output`\*, `commit-sha`\*, `release-tag`\*, `repo`\*, `assignee`, `labels-*`, `gh-token`\* | `created-count`, `issue-urls` | Parses `security-summary` + `code-review-summary` blocks and creates GitHub issues for HIGH/MEDIUM security and HIGH code-review findings. |
+
+**Inclusion rule:** an action earns its directory only when its extracted logic
+is more than 1–2 lines of bash AND it either appears in multiple workflows or
+handles a non-obvious edge case (idempotency, multi-pass cleanup, inverted-error
+matching). Single-caller ≤2-line wrappers stay inline in the workflow.
 
 ---
 
@@ -58,6 +138,59 @@ Rule 50.5 ("never `--no-verify`").
 
 ---
 
+## Required GitHub Environment for bedrock-simulator
+
+The three `bedrock-simulator-*` workflows each declare
+`environment: bedrock-simulator-sandbox`
+([deploy](workflows/bedrock-simulator-deploy.yml),
+[run](workflows/bedrock-simulator-run.yml),
+[destroy](workflows/bedrock-simulator-destroy.yml)). That line only *names*
+the environment — the environment itself is **not** defined in YAML and must
+be created once in the GitHub UI before any of those workflows can run.
+
+A [GitHub Actions Environment](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment)
+is a named scope, configured under **Settings → Environments**, that holds
+its own secrets/variables and gates any job referencing it behind protection
+rules.
+
+### Why it exists here
+
+The simulator deploys to a dedicated AWS **sandbox** account, invokes **real
+Amazon Bedrock models** (real spend), and the destroy workflow tears down live
+infrastructure (`sam delete`) — all `workflow_dispatch`-only. Scoping these to
+an environment (a) keeps the sandbox's AWS access and budget-alert details out
+of repo-wide secrets, and (b) lets a **required-reviewer** rule put a human in
+the loop before anything touches the account.
+
+### Required-reviewer protection
+
+With **Required reviewers** enabled on the environment, any job that targets it
+**pauses in a "Waiting" state before its first step** until a named reviewer
+clicks **Approve** in the Actions UI. If rejected, the job is cancelled. This
+means no one can deploy, spend, or destroy in the sandbox — even via a manual
+dispatch — without a second person approving the run. It is the human gate on
+the typed-confirmation inputs (`confirm = "deploy"` / `"destroy bedrock-simulator"`).
+
+### How to set it up
+
+1. **Settings → Environments → New environment** → name it exactly
+   `bedrock-simulator-sandbox` (must match the workflows' `environment:` value).
+2. Under **Deployment protection rules**, tick **Required reviewers** and add
+   yourself / the team.
+3. Add the environment-scoped values the workflows read:
+
+   | Kind | Name | Used by | Purpose |
+   | --- | --- | --- | --- |
+   | Variable | `SANDBOX_ACCOUNT_ID` | all three | Builds the OIDC role ARN `arn:aws:iam::<id>:role/bedrock-simulator-deployer` |
+   | Secret | `BUDGET_ALERT_EMAIL` | deploy | `BudgetAlertEmail` SAM parameter for the budget alarm |
+
+> First-deploy bootstrap: the `bedrock-simulator-deployer` OIDC role is created
+> *by* the stack on the first `sam deploy`, so the very first deploy in a fresh
+> sandbox account must be run locally with SSO credentials — see
+> [`docs/guides/bedrock-simulator.md`](../docs/guides/bedrock-simulator.md).
+
+---
+
 ## Why these workflows exist
 
 Reviewing every pull request manually doesn't scale, and asking a human
@@ -95,7 +228,7 @@ flowchart TD
     B -->|pull_request<br/>opened / synchronize /<br/>ready_for_review / reopened| PR[claude-pr-review.yml]
     B -->|push of release tag<br/>v* · *-rc* · *-beta*| RA[claude-code-review.yml]
     B -->|workflow_dispatch| RA
-    B -->|issue_comment with<br/>'@claude ...'| BOT[claude.yml]
+    B -->|issue or issue comment with<br/>'@claude ...'<br/>PRs excluded| BOT[claude-assistant.yml]
     PR --> PR1[Inline diff comments<br/>+ PR comment for HIGH/MEDIUM security<br/>+ REQUEST_CHANGES review on HIGH]
     RA --> RA1[Issues: HIGH/MEDIUM security<br/>+ HIGH code-review]
     BOT --> BOT1[Reactive reply in thread]
@@ -138,12 +271,16 @@ calls (fetching changed files, creating PR comments/reviews, creating issues).
 | --- | --- | --- |
 | **Actions enabled** | Obviously the workflows can't run otherwise. | Settings → Actions → General → "Allow all actions and reusable workflows". |
 | **Workflow permissions** | `claude-pr-review.yml` writes PR comments; `claude-code-review.yml` creates issues. | Settings → Actions → General → Workflow permissions → "Read and write permissions". Each job declares its own least-privilege `permissions:` block — only the job that needs a scope holds it. |
-| **`fibaneza` is a collaborator** | Security and code-review issues are auto-assigned to this user. | Settings → Collaborators → Add people. If you fork this repo, change the assignee in `.github/scripts/release-create-issues.cjs` (search for `assignees:`). |
+| **`fibaneza` is a collaborator** | Security and code-review issues are auto-assigned to this user. | Settings → Collaborators → Add people. If you fork this repo, change the `assignee` input on the `github-create-audit-issues` step in `claude-code-review.yml`. |
 
 ### What gets created automatically — don't pre-create these
 
-- **Issue labels** (`security`, `high-severity`, `medium-severity`,
+- **Audit issue labels** (`security`, `high-severity`, `medium-severity`,
   `code-review`) are created idempotently by the release audit on first use.
+  They are also listed in [`labels.yml`](labels.yml) for documentation; the
+  label-sync workflow runs `skip-delete: true` so it never removes them. The
+  rest of the repo's labels (the `type:` taxonomy and community labels) are
+  managed by that file — see [Labels](#labels).
 - **The `code-review` Claude plugin** is installed automatically by
   `claude-pr-review.yml` via its `plugin_marketplaces` and `plugins` inputs.
   `claude-code-review.yml` does NOT install the plugin — it uses direct
@@ -397,6 +534,52 @@ closing instruction asks the assignee to fix on a follow-up branch.
 
 ---
 
+## Labels
+
+[`labels.yml`](labels.yml) is the source of truth for repository labels.
+[`workflows/labels.yml`](workflows/labels.yml) applies it on push to `main`
+(create/update only — `skip-delete: true`, so labels created out-of-band are
+never removed). Edit a color or description there, push to `main`, and the sync
+applies it; rename via the GitHub UI first (renames preserve history), then
+update the name in the file.
+
+### Type taxonomy — one per issue
+
+Each issue form sets exactly one `type:` label automatically. These replace the
+GitHub defaults `bug` and `enhancement`, which are retired (the sync leaves any
+existing copies in place; remove them manually if you want them gone).
+
+| Label | Template | Purpose |
+| --- | --- | --- |
+| `type: bug` | [`bug.yml`](ISSUE_TEMPLATE/bug.yml) | Something is broken or behaving unexpectedly |
+| `type: feature` | [`feature.yml`](ISSUE_TEMPLATE/feature.yml) | New functionality or capability |
+| `type: task` | [`task.yml`](ISSUE_TEMPLATE/task.yml) | Defined unit of work with no user-facing change |
+| `type: chore` | [`chore.yml`](ISSUE_TEMPLATE/chore.yml) | Maintenance, dependencies, config, CI/CD |
+| `type: refactor` | [`refactor.yml`](ISSUE_TEMPLATE/refactor.yml) | Internal code improvement with no behaviour change |
+| `type: documentation` | [`documentation.yml`](ISSUE_TEMPLATE/documentation.yml) | Docs, guides, README, or inline comments |
+| `type: spike` | (manual) | Research, proof-of-concept, or investigation |
+| `type: security` | (manual) | Vulnerability, auth issue, or security improvement |
+
+Dependabot applies `type: chore` to its upgrade PRs (set in
+[`dependabot.yml`](dependabot.yml)).
+
+### Other label groups
+
+Labels beyond `type:` are applied manually and are orthogonal — stack them freely:
+
+| Group | Labels | When to use |
+| --- | --- | --- |
+| `priority:` | `critical` / `high` / `medium` / `low` | Signal urgency when triaging |
+| `status:` | `triage` / `ready` / `in progress` / `blocked` / `needs review` / `on hold` | Track workflow state when not using a Project board |
+| `area:` | `frontend` / `backend` / `database` / `infrastructure` / `auth` / `testing` / `ci/cd` / `performance` | Scope the affected system area |
+| `effort:` | `XS` / `S` / `M` / `L` / `XL` | T-shirt size estimate before picking up an issue |
+| meta | `good first issue` / `help wanted` / `wontfix` / `duplicate` / `invalid` / `tech-debt` / `breaking change` / `needs: more info` / `needs: design` / `needs: discussion` | Process and housekeeping signals |
+
+The audit labels (`security`, `high-severity`, `medium-severity`, `code-review`)
+are documented above under [Issue creation](#issue-creation).
+
+---
+
 ## Release process
 
 Releases are cut from `main` only, by pushing a version tag.
@@ -461,10 +644,10 @@ Four scenarios showing both workflows in action:
 | `paths-ignore` | top of file, under `on.pull_request` | Globs that skip the workflow entirely |
 | `concurrency.group` | top-level (`claude-pr-review-<pr>`) | One in-flight review per PR |
 | `timeout-minutes` | per job | 25 min on `jobs.review`; 5 min on `jobs.scope` and `jobs.security-gate` |
-| `--max-turns` | `claude_args` blocks | 8 for full-PR reviews, 5 for incrementals |
-| `--model` | `claude_args` blocks | Currently `claude-sonnet-4-6` |
-| `--allowed-tools` | `claude_args` blocks | Allowlist: `Read`, `Glob`, `Grep`, `gh pr …`, `mcp__github_inline_comment__create_inline_comment` |
-| `SENSITIVE` regex | `.github/scripts/lib/sensitive-paths.sh` | Which file paths trigger the security audit |
+| `max-turns` | `github-review` action `max-turns` input | 8 for full-PR reviews, 5 for incrementals |
+| `model` | `github-review` action `model` input | Currently `claude-sonnet-4-6` |
+| `allowed-tools` | `github-review` action `allowed-tools` input | Allowlist: `Read`, `Glob`, `Grep`, `gh pr …`, `mcp__github_inline_comment__create_inline_comment` |
+| `SENSITIVE` regex | `.github/scripts/claude/lib/sensitive-paths.sh` | Which file paths trigger the security audit |
 
 ### Release audit (`claude-code-review.yml`)
 
@@ -473,15 +656,15 @@ Four scenarios showing both workflows in action:
 | `tags` | `on.push` trigger | Release tag patterns that trigger the audit |
 | `concurrency.group` | top-level (`claude-code-review-<ref>`) | One in-flight audit per tag |
 | `timeout-minutes` | per job | 25 min on `jobs.audit`; 5 min on `jobs.scope` and `jobs.create-issues` |
-| `--max-turns` | `claude_args` | 8 for the combined audit |
-| `--model` | `claude_args` | Currently `claude-sonnet-4-6` |
-| `--allowed-tools` | `claude_args` | `Read`, `Glob`, `Grep`, `Bash(gh api:*)` — no PR tools |
-| `SENSITIVE` regex | `.github/scripts/lib/sensitive-paths.sh` | Shared with PR-time review |
-| **Code-review severity threshold** | `release-create-issues.cjs`, `parseTier` calls | Currently HIGH-only for code-review; widen to add MEDIUM |
-| `assignees` | `release-create-issues.cjs` | Currently `fibaneza` on all created issues |
+| `max-turns` | `github-review` action `max-turns` input | 8 for the combined audit |
+| `model` | `github-review` action `model` input | Currently `claude-sonnet-4-6` |
+| `allowed-tools` | `github-review` action `allowed-tools` input | `Read`, `Glob`, `Grep`, `Bash(gh api:*)` — no PR tools |
+| `SENSITIVE` regex | `.github/scripts/claude/lib/sensitive-paths.sh` | Shared with PR-time review |
+| **Code-review severity threshold** | `.github/scripts/claude/release-create-issues.cjs`, `parseTier` calls | Currently HIGH-only for code-review; widen to add MEDIUM |
+| `assignee` | `github-create-audit-issues` action `assignee` input (in `claude-code-review.yml`) | Currently `fibaneza` on all created issues |
 
 The `SENSITIVE` regex lives in a single file
-(`.github/scripts/lib/sensitive-paths.sh`) sourced by both scope scripts —
+(`.github/scripts/claude/lib/sensitive-paths.sh`) sourced by both scope scripts —
 edit once, applies everywhere.
 
 ---
@@ -489,7 +672,7 @@ edit once, applies everywhere.
 ## Sensitive paths (current regex)
 
 The security audit runs when any of the following paths change. Update
-`.github/scripts/lib/sensitive-paths.sh` when the project layout shifts
+`.github/scripts/claude/lib/sensitive-paths.sh` when the project layout shifts
 (one edit, both workflows pick it up):
 
 - `apps/dashboard/auth.ts`, `apps/dashboard/middleware.ts`
@@ -534,7 +717,7 @@ for the upstream recommendations.
 | Run the release audit between tags (no real release) | Use `workflow_dispatch` — no tag push needed. |
 | Block the workflow on a file class | Add the glob to `paths-ignore` at the top of `claude-pr-review.yml`. |
 | Force a security audit on a non-sensitive change | Touch a tracked sensitive file (e.g. add a no-op comment in `package.json`) or widen the `SENSITIVE` regex in `lib/sensitive-paths.sh`. |
-| Change who is paged on findings | Edit `assignees: ['fibaneza']` in `.github/scripts/release-create-issues.cjs`. Remove the line for no auto-assignee. |
+| Change who is paged on findings | Edit the `assignee:` input on the `github-create-audit-issues` step in `claude-code-review.yml`. Comma-separate multiple usernames, or leave empty for no assignment. |
 | Tighten the security audit | Edit the bulleted checklist in the relevant Claude prompt. |
 
 ---
@@ -556,7 +739,7 @@ The `scope` job's `Determine scope` step prints the scope summary — mode,
 security-audit decision (with the sensitive-file count), and the file set under
 review — to both the step log and the run summary. If your file isn't matched,
 the `SENSITIVE` regex needs extending. Edit
-`.github/scripts/lib/sensitive-paths.sh` — one change, both scope scripts pick
+`.github/scripts/claude/lib/sensitive-paths.sh` — one change, both scope scripts pick
 it up.
 
 **A `synchronize` push introduced a security issue but no PR comment /
@@ -580,13 +763,13 @@ pattern; delete them and re-run. Use `workflow_dispatch` with an explicit
 
 **Issues are being created with the wrong assignee.**
 Either `fibaneza` is no longer a collaborator on this fork, or the user
-doesn't exist on this GitHub instance. Edit `assignees` in
-`.github/scripts/release-create-issues.cjs`; remove the line entirely for
-no auto-assignee.
+doesn't exist on this GitHub instance. Update the `assignee:` input on the
+`github-create-audit-issues` step in `claude-code-review.yml`; leave it
+empty for no auto-assignee.
 
 **You want to see what the action is actually doing.**
-Add `--debug` to the relevant `claude_args` block and re-run. Remove the
-flag once done — it's noisy.
+Add `--debug` to the `claude_args` input on the relevant `github-review`
+action step and re-run. Remove the flag once done — it's noisy.
 
 ---
 
@@ -599,3 +782,32 @@ The workflows' design is grounded in this repo's rules and specs:
 - [`.claude/rules/10-server-only-boundary.md`](../.claude/rules/10-server-only-boundary.md) — defines which paths are server-only (drives the `SENSITIVE` regex)
 - [`.claude/rules/50-security-and-secrets.md`](../.claude/rules/50-security-and-secrets.md) — credential rules, no static AWS keys, gitleaks pre-commit
 - [`docs/specs/2026-05-15-system-architecture.md`](../docs/specs/2026-05-15-system-architecture.md) — overall system design the security audit references
+
+---
+
+## Future work
+
+The `aws-*` composite actions under `.github/actions/` are designed for
+eventual promotion into a shared AWS actions library (e.g. a successor to
+`fibaneza/AWS_CFN_Samples`) once they stabilise in this project.
+
+The local actions improve on the existing reference patterns in three ways
+that are worth carrying upstream:
+
+- **Region is an input** (`aws-region`, default `us-east-1`) — no regional
+  hardcode.
+- **OIDC is factored out** into a single `aws-configure-oidc` step per job;
+  all other actions assume credentials are already configured.
+- **Small assertions stay inline** — single-resource state checks (Lambda
+  state, stack-deleted verification, guardrail/profile status) are 3–6 lines
+  of bash and live in the consuming workflow rather than their own action
+  directories.
+
+When the time comes, the migration path is straightforward:
+1. PR the `aws-*` actions into the shared repo (adding region-as-input and
+   factored-out OIDC as improvements).
+2. Tag a release (`v1`).
+3. In this repo, swap `./.github/actions/<name>` →
+   `<org>/<shared-repo>/.github/actions/<name>@v1` at each call site.
+   Workflows are otherwise unchanged.
+4. Delete the migrated action directories locally.

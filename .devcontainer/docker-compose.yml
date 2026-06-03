@@ -38,12 +38,15 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
       OTEL_METRIC_EXPORT_INTERVAL: "10000"
 
-      # DynamoDB Local — placeholder values only; DynamoDB Local accepts any non-empty string.
-      # Real AWS access uses aws sso login + AWS_PROFILE (never static keys).
-      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
-      AWS_ACCESS_KEY_ID: local
-      AWS_SECRET_ACCESS_KEY: local
+      # SSO profile — set AWS_PROFILE in .devcontainer/.env; used by aws/sam CLI inside the container.
+      AWS_PROFILE: ${AWS_PROFILE}
       AWS_REGION: us-east-1
+
+      # DynamoDB Local endpoint — the app overrides the SDK endpoint with this value.
+      # Dummy keys are NOT set here: AWS_ACCESS_KEY_ID/SECRET in the container env would
+      # override SSO credentials for all aws CLI calls. Set them in apps/dashboard/.env.local
+      # if the app's DynamoDB client requires non-empty values against DynamoDB Local.
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
     depends_on:
       - otel-collector
     healthcheck:

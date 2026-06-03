@@ -1,0 +1,70 @@
+name: SAM deploy
+description: Runs sam deploy with parameter overrides, idempotent changeset handling, and S3 artifact resolution.
+
+inputs:
+  stack-name:
+    required: true
+    description: CloudFormation stack name to deploy.
+  region:
+    required: true
+    description: AWS region to deploy into.
+  working-directory:
+    required: false
+    description: Directory containing the SAM template and .aws-sam/ build output.
+    default: .
+  parameters:
+    required: false
+    description: |
+      Multiline list of CloudFormation parameter overrides, one KEY=value per line.
+      Values must be pre-expanded by the caller (no shell substitution happens here).
+    default: ''
+  capabilities:
+    required: false
+    description: Space-separated IAM capabilities to grant.
+    default: CAPABILITY_NAMED_IAM
+  resolve-s3:
+    required: false
+    description: Pass --resolve-s3 to auto-manage the SAM deployment bucket.
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy SAM stack
+      shell: bash
+      env:
+        STACK_NAME: ${{ inputs.stack-name }}
+        REGION: ${{ inputs.region }}
+        WORKING_DIR: ${{ inputs.working-directory }}
+        CAPABILITIES: ${{ inputs.capabilities }}
+        RESOLVE_S3: ${{ inputs.resolve-s3 }}
+        PARAMETERS: ${{ inputs.parameters }}
+      run: |
+        set -euo pipefail
+        cd "$WORKING_DIR"
+
+        # Split CAPABILITIES into an array so each value is quoted as one
+        # argument; bash word-splitting on an unquoted variable would silently
+        # break on any future capability name that contained a space.
+        IFS=' ' read -ra CAP_FLAGS <<< "$CAPABILITIES"
+
+        EXTRA_FLAGS=()
+        [[ "$RESOLVE_S3" == "true" ]] && EXTRA_FLAGS+=("--resolve-s3")
+
+        PARAM_FLAGS=()
+        if [[ -n "$PARAMETERS" ]]; then
+          PARAM_FLAGS+=("--parameter-overrides")
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            PARAM_FLAGS+=("$line")
+          done <<< "$PARAMETERS"
+        fi
+
+        sam deploy \
+          --stack-name "$STACK_NAME" \
+          --region "$REGION" \
+          --capabilities "${CAP_FLAGS[@]}" \
+          --no-confirm-changeset \
+          --no-fail-on-empty-changeset \
+          "${EXTRA_FLAGS[@]}" \
+          "${PARAM_FLAGS[@]}"

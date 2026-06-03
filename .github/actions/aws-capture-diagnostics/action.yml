@@ -1,0 +1,63 @@
+name: Capture AWS diagnostics on failure
+description: Collects CloudFormation stack events and (optionally) Lambda logs into an artifact when a job fails.
+
+inputs:
+  stack-name:
+    required: true
+    description: CloudFormation stack name to pull events from.
+  lambda-name:
+    required: false
+    description: Lambda function name to tail logs for. Omit to skip Lambda log capture.
+    default: ''
+  artifact-name:
+    required: true
+    description: Name of the uploaded GitHub Actions artifact.
+  retention-days:
+    required: false
+    description: Number of days to retain the artifact.
+    default: '7'
+  region:
+    required: false
+    description: AWS region to query.
+    default: us-east-1
+  output-dir:
+    required: false
+    description: Local directory to write diagnostics into before uploading.
+    default: /tmp/diagnostics
+
+runs:
+  using: composite
+  steps:
+    - name: Collect diagnostics
+      shell: bash
+      env:
+        STACK_NAME: ${{ inputs.stack-name }}
+        LAMBDA_NAME: ${{ inputs.lambda-name }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+        REGION: ${{ inputs.region }}
+      run: |
+        mkdir -p "$OUTPUT_DIR"
+
+        echo "Capturing CloudFormation stack events..."
+        aws cloudformation describe-stack-events \
+          --stack-name "$STACK_NAME" --region "$REGION" \
+          --output json > "$OUTPUT_DIR/stack-events.json" 2>/dev/null || true
+
+        aws cloudformation describe-stack-events \
+          --stack-name "$STACK_NAME" --region "$REGION" \
+          --query 'StackEvents[?contains(ResourceStatus,`FAILED`)].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]' \
+          --output table > "$OUTPUT_DIR/stack-events-failed.txt" 2>/dev/null || true
+
+        if [[ -n "$LAMBDA_NAME" ]]; then
+          echo "Tailing Lambda logs for $LAMBDA_NAME..."
+          aws logs tail "/aws/lambda/$LAMBDA_NAME" \
+            --since 10m --format short --region "$REGION" \
+            > "$OUTPUT_DIR/lambda-logs.txt" 2>/dev/null || true
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.output-dir }}/
+        retention-days: ${{ inputs.retention-days }}

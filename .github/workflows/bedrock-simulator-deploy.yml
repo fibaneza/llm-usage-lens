@@ -1,0 +1,288 @@
+# bedrock-simulator-deploy.yml
+#
+# Deploys a PREVIOUSLY BUILT bedrock-simulator artifact to the sandbox account
+# and verifies that the deployed resources are healthy. Building happens in
+# bedrock-simulator-build.yml; this workflow only downloads a bundle and runs
+# `sam deploy`, so a known-good build can be re-deployed (rollback) without
+# rebuilding or re-testing.
+#
+# Which bundle is deployed (precedence release_tag > build_run_id > latest):
+#   - release_tag=vX.Y.Z → the durable sam-build.tgz asset on that GitHub Release
+#   - build_run_id=<id>  → that build run's 7-day Actions artifact
+#   - neither            → the latest successful build's Actions artifact
+#
+# Only the `deploy` job enters the bedrock-simulator-sandbox Environment, so the
+# required-reviewer gate prompts exactly ONCE per run. The OIDC role's trust
+# policy scopes `sub` to `…:environment:bedrock-simulator-sandbox` AND pins
+# job_workflow_ref to this exact filename (tools/bedrock-simulator/template.yaml);
+# keep the filename and keep all AWS work in this one job.
+#
+# Bootstrap note: the DeployerRole this workflow assumes is CREATED BY the
+# stack on the first deploy. For the very first deploy in a new sandbox
+# account, an operator must run `sam deploy` once with SSO credentials.
+# See docs/guides/bedrock-simulator.md.
+#
+# All untrusted/external inputs are passed via `env:` blocks (never inlined in
+# `run:` strings) to prevent shell-command injection.
+
+name: bedrock-simulator deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type the literal string "deploy" to confirm this destructive action.'
+        required: true
+        type: string
+      release_tag:
+        description: 'Optional: redeploy a release by tag (e.g. v1.2.3) from its durable asset. Leave blank to use a build.'
+        required: false
+        type: string
+        default: ''
+      build_run_id:
+        description: 'Optional: redeploy a specific build run id (7-day artifact). Leave blank for the latest successful build.'
+        required: false
+        type: string
+        default: ''
+
+env:
+  AWS_REGION: us-east-1
+  STACK_NAME: bedrock-simulator
+
+jobs:
+  confirm:
+    name: Confirm intent
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Confirm intent + validate selectors
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "deploy" ]; then
+            echo "::error::confirm input must be the literal string 'deploy'."
+            exit 1
+          fi
+          if [ -n "$RELEASE_TAG" ] && [ -n "$BUILD_RUN_ID" ]; then
+            echo "::error::Set at most one of release_tag / build_run_id (precedence is release_tag > build_run_id > latest)."
+            exit 1
+          fi
+          if [ -n "$RELEASE_TAG" ] && ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::release_tag must look like a release tag, e.g. v1.2.3."
+            exit 1
+          fi
+          if [ -n "$BUILD_RUN_ID" ] && ! [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::build_run_id must be a numeric GitHub Actions run id."
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy + verify
+    needs: confirm
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: bedrock-simulator-sandbox
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Resolve + fetch build bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$RELEASE_TAG" ]; then
+            echo "Fetching release asset for $RELEASE_TAG"
+            gh release download "$RELEASE_TAG" --pattern sam-build.tgz --repo "$GITHUB_REPOSITORY" \
+              || { echo "::error::No sam-build.tgz asset on release '$RELEASE_TAG'. Was the release built by bedrock-simulator-build.yml?"; exit 1; }
+          else
+            RUN_ID="$BUILD_RUN_ID"
+            if [ -z "$RUN_ID" ]; then
+              echo "No build_run_id given — resolving latest successful build on main."
+              RUN_ID=$(gh run list --workflow bedrock-simulator-build.yml --branch main \
+                --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' \
+                --repo "$GITHUB_REPOSITORY")
+              if [ -z "$RUN_ID" ]; then
+                echo "::error::No successful bedrock-simulator-build run found on main. Run the build workflow first."
+                exit 1
+              fi
+            fi
+            echo "Downloading artifact from build run $RUN_ID"
+            gh run download "$RUN_ID" --name sam-build --repo "$GITHUB_REPOSITORY" \
+              || { echo "::error::Could not download artifact from run $RUN_ID — it may have expired (7-day retention). Rebuild or pick another."; exit 1; }
+          fi
+
+          tar xzf sam-build.tgz -C tools/bedrock-simulator
+          if [ ! -f tools/bedrock-simulator/.aws-sam/build/template.yaml ]; then
+            echo "::error::Bundle did not contain .aws-sam/build/template.yaml."
+            exit 1
+          fi
+
+      - name: Show build provenance
+        run: |
+          set -euo pipefail
+          INFO=tools/bedrock-simulator/.aws-sam/BUILD_INFO.txt
+          {
+            echo "## Bedrock simulator deploy"
+            echo ""
+            if [ -f "$INFO" ]; then
+              echo "Deploying build:"
+              echo ""
+              echo '```'
+              cat "$INFO"
+              echo '```'
+            else
+              echo "_No BUILD_INFO.txt in the bundle._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure AWS credentials via OIDC
+        uses: ./.github/actions/aws-configure-oidc
+        with:
+          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: SAM deploy
+        uses: ./.github/actions/aws-sam-deploy
+        with:
+          stack-name: ${{ env.STACK_NAME }}
+          region: ${{ env.AWS_REGION }}
+          working-directory: tools/bedrock-simulator
+          parameters: |
+            SandboxAccountId=${{ vars.SANDBOX_ACCOUNT_ID }}
+            GitHubOwner=${{ github.repository_owner }}
+            GitHubRepo=${{ github.event.repository.name }}
+            GitHubEnvironment=bedrock-simulator-sandbox
+            BudgetAlertEmail=${{ secrets.BUDGET_ALERT_EMAIL }}
+
+      - name: Describe stack + assert status + pluck outputs
+        id: outputs
+        run: |
+          set -euo pipefail
+
+          STACK_JSON=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+            --query 'Stacks[0]' --output json)
+
+          STATUS=$(echo "$STACK_JSON" | jq -r '.StackStatus')
+          echo "Stack status: $STATUS"
+          if [ "$STATUS" != "CREATE_COMPLETE" ] && [ "$STATUS" != "UPDATE_COMPLETE" ]; then
+            echo "::error::Stack status is $STATUS, expected CREATE_COMPLETE or UPDATE_COMPLETE"
+            exit 1
+          fi
+
+          # pluck returns empty for missing keys. Guard each required output
+          # below — otherwise downstream `aws ... --name ""` yields confusing
+          # InvalidParameter errors instead of "output X is missing".
+          pluck() {
+            local key=$1
+            local value
+            value=$(echo "$STACK_JSON" | jq -r ".Outputs[] | select(.OutputKey==\"$key\") | .OutputValue")
+            if [[ -z "$value" ]]; then
+              echo "::error::Stack output '$key' is missing or empty" >&2
+              exit 1
+            fi
+            echo "$value"
+          }
+
+          {
+            echo "lambda_name=$(pluck SimulatorLambdaName)"
+            echo "bucket_name=$(pluck InvocationLoggingBucketName)"
+            echo "log_group_name=$(pluck InvocationLoggingGroupName)"
+            echo "guardrail_id=$(pluck GuardrailId)"
+            echo "profile_chat_arn=$(pluck InferenceProfileChatArn)"
+            echo "profile_summarizer_arn=$(pluck InferenceProfileSummarizerArn)"
+            echo "profile_translator_arn=$(pluck InferenceProfileTranslatorArn)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Assert Lambda + Bedrock resources healthy
+        env:
+          LAMBDA_NAME: ${{ steps.outputs.outputs.lambda_name }}
+          BUCKET_NAME: ${{ steps.outputs.outputs.bucket_name }}
+          LOG_GROUP_NAME: ${{ steps.outputs.outputs.log_group_name }}
+          GUARDRAIL_ID: ${{ steps.outputs.outputs.guardrail_id }}
+          PROFILE_CHAT_ARN: ${{ steps.outputs.outputs.profile_chat_arn }}
+          PROFILE_SUMMARIZER_ARN: ${{ steps.outputs.outputs.profile_summarizer_arn }}
+          PROFILE_TRANSLATOR_ARN: ${{ steps.outputs.outputs.profile_translator_arn }}
+        run: |
+          set -euo pipefail
+
+          echo "Checking Lambda is Active..."
+          LAMBDA_STATE=$(aws lambda get-function --function-name "$LAMBDA_NAME" \
+            --query 'Configuration.State' --output text)
+          LAMBDA_LAST_UPDATE=$(aws lambda get-function --function-name "$LAMBDA_NAME" \
+            --query 'Configuration.LastUpdateStatus' --output text)
+          if [ "$LAMBDA_STATE" != "Active" ] || [ "$LAMBDA_LAST_UPDATE" != "Successful" ]; then
+            echo "::error::Lambda State=$LAMBDA_STATE, LastUpdateStatus=$LAMBDA_LAST_UPDATE (expected Active / Successful)"
+            exit 1
+          fi
+
+          for arn in "$PROFILE_CHAT_ARN" "$PROFILE_SUMMARIZER_ARN" "$PROFILE_TRANSLATOR_ARN"; do
+            echo "Checking inference profile $arn is ACTIVE..."
+            PROFILE_STATUS=$(aws bedrock get-inference-profile \
+              --inference-profile-identifier "$arn" \
+              --query 'status' --output text)
+            if [ "$PROFILE_STATUS" != "ACTIVE" ]; then
+              echo "::error::Inference profile $arn status=$PROFILE_STATUS, expected ACTIVE"
+              exit 1
+            fi
+          done
+
+          echo "Checking Guardrail is READY..."
+          GUARDRAIL_STATUS=$(aws bedrock get-guardrail --guardrail-identifier "$GUARDRAIL_ID" \
+            --query 'status' --output text)
+          if [ "$GUARDRAIL_STATUS" != "READY" ]; then
+            echo "::error::Guardrail status=$GUARDRAIL_STATUS, expected READY"
+            exit 1
+          fi
+
+          echo "Checking model invocation logging configuration..."
+          MIL=$(aws bedrock get-model-invocation-logging-configuration --output json)
+          MIL_BUCKET=$(echo "$MIL" | jq -r '.loggingConfig.s3Config.s3BucketName // empty')
+          MIL_LOG_GROUP=$(echo "$MIL" | jq -r '.loggingConfig.cloudWatchConfig.logGroupName // empty')
+          if [ "$MIL_BUCKET" != "$BUCKET_NAME" ]; then
+            echo "::error::MIL bucket='$MIL_BUCKET', expected '$BUCKET_NAME'"
+            exit 1
+          fi
+          if [ "$MIL_LOG_GROUP" != "$LOG_GROUP_NAME" ]; then
+            echo "::error::MIL log group='$MIL_LOG_GROUP', expected '$LOG_GROUP_NAME'"
+            exit 1
+          fi
+
+          echo "All resource checks passed."
+
+      - name: Smoke test (1 Haiku call, no guardrail)
+        uses: ./.github/actions/aws-lambda-invoke
+        with:
+          function-name: ${{ steps.outputs.outputs.lambda_name }}
+          payload: '{"totalCalls":1,"models":["claude-haiku"],"services":["chat"],"users":["engineering"],"guardrailRatio":0}'
+          region: ${{ env.AWS_REGION }}
+          response-path: /tmp/smoke-response.json
+
+      - name: Capture diagnostics on failure
+        if: failure()
+        uses: ./.github/actions/aws-capture-diagnostics
+        with:
+          stack-name: ${{ env.STACK_NAME }}
+          lambda-name: ${{ steps.outputs.outputs.lambda_name }}
+          artifact-name: bedrock-simulator-deploy-diagnostics
+          region: ${{ env.AWS_REGION }}

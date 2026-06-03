@@ -1,0 +1,66 @@
+name: Refactor
+description: Internal code improvement with no change to observable behaviour.
+labels: ["type: refactor"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A refactor changes structure, not behaviour. The public contract and the
+        `{ data }` / `{ error }` response shape stay identical, and the existing
+        test suite stays green. If behaviour changes, file a Feature or Bug instead.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What you want to restructure, in one or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current state & problem
+      description: What the code looks like now and why it is worth changing (duplication, unclear ownership, a rule it bends).
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: The target shape. Reference the coding-standards rule (Rule 60) or spec it brings the code closer to.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Dashboard (apps/dashboard)
+        - Collector (apps/collector)
+        - Shared package (packages/shared)
+        - Scripts / seeds
+        - CI / GitHub Actions
+        - Tooling (tools/bedrock-simulator)
+        - Other / unsure
+    validations:
+      required: true
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase (if known)
+      options:
+        - "Unsure"
+        - "1 — Foundation"
+        - "2 — Layout Shell"
+        - "3 — Data Layer"
+        - "4 — Pages"
+        - "5 — Polish & Accessibility"
+        - "6 — Collector"
+    validations:
+      required: false
+  - type: checkboxes
+    id: preservation
+    attributes:
+      label: Behaviour preservation
+      options:
+        - label: This change preserves observable behaviour and the existing tests still pass (or will, unchanged).
+          required: true

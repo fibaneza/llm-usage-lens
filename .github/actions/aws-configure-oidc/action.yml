@@ -1,0 +1,31 @@
+name: Configure AWS credentials via OIDC
+description: Assumes an IAM role via OIDC and verifies the credentials with a get-caller-identity smoke test.
+
+inputs:
+  role-arn:
+    required: true
+    description: Full ARN of the IAM role to assume (e.g. arn:aws:iam::123456789012:role/my-role).
+  aws-region:
+    required: false
+    description: AWS region to configure.
+    default: us-east-1
+  role-duration-seconds:
+    required: false
+    description: Duration of the assumed-role session in seconds.
+    default: '1200'
+
+runs:
+  using: composite
+  steps:
+    - name: Assume IAM role via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-arn }}
+        aws-region: ${{ inputs.aws-region }}
+        role-duration-seconds: ${{ inputs.role-duration-seconds }}
+
+    - name: Verify credentials
+      shell: bash
+      # Discard stdout — configure-aws-credentials already logs the assumed
+      # role. We just want the non-zero exit on failure.
+      run: aws sts get-caller-identity --query Arn --output text > /dev/null

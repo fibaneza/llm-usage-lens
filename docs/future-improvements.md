@@ -70,6 +70,28 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 - **References:** [Rule 50.7](../.claude/rules/50-security-and-secrets.md),
   [`system-architecture.md`](specs/2026-05-15-system-architecture.md).
 
+### Build-time S3 artifact upload for the bedrock-simulator deploy
+
+- **Status:** Rejected (kept for the rationale; do not reopen).
+- **What:** Have `bedrock-simulator-build.yml` run `sam package` to upload the
+  Lambda zip to S3 at build time, so deploy runs a CloudFormation-only
+  `sam deploy --template-file packaged.yaml` and skips downloading
+  `sam-build.tgz` from GitHub.
+- **Why rejected:** Deploy's `sam deploy --resolve-s3` already uploads the zip to
+  SAM's managed bucket, so S3 is unavoidable regardless — moving the upload
+  earlier relocates it, saving only seconds on a few-MB bundle. The cost is
+  steep: `sam package` needs S3-write credentials in `build`, which by design
+  holds **none** (the `DeployerRole` OIDC trust excludes it) — coupling build to
+  the sandbox account and killing its portability. It also adds an artifact
+  bucket + lifecycle to manage, whereas durable rollback already comes free from
+  never-expiring GitHub Release assets.
+- **Adopt when:** The approval-gated deploy window becomes a real bottleneck
+  **and** build can take a narrowly-scoped S3-write-only role without losing its
+  no-AWS-credentials boundary.
+- **References:** [`bedrock-simulator.md`](specs/2026-05-24-bedrock-simulator.md)
+  (build/deploy split), [`guides/bedrock-simulator.md`](guides/bedrock-simulator.md),
+  [`CLAUDE.md`](../CLAUDE.md).
+
 ---
 
 ## Security & CI
@@ -98,6 +120,41 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 - **Adopt when:** The repo moves to GitHub Pro/Team or becomes public.
 - **References:** branch-protection table in
   [`.github/README.md`](../.github/README.md), [Rule 31](../.claude/rules/31-github-flow.md).
+
+### Self-hosted GitHub Actions runners on AWS (instance/task role instead of OIDC)
+
+- **Status:** Deferred.
+- **What:** Run deploy/run/destroy on **self-hosted runners on AWS compute** that
+  carry an IAM role/instance profile directly, sourcing AWS credentials from
+  instance/container metadata instead of the GitHub OIDC → `DeployerRole`
+  exchange. Options (each gets credentials from an attached identity, never
+  static keys):
+  - **CodeBuild as a runner** — managed, ephemeral per-job; CodeBuild **service
+    role**. AWS-native, nothing to patch — the recommended start.
+  - **EC2 + instance profile** — ephemeral (`machulav/ec2-github-runner`) or an
+    autoscaling pool (`philips-labs/terraform-aws-github-runner`); creds via the
+    **instance profile** over IMDSv2.
+  - **ECS / Fargate + task role** — runners as containers; creds via the **task
+    role**. Fargate has no EC2 hosts to manage.
+  - **EKS + Actions Runner Controller** — pod-per-job, pod-level IAM via IRSA /
+    EKS Pod Identity; only worthwhile if EKS already exists.
+
+  (Lambda is unsuitable — no persistent host, 15-minute cap.)
+- **Why deferred:** GitHub-hosted runners + short-lived OIDC already meet the
+  no-static-keys bar ([Rule 50.1](../.claude/rules/50-security-and-secrets.md)),
+  scoped per-job and per-environment. Self-hosted compute adds standing cost
+  (against the [Cost posture](../CLAUDE.md) for `workflow_dispatch`-only,
+  infrequent jobs), ops burden (lifecycle, patching, autoscaling), and broader
+  standing access than OIDC's per-run credentials.
+- **Adopt when:** CI must reach **private VPC resources**, **or** volume makes
+  self-hosted compute beat GitHub-hosted minutes, **or** builds need
+  larger/cached compute. Start with CodeBuild-as-runner; reserve EKS/ARC for when
+  EKS already exists.
+- **References:** [Rule 50.1](../.claude/rules/50-security-and-secrets.md),
+  `DeployerRole` OIDC trust in
+  [`bedrock-simulator.md`](specs/2026-05-24-bedrock-simulator.md),
+  [Cost posture](../CLAUDE.md),
+  [github-best-practices](guides/github-best-practices.md).
 
 ---
 

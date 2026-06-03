@@ -1,0 +1,40 @@
+# Copy to samconfig.toml and fill in the placeholders for your sandbox account.
+# samconfig.toml is gitignored. Do NOT commit real account IDs.
+
+version = 0.1
+
+[default]
+[default.global.parameters]
+stack_name = "bedrock-simulator-sandbox"
+
+[default.build.parameters]
+parallel = true
+cached = true
+
+[default.deploy.parameters]
+# Replace placeholder values below. Use "000000000000" while developing locally
+# so gitleaks does not flag a real 12-digit AWS account ID by accident.
+region = "us-east-1"
+capabilities = "CAPABILITY_NAMED_IAM"
+confirm_changeset = false
+resolve_s3 = true
+fail_on_empty_changeset = false
+
+# BUDGET_ALERT_EMAIL is provided by the GitHub Actions workflow at deploy time
+# (via --parameter-overrides), never written here. The CFN parameter has
+# NoEcho: true so it is not echoed to deploy logs.
+parameter_overrides = [
+  "SandboxAccountId=000000000000",
+  "GitHubOwner=REPLACE_ME",
+  "GitHubRepo=aws-bedrock-cost-tracker",
+  "GitHubEnvironment=bedrock-simulator-sandbox",
+  "BudgetAlertEmail=REPLACE_ME",
+  "ClaudeOpusModelId=anthropic.claude-opus-4-5",
+  "ClaudeSonnetModelId=anthropic.claude-sonnet-4-6",
+  "ClaudeHaikuModelId=anthropic.claude-haiku-4-5-20251001-v1:0",
+  "OtherModelId=meta.llama3-3-70b-instruct-v1:0",
+  # Set to "true" to encrypt invocation logs with a customer-managed KMS key
+  # ($1/month at rest). Default "false" uses SSE-S3 (AES256) — encrypted at
+  # rest, no CMK cost. Recommended: keep false for personal sandbox use.
+  "UseKmsEncryption=false",
+]
