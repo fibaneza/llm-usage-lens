@@ -24,7 +24,11 @@ function parseTier(text, tierName) {
   const countMatch = text.match(new RegExp(`^${tierName}:\\s*(\\d+)`, 'm'));
   const count = countMatch ? parseInt(countMatch[1], 10) : 0;
 
-  const findingsRe = new RegExp(`${tierName}_FINDINGS:\\n([\\s\\S]*?)(?=\\n[A-Z_]+:|$)`);
+  // Terminate the list at the next known tier header or end-of-block — not at
+  // any `WORD:` line, so a finding such as "- TODO: ..." doesn't truncate it.
+  const findingsRe = new RegExp(
+    `${tierName}_FINDINGS:\\n([\\s\\S]*?)(?=\\n(?:HIGH|MEDIUM|LOW)(?:_FINDINGS)?:|$)`
+  );
   const findingsMatch = text.match(findingsRe);
   const findings = findingsMatch
     ? findingsMatch[1]

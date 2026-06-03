@@ -32,6 +32,12 @@ env:
   AWS_REGION: us-east-1
   STACK_NAME: bedrock-simulator
 
+# Shared with deploy/destroy so an invoke never races a deploy or teardown of
+# the same stack. cancel-in-progress is false — let an in-flight run finish.
+concurrency:
+  group: bedrock-simulator-stack
+  cancel-in-progress: false
+
 jobs:
   validate:
     name: Validate inputs

@@ -49,6 +49,14 @@ env:
   AWS_REGION: us-east-1
   STACK_NAME: bedrock-simulator
 
+# Serialize every stack-mutating / stack-reading simulator workflow on one
+# group so a deploy, destroy, and run can never operate on the stack
+# concurrently. cancel-in-progress is false — an in-flight sam deploy/delete
+# must finish, not be killed mid-changeset.
+concurrency:
+  group: bedrock-simulator-stack
+  cancel-in-progress: false
+
 jobs:
   confirm:
     name: Confirm intent

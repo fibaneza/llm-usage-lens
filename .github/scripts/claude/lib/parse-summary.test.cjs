@@ -79,6 +79,25 @@ test('parseTier: prose after the block does not bleed into findings', () => {
   assert.deepEqual(findings, ['- Real finding here']);
 });
 
+test('parseTier: a finding line starting with WORD: does not truncate the list', () => {
+  const text = [
+    'HIGH: 2',
+    'HIGH_FINDINGS:',
+    '- TODO: remove the hardcoded token in config.ts',
+    '- Missing session check in /api/users',
+    'MEDIUM: 0',
+    'MEDIUM_FINDINGS:',
+    '- none',
+  ].join('\n');
+
+  const { count, findings } = parseTier(text, 'HIGH');
+  assert.equal(count, 2);
+  assert.deepEqual(findings, [
+    '- TODO: remove the hardcoded token in config.ts',
+    '- Missing session check in /api/users',
+  ]);
+});
+
 // --- release-create-issues: env-driven assignee + labels ---
 
 test('release-create-issues: respects ASSIGNEE and LABELS_SECURITY env overrides', async () => {
