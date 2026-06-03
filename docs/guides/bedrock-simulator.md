@@ -319,7 +319,7 @@ sequenceDiagram
     GA->>AWS: sam deploy (prebuilt artifact)
     GA->>AWS: 2a describe-stacks (assert CREATE_COMPLETE)
     GA->>AWS: 2b resource-existence checks
-    GA->>AWS: 2c smoke test (1 InvokeModel; Lambda assumes a SimUserRole)
+    GA->>AWS: 2c smoke test (1 InvokeModel — Lambda assumes a SimUserRole)
     alt Deploy + verify succeed
         GA-->>Dev: ✓ Workflow green
     else Any check fails

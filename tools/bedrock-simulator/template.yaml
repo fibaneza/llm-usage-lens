@@ -215,10 +215,17 @@ Resources:
             Action:
               - s3:PutObject
             Resource: !Sub ${InvocationLoggingBucket.Arn}/*
+            # Confused-deputy mitigation only (aws:SourceAccount + aws:SourceArn).
+            # Do NOT gate on s3:x-amz-server-side-encryption: Bedrock's permission
+            # validation and its log writes do not send that header, so the
+            # condition would deny the write and PutModelInvocationLoggingConfiguration
+            # fails with "Failed to validate permissions for bucket". Encryption at
+            # rest is enforced by the bucket's default BucketEncryption instead.
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref SandboxAccountId
-                s3:x-amz-server-side-encryption: !If [KmsEnabled, 'aws:kms', 'AES256']
+              ArnLike:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${SandboxAccountId}:*
           - Sid: AllowBedrockLoggingRoleWrites
             Effect: Allow
             Principal:
