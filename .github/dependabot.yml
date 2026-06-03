@@ -13,6 +13,15 @@ updates:
     # (Conventional Commits — the squash-merge commit on `main`).
     commit-message:
       prefix: "chore"
+    # Collapse all routine Action bumps into a single weekly PR instead of one
+    # per action. Action version updates are low-risk, so majors are grouped in
+    # too (a no-wildcard pattern matches every dependency). Security updates
+    # still open as their own PRs regardless of this group.
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
 
   # bedrock-simulator (standalone pnpm package — not in the dashboard workspace).
   # Dependabot's "npm" ecosystem reads its pnpm-lock.yaml. This complements the
