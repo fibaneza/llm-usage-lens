@@ -13,6 +13,16 @@ updates:
     # (Conventional Commits — the squash-merge commit on `main`).
     commit-message:
       prefix: "chore"
+    # All GitHub Actions bumps (including majors) in one PR per week.
+    # Actions major bumps are typically backward-compatible for this project's
+    # usage patterns; a single grouped PR is easier to review than 5+ individual ones.
+    groups:
+      github-actions:
+        applies-to: version-updates
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
 
   # bedrock-simulator (standalone pnpm package — not in the dashboard workspace).
   # Dependabot's "npm" ecosystem reads its pnpm-lock.yaml. This complements the
@@ -28,11 +38,13 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
-    # One PR per week for routine minor/patch bumps; majors and security
-    # updates still come as their own PRs so breaking changes are reviewed alone.
+    # All simulator dependency bumps in one PR per week, including majors.
+    # Security updates still arrive as out-of-cycle individual PRs (Dependabot
+    # always separates security fixes regardless of group configuration).
     groups:
-      simulator-minor-patch:
+      simulator-all:
         applies-to: version-updates
         update-types:
+          - "major"
           - "minor"
           - "patch"
