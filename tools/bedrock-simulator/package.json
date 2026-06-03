@@ -26,9 +26,9 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock": "^3.1060.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.1060.0",
-    "@aws-sdk/client-sts": "^3.1060.0",
+    "@aws-sdk/client-bedrock": "^3.1061.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1061.0",
+    "@aws-sdk/client-sts": "^3.1061.0",
     "zod": "^4.4.3"
   }
 }
