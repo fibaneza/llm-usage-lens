@@ -35,7 +35,7 @@ It will ask for the start URL, region, account, and role, then write the
 ```ini
 [profile bedrock-simulator-sandbox]
 sso_session    = bedrock-cost-tracker-sso
-sso_account_id = 747064923676
+sso_account_id = 000000000000   # your sandbox account ID
 sso_role_name  = AdministratorAccess
 region         = us-east-1
 output         = json
@@ -73,8 +73,8 @@ Expected output:
 ```json
 {
     "UserId": "AROA...:you@example.com",
-    "Account": "747064923676",
-    "Arn": "arn:aws:sts::747064923676:assumed-role/AdministratorAccess/you@example.com"
+    "Account": "000000000000",
+    "Arn": "arn:aws:sts::000000000000:assumed-role/AdministratorAccess/you@example.com"
 }
 ```
 
@@ -217,7 +217,7 @@ sam deploy --guided --profile bedrock-simulator-sandbox
 |---|---|
 | Stack name | `bedrock-simulator` |
 | AWS Region | `us-east-1` |
-| `SandboxAccountId` | `747064923676` |
+| `SandboxAccountId` | your sandbox account ID (e.g. `000000000000`) |
 | `GitHubOwner` | your GitHub org/username |
 | `GitHubRepo` | `aws-bedrock-cost-tracker` |
 | `GitHubEnvironment` | `bedrock-simulator-sandbox` (default) |

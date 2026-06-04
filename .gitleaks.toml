@@ -1,0 +1,28 @@
+# gitleaks configuration for aws-bedrock-cost-tracker.
+#
+# Extends gitleaks' built-in ruleset (AWS keys, private keys, generic secrets)
+# and adds one project-specific rule: a real 12-digit AWS account ID must never
+# be committed. Docs and examples use the all-zeros placeholder instead — see
+# Rule 50 (.claude/rules/50-security-and-secrets.md). Real account IDs live only
+# in gitignored files (tools/bedrock-simulator/.bootstrap.env, samconfig.toml).
+#
+# Used by the simulator pre-push hook (tools/bedrock-simulator/.hooks/pre-push)
+# and by any `gitleaks detect` run from the repo root.
+
+title = "aws-bedrock-cost-tracker"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "aws-account-id"
+description = "AWS account ID in an account-context — use the 000000000000 placeholder, keep real IDs in gitignored config"
+# Match a 12-digit run only when it sits in an obvious account-ID context
+# (an ARN, an account_id key, an sso_account_id line, a SandboxAccountId param)
+# to avoid flagging unrelated 12-digit numbers. secretGroup 1 is the digits.
+regex = '''(?i)(?:arn:aws[a-z-]*:[a-z0-9-]*:[a-z0-9-]*:|account[_-]?id["'\s]*[:=]["'\s]*|sso_account_id\s*=\s*|sandboxaccountid\s*=\s*)(\d{12})'''
+secretGroup = 1
+
+[rules.allowlist]
+description = "Allow the all-zeros placeholder used in docs and *.example files"
+regexes = ['''^0{12}$''']
