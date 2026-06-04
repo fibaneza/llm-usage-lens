@@ -746,7 +746,7 @@ Resources:
           # GitHub Actions token (each is a separate JWT field; the `sub`
           # claim alone carries only ONE of environment / ref / job_workflow_ref
           # per token, so we pin them independently):
-          #   1. aud  — sts.amazonaws.com (set by aws-actions/configure-aws-credentials@v4)
+          #   1. aud  — sts.amazonaws.com (set by aws-actions/configure-aws-credentials@v6)
           #   2. sub  — repo:<owner>/<repo>:environment:bedrock-simulator-sandbox
           #             (enforces the GitHub Environment gate)
           #   3. job_workflow_ref — pins the exact workflow file AND the ref

@@ -8,6 +8,80 @@ The playbook for the standalone Bedrock test harness in [`tools/bedrock-simulato
 
 These six items are operator one-time setup. None can be created by the SAM template.
 
+### 0. AWS SSO credential setup
+
+All `aws` / `sam` commands in this guide need short-lived credentials for the sandbox account. Set up an IAM Identity Center (SSO) profile once; re-run `aws sso login` when the session expires (typically 8 hours).
+
+**Profile name used throughout this guide: `bedrock-simulator-sandbox`**
+This matches the GitHub Environment name and makes it unambiguous which account you are targeting.
+
+**Step 1 — Find your SSO start URL**
+
+Open **IAM Identity Center** in the management (or SSO-delegated) account.
+Under **Settings → Identity source → Instance URL**, copy the portal start URL
+(format: `https://<subdomain>.awsapps.com/start`).
+
+**Step 2 — Add the profile to `~/.aws/config`**
+
+The easiest path is the interactive wizard:
+
+```bash
+aws configure sso --profile bedrock-simulator-sandbox
+```
+
+It will ask for the start URL, region, account, and role, then write the
+`~/.aws/config` blocks for you. If you prefer to edit the file directly, add:
+
+```ini
+[profile bedrock-simulator-sandbox]
+sso_session    = bedrock-cost-tracker-sso
+sso_account_id = 747064923676
+sso_role_name  = AdministratorAccess
+region         = us-east-1
+output         = json
+
+[sso-session bedrock-cost-tracker-sso]
+sso_start_url           = https://<your-portal>.awsapps.com/start
+sso_region              = us-east-1
+sso_registration_scopes = sso:account:access
+```
+
+Replace `<your-portal>` with the subdomain from Step 1.
+
+> **Role name:** `AdministratorAccess` is required for the bootstrap deploy
+> (creates IAM roles, KMS keys, S3 buckets, Lambda). All subsequent deploys
+> go through GitHub Actions, which uses the narrower `bedrock-simulator-deployer`
+> role that the stack itself creates.
+
+**Step 3 — Log in**
+
+```bash
+aws sso login --profile bedrock-simulator-sandbox
+```
+
+A browser tab opens for authentication. Confirm the device code, then return
+to the terminal.
+
+**Step 4 — Verify**
+
+```bash
+aws sts get-caller-identity --profile bedrock-simulator-sandbox
+```
+
+Expected output:
+
+```json
+{
+    "UserId": "AROA...:you@example.com",
+    "Account": "747064923676",
+    "Arn": "arn:aws:sts::747064923676:assumed-role/AdministratorAccess/you@example.com"
+}
+```
+
+**Re-authentication:** sessions expire after 8 hours (configurable in Identity
+Center). Re-run `aws sso login --profile bedrock-simulator-sandbox` whenever a
+command fails with `Token has expired` or `Error when retrieving token`.
+
 ### 1. Sandbox member account in the AWS Organisation
 
 Required for the simulator itself. The CloudWatch cross-account observability link to the dashboard's observability account is a **deferred prerequisite** — Phase 6 hasn't built that account yet, so set up the link when Phase 6 begins, not now.
@@ -132,7 +206,7 @@ Expected result includes a selector with `eventCategory = Data` and a `resources
 cd tools/bedrock-simulator
 pnpm install --frozen-lockfile
 pnpm build   # tsc + esbuild → dist/*.mjs + sam build packages .aws-sam/
-sam deploy --guided --profile Sandbox-AdministratorAccess-469515554732
+sam deploy --guided --profile bedrock-simulator-sandbox
 ```
 
 `pnpm build` chains type-check → esbuild → `sam build` in one command. Re-run it after every `src/` change. See the [tool README](../../tools/bedrock-simulator/README.md) for details.
@@ -143,7 +217,7 @@ sam deploy --guided --profile Sandbox-AdministratorAccess-469515554732
 |---|---|
 | Stack name | `bedrock-simulator` |
 | AWS Region | `us-east-1` |
-| `SandboxAccountId` | `469515554732` |
+| `SandboxAccountId` | `747064923676` |
 | `GitHubOwner` | your GitHub org/username |
 | `GitHubRepo` | `aws-bedrock-cost-tracker` |
 | `GitHubEnvironment` | `bedrock-simulator-sandbox` (default) |
