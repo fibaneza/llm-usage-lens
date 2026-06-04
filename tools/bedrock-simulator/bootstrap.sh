@@ -10,10 +10,15 @@
 # Usage (from tools/bedrock-simulator/):
 #   ./bootstrap.sh [options]
 #
+# Per-user values (account ID, GitHub owner, budget email) are NOT hardcoded
+# here — they live in a gitignored .bootstrap.env so real account IDs never
+# land in the repo. Copy .bootstrap.env.example to .bootstrap.env and fill it
+# in. CLI flags below override anything sourced from that file.
+#
 # Options:
 #   --profile    <name>   AWS SSO profile to use (default: bedrock-simulator-sandbox)
-#   --account    <id>     Sandbox AWS account ID (default: 747064923676)
-#   --owner      <name>   GitHub owner / username (default: fibaneza)
+#   --account    <id>     Sandbox AWS account ID (required; or set in .bootstrap.env)
+#   --owner      <name>   GitHub owner / username (required; or set in .bootstrap.env)
 #   --repo       <name>   GitHub repository name (default: aws-bedrock-cost-tracker)
 #   --email      <addr>   Email for the AWS Budget alarm (prompted if omitted)
 #   --kms                 Enable KMS encryption for invocation logs (~$1/month extra)
@@ -26,9 +31,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # ── defaults ─────────────────────────────────────────────────────────────────
+# Built-in defaults only. Per-user / sensitive values (ACCOUNT_ID, GITHUB_OWNER,
+# BUDGET_EMAIL) are intentionally left empty here and sourced from .bootstrap.env
+# below. Precedence: CLI flags > .bootstrap.env > these defaults.
 PROFILE="${AWS_PROFILE:-bedrock-simulator-sandbox}"
-ACCOUNT_ID="747064923676"
-GITHUB_OWNER="fibaneza"
+ACCOUNT_ID=""
+GITHUB_OWNER=""
 GITHUB_REPO="aws-bedrock-cost-tracker"
 GITHUB_ENV="bedrock-simulator-sandbox"
 BUDGET_EMAIL=""
@@ -36,6 +44,15 @@ KMS_ENCRYPTION="false"
 SKIP_BUILD=false
 STACK_NAME="bedrock-simulator"
 REGION="us-east-1"
+
+# ── local overrides (gitignored, optional) ────────────────────────────────────
+# .bootstrap.env holds your sandbox account ID and GitHub owner. It is gitignored
+# (see .gitignore) — never commit it. Copy .bootstrap.env.example to create it.
+ENV_FILE="$SCRIPT_DIR/.bootstrap.env"
+if [[ -f "$ENV_FILE" ]]; then
+  # shellcheck source=/dev/null
+  source "$ENV_FILE"
+fi
 
 # ── argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -54,6 +71,18 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1  (run with --help)" >&2; exit 1 ;;
   esac
 done
+
+# ── required values ────────────────────────────────────────────────────────────
+if [[ -z "$ACCOUNT_ID" || "$ACCOUNT_ID" == "000000000000" ]]; then
+  echo "✗  ACCOUNT_ID is not set." >&2
+  echo "   Set it in .bootstrap.env (copy .bootstrap.env.example) or pass --account <id>." >&2
+  exit 1
+fi
+if [[ -z "$GITHUB_OWNER" ]]; then
+  echo "✗  GITHUB_OWNER is not set." >&2
+  echo "   Set it in .bootstrap.env (copy .bootstrap.env.example) or pass --owner <name>." >&2
+  exit 1
+fi
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }

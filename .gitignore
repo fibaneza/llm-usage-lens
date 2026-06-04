@@ -155,6 +155,7 @@ vite.config.ts.timestamp-*
 # pnpm workspace. Build/deploy artifacts and the sandbox-account config never
 # leave the local machine or the GitHub Actions runner.
 tools/bedrock-simulator/.aws-sam/
+tools/bedrock-simulator/.bootstrap.env
 tools/bedrock-simulator/samconfig.toml
 tools/bedrock-simulator/samconfig.toml.management
 tools/bedrock-simulator/samconfig.toml.sandbox
