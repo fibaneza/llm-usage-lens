@@ -31,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type the literal string "deploy" to confirm this destructive action.'
+        description: 'Type "deploy" to confirm this AWS deployment.'
         required: true
         type: string
       release_tag:
