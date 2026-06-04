@@ -1,4 +1,4 @@
-name: PR Title Lint
+name: "ci: pr title lint"
 
 on:
   pull_request:

@@ -23,7 +23,7 @@
 #                  REQUEST_CHANGES on HIGH findings, only for full-pr + security
 #                  reviews. Holds pull-requests:write.
 
-name: Claude PR Review
+name: "ci: claude pr review"
 
 on:
   pull_request:
