@@ -11,11 +11,17 @@
 #   - build_run_id=<id>  → that build run's 7-day Actions artifact
 #   - neither            → the latest successful build's Actions artifact
 #
-# Only the `deploy` job enters the bedrock-simulator-sandbox Environment, so the
-# required-reviewer gate prompts exactly ONCE per run. The OIDC role's trust
-# policy scopes `sub` to `…:environment:bedrock-simulator-sandbox` AND pins
-# job_workflow_ref to this exact filename (tools/bedrock-simulator/template.yaml);
-# keep the filename and keep all AWS work in this one job.
+# Pipeline (3 jobs):
+#   confirm  → validate inputs; no AWS, no environment gate
+#   deploy   → fetch bundle, sam deploy, pluck CF outputs; enters the
+#              bedrock-simulator-sandbox Environment (required-reviewer gate)
+#   validate → assert Lambda/Bedrock resources healthy, smoke test; also
+#              enters bedrock-simulator-sandbox — GitHub auto-approves the
+#              second use of an environment once the first job was approved
+#
+# OIDC note: both deploy and validate assume the same DeployerRole. The trust
+# policy pins `sub` to `…:environment:bedrock-simulator-sandbox` and
+# `job_workflow_ref` to this filename — both constraints hold for each job.
 #
 # Bootstrap note: the DeployerRole this workflow assumes is CREATED BY the
 # stack on the first deploy. For the very first deploy in a new sandbox
@@ -31,7 +37,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type the literal string "deploy" to confirm this destructive action.'
+        description: 'Type "deploy" to confirm this AWS deployment.'
         required: true
         type: string
       release_tag:
@@ -91,7 +97,7 @@ jobs:
           fi
 
   deploy:
-    name: Deploy + verify
+    name: Deploy
     needs: confirm
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -100,6 +106,14 @@ jobs:
       id-token: write
       contents: read
       actions: read
+    outputs:
+      lambda_name: ${{ steps.outputs.outputs.lambda_name }}
+      bucket_name: ${{ steps.outputs.outputs.bucket_name }}
+      log_group_name: ${{ steps.outputs.outputs.log_group_name }}
+      guardrail_id: ${{ steps.outputs.outputs.guardrail_id }}
+      profile_chat_arn: ${{ steps.outputs.outputs.profile_chat_arn }}
+      profile_summarizer_arn: ${{ steps.outputs.outputs.profile_summarizer_arn }}
+      profile_translator_arn: ${{ steps.outputs.outputs.profile_translator_arn }}
 
     steps:
       - name: Checkout
@@ -182,7 +196,7 @@ jobs:
             GitHubEnvironment=bedrock-simulator-sandbox
             BudgetAlertEmail=${{ secrets.BUDGET_ALERT_EMAIL }}
 
-      - name: Describe stack + assert status + pluck outputs
+      - name: Pluck CloudFormation outputs
         id: outputs
         run: |
           set -euo pipefail
@@ -198,9 +212,6 @@ jobs:
             exit 1
           fi
 
-          # pluck returns empty for missing keys. Guard each required output
-          # below — otherwise downstream `aws ... --name ""` yields confusing
-          # InvalidParameter errors instead of "output X is missing".
           pluck() {
             local key=$1
             local value
@@ -222,15 +233,44 @@ jobs:
             echo "profile_translator_arn=$(pluck InferenceProfileTranslatorArn)"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Capture diagnostics on failure
+        if: failure()
+        uses: ./.github/actions/aws-capture-diagnostics
+        with:
+          stack-name: ${{ env.STACK_NAME }}
+          lambda-name: ${{ steps.outputs.outputs.lambda_name }}
+          artifact-name: bedrock-simulator-deploy-diagnostics
+          region: ${{ env.AWS_REGION }}
+
+  validate:
+    name: Verify deployment
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: bedrock-simulator-sandbox
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials via OIDC
+        uses: ./.github/actions/aws-configure-oidc
+        with:
+          role-arn: arn:aws:iam::${{ vars.SANDBOX_ACCOUNT_ID }}:role/bedrock-simulator-deployer
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Assert Lambda + Bedrock resources healthy
         env:
-          LAMBDA_NAME: ${{ steps.outputs.outputs.lambda_name }}
-          BUCKET_NAME: ${{ steps.outputs.outputs.bucket_name }}
-          LOG_GROUP_NAME: ${{ steps.outputs.outputs.log_group_name }}
-          GUARDRAIL_ID: ${{ steps.outputs.outputs.guardrail_id }}
-          PROFILE_CHAT_ARN: ${{ steps.outputs.outputs.profile_chat_arn }}
-          PROFILE_SUMMARIZER_ARN: ${{ steps.outputs.outputs.profile_summarizer_arn }}
-          PROFILE_TRANSLATOR_ARN: ${{ steps.outputs.outputs.profile_translator_arn }}
+          LAMBDA_NAME: ${{ needs.deploy.outputs.lambda_name }}
+          BUCKET_NAME: ${{ needs.deploy.outputs.bucket_name }}
+          LOG_GROUP_NAME: ${{ needs.deploy.outputs.log_group_name }}
+          GUARDRAIL_ID: ${{ needs.deploy.outputs.guardrail_id }}
+          PROFILE_CHAT_ARN: ${{ needs.deploy.outputs.profile_chat_arn }}
+          PROFILE_SUMMARIZER_ARN: ${{ needs.deploy.outputs.profile_summarizer_arn }}
+          PROFILE_TRANSLATOR_ARN: ${{ needs.deploy.outputs.profile_translator_arn }}
         run: |
           set -euo pipefail
 
@@ -281,7 +321,7 @@ jobs:
       - name: Smoke test (1 Haiku call, no guardrail)
         uses: ./.github/actions/aws-lambda-invoke
         with:
-          function-name: ${{ steps.outputs.outputs.lambda_name }}
+          function-name: ${{ needs.deploy.outputs.lambda_name }}
           payload: '{"totalCalls":1,"models":["claude-haiku"],"services":["chat"],"users":["engineering"],"guardrailRatio":0}'
           region: ${{ env.AWS_REGION }}
           response-path: /tmp/smoke-response.json
@@ -291,6 +331,6 @@ jobs:
         uses: ./.github/actions/aws-capture-diagnostics
         with:
           stack-name: ${{ env.STACK_NAME }}
-          lambda-name: ${{ steps.outputs.outputs.lambda_name }}
+          lambda-name: ${{ needs.deploy.outputs.lambda_name }}
           artifact-name: bedrock-simulator-deploy-diagnostics
           region: ${{ env.AWS_REGION }}
