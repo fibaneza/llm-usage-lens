@@ -1,4 +1,4 @@
-name: Sync Labels
+name: "chore: sync labels"
 
 # Applies .github/labels.yml to the repository's labels. Create/update only —
 # no skip-delete keeps labels created out-of-band (the release audit's security /

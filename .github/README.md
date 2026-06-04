@@ -125,7 +125,7 @@ Configure under Settings → Branches → Branch protection rules:
 | Setting | Value |
 | --- | --- |
 | Require pull request before merging | ✅ (1 approval) |
-| Required status checks | `Claude PR Review`, `PR Title Lint` |
+| Required status checks | `ci: claude pr review`, `ci: pr title lint` |
 | Require linear history | ✅ |
 | Allow squash-merge only | ✅ — disable merge commits and rebase-merge in Settings → General → Pull Requests |
 | Restrict force-push to `main` | ✅ |

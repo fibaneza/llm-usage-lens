@@ -14,7 +14,7 @@
 #   1. Checkout repository (shallow)
 #   2. Run Claude Code (prompt derived from the @claude mention body)
 
-name: Claude Assistant
+name: "bot: claude assistant"
 
 on:
   issue_comment:

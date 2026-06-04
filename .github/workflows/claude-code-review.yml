@@ -18,7 +18,7 @@
 #   create-issues  needs: [scope, audit]. Creates issues for HIGH/MEDIUM
 #                  security + HIGH code-review findings. Holds issues:write.
 
-name: Claude Code Review
+name: "ci: claude code review"
 
 on:
   push:
