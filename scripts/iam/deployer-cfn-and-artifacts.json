@@ -67,7 +67,11 @@
       ],
       "Resource": [
         "arn:__PARTITION__:s3:::bedrock-simulator-*",
-        "arn:__PARTITION__:s3:::bedrock-simulator-*/*"
+        "arn:__PARTITION__:s3:::bedrock-simulator-*/*",
+        "arn:__PARTITION__:s3:::aws-sam-cli-managed-default-*",
+        "arn:__PARTITION__:s3:::aws-sam-cli-managed-default-*/*",
+        "arn:__PARTITION__:s3:::*-invocation-logging-bucket/*",
+        "arn:__PARTITION__:s3:::*-invocation-logging-bucket"
       ]
     }
   ]
