@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# bootstrap.sh — one-time setup for the bedrock-simulator SAM stack.
+# bootstrap.sh — one-time LOCAL deploy of the bedrock-simulator SAM stack.
 #
-# Solves the chicken-and-egg problem: bedrock-simulator-deploy.yml assumes the
-# bedrock-simulator-deployer OIDC role, but that role is a CloudFormation
-# resource that only exists after the first stack deploy. Run this script once
-# with your SSO credentials. After it succeeds, all future deploys go through
-# GitHub Actions (OIDC — no static credentials, no local commands needed).
+# Builds the Lambda bundle and runs `sam deploy` with your SSO credentials. The
+# stack creates the bedrock-simulator app's OWN IAM roles (SimUserRole-*, the
+# Lambda execution roles) — that is the only kind of role this script provisions.
+#
+# It does NOT create the GitHub Actions "deployer" OIDC role: that is a CI/CD
+# PIPELINE concern, not part of the app. `sam deploy` does not need it (locally
+# you authenticate with SSO; in CI the workflow assumes it). Provision that
+# pipeline role separately, once, with the example wrapper:
+#
+#   scripts/examples/create-bedrock-simulator-deployer-role.sh
+#   # (a thin example around the generic scripts/create-deployer-role.sh)
 #
 # Usage (from tools/bedrock-simulator/):
 #   ./bootstrap.sh [options]
@@ -65,7 +71,10 @@ while [[ $# -gt 0 ]]; do
     --kms)         KMS_ENCRYPTION="true"; shift ;;
     --skip-build)  SKIP_BUILD=true;     shift ;;
     --help)
-      sed -n '/^# Usage/,/^[^#]/p' "$0" | head -n -1 | sed 's/^# \?//'
+      # Absolute self-path: cwd was changed to $SCRIPT_DIR above, so a relative
+      # $0 would not resolve when invoked by path from elsewhere.
+      sed -n '/^# Usage/,/^[^#]/p' "$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")" \
+        | head -n -1 | sed 's/^# \?//'
       exit 0
       ;;
     *) echo "Unknown option: $1  (run with --help)" >&2; exit 1 ;;
@@ -129,27 +138,6 @@ fi
 
 ok "Account $ACTUAL_ACCOUNT confirmed"
 
-# ── GitHub OIDC IdP ───────────────────────────────────────────────────────────
-step "GitHub OIDC identity provider"
-
-OIDC_ARN=$(aws iam list-open-id-connect-providers \
-  --query 'OpenIDConnectProviderList[?contains(Arn,`token.actions.githubusercontent.com`)].Arn' \
-  --output text)
-
-if [[ -n "$OIDC_ARN" ]]; then
-  ok "Already exists: $OIDC_ARN"
-else
-  info "Not found — creating..."
-  aws iam create-open-id-connect-provider \
-    --url https://token.actions.githubusercontent.com \
-    --client-id-list sts.amazonaws.com \
-    --thumbprint-list \
-      6938fd4d98bab03faadb97b34396831e3780aea1 \
-      1c58a3a8518e8759bf075b76b750d4f2df264fcd \
-    --query 'OpenIDConnectProviderArn' --output text
-  ok "OIDC IdP created"
-fi
-
 # ── build ─────────────────────────────────────────────────────────────────────
 if [[ "$SKIP_BUILD" == true ]]; then
   step "Skipping build (--skip-build)"
@@ -190,7 +178,7 @@ fi
 
 # ── deploy ────────────────────────────────────────────────────────────────────
 step "Deploying stack '$STACK_NAME' to $REGION"
-info "This creates the bedrock-simulator-deployer OIDC role and all other resources."
+info "This creates all stack resources, including the app's own IAM roles (SimUserRole-*, Lambda roles)."
 info "First deploy typically takes 3–5 minutes."
 echo ""
 
@@ -228,10 +216,14 @@ fi
 echo ""
 bold "Bootstrap complete."
 echo ""
-echo "  The bedrock-simulator-deployer OIDC role now exists in account $ACCOUNT_ID."
-echo "  All future deploys go through GitHub Actions:"
+echo "  The bedrock-simulator stack is deployed in account $ACCOUNT_ID."
 echo ""
-echo "    gh workflow run bedrock-simulator-deploy.yml -f confirm=deploy"
+echo "  To deploy via GitHub Actions instead of locally, first provision the"
+echo "  pipeline deployer role (one-time, separate from this app bootstrap):"
+echo ""
+echo "    scripts/examples/create-bedrock-simulator-deployer-role.sh"
+echo ""
+echo "  Then: gh workflow run bedrock-simulator-deploy.yml -f confirm=deploy"
 echo ""
 echo "  Remaining one-time steps:"
 echo "    □ Confirm the AWS Budget SNS email subscription"

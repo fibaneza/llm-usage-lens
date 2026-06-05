@@ -1,0 +1,127 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "IamRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole",
+        "iam:UntagRole", "iam:UpdateAssumeRolePolicy", "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies"
+      ],
+      "Resource": [
+        "arn:__PARTITION__:iam::__ACCOUNT_ID__:role/bedrock-simulator-*",
+        "arn:__PARTITION__:iam::__ACCOUNT_ID__:role/SimUserRole-*"
+      ]
+    },
+    {
+      "Sid": "IamManagedPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy",
+        "iam:GetPolicyVersion", "iam:ListPolicyVersions", "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion", "iam:TagPolicy", "iam:UntagPolicy"
+      ],
+      "Resource": "arn:__PARTITION__:iam::__ACCOUNT_ID__:policy/bedrock-simulator-*"
+    },
+    {
+      "Sid": "IamPassRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:__PARTITION__:iam::__ACCOUNT_ID__:role/bedrock-simulator-*",
+        "arn:__PARTITION__:iam::__ACCOUNT_ID__:role/SimUserRole-*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": ["lambda.amazonaws.com", "bedrock.amazonaws.com"]
+        }
+      }
+    },
+    {
+      "Sid": "Lambda",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration", "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration", "lambda:PublishVersion",
+        "lambda:AddPermission", "lambda:RemovePermission", "lambda:TagResource",
+        "lambda:UntagResource", "lambda:ListTags", "lambda:InvokeFunction"
+      ],
+      "Resource": [
+        "arn:__PARTITION__:lambda:__REGION__:__ACCOUNT_ID__:function:bedrock-simulator",
+        "arn:__PARTITION__:lambda:__REGION__:__ACCOUNT_ID__:function:bedrock-simulator-logging-config"
+      ]
+    },
+    {
+      "Sid": "BedrockResources",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:CreateGuardrail", "bedrock:UpdateGuardrail", "bedrock:DeleteGuardrail",
+        "bedrock:GetGuardrail", "bedrock:TagResource", "bedrock:UntagResource",
+        "bedrock:CreateInferenceProfile", "bedrock:DeleteInferenceProfile",
+        "bedrock:GetInferenceProfile", "bedrock:ListTagsForResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket", "s3:DeleteBucket", "s3:GetBucketLocation",
+        "s3:GetBucketPolicy", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy",
+        "s3:PutBucketTagging", "s3:GetBucketTagging", "s3:PutBucketVersioning",
+        "s3:GetBucketVersioning", "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketPublicAccessBlock", "s3:PutBucketEncryption",
+        "s3:GetEncryptionConfiguration", "s3:PutLifecycleConfiguration",
+        "s3:GetLifecycleConfiguration", "s3:PutBucketOwnershipControls",
+        "s3:GetBucketOwnershipControls"
+      ],
+      "Resource": "arn:__PARTITION__:s3:::bedrock-simulator-*"
+    },
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups",
+        "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy",
+        "logs:AssociateKmsKey", "logs:DisassociateKmsKey", "logs:PutResourcePolicy",
+        "logs:DeleteResourcePolicy", "logs:DescribeResourcePolicies",
+        "logs:TagResource", "logs:UntagResource"
+      ],
+      "Resource": "arn:__PARTITION__:logs:__REGION__:__ACCOUNT_ID__:log-group:*"
+    },
+    {
+      "Sid": "Kms",
+      "Effect": "Allow",
+      "Action": [
+        "kms:CreateKey", "kms:DescribeKey", "kms:EnableKeyRotation",
+        "kms:DisableKeyRotation", "kms:GetKeyPolicy", "kms:PutKeyPolicy",
+        "kms:ScheduleKeyDeletion", "kms:TagResource", "kms:UntagResource",
+        "kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias", "kms:ListAliases"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Sns",
+      "Effect": "Allow",
+      "Action": [
+        "sns:CreateTopic", "sns:DeleteTopic", "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes", "sns:Subscribe", "sns:Unsubscribe",
+        "sns:ListSubscriptionsByTopic", "sns:TagResource", "sns:UntagResource"
+      ],
+      "Resource": "arn:__PARTITION__:sns:__REGION__:__ACCOUNT_ID__:bedrock-simulator-*"
+    },
+    {
+      "Sid": "Budgets",
+      "Effect": "Allow",
+      "Action": [
+        "budgets:CreateBudget", "budgets:DeleteBudget", "budgets:UpdateBudget",
+        "budgets:ViewBudget", "budgets:DescribeBudget", "budgets:CreateNotification",
+        "budgets:DeleteNotification"
+      ],
+      "Resource": "arn:__PARTITION__:budgets::__ACCOUNT_ID__:budget/bedrock-simulator-*"
+    }
+  ]
+}
