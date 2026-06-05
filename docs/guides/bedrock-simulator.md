@@ -35,7 +35,7 @@ It will ask for the start URL, region, account, and role, then write the
 ```ini
 [profile bedrock-simulator-sandbox]
 sso_session    = bedrock-cost-tracker-sso
-sso_account_id = 747064923676
+sso_account_id = 000000000000   # your sandbox account ID
 sso_role_name  = AdministratorAccess
 region         = us-east-1
 output         = json
@@ -48,10 +48,11 @@ sso_registration_scopes = sso:account:access
 
 Replace `<your-portal>` with the subdomain from Step 1.
 
-> **Role name:** `AdministratorAccess` is required for the bootstrap deploy
-> (creates IAM roles, KMS keys, S3 buckets, Lambda). All subsequent deploys
-> go through GitHub Actions, which uses the narrower `bedrock-simulator-deployer`
-> role that the stack itself creates.
+> **Role name:** an `AdministratorAccess`-grade SSO role is required to run the
+> one-time `scripts/examples/create-bedrock-simulator-deployer-role.sh` (it
+> creates the OIDC provider and the `bedrock-simulator-deployer` IAM role via
+> `scripts/create-deployer-role.sh`). All deploys — including the first — then
+> go through GitHub Actions using that `bedrock-simulator-deployer` role.
 
 **Step 3 — Log in**
 
@@ -73,8 +74,8 @@ Expected output:
 ```json
 {
     "UserId": "AROA...:you@example.com",
-    "Account": "747064923676",
-    "Arn": "arn:aws:sts::747064923676:assumed-role/AdministratorAccess/you@example.com"
+    "Account": "000000000000",
+    "Arn": "arn:aws:sts::000000000000:assumed-role/AdministratorAccess/you@example.com"
 }
 ```
 
@@ -198,38 +199,39 @@ Expected result includes a selector with `eventCategory = Data` and a `resources
 
 ## Bootstrap: first deploy
 
-`DeployerRole` is defined inside the SAM stack — it does not exist until the stack is deployed for the first time. This creates a chicken/egg problem: the OIDC-based GitHub Actions workflow assumes `DeployerRole`, but the role cannot exist until after the first deploy. The solution is a one-time manual deploy using operator SSO credentials.
+The `bedrock-simulator-deployer` role the workflows assume is **not** a CloudFormation resource — it is created out-of-band so the very first deploy can run entirely through GitHub Actions. (Were it defined in the stack, it would not exist until after the first deploy, yet the deploy workflow's OIDC credential step needs it *before* `sam deploy` runs — a chicken-and-egg.)
 
-**Do this once only.** After the stack exists, all subsequent deploys go through `bedrock-simulator-deploy.yml`.
+### Step A — create the deployer role (one-time, local)
+
+The deployer role is a **pipeline** resource, not part of the app. Provision it once with operator SSO credentials via the example wrapper, which feeds the bedrock-simulator inputs (role name, the three workflow trust pins, and the `iam/deployer-*.json` permission policies) to the project-generic engine `scripts/create-deployer-role.sh`. The engine registers the account-shared GitHub OIDC provider (if missing) and creates the `bedrock-simulator-deployer` role.
 
 ```bash
-cd tools/bedrock-simulator
-pnpm install --frozen-lockfile
-pnpm build   # tsc + esbuild → dist/*.mjs + sam build packages .aws-sam/
-sam deploy --guided --profile bedrock-simulator-sandbox
+# Run from the repo root. Account ID + GitHub owner are read from the gitignored
+# tools/bedrock-simulator/.bootstrap.env when present, or pass them as flags.
+aws sso login --profile bedrock-simulator-sandbox
+./scripts/examples/create-bedrock-simulator-deployer-role.sh --profile bedrock-simulator-sandbox
 ```
 
-`pnpm build` chains type-check → esbuild → `sam build` in one command. Re-run it after every `src/` change. See the [tool README](../../tools/bedrock-simulator/README.md) for details.
+Set the repo's `SANDBOX_ACCOUNT_ID` Actions **variable** to the same account ID (the deploy workflow reads `vars.SANDBOX_ACCOUNT_ID` to build the role ARN). Tear the role down later with `./scripts/examples/create-bedrock-simulator-deployer-role.sh --delete`.
 
-`sam deploy --guided` will prompt for each parameter. Use these values (accept defaults for the rest):
+### Step B — deploy via GitHub Actions
 
-| Parameter | Value |
-|---|---|
-| Stack name | `bedrock-simulator` |
-| AWS Region | `us-east-1` |
-| `SandboxAccountId` | `747064923676` |
-| `GitHubOwner` | your GitHub org/username |
-| `GitHubRepo` | `aws-bedrock-cost-tracker` |
-| `GitHubEnvironment` | `bedrock-simulator-sandbox` (default) |
-| `BudgetAlertEmail` | your alert email address |
-| `UseKmsEncryption` | `false` (default) — SSE-S3 (AES256), free. Set `true` to add a CMK ($1/month) for production-grade encryption of invocation logs + SNS. |
+With the role in place, deploy from scratch through the workflows:
 
-Accept the generated `samconfig.toml` when prompted — it is gitignored and must not be committed. Once you save it, future `sam deploy` calls in this directory pick it up automatically (used only for manual recovery runs, not the normal workflow).
+```bash
+gh workflow run bedrock-simulator-build.yml          # compile + sam build artifact
+gh workflow run bedrock-simulator-deploy.yml -f confirm=deploy   # deploy the artifact
+```
+
+The deploy workflow passes `SandboxAccountId` / `GitHubOwner` / `GitHubRepo` / `GitHubEnvironment` / `BudgetAlertEmail` (the last from the `BUDGET_ALERT_EMAIL` secret) as parameter overrides. `UseKmsEncryption` defaults to `false` (SSE-S3, free); set it `true` to add a CMK ($1/month) for the invocation logs + SNS.
 
 After the deploy completes:
-- Run the post-deploy verification checks (2a–2c below) by hand to confirm the stack is healthy.
+- The `validate` job runs the post-deploy health checks automatically; you can also run checks 2a–2c below by hand.
 - Click the SNS email confirmation link (Prereq #5).
-- From this point on, use `bedrock-simulator-build.yml` → `bedrock-simulator-deploy.yml` for all subsequent deploys.
+
+### Optional — local deploy alternative
+
+`./bootstrap.sh` (from `tools/bedrock-simulator/`) builds and `sam deploy`s the stack locally with your SSO credentials — useful for recovery runs or developing without round-tripping through Actions. It does **not** create the deployer role (that is Step A, a pipeline concern); a local `sam deploy` does not need it. The stack creates the app's own roles. `sam deploy --guided` prompts for each parameter and writes a gitignored `samconfig.toml` (never commit it).
 
 ## Build / deploy / run / destroy
 

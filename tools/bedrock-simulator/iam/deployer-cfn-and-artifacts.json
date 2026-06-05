@@ -1,0 +1,77 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudFormation",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": [
+        "arn:__PARTITION__:cloudformation:__REGION__:__ACCOUNT_ID__:stack/bedrock-simulator*",
+        "arn:__PARTITION__:cloudformation:__REGION__:__ACCOUNT_ID__:stack/bedrock-simulator*/*"
+      ]
+    },
+    {
+      "Sid": "CloudFormationDescribe",
+      "Effect": "Allow",
+      "Action": ["cloudformation:DescribeStacks", "cloudformation:DescribeStackEvents"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SamArtifactBucket",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": [
+        "arn:__PARTITION__:s3:::aws-sam-cli-managed-default-*",
+        "arn:__PARTITION__:s3:::aws-sam-cli-managed-default-*/*"
+      ]
+    },
+    {
+      "Sid": "InvokeSimulatorLambda",
+      "Effect": "Allow",
+      "Action": "lambda:InvokeFunction",
+      "Resource": "arn:__PARTITION__:lambda:__REGION__:__ACCOUNT_ID__:function:bedrock-simulator"
+    },
+    {
+      "Sid": "ReadStackResources",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:GetInferenceProfile",
+        "bedrock:GetGuardrail",
+        "bedrock:GetModelInvocationLoggingConfiguration"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DestroyPreSteps",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:PutModelInvocationLoggingConfiguration",
+        "bedrock:DeleteModelInvocationLoggingConfiguration"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "KmsKeyCleanup",
+      "Effect": "Allow",
+      "Action": ["kms:DescribeKey", "kms:DisableKey"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EmptyLoggingBucketDuringDestroy",
+      "Effect": "Allow",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:ListBucket",
+        "s3:ListBucketVersions",
+        "s3:ListBucketMultipartUploads",
+        "s3:ListMultipartUploadParts",
+        "s3:AbortMultipartUpload"
+      ],
+      "Resource": [
+        "arn:__PARTITION__:s3:::bedrock-simulator-*",
+        "arn:__PARTITION__:s3:::bedrock-simulator-*/*"
+      ]
+    }
+  ]
+}

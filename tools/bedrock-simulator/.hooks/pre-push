@@ -51,9 +51,30 @@ echo "→ bedrock-simulator: duplicate versions (warn-only)"
 (cd "$SIM" && pnpm dedupe --check) \
   || echo "  ⚠  Lockfile could be flattened. Non-blocking — run 'pnpm dedupe'."
 
+# Real AWS account IDs must never be committed (Rule 50). Runs regardless of
+# gitleaks because the default ruleset does not flag account IDs. We extract any
+# 12-digit number that sits in an account-ID context — an account_id key, a
+# SandboxAccountId param, or an arn's :NNNNNNNNNNNN: field — then drop the
+# 000000000000 placeholder. Anything left is a real ID. We match the pattern,
+# never a literal account ID.
+echo "→ AWS account ID scan"
+# shellcheck disable=SC2086
+acct_hits=$(git diff $RANGES 2>/dev/null \
+  | grep -E '^\+[^+]' \
+  | grep -Eio '(account[_-]?id["=: ]*[0-9]{12}|sandboxaccountid["=: ]*[0-9]{12}|:[0-9]{12}:)' \
+  | grep -Eo '[0-9]{12}' \
+  | grep -Ev '^0{12}$' || true)
+if [ -n "$acct_hits" ]; then
+  echo "⛔  Possible real AWS account ID added in this push."
+  echo "    Use the 000000000000 placeholder; real IDs belong only in gitignored"
+  echo "    .bootstrap.env / samconfig.toml (Rule 50)."
+  exit 1
+fi
+
 echo "→ secret scan"
 if command -v gitleaks >/dev/null 2>&1; then
   # Scan each push range separately so new-branch pushes are handled correctly.
+  # gitleaks auto-loads the repo-root .gitleaks.toml (aws-account-id rule).
   # shellcheck disable=SC2086
   for range in $RANGES; do
     (cd "$REPO_ROOT" && gitleaks git --no-banner --log-opts="$range")

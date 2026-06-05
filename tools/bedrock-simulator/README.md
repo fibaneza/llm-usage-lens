@@ -92,6 +92,14 @@ export AWS_PROFILE=<your-sandbox-profile>   # account in us-east-1
 cp samconfig.toml.example samconfig.toml    # then edit stack name / params
 #   (account-specific samconfig.*.toml variants are gitignored)
 
+# 2b. To deploy via GitHub Actions, create the pipeline OIDC deployer role once
+#     (a PIPELINE concern, separate from this app bootstrap). The example wrapper
+#     feeds this app's role name, workflow pins, and iam/deployer-*.json policies
+#     to the project-generic scripts/create-deployer-role.sh. Not needed for the
+#     local `sam deploy` below.
+(cd "$(git rev-parse --show-toplevel)" && \
+  ./scripts/examples/create-bedrock-simulator-deployer-role.sh --profile <your-sandbox-profile>)
+
 # 3. Build → package → deploy.
 pnpm install --frozen-lockfile   # only if deps aren't installed
 pnpm build                       # tsc + esbuild → dist/ + sam build → .aws-sam/

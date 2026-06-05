@@ -9,15 +9,21 @@ Parameters:
     Description: The AWS account ID this stack is being deployed into.
     AllowedPattern: ^[0-9]{12}$
 
+  # GitHubOwner / GitHubRepo / GitHubEnvironment are no longer consumed by any
+  # in-template resource: the OIDC deployer role is provisioned out-of-band by
+  # create-deployer-role.sh, whose trust policy is built from these same values.
+  # They remain declared because the deploy workflow still passes them via
+  # --parameter-overrides; an undeclared override would fail the deploy.
   GitHubOwner:
     Type: String
-    Description: GitHub repository owner (org or user) — used in the DeployerRole
-      OIDC trust policy.
+    Description: GitHub repository owner (org or user) — feeds the deployer role's
+      OIDC trust policy in create-deployer-role.sh.
     MinLength: 1
 
   GitHubRepo:
     Type: String
-    Description: GitHub repository name — used in the DeployerRole OIDC trust policy.
+    Description: GitHub repository name — feeds the deployer role's OIDC trust
+      policy in create-deployer-role.sh.
     MinLength: 1
 
   GitHubEnvironment:
@@ -730,297 +736,6 @@ Resources:
       LoggingRoleArn: !GetAtt BedrockLoggingRole.Arn
 
   # ---------------------------------------------------------------------------
-  # DeployerRole — assumed by GitHub Actions via OIDC. Trust policy locks down
-  # by repo, branch, GitHub Environment, and the three exact workflow files.
-  # Permissions are enumerated by service category — no *:* anywhere.
-  # ---------------------------------------------------------------------------
-  DeployerRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: bedrock-simulator-deployer
-      MaxSessionDuration: 3600
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          # OIDC trust is scoped by THREE distinct claims emitted in every
-          # GitHub Actions token (each is a separate JWT field; the `sub`
-          # claim alone carries only ONE of environment / ref / job_workflow_ref
-          # per token, so we pin them independently):
-          #   1. aud  — sts.amazonaws.com (set by aws-actions/configure-aws-credentials@v6)
-          #   2. sub  — repo:<owner>/<repo>:environment:bedrock-simulator-sandbox
-          #             (enforces the GitHub Environment gate)
-          #   3. job_workflow_ref — pins the exact workflow file AND the ref
-          #             (<owner>/<repo>/.github/workflows/<file>@refs/heads/main),
-          #             which jointly satisfies the spec's "only these three
-          #             workflows" and "ref:refs/heads/main" requirements.
-          # Arbitrary new workflows added to the repo cannot assume this role
-          # even if they target the same Environment.
-          - Effect: Allow
-            Principal:
-              Federated: !Sub arn:${AWS::Partition}:iam::${SandboxAccountId}:oidc-provider/token.actions.githubusercontent.com
-            Action: sts:AssumeRoleWithWebIdentity
-            Condition:
-              StringEquals:
-                token.actions.githubusercontent.com:aud: sts.amazonaws.com
-              StringLike:
-                token.actions.githubusercontent.com:sub:
-                  - !Sub repo:${GitHubOwner}/${GitHubRepo}:environment:${GitHubEnvironment}
-                token.actions.githubusercontent.com:job_workflow_ref:
-                  - !Sub ${GitHubOwner}/${GitHubRepo}/.github/workflows/bedrock-simulator-deploy.yml@refs/heads/main
-                  - !Sub ${GitHubOwner}/${GitHubRepo}/.github/workflows/bedrock-simulator-run.yml@refs/heads/main
-                  - !Sub ${GitHubOwner}/${GitHubRepo}/.github/workflows/bedrock-simulator-destroy.yml@refs/heads/main
-      Policies:
-        - PolicyName: deploy-simulator
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Sid: CloudFormation
-                Effect: Allow
-                Action: cloudformation:*
-                Resource:
-                  - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${SandboxAccountId}:stack/bedrock-simulator*
-                  - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${SandboxAccountId}:stack/bedrock-simulator*/*
-              - Sid: PassCfnRole
-                Effect: Allow
-                Action: iam:PassRole
-                Resource: !GetAtt SamCfnRole.Arn
-                Condition:
-                  StringEquals:
-                    iam:PassedToService: cloudformation.amazonaws.com
-              - Sid: SamArtifactBucket
-                Effect: Allow
-                Action:
-                  - s3:PutObject
-                  - s3:GetObject
-                  - s3:ListBucket
-                  - s3:GetBucketLocation
-                Resource:
-                  - !Sub arn:${AWS::Partition}:s3:::aws-sam-cli-managed-default-*
-                  - !Sub arn:${AWS::Partition}:s3:::aws-sam-cli-managed-default-*/*
-              - Sid: InvokeSimulatorLambda
-                Effect: Allow
-                Action: lambda:InvokeFunction
-                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:bedrock-simulator
-              - Sid: ReadStackResources
-                Effect: Allow
-                Action:
-                  - bedrock:GetInferenceProfile
-                  - bedrock:GetGuardrail
-                  - bedrock:GetModelInvocationLoggingConfiguration
-                Resource: '*'
-              - Sid: DestroyPreSteps
-                Effect: Allow
-                Action:
-                  - bedrock:PutModelInvocationLoggingConfiguration
-                  - bedrock:DeleteModelInvocationLoggingConfiguration
-                Resource: '*'
-              - Sid: KmsKeyCleanup
-                Effect: Allow
-                Action:
-                  - kms:DescribeKey
-                  - kms:DisableKey
-                Resource: '*'
-              - Sid: EmptyLoggingBucketDuringDestroy
-                Effect: Allow
-                Action:
-                  - s3:DeleteObject
-                  - s3:DeleteObjectVersion
-                  - s3:ListBucket
-                  - s3:ListBucketVersions
-                  - s3:ListBucketMultipartUploads
-                  - s3:ListMultipartUploadParts
-                  - s3:AbortMultipartUpload
-                Resource:
-                  - !GetAtt InvocationLoggingBucket.Arn
-                  - !Sub ${InvocationLoggingBucket.Arn}/*
-
-  # ---------------------------------------------------------------------------
-  # SamCfnRole — CloudFormation service role for sam deploy. Trust:
-  # cloudformation.amazonaws.com only. Permissions enumerated per service
-  # category — see "IAM least-privilege checklist" in the spec. No *:*. No
-  # iam:CreatePolicy (we use inline policies and managed policies declared
-  # in-template).
-  # ---------------------------------------------------------------------------
-  SamCfnRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: bedrock-simulator-sam-cfn
-      MaxSessionDuration: 3600
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: cloudformation.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: manage-simulator-stack
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Sid: IamRoles
-                Effect: Allow
-                Action:
-                  - iam:CreateRole
-                  - iam:DeleteRole
-                  - iam:GetRole
-                  - iam:TagRole
-                  - iam:UntagRole
-                  - iam:UpdateAssumeRolePolicy
-                  - iam:PutRolePolicy
-                  - iam:DeleteRolePolicy
-                  - iam:GetRolePolicy
-                  - iam:AttachRolePolicy
-                  - iam:DetachRolePolicy
-                  - iam:ListRolePolicies
-                  - iam:ListAttachedRolePolicies
-                Resource:
-                  - !Sub arn:${AWS::Partition}:iam::${SandboxAccountId}:role/bedrock-simulator-*
-                  - !Sub arn:${AWS::Partition}:iam::${SandboxAccountId}:role/SimUserRole-*
-              - Sid: IamManagedPolicies
-                Effect: Allow
-                Action:
-                  - iam:CreatePolicy
-                  - iam:DeletePolicy
-                  - iam:GetPolicy
-                  - iam:GetPolicyVersion
-                  - iam:ListPolicyVersions
-                  - iam:CreatePolicyVersion
-                  - iam:DeletePolicyVersion
-                  - iam:TagPolicy
-                  - iam:UntagPolicy
-                Resource: !Sub arn:${AWS::Partition}:iam::${SandboxAccountId}:policy/bedrock-simulator-*
-              - Sid: IamPassRole
-                Effect: Allow
-                Action: iam:PassRole
-                Resource:
-                  - !Sub arn:${AWS::Partition}:iam::${SandboxAccountId}:role/bedrock-simulator-*
-                  - !Sub arn:${AWS::Partition}:iam::${SandboxAccountId}:role/SimUserRole-*
-                Condition:
-                  StringEquals:
-                    iam:PassedToService:
-                      - lambda.amazonaws.com
-                      - bedrock.amazonaws.com
-              - Sid: Lambda
-                Effect: Allow
-                Action:
-                  - lambda:CreateFunction
-                  - lambda:DeleteFunction
-                  - lambda:GetFunction
-                  - lambda:GetFunctionConfiguration
-                  - lambda:UpdateFunctionCode
-                  - lambda:UpdateFunctionConfiguration
-                  - lambda:PublishVersion
-                  - lambda:AddPermission
-                  - lambda:RemovePermission
-                  - lambda:TagResource
-                  - lambda:UntagResource
-                  - lambda:ListTags
-                  - lambda:InvokeFunction
-                Resource:
-                  - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${SandboxAccountId}:function:bedrock-simulator
-                  - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${SandboxAccountId}:function:bedrock-simulator-logging-config
-              - Sid: BedrockResources
-                Effect: Allow
-                Action:
-                  - bedrock:CreateGuardrail
-                  - bedrock:UpdateGuardrail
-                  - bedrock:DeleteGuardrail
-                  - bedrock:GetGuardrail
-                  - bedrock:TagResource
-                  - bedrock:UntagResource
-                  - bedrock:CreateInferenceProfile
-                  - bedrock:DeleteInferenceProfile
-                  - bedrock:GetInferenceProfile
-                  - bedrock:ListTagsForResource
-                Resource: '*'
-              - Sid: S3
-                Effect: Allow
-                Action:
-                  - s3:CreateBucket
-                  - s3:DeleteBucket
-                  - s3:GetBucketLocation
-                  - s3:GetBucketPolicy
-                  - s3:PutBucketPolicy
-                  - s3:DeleteBucketPolicy
-                  - s3:PutBucketTagging
-                  - s3:GetBucketTagging
-                  - s3:PutBucketVersioning
-                  - s3:GetBucketVersioning
-                  - s3:PutBucketPublicAccessBlock
-                  - s3:GetBucketPublicAccessBlock
-                  - s3:PutBucketEncryption
-                  - s3:GetEncryptionConfiguration
-                  - s3:PutLifecycleConfiguration
-                  - s3:GetLifecycleConfiguration
-                  - s3:PutBucketOwnershipControls
-                  - s3:GetBucketOwnershipControls
-                Resource: !Sub arn:${AWS::Partition}:s3:::bedrock-simulator-*
-              - Sid: CloudWatchLogs
-                Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:DeleteLogGroup
-                  - logs:DescribeLogGroups
-                  - logs:PutRetentionPolicy
-                  - logs:DeleteRetentionPolicy
-                  - logs:AssociateKmsKey
-                  - logs:DisassociateKmsKey
-                  - logs:PutResourcePolicy
-                  - logs:DeleteResourcePolicy
-                  - logs:DescribeResourcePolicies
-                  - logs:TagResource
-                  - logs:UntagResource
-                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${SandboxAccountId}:log-group:*
-              - Sid: Kms
-                Effect: Allow
-                Action:
-                  - kms:CreateKey
-                  - kms:DescribeKey
-                  - kms:EnableKeyRotation
-                  - kms:DisableKeyRotation
-                  - kms:GetKeyPolicy
-                  - kms:PutKeyPolicy
-                  - kms:ScheduleKeyDeletion
-                  - kms:TagResource
-                  - kms:UntagResource
-                  - kms:CreateAlias
-                  - kms:DeleteAlias
-                  - kms:UpdateAlias
-                  - kms:ListAliases
-                Resource: '*'
-              - Sid: Sns
-                Effect: Allow
-                Action:
-                  - sns:CreateTopic
-                  - sns:DeleteTopic
-                  - sns:GetTopicAttributes
-                  - sns:SetTopicAttributes
-                  - sns:Subscribe
-                  - sns:Unsubscribe
-                  - sns:ListSubscriptionsByTopic
-                  - sns:TagResource
-                  - sns:UntagResource
-                Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${SandboxAccountId}:bedrock-simulator-*
-              - Sid: Budgets
-                Effect: Allow
-                Action:
-                  - budgets:CreateBudget
-                  - budgets:DeleteBudget
-                  - budgets:UpdateBudget
-                  - budgets:ViewBudget
-                  - budgets:DescribeBudget
-                  - budgets:CreateNotification
-                  - budgets:DeleteNotification
-                Resource: !Sub arn:${AWS::Partition}:budgets::${SandboxAccountId}:budget/bedrock-simulator-*
-              - Sid: CloudFormationCustomResource
-                Effect: Allow
-                Action:
-                  - cloudformation:DescribeStacks
-                  - cloudformation:DescribeStackEvents
-                Resource: '*'
-
-  # ---------------------------------------------------------------------------
   # Budget SNS topic + email subscription + monthly budget alarm with two
   # notifications: 80% forecast (early warning) + 100% actual (confirmed
   # breach). Email destination comes from the BudgetAlertEmail parameter
@@ -1136,11 +851,6 @@ Outputs:
   InferenceProfileTranslatorArn:
     Description: Application inference profile ARN for the "translator" service.
     Value: !GetAtt InferenceProfileTranslator.InferenceProfileArn
-
-  DeployerRoleArn:
-    Description: Role assumed by GitHub Actions via OIDC. Configure as the
-      workflow's role-to-assume.
-    Value: !GetAtt DeployerRole.Arn
 
   BudgetSnsTopicArn:
     Description: SNS topic receiving budget notifications. Confirm the email
