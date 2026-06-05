@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 // Minimal Conventional Commits config.
 // Dev dependencies (@commitlint/cli, @commitlint/config-conventional) are
@@ -6,5 +6,5 @@
 // amannn/action-semantic-pull-request (self-contained, no local deps needed).
 // This file is consumed by the local Husky commit-msg hook once Phase 1 lands.
 module.exports = {
-  extends: ['@commitlint/config-conventional'],
+  extends: ["@commitlint/config-conventional"],
 };

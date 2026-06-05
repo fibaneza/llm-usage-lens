@@ -1,0 +1,45 @@
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+ZERO=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+RANGES=""
+
+while IFS=" " read -r local_ref local_oid remote_ref remote_oid; do
+  [ "$local_oid" = "$ZERO" ] && continue
+  if [ "$remote_oid" = "$ZERO" ]; then
+    RANGES="$RANGES $local_oid"
+  else
+    RANGES="$RANGES $remote_oid..$local_oid"
+  fi
+done
+
+[ -z "$RANGES" ] && exit 0
+
+# Dashboard workspace: type-check + test suite when apps/ or packages/ change.
+# shellcheck disable=SC2086
+if git diff --name-only $RANGES 2>/dev/null | grep -qE "^apps/|^packages/"; then
+  echo "→ dashboard: typecheck"
+  (cd "$REPO_ROOT" && pnpm -r --if-present typecheck)
+  echo "→ dashboard: tests"
+  (cd "$REPO_ROOT" && pnpm exec vitest run --passWithNoTests)
+fi
+
+# Simulator: typecheck + tests (mirrors tools/bedrock-simulator/.hooks/pre-push).
+# shellcheck disable=SC2086
+if git diff --name-only $RANGES 2>/dev/null | grep -q "^tools/bedrock-simulator/"; then
+  echo "→ bedrock-simulator: typecheck"
+  (cd "$REPO_ROOT/tools/bedrock-simulator" && pnpm typecheck)
+  echo "→ bedrock-simulator: tests"
+  (cd "$REPO_ROOT/tools/bedrock-simulator" && pnpm test)
+fi
+
+# Secret scan — commits being pushed only, not full history.
+echo "→ secret scan"
+if command -v gitleaks >/dev/null 2>&1; then
+  # shellcheck disable=SC2086
+  for range in $RANGES; do
+    (cd "$REPO_ROOT" && gitleaks git --no-banner --log-opts="$range")
+  done
+else
+  echo "  gitleaks not installed; skipping (CI enforces). Install for local coverage."
+fi
+
+echo "→ all checks passed"
