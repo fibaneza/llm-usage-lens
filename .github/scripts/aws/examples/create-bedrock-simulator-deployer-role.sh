@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# scripts/examples/create-bedrock-simulator-deployer-role.sh
+# .github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh
 #
 # Worked example of calling the project-generic engine
-# scripts/create-deployer-role.sh. It provisions the GitHub Actions OIDC
+# .github/scripts/aws/create-deployer-role.sh. It provisions the GitHub Actions OIDC
 # "deployer" role used by the bedrock-simulator CI/CD pipeline.
 #
 # This is a PIPELINE concern, deliberately kept OUT of the bedrock-simulator app
@@ -14,7 +14,7 @@
 # change ROLE_NAME, the workflow list, and the policy files.
 #
 # Usage:
-#   scripts/examples/create-bedrock-simulator-deployer-role.sh [--profile P] \
+#   .github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh [--profile P] \
 #     [--account ID] [--owner OWNER] [--repo REPO] [--env ENV] [--delete]
 #
 # Account ID / GitHub owner are read from the gitignored
@@ -23,10 +23,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/../.." && pwd))"
-ENGINE="$REPO_ROOT/scripts/create-deployer-role.sh"
-POLICY_DIR="$REPO_ROOT/scripts/iam"
-ENV_FILE="$REPO_ROOT/scripts/.env"
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/../../../.." && pwd))"
+ENGINE="$REPO_ROOT/.github/scripts/aws/create-deployer-role.sh"
+POLICY_DIR="$REPO_ROOT/.github/scripts/aws/iam"
+ENV_FILE="$REPO_ROOT/.github/scripts/aws/.env"
 
 # ── the bedrock-simulator-specific inputs (what you'd customise per app) ───────
 ROLE_NAME="bedrock-simulator-deployer"

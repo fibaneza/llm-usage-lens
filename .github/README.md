@@ -19,8 +19,12 @@ The on-demand `claude-assistant.yml` is intentionally minimal and **scoped to
 issues only** — it does not run on pull requests, where `claude-pr-review.yml`
 and local Claude Code already cover the work. It carries the same cost
 discipline as the review workflows (a `--max-turns` cap and a read-only
-`--allowed-tools` allowlist). The rest of this document walks through the
-**automated review workflows** in detail.
+`--allowed-tools` allowlist). It runs in claude-code-action **agent mode** (a
+`prompt` is supplied) rather than tag mode: tag mode would treat each @claude
+issue as an implement-and-open-a-PR request, create a `claude/issue-<n>-*`
+branch, and fail when the finalising `main...<branch>` compare 404s on a
+read-only run. The rest of this document walks through the **automated review
+workflows** in detail.
 
 ### `bedrock-simulator-build.yml` job graph
 
