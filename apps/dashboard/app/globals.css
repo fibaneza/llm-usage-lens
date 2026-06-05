@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/*
+ * Dark mode is the default and only theme in v1 (Rule 40.1; design-system spec
+ * §Style: Dark Mode). Semantic tokens are defined here so components never use
+ * raw hex (Rule 40.2). Values come from design-system spec §Color Palette and
+ * §Chart Colors.
+ */
+@theme {
+  --color-background: #0f172a;
+  --color-foreground: #f8fafc;
+
+  --color-primary: #1e40af;
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: #3b82f6;
+  --color-secondary-foreground: #f8fafc;
+
+  --color-accent: #d97706;
+  --color-accent-foreground: #ffffff;
+
+  --color-muted: #334155;
+  --color-muted-foreground: #cbd5e1;
+
+  --color-border: #1e293b;
+  --color-input: #1e293b;
+  --color-ring: #1e40af;
+
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+
+  --color-success: #16a34a;
+  --color-success-foreground: #ffffff;
+
+  /* Surfaces consumed by shadcn Card / Popover primitives. */
+  --color-card: #0f172a;
+  --color-card-foreground: #f8fafc;
+  --color-popover: #0f172a;
+  --color-popover-foreground: #f8fafc;
+
+  /* Per-model chart colors (design-system spec §Chart Colors). */
+  --color-model-opus: #7c3aed;
+  --color-model-sonnet: #3b82f6;
+  --color-model-haiku: #14b8a6;
+  --color-model-other: #d97706;
+
+  /* Typography (design-system spec §Typography); bound in app/layout.tsx. */
+  --font-sans: var(--font-fira-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-fira-code), ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
