@@ -81,16 +81,27 @@
       "Resource": "arn:__PARTITION__:s3:::bedrock-simulator-*"
     },
     {
-      "Sid": "CloudWatchLogs",
+      "Sid": "CloudWatchLogGroups",
       "Effect": "Allow",
       "Action": [
-        "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups",
+        "logs:CreateLogGroup", "logs:DeleteLogGroup",
         "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy",
-        "logs:AssociateKmsKey", "logs:DisassociateKmsKey", "logs:PutResourcePolicy",
-        "logs:DeleteResourcePolicy", "logs:DescribeResourcePolicies",
+        "logs:AssociateKmsKey", "logs:DisassociateKmsKey",
         "logs:TagResource", "logs:UntagResource"
       ],
-      "Resource": "arn:__PARTITION__:logs:__REGION__:__ACCOUNT_ID__:log-group:*"
+      "Resource": [
+        "arn:__PARTITION__:logs:__REGION__:__ACCOUNT_ID__:log-group:/aws/lambda/bedrock-simulator*:*",
+        "arn:__PARTITION__:logs:__REGION__:__ACCOUNT_ID__:log-group:/aws/bedrock/invocation-logs/bedrock-simulator*:*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchLogsAccountLevel",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups", "logs:PutResourcePolicy",
+        "logs:DeleteResourcePolicy", "logs:DescribeResourcePolicies"
+      ],
+      "Resource": "*"
     },
     {
       "Sid": "Kms",
@@ -118,8 +129,8 @@
       "Effect": "Allow",
       "Action": [
         "budgets:ModifyBudget", "budgets:ViewBudget",
-				"budgets:CreateBudgetAction", "budgets:DeleteBudgetAction",
-				"budgets:UpdateBudgetAction"
+        "budgets:CreateBudgetAction", "budgets:DeleteBudgetAction",
+        "budgets:UpdateBudgetAction"
       ],
       "Resource": "arn:__PARTITION__:budgets::__ACCOUNT_ID__:budget/bedrock-simulator-*"
     }

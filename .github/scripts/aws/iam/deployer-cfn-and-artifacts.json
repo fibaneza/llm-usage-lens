@@ -2,15 +2,26 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "CloudFormation",
+      "Sid": "CloudFormationStacks",
       "Effect": "Allow",
       "Action": "cloudformation:*",
-      "Resource": "*"
+      "Resource": [
+        "arn:__PARTITION__:cloudformation:__REGION__:__ACCOUNT_ID__:stack/bedrock-simulator-sandbox/*",
+        "arn:__PARTITION__:cloudformation:__REGION__:__ACCOUNT_ID__:stack/aws-sam-cli-managed-default/*"
+      ]
     },
     {
-      "Sid": "CloudFormationDescribe",
+      "Sid": "CloudFormationAccountLevel",
       "Effect": "Allow",
-      "Action": ["cloudformation:DescribeStacks", "cloudformation:DescribeStackEvents"],
+      "Action": [
+        "cloudformation:ValidateTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ListStacks",
+        "cloudformation:ListExports",
+        "cloudformation:ListImports",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents"
+      ],
       "Resource": "*"
     },
     {
@@ -41,10 +52,7 @@
     {
       "Sid": "DestroyPreSteps",
       "Effect": "Allow",
-      "Action": [
-        "bedrock:PutModelInvocationLoggingConfiguration",
-        "bedrock:DeleteModelInvocationLoggingConfiguration"
-      ],
+      "Action": "bedrock:DeleteModelInvocationLoggingConfiguration",
       "Resource": "*"
     },
     {
