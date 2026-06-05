@@ -53,7 +53,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  STACK_NAME: bedrock-simulator
+  STACK_NAME: bedrock-simulator-sandbox
 
 # Serialize every stack-mutating / stack-reading simulator workflow on one
 # group so a deploy, destroy, and run can never operate on the stack

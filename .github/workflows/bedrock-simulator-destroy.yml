@@ -33,14 +33,14 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type the literal string "destroy bedrock-simulator" to confirm teardown.'
+        description: 'Type "destroy" to confirm teardown.'
         required: true
         type: string
 
 env:
   AWS_REGION: us-east-1
-  STACK_NAME: bedrock-simulator
-  CONFIRM_STRING: 'destroy bedrock-simulator'
+  STACK_NAME: bedrock-simulator-sandbox
+  CONFIRM_STRING: 'destroy'
 
 # Shared with deploy/run so the stack is mutated by at most one workflow at a
 # time. cancel-in-progress is false — never kill an in-flight sam delete.
@@ -199,8 +199,8 @@ jobs:
         run: |
           set -euo pipefail
           [ -z "$KEY_ARN" ] && exit 0
-          METADATA=$(aws kms describe-key --key-id "$KEY_ARN" --output json 2>/dev/null || echo "")
-          if [ -z "$METADATA" ]; then
+          METADATA=$(aws kms describe-key --key-id "$KEY_ARN" --output json 2>/dev/null || echo "{}")
+          if [ "$METADATA" = "{}" ] || ! echo "$METADATA" | jq -e '.KeyMetadata' > /dev/null 2>&1; then
             echo "KMS key $KEY_ARN no longer exists."
             exit 0
           fi

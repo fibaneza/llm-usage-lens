@@ -73,8 +73,8 @@
         "s3:GetBucketPolicy", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy",
         "s3:PutBucketTagging", "s3:GetBucketTagging", "s3:PutBucketVersioning",
         "s3:GetBucketVersioning", "s3:PutBucketPublicAccessBlock",
-        "s3:GetBucketPublicAccessBlock", "s3:PutBucketEncryption",
-        "s3:GetEncryptionConfiguration", "s3:PutLifecycleConfiguration",
+        "s3:GetBucketPublicAccessBlock", "s3:PutEncryptionConfiguration",
+        "s3:GetEncryptionConfiguration", "s3:PutLifecycleConfiguration", 
         "s3:GetLifecycleConfiguration", "s3:PutBucketOwnershipControls",
         "s3:GetBucketOwnershipControls"
       ],
@@ -117,9 +117,9 @@
       "Sid": "Budgets",
       "Effect": "Allow",
       "Action": [
-        "budgets:CreateBudget", "budgets:DeleteBudget", "budgets:UpdateBudget",
-        "budgets:ViewBudget", "budgets:DescribeBudget", "budgets:CreateNotification",
-        "budgets:DeleteNotification"
+        "budgets:ModifyBudget", "budgets:ViewBudget",
+				"budgets:CreateBudgetAction", "budgets:DeleteBudgetAction",
+				"budgets:UpdateBudgetAction"
       ],
       "Resource": "arn:__PARTITION__:budgets::__ACCOUNT_ID__:budget/bedrock-simulator-*"
     }

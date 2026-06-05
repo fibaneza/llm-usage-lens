@@ -5,10 +5,7 @@
       "Sid": "CloudFormation",
       "Effect": "Allow",
       "Action": "cloudformation:*",
-      "Resource": [
-        "arn:__PARTITION__:cloudformation:__REGION__:__ACCOUNT_ID__:stack/bedrock-simulator*",
-        "arn:__PARTITION__:cloudformation:__REGION__:__ACCOUNT_ID__:stack/bedrock-simulator*/*"
-      ]
+      "Resource": "*"
     },
     {
       "Sid": "CloudFormationDescribe",

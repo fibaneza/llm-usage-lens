@@ -25,8 +25,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/../.." && pwd))"
 ENGINE="$REPO_ROOT/scripts/create-deployer-role.sh"
-SIM_DIR="$REPO_ROOT/tools/bedrock-simulator"
-POLICY_DIR="$SIM_DIR/iam"
+POLICY_DIR="$REPO_ROOT/scripts/iam"
+ENV_FILE="$REPO_ROOT/scripts/.env"
 
 # ── the bedrock-simulator-specific inputs (what you'd customise per app) ───────
 ROLE_NAME="bedrock-simulator-deployer"
@@ -47,9 +47,9 @@ GITHUB_OWNER=""
 REGION="us-east-1"
 DELETE=false
 
-if [[ -f "$SIM_DIR/.bootstrap.env" ]]; then
+if [[ -f "$ENV_FILE" ]]; then
   # shellcheck source=/dev/null
-  source "$SIM_DIR/.bootstrap.env"
+  source "$ENV_FILE"
 fi
 
 while [[ $# -gt 0 ]]; do
