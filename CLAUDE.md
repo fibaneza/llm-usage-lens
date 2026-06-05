@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository is **pre-implementation** for application code: no `apps/`, no `packages/`, no `package.json`, no build tooling yet. Phase 1 (Foundation) has not started.
 
-Pre-Phase-1 infrastructure *is* in place — the devcontainer, the OpenTelemetry/Prometheus/Loki/Grafana observability stack, the `.claude/` rules + agents + commands, and the `.mcp.json` config (Azure MCP) are all wired up. Treat these as ready; do not rebuild them from scratch.
+Pre-Phase-1 infrastructure *is* in place — the devcontainer, the OpenTelemetry/Prometheus/Loki/Grafana observability stack, the `.claude/` rules + agents + commands, the `.mcp.json` config (Azure MCP), and the repo-root quality config staged for Phase 1 (`commitlint.config.cjs`, `.gitleaks.toml`, `.editorconfig`, `.gitattributes`) are all wired up. These activate once Phase 1 adds `package.json` and the Husky hooks (see [`docs/guides/git-hooks.md`](docs/guides/git-hooks.md)). Treat all of this as ready; do not rebuild it from scratch.
 
 ## Reading order
 
@@ -27,6 +27,14 @@ The `docs/specs/` directory is the source of truth:
 - `docs/guides/dashboard-deployment.md` — operational runbook: Next.js dashboard on Netlify, deploy/undeploy CLI
 - `docs/guides/dynamic-workflows.md` — where Opus 4.8 dynamic workflows fit (and don't fit) the phase plan; not adopted in v1
 - `docs/guides/github-best-practices.md` — general GitHub/Actions practice reconciled to this project's GitHub Flow, SAM, and pnpm conventions
+- `docs/guides/git-hooks.md` — local git-hook strategy: the current simulator pre-push hook and the Phase 1 Husky suite that supersedes it
+- `docs/guides/learning-path.md` — guided, phase-by-phase walk-through of the whole build (lesson + tracker); start here if you're new to the project
+
+Not in the reading path above, but worth knowing they exist:
+
+- `docs/future-improvements.md` — the parking lot of intentionally-deferred enhancements, each with the trigger that would revisit it; per Rule 00, adopting any starts with a spec change, not a PR
+- `ONBOARDING.md` — new-contributor setup checklist (codebases, MCP servers, skills to know)
+- `docs/superpowers/` — the design spec + implementation plan for the already-shipped `/new-component` command; kept for provenance, not active guidance
 
 Build strictly in phase order (see implementation-phases spec). Phase 4 has 9 sub-phases, one per dashboard page; components are built where first needed and reused later.
 
@@ -151,7 +159,7 @@ The project's default response voice is the **`spec-cited` output style** (`.cla
 - It is **not in the pnpm workspace** (separate `tools/bedrock-simulator/package.json`).
 - It does **not participate in `.claude/rules/30-phase-discipline.md`** — build it independently of the dashboard's phase order.
 - Deploy / run / destroy are GitHub Actions workflows (`workflow_dispatch` only). The `.claude/settings.json` deny list blocks `sam delete` and `aws *delete-*` from Claude Code — these run from the workflow, not from the local Claude session.
-- Spec: `docs/specs/<date>-bedrock-simulator.md`. Operational guide: `docs/guides/bedrock-simulator.md`.
+- Spec: [`docs/specs/2026-05-24-bedrock-simulator.md`](docs/specs/2026-05-24-bedrock-simulator.md). Operational guide: [`docs/guides/bedrock-simulator.md`](docs/guides/bedrock-simulator.md).
 
 ## Architecture & conventions
 
