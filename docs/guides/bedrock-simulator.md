@@ -214,6 +214,13 @@ aws sso login --profile bedrock-simulator-sandbox
 
 Set the repo's `SANDBOX_ACCOUNT_ID` Actions **variable** to the same account ID (the deploy workflow reads `vars.SANDBOX_ACCOUNT_ID` to build the role ARN). Tear the role down later with `./.github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh --delete`.
 
+> **Re-provision after policy changes.** The role's permissions live in the
+> committed [`iam/deployer-*.json`](../../.github/scripts/aws/iam/) files, but the
+> **live** role only changes when this script is re-run (`aws iam put-role-policy`
+> overwrites the inline policy in place, so re-running is idempotent). Whenever
+> those JSON files change, re-run the wrapper or a later deploy/destroy will fail
+> on the missing permission — see [Recovery G](#recovery-g--sam-delete-fails-with-accessdenied-on-s3deleteobject).
+
 ### Step B — deploy via GitHub Actions
 
 With the role in place, deploy from scratch through the workflows:
@@ -323,7 +330,7 @@ Two-phase teardown:
 2. `aws s3 rm s3://<bucket> --recursive` + abort any multipart uploads — empties the bucket so CFN can delete it.
 3. `sam delete --no-prompts` — tears down the stack.
 
-If step 3 lands in `DELETE_FAILED`, run [Recovery D](#recovery-d----delete_failed) by hand.
+If step 3 lands in `DELETE_FAILED`, run [Recovery D](#recovery-d----delete_failed) by hand. If step 3 fails with `AccessDenied` on `s3:DeleteObject` against the `aws-sam-cli-managed-default-*` artifact bucket, the live deployer role is stale — see [Recovery G](#recovery-g--sam-delete-fails-with-accessdenied-on-s3deleteobject).
 
 ## Post-deploy verification
 
@@ -602,6 +609,40 @@ aws cloudformation describe-stack-resource-drifts --stack-name bedrock-simulator
 ```
 
 Decide whether to revert the manual change (preferred — CFN owns the resource) or update the template to match reality.
+
+### Recovery G — `sam delete` fails with `AccessDenied` on `s3:DeleteObject`
+
+```
+Error: An error occurred (AccessDenied) when calling the DeleteObject operation:
+User: …assumed-role/bedrock-simulator-deployer/GitHubActions is not authorized to
+perform: s3:DeleteObject on resource:
+"arn:aws:s3:::aws-sam-cli-managed-default-…samclisourcebucket-…/<key>"
+```
+
+The deployer role's inline permission policies are versioned in
+[`.github/scripts/aws/iam/`](../../.github/scripts/aws/iam/), but the **live**
+role in the sandbox account is only updated when the provisioning script is
+re-run. If the policy JSON has gained permissions since the role was last
+provisioned (here: `s3:DeleteObject`/`s3:DeleteObjectVersion` on the SAM-managed
+artifact bucket, which `sam delete` needs to clean up its packaged artifacts),
+the live role is stale and `sam delete` is denied on the final cleanup step —
+even though the CloudFormation stack itself may already be deleted.
+
+Re-provision the role to pick up the committed policy, then re-run the destroy
+workflow. `aws iam put-role-policy` overwrites the inline policy in place, so
+this is idempotent and safe to repeat:
+
+```bash
+# From an operator terminal with sandbox-account SSO credentials:
+./.github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh \
+  --profile bedrock-simulator-sandbox
+
+# Then retry the teardown:
+gh workflow run bedrock-simulator-destroy.yml -f confirm="destroy bedrock-simulator"
+```
+
+Any time the `iam/deployer-*.json` policies change, the live role must be
+re-provisioned the same way (noted in [Step A](#step-a--create-the-deployer-role-one-time-local)).
 
 ## CFN state machine (Diagram 3)
 
