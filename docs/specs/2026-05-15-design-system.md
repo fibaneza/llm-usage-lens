@@ -8,7 +8,7 @@
 
 ## Overview
 
-Enterprise analytics dashboard for tracking AWS Bedrock usage and cost across an organization. Optimized for data density, readability, and dark mode.
+Enterprise analytics dashboard for tracking AWS Bedrock usage and cost across an organization. Optimized for data density, readability, and light mode.
 
 ## Technology Stack
 
@@ -134,30 +134,30 @@ Pre-commit (Husky + lint-staged + gitleaks):
 Pre-push:
 - `tsc --noEmit` — TypeScript type check catches type errors before PR
 
-## Style: Dark Mode (OLED)
+## Style: Light Mode
 
-Selected via UI UX Pro Max for enterprise SaaS analytics dashboards.
+Selected for enterprise SaaS analytics dashboards — clean, high-contrast, print-friendly.
 
-- **Mode support:** Dark primary, light secondary (future)
+- **Mode support:** Light primary
 - **Performance:** Excellent
 - **Accessibility:** WCAG AAA target
-- **Key effects:** Minimal glow (text-shadow: 0 0 10px), dark-to-light transitions, high readability, visible focus states
+- **Key effects:** Soft indigo shadows, subtle surface layering, high readability, visible focus states
 
 ## Color Palette
 
 | Role | Hex | CSS Variable | Usage |
 |------|-----|-------------|-------|
-| Primary | `#1E40AF` | `--color-primary` | Navigation active states, primary buttons |
+| Primary | `#4F46E5` | `--color-primary` | Navigation active states, primary buttons |
 | On Primary | `#FFFFFF` | `--color-on-primary` | Text on primary color |
-| Secondary | `#3B82F6` | `--color-secondary` | Links, secondary actions, chart accent |
+| Secondary | `#6366F1` | `--color-secondary` | Links, secondary actions |
 | Accent/CTA | `#D97706` | `--color-accent` | Warnings, highlights, cost alerts |
-| Background | `#0F172A` | `--color-background` | Page background (dark mode) |
-| Foreground | `#F8FAFC` | `--color-foreground` | Primary text |
-| Muted | `#334155` | `--color-muted` | Borders, secondary text backgrounds |
-| Border | `#1E293B` | `--color-border` | Card borders, dividers |
-| Destructive | `#DC2626` | `--color-destructive` | Error states, high cost alerts |
-| Success | `#16A34A` | `--color-success` | Positive trends, low cost indicators |
-| Ring | `#1E40AF` | `--color-ring` | Focus rings |
+| Background | `#F5F7FF` | `--color-background` | Page background (soft blue-gray canvas) |
+| Foreground | `#0F172A` | `--color-foreground` | Primary text |
+| Muted | `#94A3B8` | `--color-muted` | Placeholders, muted text |
+| Border | `#E2E8F0` | `--color-border` | Card borders, dividers |
+| Destructive | `#E11D48` | `--color-destructive` | Error states, high cost alerts |
+| Success | `#059669` | `--color-success` | Positive trends, low cost indicators |
+| Ring | `rgba(79,70,229,0.35)` | `--color-ring` | Focus rings |
 
 ### Chart Colors (Per Model)
 
@@ -174,19 +174,19 @@ Each Bedrock model gets a consistent color across all charts:
 
 | Role | Font | Weight | Usage |
 |------|------|--------|-------|
-| Headings | Fira Code | 600-700 | Page titles, section headers, metric values |
-| Body | Fira Sans | 300-500 | Paragraphs, labels, descriptions |
-| Data/Numbers | Fira Code | 400-500 | Table cells, chart labels, token counts, costs |
+| Headings | Space Grotesk | 600-700 | Page titles, section headers, card titles |
+| Body | Space Grotesk | 300-500 | Paragraphs, labels, descriptions |
+| Data/Numbers | JetBrains Mono | 400-600 | Table cells, chart labels, token counts, costs, KPI values |
 
 **Google Fonts import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 ```
 
 - **Type scale:** 12 / 14 / 16 / 18 / 24 / 32 / 48
 - **Base:** 16px body
 - **Line height:** 1.5 for body, 1.2 for headings
-- **Number formatting:** Tabular/monospaced figures for data columns (Fira Code handles this natively)
+- **Number formatting:** Tabular/monospaced figures for data columns (JetBrains Mono handles this natively)
 
 ## Layout
 
@@ -399,7 +399,7 @@ Global date filter present in the page header of every dashboard page:
 - **Empty states**: "No data yet" with guidance, not blank charts
 - **Stacked charts**: Cost trend stacked by model, with legend toggle to show/hide series
 - **Number formatting**: Locale-aware, tabular figures, abbreviated for large numbers ($12.5K)
-- **Gridlines**: Low-contrast (gray-800 on dark bg) so they don't compete with data
+- **Gridlines**: Low-contrast (`rgba(15,23,42,0.06)` on light bg) so they don't compete with data
 - **Responsive charts**: Every chart wrapped in Recharts `ResponsiveContainer` + Tailwind container queries
 
 ### Animation
@@ -411,7 +411,7 @@ Global date filter present in the page header of every dashboard page:
 
 ## Anti-Patterns to Avoid
 
-- Light mode as default (dark mode primary for this product)
+- Dark mode as default (light mode primary for this product)
 - Emoji as icons (use Lucide SVG icons)
 - Placeholder-only form labels
 - Gray-on-gray text

@@ -34,11 +34,11 @@ Components are built where they are first needed and reused in subsequent pages.
 - [ ] Initialize pnpm workspace monorepo (`pnpm-workspace.yaml`, `packages/shared`, `apps/dashboard`)
   - `packages/shared`: Zod schemas and `models.ts` consumed by dashboard and (later) collector — see System Architecture spec **Shared code layout**
 - [ ] Initialize Next.js project in `apps/dashboard` with TypeScript strict mode, App Router
-- [ ] Configure Tailwind CSS v4 with dark mode theme
+- [ ] Configure Tailwind CSS v4 with light mode theme
   - Color tokens (CSS variables from design system spec)
-  - Typography (Fira Code + Fira Sans via Google Fonts)
+  - Typography (Space Grotesk + JetBrains Mono via Google Fonts)
   - Spacing scale (4px/8px grid)
-- [ ] Initialize shadcn/ui with dark theme
+- [ ] Initialize shadcn/ui with light theme
 - [ ] Configure ESLint v9 (flat config, `eslint.config.ts`)
 - [ ] Configure Prettier (paired with ESLint)
 - [ ] Set up Husky + lint-staged (pre-commit: ESLint + Prettier on staged files)
@@ -67,7 +67,7 @@ Components are built where they are first needed and reused in subsequent pages.
   - Type check (`tsc --noEmit`)
   - Secret scan (gitleaks)
   - Build (`next build`)
-- [ ] Verify: project runs with `pnpm dev`, Microsoft Entra ID sign-in works, dark theme renders
+- [ ] Verify: project runs with `pnpm dev`, Microsoft Entra ID sign-in works, light theme renders
 
 ### Dependencies
 
