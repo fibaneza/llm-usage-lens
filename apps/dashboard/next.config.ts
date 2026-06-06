@@ -1,5 +1,9 @@
 import type { NextConfig } from "next";
 
+// Disable Next.js anonymous telemetry — must be set before the config is
+// evaluated so it takes effect at CLI startup (next dev / next build).
+process.env.NEXT_TELEMETRY_DISABLED = "1";
+
 const nextConfig: NextConfig = {
   // Compile the workspace package from its TypeScript source (it ships .ts,
   // not a build artifact). See docs/specs/2026-05-15-system-architecture.md —
