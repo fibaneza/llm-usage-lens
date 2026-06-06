@@ -15,7 +15,7 @@ Enterprise analytics dashboard for tracking AWS Bedrock usage and cost across an
 | Layer | Technology | Version/Notes |
 |-------|-----------|---------------|
 | **Framework** | Next.js (App Router) | Latest stable, Server Components, Route Handlers |
-| **Language** | TypeScript | Strict mode, 5.x |
+| **Language** | TypeScript | Strict mode, 6.x |
 | **Runtime** | Node.js | 22 LTS |
 | **Package Manager** | pnpm | Fast, disk-efficient, lockfile |
 | **Styling** | Tailwind CSS | v4+ |
