@@ -23,6 +23,10 @@
 # Only the issue NUMBER is interpolated into the workflow YAML. Claude reads the
 # (untrusted) issue body via `gh issue view`, so untrusted text is never inlined.
 #
+# Concurrency: keyed on the issue number so that:
+#   - Two @claude mentions on the SAME issue are queued (cancel-in-progress: false).
+#   - Mentions on DIFFERENT issues run fully in parallel (distinct group keys).
+#
 # Steps:
 #   1. Checkout repository (shallow)
 #   2. Configure git author identity
@@ -39,6 +43,11 @@ on:
 
 jobs:
   claude:
+    # Same issue → queue (cancel-in-progress: false); different issues → parallel.
+    concurrency:
+      group: claude-assistant-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
+
     # `issue_comment` fires on PR comments too — `!github.event.issue.pull_request`
     # restricts this job to real issues, keeping PRs out of scope.
     if: |
