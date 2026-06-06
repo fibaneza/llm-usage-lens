@@ -13,18 +13,20 @@ This folder holds the project's GitHub-side automation.
 | [`workflows/bedrock-simulator-deps.yml`](workflows/bedrock-simulator-deps.yml) | `workflow_dispatch` (on demand) | Full dependency-health report to the run summary: `pnpm outdated` (freshness), `pnpm audit` (vulnerabilities), `pnpm dedupe --check` (duplicate versions). **Advisory — never fails.** For inspection without a build; enforcement is the `bedrock-simulator-build.yml` gate. Touches no AWS |
 | [`workflows/pr-title-lint.yml`](workflows/pr-title-lint.yml) | PR opened / edited / reopened | Validates PR title against Conventional Commits (required — PR title becomes the squash-merge commit on `main`) |
 | [`workflows/labels.yml`](workflows/labels.yml) | Push to `main` touching [`labels.yml`](labels.yml) / the workflow; `workflow_dispatch` | Syncs repository labels from [`.github/labels.yml`](labels.yml) (create/update only — `skip-delete: true` protects labels created by the release audit) |
-| [`workflows/claude-assistant.yml`](workflows/claude-assistant.yml) | `@claude` mention on an **issue** (opened/assigned or issue comment) | On-demand reactive bot for issue triage / Q&A; PRs are out of scope (covered by `claude-pr-review.yml` + local Claude Code) |
+| [`workflows/claude-assistant.yml`](workflows/claude-assistant.yml) | `@claude` mention on an **issue** (opened/assigned or issue comment) | On-demand implementation bot: posts an acknowledgement comment immediately, implements the change on a Rule 31–named branch, opens a draft PR, and posts a summary; falls back to a Q&A reply for informational requests. Works on any issue type (bug, feature, task, chore, refactor, docs, etc.) |
 
-The on-demand `claude-assistant.yml` is intentionally minimal and **scoped to
-issues only** — it does not run on pull requests, where `claude-pr-review.yml`
-and local Claude Code already cover the work. It carries the same cost
-discipline as the review workflows (a `--max-turns` cap and a read-only
-`--allowed-tools` allowlist). It runs in claude-code-action **agent mode** (a
-`prompt` is supplied) rather than tag mode: tag mode would treat each @claude
-issue as an implement-and-open-a-PR request, create a `claude/issue-<n>-*`
-branch, and fail when the finalising `main...<branch>` compare 404s on a
-read-only run. The rest of this document walks through the **automated review
-workflows** in detail.
+The on-demand `claude-assistant.yml` is **scoped to issues only** — it does
+not run on pull requests, where `claude-pr-review.yml` and local Claude Code
+already cover the work. When `@claude` is mentioned on an issue of any type
+(bug, feature, task, chore, refactor, docs, etc.), the job immediately posts
+an acknowledgement comment (before Claude reads a line), then Claude reads the
+issue, implements the change on a properly-named branch (Rule 31 convention),
+pushes it, and opens a draft PR linking back to the issue. For informational
+requests, Claude posts a reply and skips the branch/PR flow. It runs in
+claude-code-action **agent mode** (a `prompt` is supplied) rather than tag
+mode: tag mode always compares `main...<branch>` at the end, which 404s on
+Q&A runs where nothing is pushed. The rest of this document walks through the
+**automated review workflows** in detail.
 
 ### `bedrock-simulator-build.yml` job graph
 
@@ -235,7 +237,7 @@ flowchart TD
     B -->|issue or issue comment with<br/>'@claude ...'<br/>PRs excluded| BOT[claude-assistant.yml]
     PR --> PR1[Inline diff comments<br/>+ PR comment for HIGH/MEDIUM security<br/>+ REQUEST_CHANGES review on HIGH]
     RA --> RA1[Issues: HIGH/MEDIUM security<br/>+ HIGH code-review]
-    BOT --> BOT1[Reactive reply in thread]
+    BOT --> BOT1[Acknowledgement comment immediately<br/>then implement on branch + draft PR<br/>or Q&A reply for questions]
 ```
 
 ---
