@@ -43,7 +43,10 @@ runs:
           --query '{Objects:(Versions[*].{Key:Key,VersionId:VersionId})[?VersionId!=null]}' \
           --output json > /tmp/versions.json 2>/dev/null || echo '{"Objects":[]}' > /tmp/versions.json
         if [[ "$(jq '.Objects | length' /tmp/versions.json)" -gt 0 ]]; then
-          if ! aws s3api delete-objects --bucket "$BUCKET_NAME" --delete file:///tmp/versions.json --quiet; then
+          # s3api delete-objects has no --quiet CLI flag; suppress per-object
+          # output by embedding "Quiet":true in the JSON payload instead.
+          if ! aws s3api delete-objects --bucket "$BUCKET_NAME" \
+               --delete "$(jq '.Quiet=true' /tmp/versions.json)"; then
             echo "::warning::delete-objects (versions) failed"
           fi
         fi
@@ -53,7 +56,8 @@ runs:
           --query '{Objects:(DeleteMarkers[*].{Key:Key,VersionId:VersionId})[?VersionId!=null]}' \
           --output json > /tmp/markers.json 2>/dev/null || echo '{"Objects":[]}' > /tmp/markers.json
         if [[ "$(jq '.Objects | length' /tmp/markers.json)" -gt 0 ]]; then
-          if ! aws s3api delete-objects --bucket "$BUCKET_NAME" --delete file:///tmp/markers.json --quiet; then
+          if ! aws s3api delete-objects --bucket "$BUCKET_NAME" \
+               --delete "$(jq '.Quiet=true' /tmp/markers.json)"; then
             echo "::warning::delete-objects (markers) failed"
           fi
         fi
