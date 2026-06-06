@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .github/scripts/aws/create-deployer-role.sh — generic GitHub-OIDC deployer-role provisioner.
+# .github/scripts/aws/lib/create-deployer-role.sh — generic GitHub-OIDC deployer-role provisioner.
 #
 # Project-agnostic. Creates (or updates) an IAM role that GitHub Actions can
 # assume via OIDC, with a trust policy pinned to a repository and — optionally —
@@ -8,17 +8,17 @@
 # GitHub OIDC identity provider (token.actions.githubusercontent.com) exists.
 #
 # It hard-codes NOTHING about any one app: the role name, trust pins, and
-# permission policies are all supplied by the caller. Per-app example wrappers
-# (e.g. .github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh) fill
+# permission policies are all supplied by the caller. Per-app wrappers
+# (e.g. .github/scripts/aws/create-bedrock-simulator-deployer-role.sh) fill
 # in their own values. See docs/specs/2026-05-24-bedrock-simulator.md for the first consumer.
 #
 # Usage:
-#   .github/scripts/aws/create-deployer-role.sh --role-name NAME --owner OWNER --repo REPO \
+#   .github/scripts/aws/lib/create-deployer-role.sh --role-name NAME --owner OWNER --repo REPO \
 #     [--env ENVNAME] [--workflow REF ...] [--policy NAME=PATH ...] [options]
-#   .github/scripts/aws/create-deployer-role.sh --role-name NAME --delete
+#   .github/scripts/aws/lib/create-deployer-role.sh --role-name NAME --delete
 #
 # Example (provision the bedrock-simulator pipeline deployer role):
-#   .github/scripts/aws/create-deployer-role.sh \
+#   .github/scripts/aws/lib/create-deployer-role.sh \
 #     --role-name bedrock-simulator-deployer \
 #     --owner my-org --repo aws-bedrock-cost-tracker \
 #     --env bedrock-simulator-sandbox \
@@ -26,7 +26,7 @@
 #     --policy cfn-and-artifacts=.github/scripts/aws/iam/deployer-cfn-and-artifacts.json \
 #     --policy stack-resources=.github/scripts/aws/iam/deployer-stack-resources.json
 #   # …or just run the ready-made wrapper that fills all of the above in:
-#   .github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh
+#   .github/scripts/aws/create-bedrock-simulator-deployer-role.sh
 #
 # Policy JSON files may contain the tokens __ACCOUNT_ID__, __REGION__ and
 # __PARTITION__; they are substituted before the policy is attached. Keeping
@@ -269,4 +269,4 @@ echo ""
 echo "  Role ARN: $ROLE_ARN"
 echo ""
 echo "  Delete it later with:"
-echo "    .github/scripts/aws/create-deployer-role.sh --role-name $ROLE_NAME --delete"
+echo "    .github/scripts/aws/lib/create-deployer-role.sh --role-name $ROLE_NAME --delete"

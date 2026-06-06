@@ -93,12 +93,12 @@ cp samconfig.toml.example samconfig.toml    # then edit stack name / params
 #   (account-specific samconfig.*.toml variants are gitignored)
 
 # 2b. To deploy via GitHub Actions, create the pipeline OIDC deployer role once
-#     (a PIPELINE concern, separate from this app bootstrap). The example wrapper
-#     feeds this app's role name, workflow pins, and iam/deployer-*.json policies
-#     to the project-generic .github/scripts/aws/create-deployer-role.sh. Not needed
-#     for the local `sam deploy` below.
+#     (a PIPELINE concern, separate from this app bootstrap). The wrapper feeds
+#     this app's role name, workflow pins, and iam/deployer-*.json policies to the
+#     project-generic .github/scripts/aws/lib/create-deployer-role.sh, reading config
+#     from .github/scripts/aws/.env. Not needed for the local `sam deploy` below.
 (cd "$(git rev-parse --show-toplevel)" && \
-  ./.github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh --profile <your-sandbox-profile>)
+  ./.github/scripts/aws/create-bedrock-simulator-deployer-role.sh)
 
 # 3. Build → package → deploy.
 pnpm install --frozen-lockfile   # only if deps aren't installed
