@@ -8,10 +8,10 @@
 # It does NOT create the GitHub Actions "deployer" OIDC role: that is a CI/CD
 # PIPELINE concern, not part of the app. `sam deploy` does not need it (locally
 # you authenticate with SSO; in CI the workflow assumes it). Provision that
-# pipeline role separately, once, with the example wrapper:
+# pipeline role separately, once, with:
 #
-#   .github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh
-#   # (a thin example around the generic .github/scripts/aws/create-deployer-role.sh)
+#   .github/scripts/aws/create-bedrock-simulator-deployer-role.sh
+#   # (a thin wrapper around the generic .github/scripts/aws/lib/create-deployer-role.sh)
 #
 # Usage (from tools/bedrock-simulator/):
 #   ./bootstrap.sh [options]
@@ -221,7 +221,7 @@ echo ""
 echo "  To deploy via GitHub Actions instead of locally, first provision the"
 echo "  pipeline deployer role (one-time, separate from this app bootstrap):"
 echo ""
-echo "    .github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh"
+echo "    .github/scripts/aws/create-bedrock-simulator-deployer-role.sh"
 echo ""
 echo "  Then: gh workflow run bedrock-simulator-deploy.yml -f confirm=deploy"
 echo ""

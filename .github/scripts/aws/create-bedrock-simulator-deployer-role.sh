@@ -1,30 +1,32 @@
 #!/usr/bin/env bash
-# .github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh
+# .github/scripts/aws/create-bedrock-simulator-deployer-role.sh
 #
-# Worked example of calling the project-generic engine
-# .github/scripts/aws/create-deployer-role.sh. It provisions the GitHub Actions OIDC
-# "deployer" role used by the bedrock-simulator CI/CD pipeline.
+# Provisions the GitHub Actions OIDC "deployer" role used by the
+# bedrock-simulator CI/CD pipeline. This is the script you actually run; it
+# feeds the bedrock-simulator-specific inputs (role name, workflow trust pins,
+# permission policies) to the project-generic engine
+# .github/scripts/aws/lib/create-deployer-role.sh.
 #
 # This is a PIPELINE concern, deliberately kept OUT of the bedrock-simulator app
 # bootstrap (tools/bedrock-simulator/bootstrap.sh) — that script only deploys the
 # stack, which creates the app's OWN roles. Run this once with operator SSO
 # credentials so GitHub Actions can deploy/destroy from scratch.
 #
-# Copy this file as a template when adding a deployer role for another app:
-# change ROLE_NAME, the workflow list, and the policy files.
+# All configuration is read from .github/scripts/aws/.env (copy .env.example to
+# .env and fill it in). There are no configuration flags — edit .env instead.
 #
 # Usage:
-#   .github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh [--profile P] \
-#     [--account ID] [--owner OWNER] [--repo REPO] [--env ENV] [--delete]
+#   .github/scripts/aws/create-bedrock-simulator-deployer-role.sh           # create / update
+#   .github/scripts/aws/create-bedrock-simulator-deployer-role.sh --delete  # tear down
 #
-# Account ID / GitHub owner are read from the gitignored
-# tools/bedrock-simulator/.bootstrap.env when present, or passed as flags.
+# Copy this file as a template when adding a deployer role for another app:
+# change ROLE_NAME, the workflow list, and the policy files.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/../../../.." && pwd))"
-ENGINE="$REPO_ROOT/.github/scripts/aws/create-deployer-role.sh"
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/../../.." && pwd))"
+ENGINE="$REPO_ROOT/.github/scripts/aws/lib/create-deployer-role.sh"
 POLICY_DIR="$REPO_ROOT/.github/scripts/aws/iam"
 ENV_FILE="$REPO_ROOT/.github/scripts/aws/.env"
 
@@ -40,31 +42,30 @@ WORKFLOW_FILES=(
   bedrock-simulator-destroy.yml
 )
 
-# ── values shared with bootstrap.sh, sourced from .bootstrap.env if present ────
+# ── only mode flags are accepted; all config comes from .env ───────────────────
+DELETE=false
+case "${1:-}" in
+  "")        ;;
+  --delete)  DELETE=true ;;
+  --help)    sed -n '/^# Usage/,/^[^#]/p' "$0" | head -n -1 | sed 's/^# \?//'; exit 0 ;;
+  *) echo "Unknown option: $1  (run with --help; configuration lives in .env)" >&2; exit 1 ;;
+esac
+
+# ── configuration: read from .env ──────────────────────────────────────────────
+# Defaults apply only when .env omits the value.
 PROFILE="${AWS_PROFILE:-bedrock-simulator-sandbox}"
 ACCOUNT_ID=""
 GITHUB_OWNER=""
 REGION="us-east-1"
-DELETE=false
 
 if [[ -f "$ENV_FILE" ]]; then
   # shellcheck source=/dev/null
   source "$ENV_FILE"
+else
+  echo "✗  config not found: $ENV_FILE" >&2
+  echo "   copy ${ENV_FILE%/*}/.env.example to $ENV_FILE and fill it in." >&2
+  exit 1
 fi
-
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --profile) PROFILE="$2";      shift 2 ;;
-    --account) ACCOUNT_ID="$2";   shift 2 ;;
-    --owner)   GITHUB_OWNER="$2"; shift 2 ;;
-    --repo)    GITHUB_REPO="$2";  shift 2 ;;
-    --env)     GITHUB_ENV="$2";   shift 2 ;;
-    --region)  REGION="$2";       shift 2 ;;
-    --delete)  DELETE=true;       shift ;;
-    --help)    sed -n '/^# Usage/,/^[^#]/p' "$0" | head -n -1 | sed 's/^# \?//'; exit 0 ;;
-    *) echo "Unknown option: $1  (run with --help)" >&2; exit 1 ;;
-  esac
-done
 
 [[ -x "$ENGINE" ]] || { echo "✗  engine not found/executable: $ENGINE" >&2; exit 1; }
 
@@ -73,7 +74,7 @@ if [[ "$DELETE" == true ]]; then
   exec "$ENGINE" --role-name "$ROLE_NAME" --profile "$PROFILE" --delete
 fi
 
-[[ -n "$GITHUB_OWNER" ]] || { echo "✗  GITHUB_OWNER not set (use --owner or .bootstrap.env)." >&2; exit 1; }
+[[ -n "$GITHUB_OWNER" ]] || { echo "✗  GITHUB_OWNER not set in $ENV_FILE." >&2; exit 1; }
 
 # Build the --workflow flags as job_workflow_ref values.
 WF_BASE="$GITHUB_OWNER/$GITHUB_REPO/.github/workflows"

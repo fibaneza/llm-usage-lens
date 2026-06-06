@@ -11,19 +11,20 @@ Parameters:
 
   # GitHubOwner / GitHubRepo / GitHubEnvironment are no longer consumed by any
   # in-template resource: the OIDC deployer role is provisioned out-of-band by
-  # create-deployer-role.sh, whose trust policy is built from these same values.
+  # .github/scripts/aws/lib/create-deployer-role.sh, whose trust policy is built
+  # from these same values.
   # They remain declared because the deploy workflow still passes them via
   # --parameter-overrides; an undeclared override would fail the deploy.
   GitHubOwner:
     Type: String
     Description: GitHub repository owner (org or user) — feeds the deployer role's
-      OIDC trust policy in create-deployer-role.sh.
+      OIDC trust policy in .github/scripts/aws/lib/create-deployer-role.sh.
     MinLength: 1
 
   GitHubRepo:
     Type: String
     Description: GitHub repository name — feeds the deployer role's OIDC trust
-      policy in create-deployer-role.sh.
+      policy in .github/scripts/aws/lib/create-deployer-role.sh.
     MinLength: 1
 
   GitHubEnvironment:

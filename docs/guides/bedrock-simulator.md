@@ -49,9 +49,9 @@ sso_registration_scopes = sso:account:access
 Replace `<your-portal>` with the subdomain from Step 1.
 
 > **Role name:** an `AdministratorAccess`-grade SSO role is required to run the
-> one-time `.github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh` (it
+> one-time `.github/scripts/aws/create-bedrock-simulator-deployer-role.sh` (it
 > creates the OIDC provider and the `bedrock-simulator-deployer` IAM role via
-> `.github/scripts/aws/create-deployer-role.sh`). All deploys — including the first — then
+> `.github/scripts/aws/lib/create-deployer-role.sh`). All deploys — including the first — then
 > go through GitHub Actions using that `bedrock-simulator-deployer` role.
 
 **Step 3 — Log in**
@@ -203,16 +203,16 @@ The `bedrock-simulator-deployer` role the workflows assume is **not** a CloudFor
 
 ### Step A — create the deployer role (one-time, local)
 
-The deployer role is a **pipeline** resource, not part of the app. Provision it once with operator SSO credentials via the example wrapper, which feeds the bedrock-simulator inputs (role name, the three workflow trust pins, and the `iam/deployer-*.json` permission policies) to the project-generic engine `.github/scripts/aws/create-deployer-role.sh`. The engine registers the account-shared GitHub OIDC provider (if missing) and creates the `bedrock-simulator-deployer` role.
+The deployer role is a **pipeline** resource, not part of the app. Provision it once with operator SSO credentials via the wrapper `.github/scripts/aws/create-bedrock-simulator-deployer-role.sh`, which feeds the bedrock-simulator inputs (role name, the three workflow trust pins, and the `iam/deployer-*.json` permission policies) to the project-generic engine `.github/scripts/aws/lib/create-deployer-role.sh`. The engine registers the account-shared GitHub OIDC provider (if missing) and creates the `bedrock-simulator-deployer` role.
 
 ```bash
-# Run from the repo root. Account ID + GitHub owner are read from the gitignored
-# tools/bedrock-simulator/.bootstrap.env when present, or pass them as flags.
+# Run from the repo root. All configuration (profile, account ID, GitHub owner)
+# is read from .github/scripts/aws/.env — copy .env.example to .env and fill it in.
 aws sso login --profile bedrock-simulator-sandbox
-./.github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh --profile bedrock-simulator-sandbox
+./.github/scripts/aws/create-bedrock-simulator-deployer-role.sh
 ```
 
-Set the repo's `SANDBOX_ACCOUNT_ID` Actions **variable** to the same account ID (the deploy workflow reads `vars.SANDBOX_ACCOUNT_ID` to build the role ARN). Tear the role down later with `./.github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh --delete`.
+Set the repo's `SANDBOX_ACCOUNT_ID` Actions **variable** to the same account ID (the deploy workflow reads `vars.SANDBOX_ACCOUNT_ID` to build the role ARN). Tear the role down later with `./.github/scripts/aws/create-bedrock-simulator-deployer-role.sh --delete`.
 
 > **Re-provision after policy changes.** The role's permissions live in the
 > committed [`iam/deployer-*.json`](../../.github/scripts/aws/iam/) files, but the
@@ -634,8 +634,7 @@ this is idempotent and safe to repeat:
 
 ```bash
 # From an operator terminal with sandbox-account SSO credentials:
-./.github/scripts/aws/examples/create-bedrock-simulator-deployer-role.sh \
-  --profile bedrock-simulator-sandbox
+./.github/scripts/aws/create-bedrock-simulator-deployer-role.sh
 
 # Then retry the teardown:
 gh workflow run bedrock-simulator-destroy.yml -f confirm="destroy bedrock-simulator"
