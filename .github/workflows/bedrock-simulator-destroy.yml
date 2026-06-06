@@ -27,7 +27,7 @@
 # All untrusted/external inputs are passed via `env:` blocks (never inlined in
 # `run:` strings) to prevent shell-command injection.
 
-name: "cd: bedrock-simulator destroy"
+name: "bedrock-simulator: cd - destroy"
 
 on:
   workflow_dispatch:

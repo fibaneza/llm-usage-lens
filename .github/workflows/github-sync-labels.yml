@@ -1,6 +1,6 @@
-name: "chore: sync labels"
+name: "Github: chore - sync labels"
 
-# Applies .github/labels.yml to the repository's labels. Create/update only —
+# Applies .github/github-sync-labels.yml to the repository's labels. Create/update only —
 # no skip-delete keeps labels created out-of-band (the release audit's security /
 # severity / code-review labels) from being removed. Runs on push to main when
 # the definitions or this workflow change, and on demand.
@@ -9,8 +9,8 @@ on:
   push:
     branches: [main]
     paths:
-      - ".github/labels.yml"
-      - ".github/workflows/labels.yml"
+      - ".github/github-sync-labels.yml"
+      - ".github/workflows/github-sync-labels.yml"
   workflow_dispatch:
 
 permissions:
@@ -24,10 +24,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      - name: Sync labels from .github/labels.yml
+      - name: Sync labels from .github/github-sync-labels.yml
         uses: crazy-max/ghaction-github-labeler@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          yaml-file: .github/labels.yml
+          yaml-file: .github/github-sync-labels.yml
           skip-delete: true
           dry-run: false

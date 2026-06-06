@@ -12,7 +12,7 @@
 # All untrusted/external inputs are passed via `env:` blocks (never inlined in
 # `run:` strings) to prevent shell-command injection.
 
-name: "ops: bedrock-simulator run"
+name: "bedrock-simulator: ops - run"
 
 on:
   workflow_dispatch:

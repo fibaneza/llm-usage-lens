@@ -1,4 +1,4 @@
-name: "ci: pr title lint"
+name: "Github: ci - pr title lint"
 
 on:
   pull_request:

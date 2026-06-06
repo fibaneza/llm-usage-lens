@@ -21,7 +21,7 @@
 #   1. Checkout repository (shallow)
 #   2. Run Claude Code in agent mode to triage the issue and post one reply
 
-name: "bot: claude assistant"
+name: "claude: bot - assistant"
 
 on:
   issue_comment:

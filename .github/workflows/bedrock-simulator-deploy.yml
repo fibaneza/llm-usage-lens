@@ -31,7 +31,7 @@
 # All untrusted/external inputs are passed via `env:` blocks (never inlined in
 # `run:` strings) to prevent shell-command injection.
 
-name: "cd: bedrock-simulator deploy"
+name: "bedrock-simulator: cd - deploy"
 
 on:
   workflow_dispatch:

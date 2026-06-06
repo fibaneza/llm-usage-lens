@@ -95,7 +95,7 @@ triggers no Claude invocation.
 Configure under Settings → Branches → Branch protection rules:
 
 - Require pull request before merging (1 approval minimum).
-- Require status checks to pass: `ci: claude pr review`, `ci: pr title lint`.
+- Require status checks to pass: `claude: ci - pr review`, `pr title: ci - lint`.
 - Require linear history.
 - Allow squash-merge only — disable merge commits and rebase-merge in
   Settings → General → Pull Requests.

@@ -1,7 +1,7 @@
 <!--
   PR title is squash-merged into main as the sole commit message.
   It MUST follow Conventional Commits: feat|fix|ci|docs|chore|refactor|perf|test: <description>
-  The `ci: pr title lint` check enforces this automatically.
+  The `pr title: ci - lint` check enforces this automatically.
 -->
 
 ## Summary

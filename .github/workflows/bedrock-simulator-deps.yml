@@ -2,7 +2,7 @@
 # Never fails — enforcement is the blocking audit in bedrock-simulator-build.yml.
 # Touches no AWS.
 
-name: "ci: bedrock-simulator deps"
+name: "bedrock-simulator: ci - deps"
 
 on:
   workflow_dispatch:

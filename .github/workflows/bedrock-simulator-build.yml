@@ -21,7 +21,7 @@
 #   - Release asset (durable): when a vX.Y.Z release is published. deploy pulls
 #     it by release_tag.
 
-name: "ci: bedrock-simulator build"
+name: "bedrock-simulator: ci - build"
 
 on:
   workflow_dispatch:
