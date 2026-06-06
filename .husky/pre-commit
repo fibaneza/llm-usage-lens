@@ -1,0 +1,19 @@
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Layer 1 — secret scan on staged changes (docs/guides/git-hooks.md §Secret
+# detection). gitleaks is preferred; a high-confidence grep fallback keeps the
+# hook enforceable where gitleaks is not installed. CI runs full gitleaks.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --no-banner
+else
+  echo "→ gitleaks not installed; using grep fallback (install gitleaks for full coverage)"
+  if git diff --cached -U0 | grep -nE \
+    'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|-----BEGIN (RSA|EC|OPENSSH|DSA|PGP) PRIVATE KEY' \
+    >/dev/null; then
+    echo "✖ potential secret detected in staged changes — aborting commit"
+    exit 1
+  fi
+fi
+
+# Layer 2 — lint + format staged files.
+cd "$REPO_ROOT" && pnpm exec lint-staged

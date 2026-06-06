@@ -2,12 +2,7 @@
   "mcpServers": {
     "azure-mcp": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@azure/mcp",
-        "server",
-        "start"
-      ]
+      "args": ["-y", "@azure/mcp", "server", "start"]
     }
   }
 }

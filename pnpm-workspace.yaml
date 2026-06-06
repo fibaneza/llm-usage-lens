@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Native build scripts explicitly allowed:
+#   sharp         — Next.js image optimization binary
+#   unrs-resolver — native resolver used by eslint-plugin-import-x
+allowBuilds:
+  sharp: true
+  unrs-resolver: true

@@ -1,0 +1,17 @@
+# Build output and dependencies
+**/.next/**
+**/node_modules/**
+**/coverage/**
+**/next-env.d.ts
+pnpm-lock.yaml
+
+# Pre-existing repo content authored outside the Phase 1 toolchain — Prettier
+# scopes to the dashboard/packages/scripts source it owns. (Rule 00.2: don't
+# silently reformat hand-authored docs/config.)
+docs/**
+.github/**
+.claude/**
+.devcontainer/**
+tools/**
+*.md
+LICENSE
