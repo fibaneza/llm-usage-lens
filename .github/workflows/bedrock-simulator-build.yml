@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup SAM toolchain
-        uses: ./.github/actions/setup-sam-toolchain
+        uses: ./.github/actions/aws-sam-setup
         with:
           cache-pnpm: 'true'
 
@@ -77,7 +77,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup SAM toolchain
-        uses: ./.github/actions/setup-sam-toolchain
+        uses: ./.github/actions/aws-sam-setup
         with:
           cache-pnpm: 'true'
 
@@ -137,7 +137,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup SAM toolchain
-        uses: ./.github/actions/setup-sam-toolchain
+        uses: ./.github/actions/aws-sam-setup
         with:
           cache-pnpm: 'true'
 

@@ -98,7 +98,7 @@ be generically portable to a shared repository (see [Future work](#future-work))
 | Action | Inputs | Outputs | Purpose |
 | --- | --- | --- | --- |
 | `node-setup` | `node-version` (default `22`) | — | Installs pnpm via `pnpm/action-setup@v6` then Node.js with pnpm store caching via `actions/setup-node@v6`. Used in `bedrock-dashboard-build.yml`. |
-| `setup-sam-toolchain` | `node-version` (default `22`), `pnpm-version` (default `9`), `cache-pnpm` (default `false`), `cache-dependency-path` | — | Installs Node.js, pnpm, and the AWS SAM CLI. Used in simulator build/deploy workflows. |
+| `aws-sam-setup` | `node-version` (default `22`), `pnpm-version` (default `9`), `cache-pnpm` (default `false`), `cache-dependency-path` | — | Installs Node.js, pnpm, and the AWS SAM CLI. Used in the simulator build workflow (deploy/destroy install the SAM CLI directly via `aws-actions/setup-sam`, as they need neither Node nor pnpm). |
 
 **Inclusion rule:** an action earns its directory only when its extracted logic
 is more than 1–2 lines of bash AND it either appears in multiple workflows or
