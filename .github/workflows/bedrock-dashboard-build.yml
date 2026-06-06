@@ -1,4 +1,4 @@
-name: "ci: bedrock-dashboard build"
+name: "bedrock-dashboard: ci - build"
 
 # Phase 1 pipeline: quality + build. The test job (Vitest + DynamoDB Local) is
 # added in Phase 3 and deploy-collector in Phase 6.
