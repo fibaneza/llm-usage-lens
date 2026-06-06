@@ -25,6 +25,12 @@
       "Resource": "*"
     },
     {
+      "Sid": "SamServerlessTransform",
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateChangeSet",
+      "Resource": "arn:__PARTITION__:cloudformation:__REGION__:aws:transform/Serverless-2016-10-31"
+    },
+    {
       "Sid": "SamArtifactBucket",
       "Effect": "Allow",
       "Action": [
