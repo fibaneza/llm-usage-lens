@@ -17,7 +17,7 @@ patterns) and current Next.js App Router guidance.
 4. **`type` for unions and object shapes, `interface` only for extension.**
    Be consistent within a file.
 5. **No default exports** except where a framework requires them (Next.js
-   `page.tsx`, `layout.tsx`, `route.ts`, `middleware.ts`, `auth.ts`). Named
+   `page.tsx`, `layout.tsx`, `route.ts`, `proxy.ts`, `auth.ts`). Named
    exports everywhere else.
 6. **Discriminated unions over optional-field soup.** The `{ data }` /
    `{ error }` response shape is the canonical example.

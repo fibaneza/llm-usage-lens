@@ -61,7 +61,7 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id"
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [MicrosoftEntraID],
   callbacks: {
-    authorized: ({ auth }) => !!auth, // gates matched routes in middleware
+    authorized: ({ auth }) => !!auth, // gates matched routes in proxy
   },
 })
 ```
@@ -73,12 +73,13 @@ import { handlers } from "@/auth"
 export const { GET, POST } = handlers
 ```
 
-### 6. `apps/dashboard/middleware.ts`
+### 6. `apps/dashboard/proxy.ts`
 
 Protects the dashboard and API routes, excluding the auth routes themselves.
+(Next.js 16 renamed the `middleware` file convention to `proxy`.)
 
 ```ts
-export { auth as middleware } from "@/auth"
+export { auth as proxy } from "@/auth"
 
 export const config = {
   matcher: ["/dashboard/:path*", "/api/((?!auth).*)"],
