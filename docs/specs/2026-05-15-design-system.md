@@ -59,11 +59,11 @@ Decisions on technologies evaluated and excluded, with rationale:
 
 ## Authentication
 
-- **Library:** Auth.js (NextAuth v5) — the provider abstraction. Switching identity providers is a config change in `apps/dashboard/auth.ts`; pages, middleware, and route guards use Auth.js session APIs and never change.
+- **Library:** Auth.js (NextAuth v5) — the provider abstraction. Switching identity providers is a config change in `apps/dashboard/auth.ts`; pages, proxy, and route guards use Auth.js session APIs and never change.
 - **Identity provider:** Microsoft Entra ID. Recommended start: a free Entra tenant, developing against the real provider from day one.
 - **Access model:** Open access — every authenticated member sees all data.
 - **Session:** Auth.js encrypted JWT session cookie.
-- **Middleware:** Auth.js middleware protects all `/dashboard/*` and `/api/*` routes.
+- **Proxy:** Auth.js in the Next.js proxy (`proxy.ts`) protects all `/dashboard/*` and `/api/*` routes.
 - **Sign-in page:** Single "Sign in with Microsoft" action. No sign-up — identities are managed in Entra ID.
 - **User menu:** Custom user menu in the top bar (avatar, name, sign out) backed by the Auth.js session.
 - **Roles:** Not implemented in v1. Entra ID groups can be surfaced as token claims and mapped to app roles later (e.g. restrict Settings to admins) without a redesign.

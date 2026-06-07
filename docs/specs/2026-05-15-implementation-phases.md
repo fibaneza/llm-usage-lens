@@ -51,7 +51,7 @@ Components are built where they are first needed and reused in subsequent pages.
 - [ ] Set up Auth.js (NextAuth v5) authentication
   - Install `next-auth`
   - Configure the Microsoft Entra ID provider in `auth.ts` (provider-agnostic — swappable in one file)
-  - Configure Auth.js middleware to protect `/dashboard/*` and `/api/*` routes
+  - Configure Auth.js in the Next.js proxy (`proxy.ts`) to protect `/dashboard/*` and `/api/*` routes
   - Build sign-in page (`/sign-in`) — single "Sign in with Microsoft" action; no sign-up (identities managed in Entra ID)
   - Set up environment variables
 - [ ] Configure @t3-oss/env-nextjs (type-safe env vars with Zod validation)

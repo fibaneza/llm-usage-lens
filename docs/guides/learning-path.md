@@ -192,7 +192,7 @@ misconfiguration fails at build time. The output is a skeleton: no pages yet.
 - [ ] Add the pre-push hook: `tsc --noEmit`
 - [ ] Set up Auth.js (NextAuth v5) with the Microsoft Entra ID provider
 - [ ] Build the sign-in page (`/sign-in`) — single "Sign in with Microsoft" action, no sign-up
-- [ ] Protect `/dashboard/*` and `/api/*` routes via Auth.js middleware
+- [ ] Protect `/dashboard/*` and `/api/*` routes via Auth.js in the Next.js proxy (`proxy.ts`)
 - [ ] Configure `@t3-oss/env-nextjs` (type-safe env vars validated with Zod)
 - [ ] Integrate OpenTelemetry (`@vercel/otel`)
 - [ ] Create `.env.example` (tracked, no values), `.env.local` (ignored), `.env.test` (ignored)
