@@ -218,30 +218,39 @@ desktop, overlay on mobile), a top bar, breadcrumbs, a Cmd+K command menu, and
 a `DateRangePicker` whose state lives in the **URL** via `nuqs` (not React
 state) — so a date range survives refresh and is shareable. You also learn the
 breakpoint system (375 / 768 / 1024 / 1440) and the centered 1280px content
-area. Components are placeholders where data is not available yet.
+area. Components are placeholders where data is not available yet. The phase is
+split into three sub-phases, each its own branch and PR — build them in order.
 
 **Dependencies.** Phase 1 (green gate).
 
-**Build tasks.**
+**Build tasks — 2.1 Shell + Navigation.**
 
-- [ ] Build the `Sidebar` — 9 nav items with Lucide icons, active state, collapsible (desktop) / overlay (mobile)
-- [ ] Build the top bar — user menu (avatar, name, sign out, Auth.js session) + organization name
-- [ ] Add `SyncStatusBadge` and `SyncCountdown` placeholders to the top bar
+- [ ] Create bare placeholder pages for all 9 routes (title only) so navigation has targets
+- [ ] Build the `Sidebar` — 7 top-level nav links with Lucide icons, active state, collapsible (desktop) / overlay (mobile); the two `[id]` detail routes are drill-down only
 - [ ] Build the responsive layout structure (breakpoints 375/768/1024/1440, content max-width 1280px centered)
+- [ ] Build the top bar — user menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`)
+- [ ] Add `SyncStatusBadge` and `SyncCountdown` placeholders to the top bar
+
+**Build tasks — 2.2 Breadcrumbs + Command Menu.**
+
 - [ ] Build the `Breadcrumbs` component (shadcn/ui)
+- [ ] Build the `Kbd` component (keyboard-shortcut hint)
 - [ ] Build the `CommandMenu` (shadcn/ui cmdk) with Cmd+K trigger and `Kbd` hint — skeleton search
+
+**Build tasks — 2.3 Global Filters & Page Header.**
+
 - [ ] Build the `DateRangePicker` (shadcn Calendar + Popover): 7d / 30d / 90d / custom, default 30 days, persisted in URL via nuqs
 - [ ] Build the page header layout (title + breadcrumbs + date filter)
-- [ ] Create placeholder pages for all 9 routes
+- [ ] Wire the page header into all 9 routes
 
 **Verify.**
 
-- [ ] Navigation works
-- [ ] Sidebar collapses
+- [ ] Navigation works (every route reachable from the sidebar)
+- [ ] Sidebar collapses (desktop) / overlays (mobile)
 - [ ] Date filter persists in the URL
 - [ ] Layout is responsive at all breakpoints
 
-**Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
+**Gate (per sub-phase):**  `[ ] Works   [ ] Tested   [ ] Reviewed`
 
 ---
 
