@@ -100,7 +100,7 @@ code. Don't re-derive them from CLAUDE.md — they are the source of truth.
 - [Rule 00 — specs are the source of truth](../.claude/rules/00-spec-source-of-truth.md) — cite the spec for non-trivial decisions
 - [Rule 10 — server-only data boundary](../.claude/rules/10-server-only-boundary.md) — DynamoDB and AWS SDK live in server code only
 - [Rule 20 — data model conventions](../.claude/rules/20-data-model-conventions.md) — UTC, USD, model-first rollups, response shape
-- [Rule 40 — design system & stack](../.claude/rules/40-style-and-stack.md) — dark mode default, semantic tokens, lazy-loaded charts
+- [Rule 40 — design system & stack](../.claude/rules/40-style-and-stack.md) — light mode default, semantic tokens, lazy-loaded charts
 - [Rule 50 — security & secrets](../.claude/rules/50-security-and-secrets.md) — no static AWS keys, Auth.js session checks, never `--no-verify`
 - [Rule 60 — coding standards](../.claude/rules/60-coding-standards.md) — strict TypeScript, no `any`, validate at the boundary, Vitest
 
