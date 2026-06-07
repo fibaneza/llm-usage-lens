@@ -83,42 +83,85 @@ None — infrastructure only.
 
 **Goal:** Responsive layout with sidebar navigation, top bar, global date filter, and command menu. All pages will render inside this shell.
 
-### Tasks
+Phase 2 is split into three sub-phases, each independently deliverable on its own branch and PR — built in order, one visual checkpoint at a time (mirrors the Phase 4 sub-phase model; see [Rule 30](../../.claude/rules/30-phase-discipline.md) branching). Components are introduced in the sub-phase where they are first needed.
 
+| Sub-phase | Name | New components |
+|---|---|---|
+| 2.1 | Shell + Navigation | `Sidebar`, top bar + user menu, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder) |
+| 2.2 | Breadcrumbs + Command Menu | `Breadcrumbs`, `Kbd`, `CommandMenu` |
+| 2.3 | Global Filters & Page Header | `DateRangePicker`, page header |
+
+### Navigation routes
+
+The sidebar exposes **7 top-level navigation links**: Overview, Ranking, Departments, Teams, Services, Users, Settings. The two detail routes (`departments/[id]`, `teams/[id]`) are reached by drill-down — they get placeholder pages but **no sidebar entry**. Nine route files in total (see Design System spec — Navigation).
+
+### Dependencies
+
+Phase 1 (Foundation).
+
+---
+
+### Phase 2.1 — Shell + Navigation
+
+**Goal:** The persistent application frame — sidebar, top bar, and responsive layout — with every route navigable as a bare placeholder.
+
+**Tasks:**
+- [ ] Create bare placeholder pages for all 9 routes (title only — the shared page header arrives in 2.3) so navigation has targets: `/dashboard`, `/dashboard/ranking`, `/dashboard/departments`, `/dashboard/departments/[id]`, `/dashboard/teams`, `/dashboard/teams/[id]`, `/dashboard/services`, `/dashboard/users`, `/dashboard/settings`
 - [ ] Build `Sidebar` component (shadcn/ui)
-  - All 9 navigation items with Lucide icons
+  - 7 top-level navigation links with Lucide icons (the two `[id]` detail routes are drill-down only — no sidebar entry)
   - Active state highlighting
   - Collapsible on desktop, overlay on mobile
-- [ ] Build top bar
-  - User menu (avatar, name, sign out, Auth.js session) + organization name
-  - `SyncStatusBadge` placeholder (no real data yet)
-  - `SyncCountdown` placeholder
-- [ ] Build responsive layout structure
+- [ ] Build responsive layout structure (the `/dashboard` layout)
   - Breakpoints: 375 / 768 / 1024 / 1440
   - Content area max-width 1280px, centered
   - Mobile: single column, collapsible sidebar
   - Tablet: sidebar overlay
   - Desktop: persistent sidebar + content
-- [ ] Build `Breadcrumbs` component (shadcn/ui)
+- [ ] Build top bar
+  - User menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`)
+  - `SyncStatusBadge` placeholder (no real data yet — neutral "no sync" state, never an error)
+  - `SyncCountdown` placeholder
+- [ ] Verify: every route is reachable from the sidebar, sidebar collapses on desktop and overlays on mobile, responsive at all breakpoints with no horizontal scroll
+
+**Components Built:** `Sidebar`, top bar + user menu, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder)
+
+---
+
+### Phase 2.2 — Breadcrumbs + Command Menu
+
+**Goal:** Navigation context and quick-jump search layered onto the shell.
+
+**Dependencies:** Phase 2.1.
+
+**Tasks:**
+- [ ] Build `Breadcrumbs` component (shadcn/ui) — derived from the current route
+- [ ] Build `Kbd` component (keyboard-shortcut hint)
 - [ ] Build `CommandMenu` component (shadcn/ui cmdk)
   - Cmd+K trigger with `Kbd` hint
-  - Skeleton search — navigates to pages (populated with real data in Phase 4)
+  - Skeleton search — navigates to pages (populated with real data in Phase 5)
+- [ ] Verify: breadcrumb trail renders on detail routes, Cmd+K opens the command menu and navigates between pages
+
+**Components Built:** `Breadcrumbs`, `Kbd`, `CommandMenu`
+
+---
+
+### Phase 2.3 — Global Filters & Page Header
+
+**Goal:** The global date filter and the shared page header, wired into every page.
+
+**Dependencies:** Phase 2.2.
+
+**Tasks:**
 - [ ] Build `DateRangePicker` component
   - shadcn/ui `Calendar` + `Popover`
   - Presets: 7 days, 30 days, 90 days, Custom range
   - Default: last 30 days
   - Persisted in URL via nuqs
 - [ ] Build page header layout (title + breadcrumbs + date filter)
-- [ ] Create placeholder pages for all 9 routes (empty shells inside layout)
-- [ ] Verify: navigation works, sidebar collapses, date filter persists in URL, responsive at all breakpoints
+- [ ] Wire the page header into all 9 routes (replacing the bare 2.1 placeholders' bodies)
+- [ ] Verify: date filter persists in URL, page header renders on every page, navigation and responsive behaviour from 2.1 still hold
 
-### Dependencies
-
-Phase 1 (Foundation).
-
-### Components Built
-
-`Sidebar`, `Breadcrumbs`, `CommandMenu`, `Kbd`, `DateRangePicker`, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder)
+**Components Built:** `DateRangePicker`, page header
 
 ---
 
