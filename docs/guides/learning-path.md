@@ -186,8 +186,8 @@ misconfiguration fails at build time. The output is a skeleton: no pages yet.
 
 - [ ] Initialize the pnpm workspace monorepo with `packages/shared` and `apps/dashboard`
 - [ ] Initialize Next.js (TypeScript strict mode, App Router)
-- [ ] Configure Tailwind CSS v4 with dark mode (color tokens, Fira Code + Fira Sans fonts, 4px/8px grid)
-- [ ] Initialize shadcn/ui with the dark theme
+- [ ] Configure Tailwind CSS v4 with light mode (color tokens, Space Grotesk + JetBrains Mono fonts, 4px/8px grid)
+- [ ] Initialize shadcn/ui with the light theme
 - [ ] Configure ESLint v9 (flat config), Prettier, Husky + lint-staged, gitleaks, commitlint
 - [ ] Add the pre-push hook: `tsc --noEmit`
 - [ ] Set up Auth.js (NextAuth v5) with the Microsoft Entra ID provider
@@ -202,7 +202,7 @@ misconfiguration fails at build time. The output is a skeleton: no pages yet.
 
 - [ ] Project runs with `pnpm dev`
 - [ ] Microsoft Entra ID sign-in works
-- [ ] Dark theme renders
+- [ ] Light theme renders
 
 **Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
 

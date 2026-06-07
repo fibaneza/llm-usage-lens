@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Fira_Code, Fira_Sans } from "next/font/google";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 
 import "./globals.css";
 
-const firaSans = Fira_Sans({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-fira-sans",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-space-grotesk",
   display: "swap",
 });
 
-const firaCode = Fira_Code({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-fira-code",
+  variable: "--font-jetbrains-mono",
   display: "swap",
 });
 
@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${firaSans.variable} ${firaCode.variable} dark`}
+      className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
     >
       <body className="min-h-dvh antialiased">{children}</body>
     </html>

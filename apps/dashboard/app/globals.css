@@ -1,42 +1,42 @@
 @import "tailwindcss";
 
 /*
- * Dark mode is the default and only theme in v1 (Rule 40.1; design-system spec
- * §Style: Dark Mode). Semantic tokens are defined here so components never use
+ * Light mode is the default and only theme in v1 (Rule 40.1; design-system spec
+ * §Style: Light Mode). Semantic tokens are defined here so components never use
  * raw hex (Rule 40.2). Values come from design-system spec §Color Palette and
  * §Chart Colors.
  */
 @theme {
-  --color-background: #0f172a;
-  --color-foreground: #f8fafc;
+  --color-background: #f5f7ff;
+  --color-foreground: #0f172a;
 
-  --color-primary: #1e40af;
+  --color-primary: #4f46e5;
   --color-primary-foreground: #ffffff;
 
-  --color-secondary: #3b82f6;
-  --color-secondary-foreground: #f8fafc;
+  --color-secondary: #6366f1;
+  --color-secondary-foreground: #ffffff;
 
   --color-accent: #d97706;
   --color-accent-foreground: #ffffff;
 
-  --color-muted: #334155;
-  --color-muted-foreground: #cbd5e1;
+  --color-muted: #e2e8f0;
+  --color-muted-foreground: #94a3b8;
 
-  --color-border: #1e293b;
-  --color-input: #1e293b;
-  --color-ring: #1e40af;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: rgba(79, 70, 229, 0.35);
 
-  --color-destructive: #dc2626;
+  --color-destructive: #e11d48;
   --color-destructive-foreground: #ffffff;
 
-  --color-success: #16a34a;
+  --color-success: #059669;
   --color-success-foreground: #ffffff;
 
   /* Surfaces consumed by shadcn Card / Popover primitives. */
-  --color-card: #0f172a;
-  --color-card-foreground: #f8fafc;
-  --color-popover: #0f172a;
-  --color-popover-foreground: #f8fafc;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
 
   /* Per-model chart colors (design-system spec §Chart Colors). */
   --color-model-opus: #7c3aed;
@@ -45,12 +45,12 @@
   --color-model-other: #d97706;
 
   /* Typography (design-system spec §Typography); bound in app/layout.tsx. */
-  --font-sans: var(--font-fira-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-fira-code), ui-monospace, monospace;
+  --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
