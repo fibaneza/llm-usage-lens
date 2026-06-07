@@ -1,6 +1,6 @@
 "use client";
 
-import { Gauge, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,14 +11,12 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { env } from "@/env";
 import {
   isNavItemActive,
   PRIMARY_NAV_ITEMS,
@@ -34,37 +32,18 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { state, toggleSidebar } = useSidebar();
 
-  const SettingsIcon = SETTINGS_NAV_ITEM.icon;
   const collapsed = state === "collapsed";
   const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
+  const SettingsIcon = SETTINGS_NAV_ITEM.icon;
+  const settingsActive = isNavItemActive(pathname, SETTINGS_NAV_ITEM.href);
 
   return (
-    <Sidebar collapsible="icon" className="border-sidebar-border shadow-sm">
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              asChild
-              tooltip="Bedrock Cost"
-              className="hover:bg-transparent active:bg-transparent"
-            >
-              <Link href="/dashboard">
-                <div className="bg-primary text-primary-foreground flex aspect-square size-9 items-center justify-center rounded-lg">
-                  <Gauge className="size-5" />
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">Bedrock Cost</span>
-                  <span className="text-primary text-[11px] font-medium tracking-wide uppercase">
-                    {env.NEXT_PUBLIC_ORG_NAME}
-                  </span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-
+    // Offset below the full-width header via the shared --header-height var; the
+    // brand lives in the header, so the sidebar starts directly with the nav.
+    <Sidebar
+      collapsible="icon"
+      className="border-sidebar-border top-(--header-height) h-[calc(100svh-var(--header-height))] shadow-sm"
+    >
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Main</SidebarGroupLabel>
@@ -72,15 +51,19 @@ export function AppSidebar() {
             <SidebarMenu>
               {PRIMARY_NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
+                const active = isNavItemActive(pathname, item.href);
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
                       asChild
-                      isActive={isNavItemActive(pathname, item.href)}
+                      isActive={active}
                       tooltip={item.title}
                       className={NAV_LINK_CLASS}
                     >
-                      <Link href={item.href}>
+                      <Link
+                        href={item.href}
+                        aria-current={active ? "page" : undefined}
+                      >
                         <Icon />
                         <span>{item.title}</span>
                       </Link>
@@ -98,11 +81,14 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              isActive={isNavItemActive(pathname, SETTINGS_NAV_ITEM.href)}
+              isActive={settingsActive}
               tooltip={SETTINGS_NAV_ITEM.title}
               className={NAV_LINK_CLASS}
             >
-              <Link href={SETTINGS_NAV_ITEM.href}>
+              <Link
+                href={SETTINGS_NAV_ITEM.href}
+                aria-current={settingsActive ? "page" : undefined}
+              >
                 <SettingsIcon />
                 <span>{SETTINGS_NAV_ITEM.title}</span>
               </Link>

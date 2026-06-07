@@ -7,11 +7,9 @@ export default async function DepartmentDetailPage({
 }: DepartmentDetailPageProps) {
   const { id } = await params;
   return (
-    <section>
-      <h1 className="text-2xl font-semibold">Department {id}</h1>
-      <p className="text-muted-foreground mt-2 text-sm">
-        Placeholder — department detail arrives in Phase 4.4.
-      </p>
-    </section>
+    <p className="text-muted-foreground text-sm">
+      Placeholder — department detail for{" "}
+      <span className="font-mono">{id}</span> arrives in Phase 4.4.
+    </p>
   );
 }
