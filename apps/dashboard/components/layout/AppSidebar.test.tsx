@@ -59,4 +59,12 @@ describe("AppSidebar", () => {
       "true",
     );
   });
+
+  it("renders a collapse toggle in the footer", () => {
+    renderSidebar("/dashboard");
+
+    expect(
+      screen.getByRole("button", { name: "Collapse" }),
+    ).toBeInTheDocument();
+  });
 });

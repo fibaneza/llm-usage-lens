@@ -19,6 +19,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./apps/dashboard/vitest.setup.ts"],
+    // Components import the t3-env object; tests don't carry real secrets, so
+    // skip its build-time validation (the schema itself is covered elsewhere).
+    env: { SKIP_ENV_VALIDATION: "true" },
     include: [
       "apps/**/*.{test,spec}.{ts,tsx}",
       "packages/**/*.{test,spec}.{ts,tsx}",
