@@ -16,6 +16,10 @@ export default tseslint.config(
       // CI helper scripts and the standalone simulator carry their own configs.
       ".github/**",
       "tools/**",
+      // Vendored shadcn/ui primitives and the generated mobile hook — upstream
+      // code re-emitted by the shadcn CLI, not authored against our rules.
+      "apps/dashboard/components/ui/**",
+      "apps/dashboard/hooks/use-mobile.ts",
     ],
   },
   js.configs.recommended,
