@@ -168,3 +168,4 @@ tools/bedrock-simulator/coverage/
 
 # Git directories
 /worktrees
+/temp
