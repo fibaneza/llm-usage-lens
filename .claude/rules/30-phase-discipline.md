@@ -5,7 +5,7 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
 ## Build order (strict)
 
 ```
-1 Foundation → 2 Layout Shell → 3 Data Layer
+1 Foundation → 2 Layout Shell (2.1 → 2.3, in order) → 3 Data Layer
   → 4 Pages (4.1 → 4.9, in order)
     → 5 Polish & Accessibility
       → 6 AWS Lambda Collector
@@ -36,14 +36,16 @@ receives direct commits.
 
 1. **One `feature/` branch per phase.** Branch from an up-to-date `main` at the
    start of a phase, named `feature/phase-<n>-<slug>` (e.g.
-   `feature/phase-1-foundation`). Phase 4 sub-phases each get their own branch
-   — `feature/phase-4.1-overview`, etc. (Rule 30.4 — one sub-phase per PR).
+   `feature/phase-1-foundation`). Phases that are split into sub-phases each get
+   their own branch per sub-phase — `feature/phase-2.1-shell-nav`,
+   `feature/phase-4.1-overview`, etc. (Rule 30.4 — one sub-phase per PR).
 2. **A phase's tasks are commits on that branch**, each following Conventional
    Commits (commitlint).
 3. **Open a PR to `main` as a draft by default** (`gh pr create --draft`; see
    [Rule 31](31-github-flow.md)). Mark it ready (`gh pr ready`) once the phase's
    "Verify" checklist passes — run `/verify-phase <n>` first; do not mark it
    ready on a failing checklist.
-4. **One phase (or one Phase 4 sub-phase) per PR.** Never bundle multiple
-   phases into a single branch or PR.
+4. **One phase (or one sub-phase) per PR.** Phase 2 (2.1–2.3) and Phase 4
+   (4.1–4.9) are split into independently deliverable sub-phases — never bundle
+   multiple phases or sub-phases into a single branch or PR.
 5. **Never commit or merge directly to `main`.**
