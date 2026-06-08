@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Gauge, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,17 +11,15 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  isNavItemActive,
-  PRIMARY_NAV_ITEMS,
-  SETTINGS_NAV_ITEM,
-} from "@/lib/nav";
+import { env } from "@/env";
+import { isNavItemActive, NAV_GROUPS, SETTINGS_NAV_ITEM } from "@/lib/nav";
 
 // Active nav links render as a filled indigo pill (design reference). twMerge
 // lets these override the primitive's default `sidebar-accent` active styling.
@@ -38,42 +36,59 @@ export function AppSidebar() {
   const settingsActive = isNavItemActive(pathname, SETTINGS_NAV_ITEM.href);
 
   return (
-    // Offset below the full-width header via the shared --header-height var; the
-    // brand lives in the header, so the sidebar starts directly with the nav.
-    <Sidebar
-      collapsible="icon"
-      className="border-sidebar-border top-(--header-height) h-[calc(100svh-var(--header-height))] shadow-sm"
-    >
+    <Sidebar collapsible="icon" className="border-sidebar-border">
+      {/* Brand lives at the top of the rail (design reference); the mark stays
+          visible when the rail collapses to icon width, the wordmark hides. */}
+      <SidebarHeader className="border-sidebar-border h-(--header-height) justify-center border-b">
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2.5 px-1"
+          aria-label="Bedrock Cost — go to overview"
+        >
+          <div className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
+            <Gauge className="size-5" />
+          </div>
+          <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
+            <span className="font-semibold">Bedrock Cost</span>
+            <span className="text-primary text-[11px] font-medium tracking-wide uppercase">
+              {env.NEXT_PUBLIC_ORG_NAME}
+            </span>
+          </div>
+        </Link>
+      </SidebarHeader>
+
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Main</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {PRIMARY_NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const active = isNavItemActive(pathname, item.href);
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={active}
-                      tooltip={item.title}
-                      className={NAV_LINK_CLASS}
-                    >
-                      <Link
-                        href={item.href}
-                        aria-current={active ? "page" : undefined}
+        {NAV_GROUPS.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isNavItemActive(pathname, item.href);
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={active}
+                        tooltip={item.title}
+                        className={NAV_LINK_CLASS}
                       >
-                        <Icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                        <Link
+                          href={item.href}
+                          aria-current={active ? "page" : undefined}
+                        >
+                          <Icon />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter className="border-sidebar-border border-t">

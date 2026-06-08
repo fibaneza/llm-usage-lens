@@ -1,19 +1,15 @@
-import { Gauge } from "lucide-react";
-import Link from "next/link";
-
 import { auth, signOut } from "@/auth";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { SyncCountdown } from "@/components/status/SyncCountdown";
 import { SyncStatusBadge } from "@/components/status/SyncStatusBadge";
-import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { env } from "@/env";
 import { UserMenu } from "./UserMenu";
 
-// Full-width top bar: a static brand (logo + product + org name) pinned
-// top-left that does not collapse with the sidebar, the active page title, and
-// sync/account actions on the right (design-system spec — Layout). Server
-// component so it can read the Auth.js session.
+// Top bar sitting inside the content inset, to the right of the sidebar (the
+// brand now lives in the sidebar header). The active page title and its sync
+// status badge sit together on the left; sync countdown and the account menu
+// sit on the right (design reference — TopBar). Server component so it can read
+// the Auth.js session.
 export async function AppHeader() {
   const session = await auth();
 
@@ -23,29 +19,18 @@ export async function AppHeader() {
   }
 
   return (
-    <header className="bg-card border-border sticky top-0 z-30 flex h-(--header-height) shrink-0 items-center gap-3 border-b px-4">
-      <Link
-        href="/dashboard"
-        className="flex items-center gap-2.5"
-        aria-label="Bedrock Cost — go to overview"
-      >
-        <div className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-lg">
-          <Gauge className="size-5" />
-        </div>
-        <div className="flex flex-col gap-0.5 leading-none">
-          <span className="font-semibold">Bedrock Cost</span>
-          <span className="text-primary text-[11px] font-medium tracking-wide uppercase">
-            {env.NEXT_PUBLIC_ORG_NAME}
-          </span>
-        </div>
-      </Link>
-
-      <Separator orientation="vertical" className="mx-1 h-6" />
-      <SidebarTrigger className="md:hidden" />
-      <PageTitle className="hidden sm:block" />
+    <header className="bg-card border-border sticky top-0 z-30 flex h-(--header-height) shrink-0 items-center gap-3 border-b px-4 md:px-6">
+      {/* Desktop collapses via the sidebar's own footer control; on mobile the
+          sidebar is an overlay, so the trigger is the only way in. */}
+      <SidebarTrigger className="-ml-1 md:hidden" />
+      {/* Title + sync badge read as one unit (design reference — the sync
+          status sits next to the page heading, not across the bar). */}
+      <div className="flex items-center gap-3">
+        <PageTitle />
+        <SyncStatusBadge />
+      </div>
 
       <div className="ml-auto flex items-center gap-3">
-        <SyncStatusBadge />
         <SyncCountdown />
         <UserMenu user={session?.user ?? null} signOutAction={signOutAction} />
       </div>
