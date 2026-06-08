@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="KPI / stat cards" subtitle="Metric, delta, sparkline" viewport="700x200" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  body { flex-direction:row; }
+  .kpi { flex:1; }
+  .kpi .top { display:flex; align-items:center; justify-content:space-between; }
+  .kpi .label { color:var(--fg-muted); }
+  .kpi .ic { width:28px; height:28px; border-radius:var(--radius-md); background:var(--surface-2);
+    display:flex; align-items:center; justify-content:center; color:var(--fg-muted); }
+  .kpi .ic svg { width:15px; height:15px; }
+  .kpi .val { font-family:var(--font-mono); font-weight:600; font-size:28px; letter-spacing:-0.01em; color:var(--fg); margin:12px 0 8px; }
+  .kpi .foot { display:flex; align-items:center; gap:7px; }
+  .delta { font-family:var(--font-mono); font-size:var(--text-xs); }
+  .neg { color:var(--neg); } .pos { color:var(--pos); }
+  .spark { height:30px; width:100%; margin-top:12px; display:block; }
+</style></head>
+<body>
+  <div class="card kpi">
+    <div class="top"><span class="label">Total spend · MTD</span><span class="ic"><i data-lucide="dollar-sign"></i></span></div>
+    <div class="val">$48,210.34</div>
+    <div class="foot"><span class="delta neg">▲ 18.3%</span><span class="small">vs. prior 30d</span></div>
+    <svg class="spark" viewBox="0 0 200 30" preserveAspectRatio="none"><polyline fill="none" stroke="var(--neg)" stroke-width="1.5" points="0,24 25,22 50,23 75,18 100,19 125,14 150,12 175,9 200,4"/></svg>
+  </div>
+  <div class="card kpi">
+    <div class="top"><span class="label">Invocations</span><span class="ic"><i data-lucide="activity"></i></span></div>
+    <div class="val">1.94M</div>
+    <div class="foot"><span class="delta pos">▼ 4.1%</span><span class="small">vs. prior 30d</span></div>
+    <svg class="spark" viewBox="0 0 200 30" preserveAspectRatio="none"><polyline fill="none" stroke="var(--pos)" stroke-width="1.5" points="0,8 25,10 50,9 75,13 100,12 125,16 150,15 175,19 200,20"/></svg>
+  </div>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons();</script>
+</body></html>

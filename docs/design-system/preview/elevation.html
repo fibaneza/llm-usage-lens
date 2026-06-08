@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Spacing" name="Elevation & shadow" subtitle="Card vs overlay vs modal" viewport="700x200" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  .grid { display:grid; grid-template-columns: repeat(3,1fr); gap:16px; }
+  .e { height:96px; border-radius:var(--radius-lg); display:flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; }
+  .e .n { font-size:var(--text-xs); font-weight:600; color:var(--fg); }
+  .e .t { font-family:var(--font-mono); font-size:var(--text-2xs); color:var(--fg-subtle); }
+</style></head>
+<body>
+  <span class="eyebrow">On OLED, depth = border + surface shift. Shadow only for overlays.</span>
+  <div class="grid">
+    <div class="e" style="background:var(--surface-1); border:1px solid var(--border); box-shadow:var(--inset-hairline)">
+      <span class="n">Card</span><span class="t">surface-1 + border</span>
+    </div>
+    <div class="e" style="background:var(--surface-3); border:1px solid var(--border-strong); box-shadow:var(--shadow-overlay)">
+      <span class="n">Menu / tooltip</span><span class="t">shadow-overlay</span>
+    </div>
+    <div class="e" style="background:var(--surface-3); border:1px solid var(--border-strong); box-shadow:var(--shadow-modal)">
+      <span class="n">Modal</span><span class="t">shadow-modal</span>
+    </div>
+  </div>
+</body></html>

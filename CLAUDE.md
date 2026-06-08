@@ -148,6 +148,8 @@ A devcontainer (`.devcontainer/`) bundles an observability stack alongside the a
 
 MCP servers are configured in `.mcp.json` at the repo root (currently: Azure MCP via `@azure/mcp`). Add new MCP servers there rather than to per-user Claude Code settings so the whole team gets them.
 
+The repo-root `temp/` directory is **local scratch** — design exports, screenshots, and throwaway working files. It is gitignored and **must never be committed or pushed**. Do not `git add` anything under `temp/`. When something in `temp/` is worth keeping (e.g. a vendored design reference), promote a curated copy into `docs/` instead — as was done for the Strata design system at [`docs/design-system/`](docs/design-system/README.md).
+
 The project's default response voice is the **`spec-cited` output style** (`.claude/output-styles/spec-cited.md`): brief, impersonal, no emoji, citing `docs/specs/**` for non-trivial decisions and rendering file references as workspace-relative Markdown links.
 
 `.claude/settings.json` hard-blocks destructive commands via its `deny` list — `rm -rf`, `git push --force`, `git reset --hard`, `git commit --no-verify`, and all `aws … delete-*` / `aws dynamodb delete-table` / `aws cloudformation delete-stack` / `sam delete`. These will be refused regardless of permission mode; don't attempt to route around them.

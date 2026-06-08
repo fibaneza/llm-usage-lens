@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Inputs & selects" subtitle="Search, select, focus, numeric" viewport="700x200" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  .field { display:flex; flex-direction:column; gap:6px; }
+  .field .label { color:var(--fg-muted); }
+  .ctrl { display:flex; align-items:center; gap:8px; height:34px; padding:0 11px; background:var(--surface-2);
+    border:1px solid var(--border); border-radius:var(--radius-md); color:var(--fg); font-size:var(--text-body); }
+  .ctrl svg { width:15px; height:15px; color:var(--fg-subtle); }
+  .ctrl input { background:none; border:0; outline:none; color:var(--fg); font-family:var(--font-sans); font-size:var(--text-body); width:100%; }
+  .ctrl input::placeholder { color:var(--fg-subtle); }
+  .ctrl.focus { border-color:var(--accent); box-shadow:0 0 0 2px var(--ring); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+</style></head>
+<body>
+  <div class="grid2">
+    <div class="field">
+      <span class="label">Search</span>
+      <div class="ctrl focus"><i data-lucide="search"></i><input placeholder="Find model or service" value="claude"></div>
+    </div>
+    <div class="field">
+      <span class="label">Team</span>
+      <div class="ctrl"><span style="color:var(--fg-subtle)">All teams</span><i data-lucide="chevron-down" style="margin-left:auto"></i></div>
+    </div>
+    <div class="field">
+      <span class="label">Region</span>
+      <div class="ctrl"><span>us-east-1</span><i data-lucide="chevron-down" style="margin-left:auto"></i></div>
+    </div>
+    <div class="field">
+      <span class="label">Budget threshold</span>
+      <div class="ctrl"><span style="color:var(--fg-subtle)">$</span><input value="50,000.00" class="tnum" style="font-family:var(--font-mono)"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons();</script>
+</body></html>

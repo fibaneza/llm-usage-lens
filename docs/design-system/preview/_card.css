@@ -1,0 +1,36 @@
+/* Shared base for Design System preview cards.
+   Each card is a standalone ~700px HTML specimen on the light canvas. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body {
+  width: 700px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.row { display: flex; gap: 12px; align-items: center; }
+.col { display: flex; flex-direction: column; }
+.wrap { display: flex; flex-wrap: wrap; gap: 12px; }
+.spread { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.tnum { font-feature-settings: 'tnum' 1, 'zero' 1; }
+.muted { color: var(--fg-muted); }
+.subtle { color: var(--fg-subtle); }
+.eyebrow {
+  font-size: var(--text-2xs); font-weight: var(--w-medium);
+  letter-spacing: var(--tracking-label); text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--inset-hairline);
+  padding: 16px;
+}

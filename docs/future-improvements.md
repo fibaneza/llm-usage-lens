@@ -56,6 +56,38 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ---
 
+## Dashboard & UI
+
+### Global filter-chip top bar (and YTD date preset)
+
+- **Status:** Deferred.
+- **What:** Adopt the Strata design's *global* top-bar filter cluster — a
+  removable filter-chip row (`period · team · region · + Add filter`) plus an
+  Export CSV action — applied across pages from the top bar, and add a **YTD**
+  preset to the date range control.
+- **Why deferred:** The committed scope filters at the **page** level, not
+  globally. Only the global date filter lives in the top bar (`DateRangePicker`,
+  Phase 2); per-dimension filtering is per-page Phase 4 work (`ModelFilter`,
+  department filter, `SearchInput`), and CSV export is the page-level
+  `ExportButton` introduced in Phase 4.2 (Ranking) and reused on later table
+  pages. A cross-page chip model is a different information architecture —
+  shared filter state spanning routes — that the spec does not define, and
+  building it now would be speculative ahead of need
+  ([Rule 30.2](../.claude/rules/30-phase-discipline.md)). The date presets are
+  fixed at 7d / 30d / 90d / Custom range; **YTD** is not among them.
+- **Adopt when:** Product wants filters to persist and apply across pages (not
+  just within a page), **or** the YTD preset is explicitly requested. Either is a
+  spec change first — update the design-system §Layout (top bar contents) and the
+  Phase 2 / Phase 4 task lists — then a PR.
+- **References:** top-bar / navigation in
+  [`design-system.md`](specs/2026-05-15-design-system.md) (§Layout, §Navigation),
+  `DateRangePicker` presets in Phase 2 and `ExportButton` / `ModelFilter` in
+  Phase 4.2 of [`implementation-phases.md`](specs/2026-05-15-implementation-phases.md),
+  and the source design at
+  [`docs/design-system/`](design-system/README.md).
+
+---
+
 ## Collector & infrastructure
 
 ### Multi-region collection
