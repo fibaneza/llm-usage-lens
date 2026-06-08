@@ -202,24 +202,32 @@ Each Bedrock model gets a consistent color across all charts:
 ### Structure
 
 ```
-+-----------------------------------------------------+
-|  Top Bar: User Menu | Org Name | Sync Status         |
 +----------+------------------------------------------+
-|          |                                           |
-| Sidebar  |  Content Area                             |
+| Brand    |  Top Bar: Page title · Sync status | … | User menu
++----------+------------------------------------------+
+|  MAIN    |                                           |
+| Overview |  Content Area                             |
 |          |  +--------------------------------------+ |
-| Overview |  |  Page Header + Date Range Filter     | |
+| ATTRIB.  |  |  Page Header + Date Range Filter     | |
 | Ranking  |  +--------------------------------------+ |
 | Depts    |  |                                      | |
 | Teams    |  |  Page Content                        | |
 | Services |  |  (cards, charts, tables)             | |
 | Users    |  +--------------------------------------+ |
-| Settings |                                           |
 |          |                                           |
+| Settings |                                           |
 +----------+------------------------------------------+
 ```
 
-- Sidebar: collapsible, persistent on desktop, overlay on mobile
+- Brand (logo + product + org name) sits at the top of the sidebar, not in a
+  full-width header; it collapses to the mark when the rail collapses.
+- Top bar lives **inside** the content area, to the right of the sidebar. The
+  active page title and its sync-status badge read as one unit on the left;
+  sync countdown and the user menu sit on the right.
+- Page title is the descriptive heading (e.g. "Cost overview"), not the short
+  sidebar label ("Overview").
+- Sidebar: collapsible, persistent on desktop, overlay on mobile; nav is grouped
+  (**Main**, **Attribution**) with Settings pinned to the footer.
 - Content area: max-width 1280px, centered
 - Spacing: 4px/8px grid system
 
@@ -227,17 +235,21 @@ Each Bedrock model gets a consistent color across all charts:
 
 ### Navigation (Sidebar)
 
-| Item | Route | Description |
-|------|-------|-------------|
-| Overview | `/dashboard` | KPI cards, cost trend chart, top consumers |
-| Ranking | `/dashboard/ranking` | Leaderboard with tabs + model filter |
-| Departments | `/dashboard/departments` | Department cards grid |
-| Department Detail | `/dashboard/departments/[id]` | Teams breakdown, cost over time |
-| Teams | `/dashboard/teams` | Teams list, filterable by department |
-| Team Detail | `/dashboard/teams/[id]` | Services + users breakdown |
-| Services | `/dashboard/services` | All services across all accounts |
-| Users | `/dashboard/users` | All users across all accounts |
-| Settings | `/dashboard/settings` | Account registry, sync status, tag coverage |
+Nav is grouped: **Main** (Overview) and **Attribution** (the per-dimension
+breakdowns); Settings is pinned to the sidebar footer. Each item carries a short
+rail label and a descriptive page title shown in the top bar.
+
+| Group | Item (rail label) | Page title | Route | Description |
+|-------|-------------------|------------|-------|-------------|
+| Main | Overview | Cost overview | `/dashboard` | KPI cards, cost trend chart, top consumers |
+| Attribution | Ranking | Cost ranking | `/dashboard/ranking` | Leaderboard with tabs + model filter |
+| Attribution | Departments | Department breakdown | `/dashboard/departments` | Department cards grid |
+| — | Department Detail | Department breakdown | `/dashboard/departments/[id]` | Teams breakdown, cost over time (drill-down, no rail item) |
+| Attribution | Teams | Team breakdown | `/dashboard/teams` | Teams list, filterable by department |
+| — | Team Detail | Team breakdown | `/dashboard/teams/[id]` | Services + users breakdown (drill-down, no rail item) |
+| Attribution | Services | Service breakdown | `/dashboard/services` | All services across all accounts |
+| Attribution | Users | User breakdown | `/dashboard/users` | All users across all accounts |
+| Footer | Settings | Settings | `/dashboard/settings` | Account registry, sync status, tag coverage |
 
 ### Overview Page
 

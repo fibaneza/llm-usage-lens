@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Brand" name="Iconography (Lucide)" subtitle="Core glyph set, outline 1.6px" viewport="700x180" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  .set { display:grid; grid-template-columns:repeat(10,1fr); gap:6px; }
+  .ic { aspect-ratio:1; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-sm);
+    background:var(--surface-1); border:1px solid var(--border-subtle); color:var(--fg-muted); }
+  .ic svg { width:18px; height:18px; }
+  .ic.active { color:var(--accent); border-color:var(--accent); background:var(--accent-subtle); }
+  .note { display:flex; gap:16px; }
+  .note span { font-size:var(--text-xs); color:var(--fg-muted); }
+</style></head>
+<body>
+  <div class="note">
+    <span><b style="color:var(--fg)">Lucide</b> — shadcn default</span>
+    <span>outline · ~1.6px stroke</span>
+    <span>16–18px · inherits currentColor</span>
+  </div>
+  <div class="set">
+    <div class="ic active"><i data-lucide="layers"></i></div>
+    <div class="ic"><i data-lucide="bar-chart-3"></i></div>
+    <div class="ic"><i data-lucide="pie-chart"></i></div>
+    <div class="ic"><i data-lucide="trending-up"></i></div>
+    <div class="ic"><i data-lucide="trending-down"></i></div>
+    <div class="ic"><i data-lucide="users"></i></div>
+    <div class="ic"><i data-lucide="server"></i></div>
+    <div class="ic"><i data-lucide="cpu"></i></div>
+    <div class="ic"><i data-lucide="dollar-sign"></i></div>
+    <div class="ic"><i data-lucide="calendar"></i></div>
+    <div class="ic"><i data-lucide="filter"></i></div>
+    <div class="ic"><i data-lucide="search"></i></div>
+    <div class="ic"><i data-lucide="download"></i></div>
+    <div class="ic"><i data-lucide="arrow-up-right"></i></div>
+    <div class="ic"><i data-lucide="arrow-down-right"></i></div>
+    <div class="ic"><i data-lucide="circle-dot"></i></div>
+    <div class="ic"><i data-lucide="chevron-down"></i></div>
+    <div class="ic"><i data-lucide="settings"></i></div>
+    <div class="ic"><i data-lucide="bell"></i></div>
+    <div class="ic"><i data-lucide="more-horizontal"></i></div>
+  </div>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons();</script>
+</body></html>

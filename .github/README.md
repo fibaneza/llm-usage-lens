@@ -89,8 +89,8 @@ be generically portable to a shared repository (see [Future work](#future-work))
 
 | Action | Inputs (required \*) | Outputs | Purpose |
 | --- | --- | --- | --- |
-| `setup-node-pnpm` | `node-version` (default `22`) | — | Installs pnpm via `pnpm/action-setup@v6` then Node.js with pnpm cache via `actions/setup-node@v6`. Used in `bedrock-dashboard-build.yml`. |
-| `setup-sam-toolchain` | `node-version` (default `22`), `pnpm-version` (default `9`), `cache-pnpm` (default `false`), `cache-dependency-path` | — | Installs Node.js, pnpm, and the AWS SAM CLI for SAM build/deploy jobs. |
+| `node-setup` | `node-version` (default `22`) | — | Installs pnpm via `pnpm/action-setup@v6` then Node.js with pnpm cache via `actions/setup-node@v6`. Used in `bedrock-dashboard-build.yml`. |
+| `aws-sam-setup` | `node-version` (default `22`), `pnpm-version` (default `9`), `cache-pnpm` (default `false`), `cache-dependency-path` | — | Installs Node.js, pnpm, and the AWS SAM CLI for SAM build/deploy jobs. |
 
 ### `github-*` family
 

@@ -1,0 +1,267 @@
+/* ============================================================================
+   STRATA — Bedrock Cost Observability
+   Foundation tokens: color + type
+   ----------------------------------------------------------------------------
+   Light mode. Space Grotesk (headings + UI) + JetBrains Mono (data/code).
+   Background #F5F7FF, surfaces white, primary indigo #4F46E5.
+   Semantic CSS tokens only — no raw hex in product components.
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ======================================================================== */
+  /* PRIMITIVE — color ramps (internal; semantic layer points here)            */
+  /* ======================================================================== */
+
+  /* --- Slate/blue-gray neutral (Tailwind slate family) -------------------- */
+  --slate-50:   #F8FAFC;
+  --slate-100:  #F1F5F9;
+  --slate-200:  #E2E8F0;   /* default border                                 */
+  --slate-300:  #CBD5E1;   /* fg-faint / disabled                            */
+  --slate-400:  #94A3B8;   /* fg-subtle / placeholders                       */
+  --slate-500:  #64748B;   /* fg-muted / labels, ticks                       */
+  --slate-600:  #475569;
+  --slate-700:  #334155;   /* fg-secondary / body copy                       */
+  --slate-800:  #1E293B;
+  --slate-900:  #0F172A;   /* fg / primary text                              */
+
+  /* --- App canvas --------------------------------------------------------- */
+  --canvas:  #F5F7FF;      /* page background                                */
+  --surf-0:  #FFFFFF;      /* cards, panels, sidebar                         */
+  --surf-1:  #EEF0FC;      /* inputs, segment controls, hover tints          */
+  --surf-2:  #E2E5F4;      /* popovers, menus, selected tracks               */
+
+  /* --- Indigo/violet (primary brand) -------------------------------------- */
+  --indigo-950: #1e1b4b;
+  --indigo-900: #312e81;
+  --indigo-800: #3730a3;   /* gradient start · --accent-hover                */
+  --indigo-600: #4f46e5;   /* --color-primary                                */
+  --indigo-500: #6366f1;   /* --color-secondary                              */
+  --indigo-400: #818cf8;
+  --indigo-100: #e0e7ff;
+  --indigo-50:  #eef2ff;
+
+  /* --- Amber (warnings & cost alerts only — not the brand accent) --------- */
+  --amber-600:  #D97706;   /* --color-accent                                 */
+  --amber-500:  #F59E0B;
+
+  /* --- Semantic status ---------------------------------------------------- */
+  --rose-600:    #E11D48;  /* --color-destructive                            */
+  --rose-500:    #F43F5E;
+  --emerald-700: #047857;
+  --emerald-600: #059669;  /* --color-success                                */
+  --emerald-500: #10b981;
+
+  /* --- Chart: model-assigned hues (spec-exact — never change per model) --- */
+  --chart-opus:    #7C3AED;   /* Claude Opus   — deep purple                 */
+  --chart-sonnet:  #3B82F6;   /* Claude Sonnet — blue                        */
+  --chart-haiku:   #14B8A6;   /* Claude Haiku  — teal                        */
+  --chart-other:   #D97706;   /* Other models  — amber                       */
+  /* Extended categorical palette (chart slots 5–8) */
+  --chart-5:    #F43F5E;   /* rose                                           */
+  --chart-6:    #A855F7;   /* purple                                         */
+  --chart-7:    #06B6D4;   /* cyan                                           */
+  --chart-8:    #84CC16;   /* lime                                           */
+
+  /* ======================================================================== */
+  /* SEMANTIC — the only layer product components should reference            */
+  /* ======================================================================== */
+
+  /* Core brand roles */
+  --color-primary:      var(--indigo-600);      /* #4F46E5 — nav active, primary btn  */
+  --color-on-primary:   #ffffff;                /* text on primary                    */
+  --color-secondary:    var(--indigo-500);       /* #6366F1 — links, secondary actions */
+  --color-accent:       var(--amber-600);        /* #D97706 — warnings, cost alerts    */
+  --color-background:   var(--canvas);           /* #F5F7FF — page background          */
+  --color-foreground:   var(--slate-900);        /* #0F172A — primary text             */
+  --color-muted:        var(--slate-400);        /* #94A3B8 — placeholders             */
+  --color-border:       var(--slate-200);        /* #E2E8F0 — card borders, dividers   */
+  --color-destructive:  var(--rose-600);         /* #E11D48 — errors, high cost alerts */
+  --color-success:      var(--emerald-600);      /* #059669 — positive trends          */
+  --color-ring:         var(--indigo-600);       /* #4F46E5 — focus rings              */
+
+  /* Surfaces (low → high elevation) */
+  --bg:            var(--color-background);
+  --surface-1:     var(--surf-0);               /* #FFFFFF cards, panels, sidebar     */
+  --surface-2:     var(--surf-1);               /* #EEF0FC inputs, row hover          */
+  --surface-3:     var(--surf-2);               /* #E2E5F4 popovers, menus            */
+  --surface-hover: rgba(79,70,229,0.04);
+
+  /* Foreground */
+  --fg:           var(--slate-900);             /* #0F172A primary text               */
+  --fg-secondary: var(--slate-700);             /* #334155 body copy                  */
+  --fg-muted:     var(--slate-500);             /* #64748B labels, axis ticks         */
+  --fg-subtle:    var(--slate-400);             /* #94A3B8 placeholders, meta         */
+  --fg-faint:     var(--slate-300);             /* #CBD5E1 disabled                   */
+
+  /* Borders */
+  --border-subtle:  rgba(15,23,42,0.06);
+  --border:         var(--color-border);        /* #E2E8F0 default                    */
+  --border-strong:  #C7D0E8;                    /* hover / active                     */
+
+  /* Accent (gradient: indigo-800 → indigo-600 — brand signature) */
+  --accent:               var(--color-primary);
+  --accent-hover:         var(--indigo-800);
+  --accent-active:        var(--indigo-900);
+  --accent-secondary:     var(--color-secondary);
+  --accent-subtle:        rgba(79,70,229,0.08);
+  --accent-gradient:      linear-gradient(110deg, var(--indigo-800) 0%, var(--indigo-600) 100%);
+  --accent-gradient-active: linear-gradient(110deg, var(--indigo-600) 0%, var(--indigo-500) 100%);
+  --ring:                 rgba(79,70,229,0.35);
+
+  /* Cost/warning accent (amber) */
+  --warn:       var(--color-accent);            /* #D97706 budget alerts              */
+  --warn-bg:    rgba(217,119,6,0.12);
+  --warn-hover: var(--amber-500);
+
+  /* Status */
+  --pos:      var(--color-success);             /* spend down / under budget          */
+  --pos-bg:   rgba(5,150,105,0.12);
+  --neg:      var(--color-destructive);         /* spend up / over budget             */
+  --neg-bg:   rgba(225,29,72,0.12);
+  --info:     var(--color-secondary);
+  --info-bg:  rgba(99,102,241,0.12);
+
+  /* Chart series (use canonical key → CSS var mapping) */
+  --chart-1:  var(--chart-sonnet);   /* slot 1: Sonnet  #3B82F6 */
+  --chart-2:  var(--chart-opus);     /* slot 2: Opus    #7C3AED */
+  --chart-3:  var(--chart-haiku);    /* slot 3: Haiku   #14B8A6 */
+  --chart-4:  var(--chart-other);    /* slot 4: Other   #D97706 */
+  --chart-5:  var(--chart-5);
+  --chart-6:  var(--chart-6);
+  --chart-7:  var(--chart-7);
+  --chart-8:  var(--chart-8);
+  --grid-line: rgba(15,23,42,0.06);
+
+  /* ======================================================================== */
+  /* TYPE                                                                     */
+  /* ======================================================================== */
+
+  /* Space Grotesk for headings and all UI copy.
+     JetBrains Mono for all numeric/data content and code. */
+  --font-heading: 'Space Grotesk', system-ui, sans-serif;
+  --font-sans:    'Space Grotesk', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+
+  /* Weights */
+  --w-light:   300; /* @kind font */
+  --w-regular: 400; /* @kind font */
+  --w-medium:  500; /* @kind font */
+  --w-semibold:600; /* @kind font */
+  --w-bold:    700; /* @kind font */
+
+  /* Type scale (spec: 12 / 14 / 16 / 18 / 24 / 32 / 48) */
+  --text-48:  3rem;      /* 48px  hero display metric                        */
+  --text-32:  2rem;      /* 32px  page-level KPI                             */
+  --text-24:  1.5rem;    /* 24px  page title (h1)                            */
+  --text-18:  1.125rem;  /* 18px  section title (h2)                         */
+  --text-16:  1rem;      /* 16px  card title (h3) / base body                */
+  --text-14:  0.875rem;  /* 14px  UI body, table cells                       */
+  --text-12:  0.75rem;   /* 12px  labels, captions, legends                  */
+
+  /* Semantic aliases */
+  --text-display: var(--text-48);
+  --text-h1:      var(--text-24);
+  --text-h2:      var(--text-18);
+  --text-h3:      var(--text-16);
+  --text-body:    var(--text-14);
+  --text-sm:      var(--text-14);
+  --text-xs:      var(--text-12);
+  --text-2xs:     0.6875rem;   /* 11px labels/legend */
+
+  --leading-tight:  1.2;
+  --leading-snug:   1.35;
+  --leading-normal: 1.5;
+  --tracking-label: 0.06em;
+  --tracking-tight: -0.02em;
+
+  /* ======================================================================== */
+  /* SPACE / RADIUS / ELEVATION                                               */
+  /* ======================================================================== */
+  --space-1:  0.25rem;   /*  4px */
+  --space-2:  0.5rem;    /*  8px */
+  --space-3:  0.75rem;   /* 12px */
+  --space-4:  1rem;      /* 16px */
+  --space-5:  1.25rem;   /* 20px */
+  --space-6:  1.5rem;    /* 24px */
+  --space-8:  2rem;      /* 32px */
+  --space-10: 2.5rem;    /* 40px */
+  --space-12: 3rem;      /* 48px */
+
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:   12px;
+  --radius-full: 9999px;
+
+  /* Elevation — light-mode */
+  --inset-hairline: inset 0 1px 0 rgba(255,255,255,0.8);
+  --shadow-card:    0 1px 4px rgba(0,0,0,0.06);
+  --shadow-overlay: 0 8px 28px -6px rgba(79,70,229,0.12), 0 2px 8px -2px rgba(0,0,0,0.08);
+  --shadow-modal:   0 24px 64px -12px rgba(0,0,0,0.18);
+
+  /* Card hover: indigo border ring + lift */
+  --shadow-card-hover:
+    0 0 0 1px rgba(79,70,229,0.2),
+    0 12px 28px rgba(79,70,229,0.12),
+    0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* ============================================================================
+   SEMANTIC TYPE CLASSES
+   Space Grotesk for headings and UI; JetBrains Mono for data and code.
+   ============================================================================ */
+
+/* Headings — Space Grotesk */
+.display {
+  font: var(--w-bold) var(--text-display)/var(--leading-tight) var(--font-heading);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg);
+}
+.h1 {
+  font: var(--w-semibold) var(--text-h1)/var(--leading-tight) var(--font-heading);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg);
+}
+.h2 {
+  font: var(--w-semibold) var(--text-h2)/var(--leading-snug) var(--font-heading);
+  color: var(--fg);
+}
+.h3 {
+  font: var(--w-semibold) var(--text-h3)/var(--leading-snug) var(--font-heading);
+  color: var(--fg);
+}
+
+/* Body — Space Grotesk */
+.body {
+  font: var(--w-regular) var(--text-body)/var(--leading-normal) var(--font-sans);
+  color: var(--fg-secondary);
+}
+.small {
+  font: var(--w-regular) var(--text-12)/var(--leading-normal) var(--font-sans);
+  color: var(--fg-muted);
+}
+.label {
+  font: var(--w-medium) var(--text-xs)/1 var(--font-sans);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* Data / numbers — JetBrains Mono, tabular + slashed zero */
+.metric {
+  font: var(--w-medium) var(--text-body)/1 var(--font-mono);
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+  color: var(--fg);
+}
+.metric-lg {
+  font: var(--w-semibold) var(--text-32)/1 var(--font-mono);
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg);
+}
+code, .code {
+  font: var(--w-regular) var(--text-sm)/var(--leading-normal) var(--font-mono);
+  color: var(--fg-secondary);
+}

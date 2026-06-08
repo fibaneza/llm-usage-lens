@@ -15,3 +15,9 @@ docs/**
 tools/**
 *.md
 LICENSE
+
+# Vendored shadcn/ui primitives + generated hook — emitted by the shadcn CLI in
+# its own house style; kept verbatim so re-adds don't churn (matches the
+# eslint.config.ts ignore).
+apps/dashboard/components/ui/**
+apps/dashboard/hooks/use-mobile.ts

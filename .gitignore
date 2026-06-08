@@ -168,4 +168,8 @@ tools/bedrock-simulator/coverage/
 
 # Git directories
 /worktrees
-/temp
+
+# Local scratch — design exports, screenshots, throwaway working files. Never
+# pushed. Curated reference material is promoted into docs/ instead (e.g. the
+# Strata design system lives at docs/design-system/).
+/temp/

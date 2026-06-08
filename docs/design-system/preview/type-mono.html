@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Type" name="Mono / tabular figures" subtitle="JetBrains Mono ledger + glyph disambiguation" viewport="700x240" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  body { gap:14px; }
+  .ledger { border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; }
+  .lr { display:flex; align-items:center; justify-content:space-between; padding:7px 14px; border-bottom:1px solid var(--border-subtle); }
+  .lr:last-child { border-bottom:0; }
+  .lr.tot { background:var(--surface-2); }
+  .lr .nm { font-size:var(--text-sm); color:var(--fg-muted); display:flex; align-items:center; gap:8px; font-family:var(--font-sans); }
+  .sw { width:8px; height:8px; border-radius:2px; }
+  .lr .amt { font-family:var(--font-mono); font-size:var(--text-sm); font-feature-settings:'tnum' 1,'zero' 1; color:var(--fg); }
+  .lr.tot .amt { font-weight:600; }
+  .lr.tot .nm { color:var(--fg); font-weight:500; }
+  .top { display:flex; align-items:baseline; justify-content:space-between; }
+  .face { font-family:var(--font-mono); font-weight:500; font-size:20px; color:var(--fg); }
+  .glyphs { display:flex; align-items:center; gap:14px; }
+  .glyphs .strip { font-family:var(--font-mono); font-size:18px; font-feature-settings:'zero' 1; color:var(--fg-secondary); letter-spacing:2px; }
+  .glyphs .strip b { color:var(--color-secondary); font-weight:500; }
+</style></head>
+<body>
+  <div class="top">
+    <span class="face">JetBrains Mono — data &amp; numbers</span>
+    <div style="display:flex;gap:16px">
+      <span style="font-family:var(--font-mono);font-size:var(--text-sm);font-weight:400;color:var(--fg-secondary)">Regular 400</span>
+      <span style="font-family:var(--font-mono);font-size:var(--text-sm);font-weight:500;color:var(--fg-secondary)">Medium 500</span>
+      <span style="font-family:var(--font-mono);font-size:var(--text-sm);font-weight:600;color:var(--fg)">SemiBold 600</span>
+    </div>
+  </div>
+  <div class="ledger">
+    <div class="lr"><span class="nm"><span class="sw" style="background:var(--chart-sonnet)"></span>Claude Sonnet</span><span class="amt">$16,402.18</span></div>
+    <div class="lr"><span class="nm"><span class="sw" style="background:var(--chart-opus)"></span>Claude Opus</span><span class="amt">$7,713.66</span></div>
+    <div class="lr"><span class="nm"><span class="sw" style="background:var(--chart-haiku)"></span>Claude Haiku</span><span class="amt">$914.08</span></div>
+    <div class="lr tot"><span class="nm">Total · MTD</span><span class="amt">$48,210.34</span></div>
+  </div>
+  <div class="glyphs">
+    <span class="strip"><b>0</b>123456789</span>
+    <span style="font-size:var(--text-2xs);color:var(--fg-subtle);font-family:var(--font-sans)">tabular · slashed zero — <b style="color:var(--color-secondary)">0</b>/O and 1/l never blur</span>
+  </div>
+</body></html>

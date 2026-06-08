@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Tabs, segments & date range" subtitle="Segmented control, page tabs, range picker" viewport="700x150" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  .seg { display:inline-flex; padding:3px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-md); gap:2px; }
+  .seg button { height:28px; padding:0 14px; border:0; background:transparent; color:var(--fg-muted); font-family:var(--font-sans);
+    font-size:var(--text-sm); font-weight:500; border-radius:var(--radius-sm); cursor:pointer; }
+  .seg button.on { background:var(--accent); color:var(--accent-fg); }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); }
+  .tabs a { padding:9px 14px; font-size:var(--text-body); color:var(--fg-muted); text-decoration:none; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .tabs a.on { color:var(--fg); border-bottom-color:var(--accent); font-weight:500; }
+  .tabs a:hover { color:var(--fg); }
+  .daterange { display:inline-flex; align-items:center; gap:9px; height:34px; padding:0 12px; background:var(--surface-2);
+    border:1px solid var(--border); border-radius:var(--radius-md); color:var(--fg); font-size:var(--text-body); }
+  .daterange svg { width:15px; height:15px; color:var(--fg-subtle); }
+  .daterange .v { font-family:var(--font-mono); font-size:var(--text-sm); }
+</style></head>
+<body>
+  <div class="row" style="justify-content:space-between">
+    <div class="seg"><button class="on">Cost</button><button>Tokens</button><button>Invocations</button></div>
+    <div class="daterange"><i data-lucide="calendar"></i><span class="v">May 4 – Jun 3, 2026</span><i data-lucide="chevron-down"></i></div>
+  </div>
+  <div class="tabs">
+    <a class="on">Overview</a><a>By model</a><a>By team</a><a>By service</a><a>Trends</a>
+  </div>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons();</script>
+</body></html>

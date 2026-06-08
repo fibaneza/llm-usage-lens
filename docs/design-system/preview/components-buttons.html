@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Buttons" subtitle="Primary, secondary, ghost, destructive, icon" viewport="700x170" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  :root { --ease: cubic-bezier(0.2, 0, 0, 1); }
+  .btn { position:relative; isolation:isolate; overflow:hidden; display:inline-flex; align-items:center; gap:7px;
+    height:34px; padding:0 14px; border-radius:var(--radius-md);
+    font-family:var(--font-sans); font-size:var(--text-body); font-weight:500; border:1px solid transparent; cursor:pointer;
+    transition: transform .14s var(--ease), border-color .2s var(--ease), color .2s var(--ease), box-shadow .2s var(--ease); }
+  .btn > * { position:relative; z-index:1; }
+  .btn svg { width:15px; height:15px; transition: transform .16s var(--ease); }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+
+  /* Colored fill that rises from the bottom on hover */
+  .btn::before { content:""; position:absolute; inset:0; z-index:0; transform: scaleY(0); transform-origin: bottom;
+    transition: transform .26s var(--ease); }
+
+  /* PRIMARY — flowing blue→violet gradient sweep + glow */
+  .primary { color:#fff;
+    background:linear-gradient(110deg, var(--brand-blue), var(--brand-violet), var(--brand-blue-d), var(--brand-violet));
+    background-size:240% 100%; background-position:0% 0;
+    transition: background-position .55s var(--ease), transform .14s var(--ease), box-shadow .2s var(--ease); }
+  .primary:hover { background-position:100% 0; box-shadow:0 5px 18px -4px color-mix(in oklch, var(--accent) 60%, transparent); }
+  .primary:hover svg { transform: translateY(2px); }
+
+  /* SECONDARY — accent tint rises, border + text turn accent */
+  .secondary { background:var(--surface-2); color:var(--fg); border-color:var(--border); }
+  .secondary::before { background:var(--accent-subtle); }
+  .secondary:hover { border-color:var(--accent); color:var(--accent); }
+  .secondary:hover::before { transform: scaleY(1); }
+
+  /* GHOST — surface fill rises */
+  .ghost { background:transparent; color:var(--fg-secondary); }
+  .ghost::before { background:var(--surface-2); }
+  .ghost:hover { color:var(--fg); }
+  .ghost:hover::before { transform: scaleY(1); }
+
+  /* DESTRUCTIVE — red wash rises */
+  .destructive { background:transparent; color:var(--neg); border-color:color-mix(in oklch, var(--neg) 40%, transparent); }
+  .destructive::before { background:var(--neg-bg); }
+  .destructive:hover { border-color:var(--neg); }
+  .destructive:hover::before { transform: scaleY(1); }
+
+  .icon { width:34px; padding:0; justify-content:center; }
+  .icon:hover svg { transform: rotate(90deg); }
+
+  .link { background:transparent; color:var(--accent); border:0; padding:0 2px; overflow:visible; }
+  .link::before { display:none; }
+  .link:hover { transform:none; }
+  .link:hover svg { transform: translateX(3px); }
+
+  .grp { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .grp + .grp { margin-top:4px; }
+  .hint { font-size:var(--text-2xs); color:var(--fg-subtle); margin-top:2px; }
+  @media (prefers-reduced-motion: reduce) {
+    .btn, .btn svg, .btn::before { transition:none !important; transform:none !important; }
+  }
+</style></head>
+<body>
+  <div class="grp">
+    <button class="btn primary"><i data-lucide="download"></i> <span>Export CSV</span></button>
+    <button class="btn secondary"><i data-lucide="filter"></i> <span>Filters</span></button>
+    <button class="btn ghost"><span>Reset</span></button>
+    <button class="btn destructive"><i data-lucide="trash-2"></i> <span>Delete alert</span></button>
+    <button class="btn secondary icon"><i data-lucide="more-horizontal"></i></button>
+  </div>
+  <div class="grp">
+    <button class="btn primary" style="opacity:.45; pointer-events:none"><span>Disabled</span></button>
+    <button class="btn secondary" style="height:28px; font-size:var(--text-sm)"><i data-lucide="calendar"></i> <span>Last 30 days</span></button>
+    <button class="btn link"><span>View all</span> <i data-lucide="arrow-right"></i></button>
+  </div>
+  <div class="hint">Hover: colored fill rises behind the label (accent · red wash) · primary gradient sweeps + glows · 1px lift · icons nudge — ~260ms ease-out.</div>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons();</script>
+</body></html>

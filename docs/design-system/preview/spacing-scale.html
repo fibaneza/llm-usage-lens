@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Spacing" name="Spacing scale" subtitle="4px base grid tokens" viewport="700x250" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  .scale { display:flex; flex-direction:column; gap:7px; }
+  .s { display:flex; align-items:center; gap:12px; }
+  .s .bar { height:14px; background:var(--accent); border-radius:2px; }
+  .s .name { width:64px; font-family:var(--font-mono); font-size:var(--text-2xs); color:var(--fg-muted); }
+  .s .px { font-family:var(--font-mono); font-size:var(--text-2xs); color:var(--fg-subtle); }
+</style></head>
+<body>
+  <span class="eyebrow">4px base grid</span>
+  <div class="scale">
+    <div class="s"><span class="name">space-1</span><div class="bar" style="width:4px"></div><span class="px">4px</span></div>
+    <div class="s"><span class="name">space-2</span><div class="bar" style="width:8px"></div><span class="px">8px</span></div>
+    <div class="s"><span class="name">space-3</span><div class="bar" style="width:12px"></div><span class="px">12px</span></div>
+    <div class="s"><span class="name">space-4</span><div class="bar" style="width:16px"></div><span class="px">16px · card pad</span></div>
+    <div class="s"><span class="name">space-6</span><div class="bar" style="width:24px"></div><span class="px">24px · card pad lg</span></div>
+    <div class="s"><span class="name">space-8</span><div class="bar" style="width:32px"></div><span class="px">32px · section gap</span></div>
+    <div class="s"><span class="name">space-12</span><div class="bar" style="width:48px"></div><span class="px">48px</span></div>
+  </div>
+</body></html>
