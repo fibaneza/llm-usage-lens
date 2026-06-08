@@ -16,6 +16,9 @@ export default tseslint.config(
       // CI helper scripts and the standalone simulator carry their own configs.
       ".github/**",
       "tools/**",
+      // Vendored design-reference bundle (claude.ai/design export) — prototype
+      // HTML/CSS/JS, not product code; recreated in our stack, never shipped.
+      "docs/design-system/**",
       // Vendored shadcn/ui primitives and the generated mobile hook — upstream
       // code re-emitted by the shadcn CLI, not authored against our rules.
       "apps/dashboard/components/ui/**",
