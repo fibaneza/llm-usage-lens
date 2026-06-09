@@ -1,4 +1,5 @@
 import { auth, signOut } from "@/auth";
+import { CommandMenu } from "@/components/layout/CommandMenu";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { SyncCountdown } from "@/components/status/SyncCountdown";
 import { SyncStatusBadge } from "@/components/status/SyncStatusBadge";
@@ -24,13 +25,16 @@ export async function AppHeader() {
           sidebar is an overlay, so the trigger is the only way in. */}
       <SidebarTrigger className="-ml-1 md:hidden" />
       {/* Title + sync badge read as one unit (design reference — the sync
-          status sits next to the page heading, not across the bar). */}
+          status sits next to the page heading, not across the bar). CommandMenu
+          is a client component embedded in this server header — fine, the
+          boundary stays as deep as possible (Rule 60.7). */}
       <div className="flex items-center gap-3">
         <PageTitle />
         <SyncStatusBadge />
       </div>
 
       <div className="ml-auto flex items-center gap-3">
+        <CommandMenu />
         <SyncCountdown />
         <UserMenu user={session?.user ?? null} signOutAction={signOutAction} />
       </div>

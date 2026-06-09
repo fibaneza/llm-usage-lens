@@ -51,7 +51,11 @@ export function UserMenu({ user, signOutAction }: UserMenuProps) {
         >
           <Avatar className="size-9">
             {user?.image ? <AvatarImage src={user.image} alt="" /> : null}
-            <AvatarFallback>{initials(user)}</AvatarFallback>
+            {/* Filled brand circle with white initials (design reference —
+                the indigo avatar, not the default neutral fallback). */}
+            <AvatarFallback className="bg-primary text-primary-foreground font-medium">
+              {initials(user)}
+            </AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>

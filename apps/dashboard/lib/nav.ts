@@ -92,8 +92,8 @@ export const SETTINGS_NAV_ITEM: NavItem = {
   icon: Settings,
 };
 
-// The full set (primary + settings) — consumed by the PageTitle lookup,
-// Breadcrumbs, and the command menu in Phase 2.2.
+// The full set (primary + settings) — consumed by the PageTitle lookup and
+// the command menu in Phase 2.2.
 export const NAV_ITEMS: readonly NavItem[] = [
   ...PRIMARY_NAV_ITEMS,
   SETTINGS_NAV_ITEM,

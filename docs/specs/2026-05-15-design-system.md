@@ -333,7 +333,6 @@ Global date filter present in the page header of every dashboard page:
 | Component | Source | Purpose |
 |-----------|--------|---------|
 | `Sidebar` | shadcn/ui | Collapsible navigation with active state |
-| `Breadcrumbs` | shadcn/ui | Navigation context on detail pages (Departments > Engineering > Payments) |
 | `CommandMenu` | shadcn/ui (cmdk) | Cmd+K quick search — jump to any department, team, user, service |
 | `Kbd` | Custom | Keyboard shortcut hints |
 

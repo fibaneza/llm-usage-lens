@@ -5,8 +5,8 @@ import { Clock } from "lucide-react";
 // (Rule 20.9).
 export function SyncCountdown() {
   return (
-    <span className="text-muted-foreground hidden items-center gap-1.5 text-sm sm:inline-flex">
-      <Clock className="size-3.5" aria-hidden />
+    <span className="text-muted-foreground hidden items-center gap-1.5 text-sm whitespace-nowrap sm:inline-flex">
+      <Clock className="size-3.5 shrink-0" aria-hidden />
       Next sync —
     </span>
   );

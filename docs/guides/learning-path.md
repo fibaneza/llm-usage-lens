@@ -214,7 +214,7 @@ misconfiguration fails at build time. The output is a skeleton: no pages yet.
 
 **Lesson.** This phase teaches **responsive application layout**. Every page
 later renders inside this shell, so you build it once: a sidebar (persistent on
-desktop, overlay on mobile), a top bar, breadcrumbs, a Cmd+K command menu, and
+desktop, overlay on mobile), a top bar, a Cmd+K command menu, and
 a `DateRangePicker` whose state lives in the **URL** via `nuqs` (not React
 state) — so a date range survives refresh and is shareable. You also learn the
 breakpoint system (375 / 768 / 1024 / 1440) and the centered 1280px content
@@ -231,16 +231,15 @@ split into three sub-phases, each its own branch and PR — build them in order.
 - [ ] Build the top bar — user menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`)
 - [ ] Add `SyncStatusBadge` and `SyncCountdown` placeholders to the top bar
 
-**Build tasks — 2.2 Breadcrumbs + Command Menu.**
+**Build tasks — 2.2 Command Menu.**
 
-- [ ] Build the `Breadcrumbs` component (shadcn/ui)
 - [ ] Build the `Kbd` component (keyboard-shortcut hint)
 - [ ] Build the `CommandMenu` (shadcn/ui cmdk) with Cmd+K trigger and `Kbd` hint — skeleton search
 
 **Build tasks — 2.3 Global Filters & Page Header.**
 
 - [ ] Build the `DateRangePicker` (shadcn Calendar + Popover): 7d / 30d / 90d / custom, default 30 days, persisted in URL via nuqs
-- [ ] Build the page header layout (title + breadcrumbs + date filter)
+- [ ] Build the page header layout (title + date filter)
 - [ ] Wire the page header into all 9 routes
 
 **Verify.**
@@ -438,9 +437,8 @@ build `PeriodComparison` for "vs previous 30 days".
 - [ ] Reuse `UsageTable` for the teams breakdown
 - [ ] Reuse `CostTrendChart` stacked by team
 - [ ] Build the top-users ranked list (reuse `RankingList`)
-- [ ] Update `Breadcrumbs` (Departments > Engineering)
 - [ ] Connect to Route Handlers — department rollups + team breakdown
-- [ ] Tests: header stat calculation; breadcrumb rendering
+- [ ] Tests: header stat calculation
 
 **Verify.**
 
@@ -493,7 +491,6 @@ with consistent color) — and learn that a team maps to exactly one AWS account
 - [ ] Reuse `UsageTable` for the services breakdown
 - [ ] Reuse `UsageTable` for the users breakdown (with `UserAvatar` in the name column)
 - [ ] Build the model-usage bar chart (Recharts, `next/dynamic`)
-- [ ] Update `Breadcrumbs` (Teams > Payments Team)
 - [ ] Connect to Route Handlers — team rollups with `byService` and `byUser` data
 - [ ] Tests: `AccountIdBadge` copy; `UserAvatar` color consistency
 
