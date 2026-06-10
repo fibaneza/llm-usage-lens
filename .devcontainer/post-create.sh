@@ -49,5 +49,5 @@ claude plugin install ui-ux-pro-max@ui-ux-pro-max-skill            	    # UI/UX 
 # find ~/.claude/plugins/cache/ecc -name ".mcp.json" -exec sh -c 'echo "{\"mcpServers\":{}}" | jq . > "$1"' _ {} \;
 
 # Tools — installed system-wide for workflow linting.
-bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) latest /usr/local/bin  # Lint .github/workflows/*.yml with: actionlint
+sudo bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) latest /usr/local/bin  # Lint .github/workflows/*.yml with: actionlint
 gh extension install nicholasgasior/gh-label-sync                        # Sync GitHub labels from .github/labels.yml with: gh label-sync sync --file .github/labels.yml --dry-run
