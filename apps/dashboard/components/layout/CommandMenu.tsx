@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SearchIcon } from "lucide-react";
 
 import {
@@ -13,6 +13,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
+import { withDateRange } from "@/lib/date-range-search-params";
 import { NAV_ITEMS } from "@/lib/nav";
 
 // Cmd+K quick-jump menu. The trigger is styled as a search box; the dialog is
@@ -22,6 +23,9 @@ import { NAV_ITEMS } from "@/lib/nav";
 // Phase 2.2). Pure client UI: no AWS/data imports (Rule 10).
 export function CommandMenu() {
   const router = useRouter();
+  // Quick-jumps carry the active global date range too, matching the sidebar
+  // links so the filter survives navigation (issue #75).
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -38,7 +42,7 @@ export function CommandMenu() {
 
   function navigate(href: string) {
     setOpen(false);
-    router.push(href);
+    router.push(withDateRange(href, searchParams));
   }
 
   return (

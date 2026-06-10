@@ -1,7 +1,7 @@
-import { type CSSProperties, type ReactNode } from "react";
+import { type CSSProperties, type ReactNode, Suspense } from "react";
 
 import { AppHeader } from "@/components/layout/AppHeader";
-import { AppSidebar } from "@/components/layout/AppSidebar";
+import { AppSidebar, AppSidebarFallback } from "@/components/layout/AppSidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 // Shell: a collapsible sidebar (brand + grouped nav) beside the content inset.
@@ -15,7 +15,12 @@ export default function DashboardLayout({
 }: Readonly<{ children: ReactNode }>) {
   return (
     <SidebarProvider style={{ "--header-height": "3.5rem" } as CSSProperties}>
-      <AppSidebar />
+      {/* AppSidebar reads the URL via useSearchParams (issue #75 — carries the
+          date range onto nav links), so it sits under Suspense for static
+          prerender (Rule 60.12); the fallback is the same rail with bare hrefs. */}
+      <Suspense fallback={<AppSidebarFallback />}>
+        <AppSidebar />
+      </Suspense>
       <SidebarInset>
         <AppHeader />
         <div className="mx-auto w-full max-w-[1280px] flex-1 p-4 md:p-6">
