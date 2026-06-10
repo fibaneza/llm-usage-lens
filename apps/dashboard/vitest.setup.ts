@@ -34,6 +34,16 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = function scrollIntoView() {};
 }
 
+// jsdom implements no Pointer Capture API; Radix dropdown/popover triggers call
+// these on pointer interactions. Stub them so those menus open under test.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = function hasPointerCapture() {
+    return false;
+  };
+  Element.prototype.setPointerCapture = function setPointerCapture() {};
+  Element.prototype.releasePointerCapture = function releasePointerCapture() {};
+}
+
 // Unmount React trees between tests so the jsdom document never leaks state
 // across cases (Rule 60.24 — no flaky tests).
 afterEach(() => {
