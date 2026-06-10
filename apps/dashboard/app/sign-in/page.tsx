@@ -3,7 +3,7 @@ import { signIn } from "@/auth";
 export default function SignInPage() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 p-8 text-center">
-      <h1 className="text-foreground font-mono text-2xl font-semibold">
+      <h1 className="text-foreground text-2xl font-semibold">
         Bedrock Cost Dashboard
       </h1>
       <form

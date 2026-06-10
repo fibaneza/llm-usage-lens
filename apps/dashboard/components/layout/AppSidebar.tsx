@@ -72,7 +72,7 @@ function SidebarNav({ toHref }: { toHref: ToHref }) {
           </div>
           <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
             <span className="font-semibold">Bedrock Cost</span>
-            <span className="text-primary text-[11px] font-medium tracking-wide uppercase">
+            <span className="text-primary text-xs font-medium tracking-wide uppercase">
               {env.NEXT_PUBLIC_ORG_NAME}
             </span>
           </div>
