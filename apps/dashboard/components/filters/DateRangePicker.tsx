@@ -6,14 +6,7 @@ import { CalendarIcon } from "lucide-react";
 import { useQueryStates } from "nuqs";
 import type { DateRange as CalendarRange } from "react-day-picker";
 
-import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
@@ -22,7 +15,6 @@ import {
 import {
   clampCustomRange,
   type DateRange,
-  type DateRangePreset,
   defaultDateRange,
   formatDay,
   parseDay,
@@ -30,18 +22,32 @@ import {
   resolvePreset,
 } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
+import { cn } from "@/lib/utils";
 
-const PRESET_LABELS: Record<DateRangePreset, string> = {
-  "7d": "Last 7 days",
-  "30d": "Last 30 days",
-  "90d": "Last 90 days",
-  custom: "Custom range",
-};
+// Short segmented-control labels (design reference — the top-bar toggle reads
+// "7D / 30D / 90D", not "Last 7 days"); the long form is the accessible name.
+const PRESET_PILLS = [
+  { preset: "7d", label: "7D", aria: "Last 7 days" },
+  { preset: "30d", label: "30D", aria: "Last 30 days" },
+  { preset: "90d", label: "90D", aria: "Last 90 days" },
+] as const;
 
 function formatRangeLabel(range: DateRange): string {
-  const from = format(parseDay(range.dateFrom), "MMM d, yyyy");
-  const to = format(parseDay(range.dateTo), "MMM d, yyyy");
+  const from = format(parseDay(range.dateFrom), "MMM d");
+  const to = format(parseDay(range.dateTo), "MMM d");
   return `${from} – ${to}`;
+}
+
+// One segment of the control. Active = filled primary indigo; inactive = muted
+// text on the track (design reference — Color: active preset uses the brand
+// primary). aria-pressed exposes the toggle state to assistive tech.
+function pillClassName(active: boolean): string {
+  return cn(
+    "h-7 rounded-md px-3 text-xs font-medium transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+    active
+      ? "bg-primary text-primary-foreground"
+      : "text-muted-foreground hover:text-foreground",
+  );
 }
 
 export function DateRangePicker() {
@@ -59,16 +65,11 @@ export function DateRangePicker() {
 
   const activePreset = presetForRange(range);
 
-  const triggerLabel =
-    activePreset === "custom"
-      ? PRESET_LABELS.custom
-      : PRESET_LABELS[activePreset];
-
   function applyRange(next: DateRange) {
     setParams({ dateFrom: next.dateFrom, dateTo: next.dateTo });
   }
 
-  function selectPreset(preset: Exclude<DateRangePreset, "custom">) {
+  function selectPreset(preset: "7d" | "30d" | "90d") {
     applyRange(resolvePreset(preset));
   }
 
@@ -88,44 +89,43 @@ export function DateRangePicker() {
     to: parseDay(range.dateTo),
   };
 
+  const customActive = activePreset === "custom";
+
   return (
-    <div className="flex items-center gap-2">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label={`Date range preset: ${triggerLabel}`}
-          >
-            {triggerLabel}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => selectPreset("7d")}>
-            {PRESET_LABELS["7d"]}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => selectPreset("30d")}>
-            {PRESET_LABELS["30d"]}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => selectPreset("90d")}>
-            {PRESET_LABELS["90d"]}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setCalendarOpen(true)}>
-            {PRESET_LABELS.custom}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    // Segmented control: the preset pills and the custom-range trigger share one
+    // bordered track (design reference — TopBar date toggle).
+    <div className="border-border bg-card inline-flex items-center gap-1 rounded-lg border p-1 shadow-xs">
+      {PRESET_PILLS.map(({ preset, label, aria }) => (
+        <button
+          key={preset}
+          type="button"
+          aria-label={aria}
+          aria-pressed={activePreset === preset}
+          onClick={() => selectPreset(preset)}
+          className={pillClassName(activePreset === preset)}
+        >
+          {label}
+        </button>
+      ))}
 
       <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
         <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label={`Custom date range: ${formatRangeLabel(range)}`}
+          <button
+            type="button"
+            aria-label={
+              customActive
+                ? `Custom date range: ${formatRangeLabel(range)}`
+                : "Custom date range"
+            }
+            aria-pressed={customActive}
+            className={cn(
+              pillClassName(customActive),
+              "flex items-center gap-1.5",
+            )}
           >
-            <CalendarIcon />
-            <span className="hidden md:inline">{formatRangeLabel(range)}</span>
-          </Button>
+            <CalendarIcon className="size-3.5" />
+            <span>{customActive ? formatRangeLabel(range) : "Custom"}</span>
+          </button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="end">
           <Calendar

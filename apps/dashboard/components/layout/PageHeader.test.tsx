@@ -21,7 +21,7 @@ describe("PageHeader", () => {
   it("renders the global date range filter", () => {
     render(<PageHeader description="Anything" />, { wrapper });
     expect(
-      screen.getByRole("button", { name: /date range preset/i }),
+      screen.getByRole("button", { name: /last 30 days/i }),
     ).toBeInTheDocument();
   });
 
@@ -29,7 +29,7 @@ describe("PageHeader", () => {
     const { container } = render(<PageHeader />, { wrapper });
     // The date filter still renders; only the description paragraph is absent.
     expect(
-      screen.getByRole("button", { name: /date range preset/i }),
+      screen.getByRole("button", { name: /last 30 days/i }),
     ).toBeInTheDocument();
     expect(container.querySelector("p")).toBeNull();
   });

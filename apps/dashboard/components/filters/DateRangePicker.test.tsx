@@ -23,19 +23,29 @@ function renderWithUrl(
 }
 
 describe("DateRangePicker", () => {
-  it("defaults to the last 30 days when the URL carries no range", () => {
+  it("marks the 30-day preset active when the URL carries no range", () => {
     renderWithUrl({});
     expect(
-      screen.getByRole("button", { name: /date range preset: last 30 days/i }),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: /last 30 days/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: /last 7 days/i }),
+    ).toHaveAttribute("aria-pressed", "false");
   });
 
   it("reflects a preset range carried in the URL", () => {
     const sevenDays = resolvePreset("7d");
     renderWithUrl({ dateFrom: sevenDays.dateFrom, dateTo: sevenDays.dateTo });
     expect(
-      screen.getByRole("button", { name: /date range preset: last 7 days/i }),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: /last 7 days/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("marks the custom trigger active for a non-preset range", () => {
+    renderWithUrl({ dateFrom: "2026-01-01", dateTo: "2026-01-20" });
+    expect(
+      screen.getByRole("button", { name: /custom date range/i }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   it("writes the selected preset's range to the URL", async () => {
@@ -43,12 +53,7 @@ describe("DateRangePicker", () => {
     const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
     renderWithUrl({}, onUrlUpdate);
 
-    await user.click(
-      screen.getByRole("button", { name: /date range preset/i }),
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /last 7 days/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /last 7 days/i }));
 
     expect(onUrlUpdate).toHaveBeenCalledTimes(1);
     const firstCall = onUrlUpdate.mock.calls[0];
