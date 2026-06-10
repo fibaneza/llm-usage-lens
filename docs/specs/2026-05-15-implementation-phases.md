@@ -89,7 +89,7 @@ Phase 2 is split into three sub-phases, each independently deliverable on its ow
 |---|---|---|
 | 2.1 | Shell + Navigation | `Sidebar`, top bar + user menu, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder) |
 | 2.2 | Command Menu | `Kbd`, `CommandMenu` |
-| 2.3 | Global Filters & Page Header | `DateRangePicker`, page header |
+| 2.3 | Global Date Filter | `DateRangePicker` (in the top bar) |
 
 ### Navigation routes
 
@@ -106,7 +106,7 @@ Phase 1 (Foundation).
 **Goal:** The persistent application frame — sidebar, top bar, and responsive layout — with every route navigable as a bare placeholder.
 
 **Tasks:**
-- [ ] Create bare placeholder pages for all 9 routes (title only — the shared page header arrives in 2.3) so navigation has targets: `/dashboard`, `/dashboard/ranking`, `/dashboard/departments`, `/dashboard/departments/[id]`, `/dashboard/teams`, `/dashboard/teams/[id]`, `/dashboard/services`, `/dashboard/users`, `/dashboard/settings`
+- [ ] Create bare placeholder pages for all 9 routes (title only — the shared top-bar title comes from this shell; the global date filter joins the top bar in 2.3) so navigation has targets: `/dashboard`, `/dashboard/ranking`, `/dashboard/departments`, `/dashboard/departments/[id]`, `/dashboard/teams`, `/dashboard/teams/[id]`, `/dashboard/services`, `/dashboard/users`, `/dashboard/settings`
 - [ ] Build `Sidebar` component (shadcn/ui)
   - 7 top-level navigation links with Lucide icons (the two `[id]` detail routes are drill-down only — no sidebar entry)
   - Active state highlighting
@@ -144,23 +144,29 @@ Phase 1 (Foundation).
 
 ---
 
-### Phase 2.3 — Global Filters & Page Header
+### Phase 2.3 — Global Date Filter
 
-**Goal:** The global date filter and the shared page header, wired into every page.
+**Goal:** The global date filter, rendered once in the top bar and shared by
+every page. (The "page header" the top bar already provides in 2.1 — title +
+sync status — is the heading; the date filter joins it there rather than in a
+separate content-area band; see design-system spec — Layout / Date Filtering.)
 
 **Dependencies:** Phase 2.2.
 
 **Tasks:**
 - [ ] Build `DateRangePicker` component
-  - shadcn/ui `Calendar` + `Popover`
+  - Segmented preset toggle (`7D / 30D / 90D`) + a `Custom` trigger opening a
+    shadcn/ui `Calendar` in a `Popover` (see design-system — Control Patterns)
   - Presets: 7 days, 30 days, 90 days, Custom range
   - Default: last 30 days
-  - Persisted in URL via nuqs
-- [ ] Build page header layout (title + date filter)
-- [ ] Wire the page header into all 9 routes (replacing the bare 2.1 placeholders' bodies)
-- [ ] Verify: date filter persists in URL, page header renders on every page, navigation and responsive behaviour from 2.1 still hold
+  - Persisted in URL via nuqs; UTC arithmetic with a 90-day clamp (Rules 20.1, 20.8)
+- [ ] Place the `DateRangePicker` in the top bar (`AppHeader`), wrapped in a
+  `<Suspense>` boundary so pages still prerender statically
+- [ ] Verify: date filter persists in URL, renders on every page via the shared
+  top bar, navigation and responsive behaviour from 2.1 still hold, `next build`
+  succeeds
 
-**Components Built:** `DateRangePicker`, page header
+**Components Built:** `DateRangePicker` (top bar)
 
 ---
 
