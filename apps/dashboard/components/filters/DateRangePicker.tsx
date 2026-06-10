@@ -127,7 +127,10 @@ export function DateRangePicker() {
             <span>{customActive ? formatRangeLabel(range) : "Custom"}</span>
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="end">
+        <PopoverContent
+          className="border-border/60 w-auto rounded-xl p-2 shadow-lg"
+          align="end"
+        >
           <Calendar
             mode="range"
             selected={calendarSelected}
