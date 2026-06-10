@@ -1,8 +1,12 @@
+import { Suspense } from "react";
+
 import { auth, signOut } from "@/auth";
+import { DateRangePicker } from "@/components/filters/DateRangePicker";
 import { CommandMenu } from "@/components/layout/CommandMenu";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { SyncCountdown } from "@/components/status/SyncCountdown";
 import { SyncStatusBadge } from "@/components/status/SyncStatusBadge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { UserMenu } from "./UserMenu";
 
@@ -34,10 +38,28 @@ export async function AppHeader() {
       </div>
 
       <div className="ml-auto flex items-center gap-3">
+        {/* Global date filter lives in the top bar (design reference — the
+            7D/30D/90D toggle sits beside the account controls). It reads the URL
+            via nuqs (useSearchParams), so it sits under a Suspense boundary for
+            static prerender (Rule 60.12). */}
+        <Suspense fallback={<DateRangePickerSkeleton />}>
+          <DateRangePicker />
+        </Suspense>
         <CommandMenu />
         <SyncCountdown />
         <UserMenu user={session?.user ?? null} signOutAction={signOutAction} />
       </div>
     </header>
+  );
+}
+
+function DateRangePickerSkeleton() {
+  return (
+    <div className="border-border flex items-center gap-1 rounded-lg border p-1">
+      <Skeleton className="h-7 w-10" />
+      <Skeleton className="h-7 w-10" />
+      <Skeleton className="h-7 w-10" />
+      <Skeleton className="h-7 w-20" />
+    </div>
   );
 }

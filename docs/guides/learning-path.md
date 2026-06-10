@@ -236,11 +236,11 @@ split into three sub-phases, each its own branch and PR — build them in order.
 - [ ] Build the `Kbd` component (keyboard-shortcut hint)
 - [ ] Build the `CommandMenu` (shadcn/ui cmdk) with Cmd+K trigger and `Kbd` hint — skeleton search
 
-**Build tasks — 2.3 Global Filters & Page Header.**
+**Build tasks — 2.3 Global Date Filter.**
 
-- [ ] Build the `DateRangePicker` (shadcn Calendar + Popover): 7d / 30d / 90d / custom, default 30 days, persisted in URL via nuqs
-- [ ] Build the page header layout (title + date filter)
-- [ ] Wire the page header into all 9 routes
+- [ ] Build the `DateRangePicker`: segmented `7D / 30D / 90D` toggle + a `Custom` trigger opening a shadcn Calendar in a Popover; default 30 days, persisted in URL via nuqs (UTC arithmetic, 90-day clamp)
+- [ ] Place it in the top bar (`AppHeader`), wrapped in a `<Suspense>` boundary
+- [ ] Confirm `next build` still prerenders the pages
 
 **Verify.**
 

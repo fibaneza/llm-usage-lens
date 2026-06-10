@@ -203,17 +203,17 @@ Each Bedrock model gets a consistent color across all charts:
 
 ```
 +----------+------------------------------------------+
-| Brand    |  Top Bar: Page title · Sync status | … | User menu
+| Brand    |  Top Bar: Page title · Sync | [7D 30D 90D] · User menu
 +----------+------------------------------------------+
 |  MAIN    |                                           |
 | Overview |  Content Area                             |
 |          |  +--------------------------------------+ |
-| ATTRIB.  |  |  Page Header + Date Range Filter     | |
-| Ranking  |  +--------------------------------------+ |
-| Depts    |  |                                      | |
-| Teams    |  |  Page Content                        | |
-| Services |  |  (cards, charts, tables)             | |
-| Users    |  +--------------------------------------+ |
+| ATTRIB.  |  |  Page Content                        | |
+| Ranking  |  |  (cards, charts, tables)             | |
+| Depts    |  +--------------------------------------+ |
+| Teams    |                                           |
+| Services |                                           |
+| Users    |                                           |
 |          |                                           |
 | Settings |                                           |
 +----------+------------------------------------------+
@@ -222,8 +222,11 @@ Each Bedrock model gets a consistent color across all charts:
 - Brand (logo + product + org name) sits at the top of the sidebar, not in a
   full-width header; it collapses to the mark when the rail collapses.
 - Top bar lives **inside** the content area, to the right of the sidebar. The
-  active page title and its sync-status badge read as one unit on the left;
-  sync countdown and the user menu sit on the right.
+  active page title and its sync-status badge read as one unit on the left; the
+  global `DateRangePicker`, command menu, sync countdown, and user menu sit on
+  the right. The date filter lives here — not in a content-area band — so it
+  reads as a single global control across every page (the earlier "Page Header +
+  Date Range Filter" content band was dropped in favour of the top-bar toggle).
 - Page title is the descriptive heading (e.g. "Cost overview"), not the short
   sidebar label ("Overview").
 - Sidebar: collapsible, persistent on desktop, overlay on mobile; nav is grouped
@@ -317,14 +320,44 @@ Sort and filter controls (`SearchInput`, `ModelFilter`, `ColumnToggle`, `Paginat
 
 ## Date Filtering
 
-Global date filter present in the page header of every dashboard page:
+Global date filter rendered once in the top bar, shared by every dashboard page:
 
 - **Presets:** 7 days, 30 days, 90 days, Custom range
 - **Default:** Last 30 days
-- **Component:** shadcn/ui `Calendar` + `Popover`
-- **Date logic:** date-fns for arithmetic and formatting
-- **Persistence:** nuqs stores selection in URL search params (shareable, bookmarkable)
-- **Scope:** Applies to all charts and tables on the current page
+- **Control:** a segmented toggle (`7D / 30D / 90D / Custom`) on one bordered
+  track; the active preset is filled with the brand primary, inactive segments
+  are muted text (see **Control Patterns**). `Custom` opens a shadcn/ui
+  `Calendar` in a `Popover`.
+- **Date logic:** UTC calendar-day arithmetic (Rule 20.1); custom ranges clamp
+  to a 90-day span (Rule 20.8). date-fns is used for display formatting only.
+- **Persistence:** nuqs stores `dateFrom`/`dateTo` in URL search params
+  (shareable, bookmarkable). The control sits under a `<Suspense>` boundary so
+  pages still prerender statically.
+- **Scope:** Applies to all charts and tables on the current page.
+
+## Control Patterns
+
+Conventions for interactive controls, established with the global
+`DateRangePicker` and applied to every later phase. All use semantic tokens —
+**no raw hex** (Rule 40.2).
+
+- **Segmented toggles** (preset pickers, tab-like switches): a single bordered
+  track (`border-border bg-card`) holding the options. The active option is
+  filled `bg-primary text-primary-foreground`; inactive options are
+  `text-muted-foreground` with a `hover:text-foreground` lift. Expose state with
+  `aria-pressed`.
+- **Icon / navigation buttons** (calendar arrows, close, chevrons): the `ghost`
+  button variant — no bordered box. Muted by default, foreground on hover.
+  Reserve `outline` (bordered) buttons for standalone secondary actions, not for
+  inline icon affordances.
+- **Popovers, dropdowns, and dialogs:** soft floating surfaces — `rounded-xl`,
+  a light `border-border/60`, and `shadow-lg` on `bg-popover`. Avoid heavy
+  full-strength borders on overlays.
+- **Selection & ranges:** the selected item is `bg-primary`; a range band uses
+  `accent`; "today"/current markers are a subtle `accent/60` chip, never a
+  competing fill.
+- **Focus:** keep the visible focus ring (`ring-ring/50`) on every interactive
+  element (Rule 60.30); never remove it to tidy a layout.
 
 ## Component Inventory
 
