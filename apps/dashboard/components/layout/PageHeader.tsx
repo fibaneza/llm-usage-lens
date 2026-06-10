@@ -1,4 +1,7 @@
+import { Suspense } from "react";
+
 import { DateRangePicker } from "@/components/filters/DateRangePicker";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // The in-content page header band (design-system — Structure: "Page Header +
 // Date Range Filter"). The descriptive page <h1> lives in the top bar
@@ -14,8 +17,22 @@ export function PageHeader({ description }: { description?: string }) {
         <p className="text-muted-foreground text-sm">{description}</p>
       ) : null}
       <div className="sm:ml-auto">
-        <DateRangePicker />
+        {/* DateRangePicker reads the URL via nuqs (useSearchParams), which Next
+            requires to sit under a Suspense boundary so pages can prerender
+            statically (Rule 60.12 — Suspense with a Skeleton fallback). */}
+        <Suspense fallback={<DateRangePickerSkeleton />}>
+          <DateRangePicker />
+        </Suspense>
       </div>
+    </div>
+  );
+}
+
+function DateRangePickerSkeleton() {
+  return (
+    <div className="flex items-center gap-2">
+      <Skeleton className="h-8 w-28" />
+      <Skeleton className="h-8 w-9 md:w-44" />
     </div>
   );
 }
