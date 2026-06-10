@@ -5,14 +5,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandMenu } from "./CommandMenu";
 
 const mockPush = vi.fn<(href: string) => void>();
+const mockUseSearchParams = vi.fn<() => URLSearchParams>();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => mockUseSearchParams(),
 }));
 
 describe("CommandMenu", () => {
   beforeEach(() => {
     mockPush.mockClear();
+    mockUseSearchParams.mockReturnValue(new URLSearchParams());
   });
 
   it("renders a search trigger with the ⌘K hint", () => {
@@ -95,6 +98,25 @@ describe("CommandMenu", () => {
     await user.click(services);
 
     expect(mockPush).toHaveBeenCalledWith("/dashboard/services");
+  });
+
+  // Issue #75 — a quick-jump must carry the active date range, like the sidebar.
+  it("carries the active date range onto the destination", async () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams("dateFrom=2026-01-01&dateTo=2026-01-31"),
+    );
+    const user = userEvent.setup();
+    render(<CommandMenu />);
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    await screen.findByRole("dialog");
+
+    const ranking = await screen.findByRole("option", { name: /ranking/i });
+    await user.click(ranking);
+
+    expect(mockPush).toHaveBeenCalledWith(
+      "/dashboard/ranking?dateFrom=2026-01-01&dateTo=2026-01-31",
+    );
   });
 
   it("toggles the dialog closed on a second Cmd+K", async () => {

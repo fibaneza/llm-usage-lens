@@ -45,7 +45,12 @@ export async function AppHeader() {
         <Suspense fallback={<DateRangePickerSkeleton />}>
           <DateRangePicker />
         </Suspense>
-        <CommandMenu />
+        {/* CommandMenu also reads the URL (useSearchParams) to carry the date
+            range onto quick-jumps (issue #75), so it too needs a Suspense
+            boundary for static prerender (Rule 60.12). */}
+        <Suspense fallback={<CommandMenuSkeleton />}>
+          <CommandMenu />
+        </Suspense>
         <SyncCountdown />
         <UserMenu user={session?.user ?? null} signOutAction={signOutAction} />
       </div>
@@ -62,4 +67,8 @@ function DateRangePickerSkeleton() {
       <Skeleton className="h-7 w-20" />
     </div>
   );
+}
+
+function CommandMenuSkeleton() {
+  return <Skeleton className="h-9 w-full max-w-56 rounded-md" />;
 }
