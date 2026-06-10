@@ -18,6 +18,22 @@ if (!window.matchMedia) {
   }));
 }
 
+// jsdom ships no ResizeObserver; cmdk (the CommandMenu) constructs one on mount.
+// Provide a no-op stub so the command dialog renders under test.
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
+// jsdom does not implement scrollIntoView; cmdk calls it when it auto-selects
+// the active command item. No-op it so the command dialog renders under test.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
+
 // Unmount React trees between tests so the jsdom document never leaks state
 // across cases (Rule 60.24 — no flaky tests).
 afterEach(() => {

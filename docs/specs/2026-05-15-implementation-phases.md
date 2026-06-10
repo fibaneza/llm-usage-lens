@@ -88,7 +88,7 @@ Phase 2 is split into three sub-phases, each independently deliverable on its ow
 | Sub-phase | Name | New components |
 |---|---|---|
 | 2.1 | Shell + Navigation | `Sidebar`, top bar + user menu, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder) |
-| 2.2 | Breadcrumbs + Command Menu | `Breadcrumbs`, `Kbd`, `CommandMenu` |
+| 2.2 | Command Menu | `Kbd`, `CommandMenu` |
 | 2.3 | Global Filters & Page Header | `DateRangePicker`, page header |
 
 ### Navigation routes
@@ -127,21 +127,20 @@ Phase 1 (Foundation).
 
 ---
 
-### Phase 2.2 — Breadcrumbs + Command Menu
+### Phase 2.2 — Command Menu
 
-**Goal:** Navigation context and quick-jump search layered onto the shell.
+**Goal:** Quick-jump search layered onto the shell.
 
 **Dependencies:** Phase 2.1.
 
 **Tasks:**
-- [ ] Build `Breadcrumbs` component (shadcn/ui) — derived from the current route
 - [ ] Build `Kbd` component (keyboard-shortcut hint)
 - [ ] Build `CommandMenu` component (shadcn/ui cmdk)
   - Cmd+K trigger with `Kbd` hint
   - Skeleton search — navigates to pages (populated with real data in Phase 5)
-- [ ] Verify: breadcrumb trail renders on detail routes, Cmd+K opens the command menu and navigates between pages
+- [ ] Verify: Cmd+K opens the command menu and navigates between pages
 
-**Components Built:** `Breadcrumbs`, `Kbd`, `CommandMenu`
+**Components Built:** `Kbd`, `CommandMenu`
 
 ---
 
@@ -157,7 +156,7 @@ Phase 1 (Foundation).
   - Presets: 7 days, 30 days, 90 days, Custom range
   - Default: last 30 days
   - Persisted in URL via nuqs
-- [ ] Build page header layout (title + breadcrumbs + date filter)
+- [ ] Build page header layout (title + date filter)
 - [ ] Wire the page header into all 9 routes (replacing the bare 2.1 placeholders' bodies)
 - [ ] Verify: date filter persists in URL, page header renders on every page, navigation and responsive behaviour from 2.1 still hold
 
@@ -346,9 +345,8 @@ Components are introduced in the sub-phase where they are first needed:
 - [ ] Reuse `UsageTable` for teams breakdown
 - [ ] Reuse `CostTrendChart` (stacked by team instead of model)
 - [ ] Top users ranked list (reuse `RankingList`)
-- [ ] Update `Breadcrumbs` (Departments > Engineering)
 - [ ] Connect to Route Handlers: department rollups + team breakdown
-- [ ] Tests: header stats calculation; breadcrumb rendering
+- [ ] Tests: header stats calculation
 - [ ] Verify: page loads for each department in seed data, charts and tables render correctly
 
 ---
@@ -389,7 +387,6 @@ Components are introduced in the sub-phase where they are first needed:
 - [ ] Reuse `UsageTable` for services breakdown
 - [ ] Reuse `UsageTable` for users breakdown (with `UserAvatar` in name column)
 - [ ] Build model usage bar chart (reuse Recharts, `next/dynamic`)
-- [ ] Update `Breadcrumbs` (Teams > Payments Team)
 - [ ] Connect to Route Handlers: team rollups with byService and byUser data
 - [ ] Tests: AccountIdBadge copy functionality; UserAvatar color consistency
 - [ ] Verify: services and users tables populated from seed data, model chart renders
