@@ -246,7 +246,7 @@ impact, and rollback strategy. Avoid bare `LGTM`; prefer actionable comments,
 architectural discussion, and threat modeling for sensitive changes.
 
 > **In this project.** Non-trivial features run the
-> `test-engineer → typescript-developer → quality-reviewer` TDD loop
+> `tdd-test-engineer → typescript-developer → quality-reviewer` TDD loop
 > ([Rule 70](../../.claude/rules/70-agent-workflow.md), via `/build-feature`),
 > and the automated `Claude PR Review` posts inline findings with one-click
 > suggestion blocks. Human review still owns the final approval.
