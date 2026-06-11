@@ -88,7 +88,7 @@ also runs when a release tag is pushed, scoping its review to commits since
 the previous release tag.
 
 For non-trivial code, the project's three-agent TDD loop
-(`test-engineer` → `typescript-developer` → `quality-reviewer`) runs via
+(`tdd-test-engineer` → `typescript-developer` → `quality-reviewer`) runs via
 the `/build-feature` slash command — tests are written first, then the
 implementation makes them pass. See
 [Rule 70](../.claude/rules/70-agent-workflow.md).

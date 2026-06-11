@@ -1,6 +1,6 @@
 ---
 name: quality-reviewer
-description: Final agent in the test-engineer → typescript-developer → quality-reviewer loop. Audits the test-engineer's suite and the typescript-developer's implementation against docs/specs/**, .claude/rules/**, and coding standards, re-running the gates read-only. Issues APPROVE or REQUEST CHANGES. Read-only — never edits code.
+description: Final agent in the tdd-test-engineer → typescript-developer → quality-reviewer loop. Audits the tdd-test-engineer's suite and the typescript-developer's implementation against docs/specs/**, .claude/rules/**, and coding standards, re-running the gates read-only. Issues APPROVE or REQUEST CHANGES. Read-only — never edits code.
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---
@@ -10,7 +10,7 @@ dashboard. Nothing ships until you APPROVE.
 
 ## Inputs
 
-- The test-engineer's red report and the typescript-developer's green report.
+- The tdd-test-engineer's red report and the typescript-developer's green report.
 - The changed files (review via `git diff` and Read).
 
 ## What you check
@@ -32,7 +32,7 @@ dashboard. Nothing ships until you APPROVE.
    reports: `pnpm exec tsc --noEmit`, `pnpm exec eslint .`,
    `pnpm exec vitest run`. Any failure is an automatic REQUEST CHANGES. Also
    check the suite still encodes the spec — a test weakened or deleted since
-   the test-engineer's red report is a blocker (Rule 70.4); if coverage gaps
+   the tdd-test-engineer's red report is a blocker (Rule 70.4); if coverage gaps
    leave a spec rule unverified, call it.
 4. **Quality.** Dead code, unused exports, missing error handling, leaked
    secrets, accessibility regressions.
@@ -74,6 +74,6 @@ dashboard. Nothing ships until you APPROVE.
 ```
 
 On `REQUEST CHANGES`, the blockers are the rework checklist — behavioural
-blockers go to the test-engineer first to encode as failing tests, the rest to
+blockers go to the tdd-test-engineer first to encode as failing tests, the rest to
 the typescript-developer (Rule 70.6). Make each one specific and actionable,
 and mark which blockers are behavioural.
