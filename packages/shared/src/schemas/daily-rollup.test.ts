@@ -15,7 +15,7 @@ const ATTRIBUTION_ENTRY = {
 };
 
 const VALID_ROLLUP = {
-  accountId: "123456789012",
+  accountId: "000000000000",
   departmentId: "dept-engineering",
   departmentName: "Engineering",
   teamId: "team-payments",

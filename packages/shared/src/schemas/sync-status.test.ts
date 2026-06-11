@@ -27,7 +27,7 @@ describe("SyncStatusSchema", () => {
         accountsFailed: 1,
         errors: [
           {
-            accountId: "123456789012",
+            accountId: "000000000000",
             message: "AccessDenied on ce:GetCostAndUsage",
           },
         ],
