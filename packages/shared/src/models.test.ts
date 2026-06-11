@@ -77,7 +77,7 @@ describe("normalizeModelId", () => {
   it("maps ARN-style identifiers to other (callers pass bare model IDs)", () => {
     expect(
       normalizeModelId(
-        "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0",
+        "arn:aws:bedrock:us-east-1:000000000000:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0",
       ),
     ).toBe("other");
   });

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { AccountMetaSchema } from "./account-meta";
 
 const VALID_ACCOUNT_META = {
-  accountId: "123456789012",
+  accountId: "000000000000",
   accountName: "payments-team-prod",
   departmentId: "dept-engineering",
   departmentName: "Engineering",

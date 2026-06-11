@@ -35,7 +35,7 @@ describe("DateRangeQuerySchema", () => {
     expect(
       DateRangeQuerySchema.safeParse({
         ...RANGE_90_DAYS,
-        accountId: "123456789012",
+        accountId: "000000000000",
       }).success,
     ).toBe(true);
     expect(
