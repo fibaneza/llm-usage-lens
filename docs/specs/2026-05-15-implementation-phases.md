@@ -475,12 +475,19 @@ Components are introduced in the sub-phase where they are first needed:
 
 - [ ] Add `ErrorBoundary` per section on every page (one chart failing doesn't crash the page)
 - [ ] Accessibility audit
+  > Smoke-level a11y is enforced continuously before Phase 5:
+  > `apps/dashboard/e2e/accessibility.spec.ts` fails the suite on any
+  > serious/critical axe (WCAG 2.0/2.1 A+AA) violation on every nav page.
+  > This phase performs the full audit below on top of that floor.
   - Contrast: 4.5:1 minimum (WCAG AA), target 7:1 (AAA) for key text
   - Keyboard navigation: all interactive elements reachable via Tab
   - aria-labels: icon-only buttons, charts, status indicators
   - Focus rings: 2-4px, visible on all interactive elements
   - Screen reader: meaningful alt text, aria-live regions for dynamic updates
 - [ ] Responsive testing at all breakpoints (375 / 768 / 1024 / 1440)
+  > The no-horizontal-scroll check runs continuously before Phase 5
+  > (`apps/dashboard/e2e/responsive.spec.ts`, all four breakpoints, every
+  > nav page); this phase adds the visual checks below.
   - No horizontal scroll on any viewport
   - Charts resize correctly via `ResponsiveContainer`
   - Sidebar behavior correct per breakpoint
@@ -493,7 +500,16 @@ Components are introduced in the sub-phase where they are first needed:
 - [ ] Verify `prefers-reduced-motion` is respected (animations disabled/reduced)
 - [ ] Populate `CommandMenu` with real data (departments, teams, users, services)
 - [ ] E2E tests with Playwright
-  - Login flow (Auth.js + Microsoft Entra ID, or test auth bypass via `.env.test`)
+  > The Playwright harness itself lands **before** Phase 5: the agent loop
+  > (Rule 70) ships a headless smoke spec with every UI component or page
+  > addition/modification, in `apps/dashboard/e2e/` against
+  > `apps/dashboard/playwright.config.ts` (headless Chromium — the
+  > devcontainer has no display server). Authentication uses a forged
+  > Auth.js session cookie signed with the E2E dev server's `AUTH_SECRET`
+  > (`e2e/support/session.ts`) — real JWT verification, no production
+  > bypass. Phase 5 builds the full user journeys below on that harness.
+  - Login flow (the auth gate redirect is smoke-covered; the full Entra ID
+    round-trip stays out of E2E — forged-session sign-in instead)
   - Overview page loads
   - Ranking tab switching
   - Department → detail drill-down
@@ -653,7 +669,7 @@ jobs:
       - Start DynamoDB Local (Docker service)
       - Create table + seed data
       - Unit + component tests (vitest run)
-      - E2E tests (playwright test) — Phase 5+
+      - E2E tests (playwright test) — smoke specs exist from Phase 2+; wired into CI in Phase 5
 
   build:
     needs: [quality, test]

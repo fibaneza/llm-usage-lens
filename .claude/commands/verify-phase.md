@@ -18,9 +18,14 @@ Steps:
      Local, then `scan --table-name bedrock-usage --select COUNT`
    - "Route Handlers return validated data" → `curl` a sample endpoint and
      show the Zod-validated response shape
-   - "responsive at all breakpoints" → manual; list the URLs and breakpoints
-     for the user
+   - "responsive at all breakpoints" → `pnpm test:e2e -- responsive` (the
+     headless breakpoint specs in `apps/dashboard/e2e/responsive.spec.ts`),
+     plus a manual pass for anything visual the overflow check can't see
 3. Report each bullet as **pass / fail / manual** with the evidence
    (command + brief output).
 4. If anything fails, do **not** mark the phase complete — file the failures
    as the next TODOs.
+5. On a passing checklist, **refresh the "Project Status" section of
+   `CLAUDE.md`** to name the newly completed phase and the next one — the
+   status went stale once (it claimed "pre-implementation" after Phases 1–2
+   had merged); this step keeps it honest.

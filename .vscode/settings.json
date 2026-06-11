@@ -1,0 +1,72 @@
+{
+  // Project-level editor settings — the single source of truth for VS Code
+  // configuration, applied both outside and inside the devcontainer
+  // (workspace settings load in the container and take precedence, so
+  // .devcontainer/devcontainer.json defines no editor settings — it keeps
+  // only container concerns: extensions, features, mounts, ports, lifecycle).
+  "files.autoSave": "afterDelay",
+  // Prettier is the single formatter; format on save, but only where a
+  // Prettier config exists so plain docs trees are left untouched.
+  "editor.defaultFormatter": null,
+  "editor.formatOnSave": true,
+  "prettier.requireConfig": true,
+  // ESLint v9 flat config in `eslint.config.ts`; apply lint fixes on save.
+  "eslint.useFlatConfig": true,
+  "eslint.workingDirectories": [{ "mode": "auto" }],
+  // Apply ESLint + markdownlint autofixes on save (markdownlint keeps
+  // docs/specs/** tidy).
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.fixAll.markdownlint": "explicit"
+  },
+  // Activate the VSCode Icons file icon theme. If this exact id is wrong,
+  // pick it from the File Icon Theme menu — VS Code writes the correct id here.
+  "workbench.iconTheme": "vscode-icons",
+  // Per-language formatter — use the supported language-feature formatters.
+  "[typescript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "vscode.css-language-features"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "vscode.markdown-language-features"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  // Use the workspace TypeScript (monorepo) instead of VS Code's bundled.
+  "js/ts.tsdk.path": "./node_modules/typescript/lib",
+  // Tailwind v4 IntelliSense inside cn()/cva() (shadcn/ui helpers).
+  "tailwindCSS.experimental.classRegex": [
+    ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+    ["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
+  ],
+  "editor.quickSuggestions": {
+    "strings": "on"
+  },
+  // Keep the explorer and search fast; these never need indexing.
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/pnpm-lock.yaml": true,
+    "**/playwright-report": true,
+    "**/test-results": true
+  },
+  "files.exclude": {
+    "**/.DS_Store": true
+  },
+  "terminal.integrated.cwd": "${workspaceFolder}"
+}

@@ -347,9 +347,12 @@ forwards all service ports, and installs the recommended VS Code extensions
 #### Recommended VS Code extensions
 
 Installed automatically into the container from
-`customizations.vscode.extensions` in `devcontainer.json`. They match the
-project stack (Rule 40) so the editor's lint, format, IntelliSense, and test
-tooling agree with the CLI gates.
+`customizations.vscode.extensions` in `devcontainer.json` (and recommended
+outside the container via `.vscode/extensions.json` — keep the two lists in
+sync). They match the project stack (Rule 40) so the editor's lint, format,
+IntelliSense, and test tooling agree with the CLI gates. Editor *settings*
+live in `.vscode/settings.json` only — workspace settings apply inside the
+container too, so `devcontainer.json` defines none.
 
 | Extension | ID | Purpose |
 |---|---|---|

@@ -32,13 +32,22 @@ that defines what "done" means — before any production code exists.
      `401` and `400` paths (Rule 60.23).
    - Components: assert rendered output and behaviour, not internals; cover
      empty states and the loading skeleton.
+   - **UI components or pages added/modified:** also write or extend a
+     headless Playwright spec in `apps/dashboard/e2e/` — render in the real
+     shell, exercise the key interaction, select by role/label. Pages in
+     `lib/nav.ts` are smoke-covered by `e2e/smoke.spec.ts` automatically;
+     add a dedicated spec when the task introduces interaction or states the
+     smoke pass can't see. Authenticate with `signInAsTestUser`
+     (`e2e/support/session.ts`); the devcontainer is headless — never
+     `--headed`/`--ui`.
    - Edge cases for this project: missing `SyncStatus` ("never synced"),
      `costEstimated` / `costFinalized` flags, `_untagged` services, GSI
      pagination, 90-day range cap.
-3. **Run the suite and capture the red state:** `pnpm exec vitest run` (and
-   `playwright test` in Phase 5+). At this stage failures — including `tsc`
-   errors from importing not-yet-written modules — are the **expected**
-   result. Report exactly which failures the implementation must clear.
+3. **Run the suite and capture the red state:** `pnpm exec vitest run`, plus
+   `pnpm test:e2e` (headless Playwright) when the task touches UI. At this
+   stage failures — including `tsc` errors from importing not-yet-written
+   modules — are the **expected** result. Report exactly which failures the
+   implementation must clear.
 4. Do not write production code, stubs, or fixtures that implement behaviour
    — test files and test-only helpers only. The typescript-developer makes
    the suite green.
@@ -63,6 +72,7 @@ that defines what "done" means — before any production code exists.
 
 ### Expected red state
 - vitest: <n failing / n passing> — <which failures the implementation must clear>
+- playwright: <n failing / n passing, when the task touches UI>
 - tsc: <expected failures from unimplemented modules, if any>
 
 ### Contract for typescript-developer

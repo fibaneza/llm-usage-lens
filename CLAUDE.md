@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-This repository is **pre-implementation** for application code: no `apps/`, no `packages/`, no `package.json`, no build tooling yet. Phase 1 (Foundation) has not started.
+Phases 1–2 are **complete**: the pnpm monorepo toolchain (Phase 1) and the dashboard layout shell — sidebar nav, top bar, date-range filter, sync status, command menu — with placeholder pages for every route (Phase 2). Phase 3 (Data Layer: DynamoDB Local, `lib/dynamodb.ts`, `lib/data/**`, seed scripts) is next; run `/phase-status` to confirm before starting work.
 
-Pre-Phase-1 infrastructure *is* in place — the devcontainer, the OpenTelemetry/Prometheus/Loki/Grafana observability stack, the `.claude/` rules + agents + commands, the `.mcp.json` config (Azure MCP), and the repo-root quality config staged for Phase 1 (`commitlint.config.cjs`, `.gitleaks.toml`, `.editorconfig`, `.gitattributes`) are all wired up. These activate once Phase 1 adds `package.json` and the Husky hooks (see [`docs/guides/git-hooks.md`](docs/guides/git-hooks.md)). Treat all of this as ready; do not rebuild it from scratch.
+Supporting infrastructure is in place and active — the devcontainer, the OpenTelemetry/Prometheus/Loki/Grafana observability stack, the `.claude/` rules + agents + commands, the `.mcp.json` config (Azure MCP), the repo-root quality config (`commitlint.config.cjs`, `.gitleaks.toml`, `.editorconfig`, `.gitattributes`), the Husky hooks (see [`docs/guides/git-hooks.md`](docs/guides/git-hooks.md)), and the headless Playwright E2E harness (`apps/dashboard/playwright.config.ts` + `apps/dashboard/e2e/`). Treat all of this as ready; do not rebuild it from scratch.
 
 ## Reading order
 
@@ -80,7 +80,7 @@ Package manager is **pnpm**.
 | `pnpm exec tsc --noEmit` | Type check (also the pre-push hook) |
 | `pnpm exec vitest run` | Unit + component tests (**Vitest**, not Jest) |
 | `pnpm exec vitest run path/to/file.test.ts` | Run a single test file |
-| `playwright test` | E2E tests (Phase 5+) |
+| `pnpm test:e2e` | Headless Playwright E2E (smoke specs accrue with UI work; full journeys Phase 5) |
 | `docker compose up -d dynamodb-local` | Start DynamoDB Local |
 | `pnpm tsx scripts/create-table.ts` | Create the DynamoDB table (idempotent) |
 | `pnpm tsx scripts/seed.ts` | Seed realistic data |
@@ -96,6 +96,7 @@ Pre-commit (Husky + lint-staged): ESLint fix + Prettier on staged files, plus gi
 |---|---|
 | `/build-feature <description>` | Run the tdd-test-engineer → typescript-developer → quality-reviewer TDD agent loop for a feature |
 | `/lint` | Run prettier + eslint + tsc + vitest sequentially |
+| `/ui-review` | Run the headless Playwright UI suite and audit e2e coverage of changed components |
 | `/seed [empty\|large\|ranking]` | Bring up DynamoDB Local and load seed data |
 | `/new-route <path>` | Scaffold a Route Handler with all required boilerplate |
 | `/new-data-access <description>` | Scaffold a server-only data-access function |
