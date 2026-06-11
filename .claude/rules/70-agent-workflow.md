@@ -1,14 +1,14 @@
-# Rule 70 — typescript-developer → test-engineer → quality-reviewer workflow
+# Rule 70 — test-engineer → typescript-developer → quality-reviewer workflow (TDD)
 
-Non-trivial feature work runs through a three-agent loop. Run it with the
-`/build-feature` command; this rule is the contract behind it.
+Non-trivial feature work runs through a three-agent, test-first loop. Run it
+with the `/build-feature` command; this rule is the contract behind it.
 
 ## The agents
 
 | Agent | Role | Edits | Defined in |
 |---|---|---|---|
-| `typescript-developer` | Implements the feature per specs + rules | code + first tests | `.claude/agents/typescript-developer.md` |
-| `test-engineer` | Hardens and runs the test suite, runs the gates | tests only | `.claude/agents/test-engineer.md` |
+| `test-engineer` | Writes the failing test suite first (TDD red) from specs + rules | tests only | `.claude/agents/test-engineer.md` |
+| `typescript-developer` | Implements the feature until the tests pass (TDD green) | production code only | `.claude/agents/typescript-developer.md` |
 | `quality-reviewer` | Gatekeeper — APPROVE / REQUEST CHANGES | nothing (read-only) | `.claude/agents/quality-reviewer.md` |
 
 The review stage also fans out to existing agents — `spec-guardian`
@@ -22,8 +22,8 @@ language and security depth.
    ┌────────────────────────────────────────────────────┐
    │                                                    │ REQUEST CHANGES
    ▼                                                    │ (consolidated blockers)
-typescript-developer ─▶ test-engineer ─▶ review ────────┤
-                                            │ APPROVE   │
+test-engineer ─▶ typescript-developer ─▶ review ────────┤
+    (red)             (green)               │ APPROVE   │
                                             ▼           │
                                           done ─────────┘
 
@@ -35,23 +35,35 @@ review = quality-reviewer + spec-guardian + ecc reviewers
 1. **The main session orchestrates.** Claude Code subagents cannot invoke
    each other — the `/build-feature` command dispatches each agent and carries
    results between stages.
-2. **No stage is skipped.** Every change goes typescript-developer →
-   test-engineer → review, even on a one-line fix.
-3. **REQUEST CHANGES if** the test-engineer reports `FAIL` **or** any reviewer
-   raises a BLOCKER. WARN and NIT findings do not block.
-4. **Rework loops back to `typescript-developer`** with one consolidated,
-   deduplicated blocker checklist — never to the test-engineer or
-   quality-reviewer directly.
-5. **Cap at 3 iterations.** If the loop has not converged after three rounds,
+2. **No stage is skipped.** Every change goes test-engineer →
+   typescript-developer → review, even on a one-line fix.
+3. **Tests lead, code follows.** The test-engineer derives a failing suite
+   from the spec and task description *before* any production code exists.
+   Failing gates at this stage are the expected **red** state, not a defect —
+   the test-engineer reports which failures the implementation must clear.
+4. **The typescript-developer's job is green.** It implements until the
+   suite passes and runs the gates (`tsc`, `eslint`, `vitest`). It never
+   edits, weakens, or deletes a test — a test it believes is wrong goes back
+   to the orchestrator, who re-dispatches the test-engineer to rule on it.
+5. **REQUEST CHANGES if** the gates are not green at review time **or** any
+   reviewer raises a BLOCKER. WARN and NIT findings do not block. The
+   quality-reviewer independently re-runs the gates (read-only) rather than
+   trusting reports.
+6. **Rework loops back to the top of the loop** with one consolidated,
+   deduplicated blocker checklist: the test-engineer first encodes each
+   behavioural blocker as a failing test, then the typescript-developer makes
+   the suite green again. Blockers that change no behaviour (naming, dead
+   code, comments) skip straight to the typescript-developer.
+7. **Cap at 3 iterations.** If the loop has not converged after three rounds,
    stop and hand the open blockers to the user. Never weaken a test or lower
    the review bar to force an APPROVE.
-6. **Role boundaries hold:** only `typescript-developer` edits production
+8. **Role boundaries hold:** only `typescript-developer` edits production
    code; `test-engineer` edits tests only; `quality-reviewer` and
    `spec-guardian` are strictly read-only.
-7. **The loop never commits.** On APPROVE the orchestrator summarises and
+9. **The loop never commits.** On APPROVE the orchestrator summarises and
    suggests `/commit` — the user commits.
-8. **One Phase 4 sub-phase per run** (Rule 30.4). Larger requests are split
-   before the loop starts.
+10. **One Phase 4 sub-phase per run** (Rule 30.4). Larger requests are split
+    before the loop starts.
 
 ## When to use
 

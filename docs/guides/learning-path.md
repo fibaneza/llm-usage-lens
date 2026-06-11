@@ -56,7 +56,7 @@ is only *done* when its gate reads `[x] Works  [x] Tested  [x] Reviewed`:
 - **Tested** — automated tests cover the behaviour and pass.
 - **Reviewed** — a reviewer has approved it.
 
-This mirrors the project's `typescript-developer → test-engineer → quality-reviewer` agent loop
+This mirrors the project's `test-engineer → typescript-developer → quality-reviewer` TDD agent loop
 (see `.claude/rules/70-agent-workflow.md`), which you can run with the
 `/build-feature` command.
 

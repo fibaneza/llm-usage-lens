@@ -94,7 +94,7 @@ Pre-commit (Husky + lint-staged): ESLint fix + Prettier on staged files, plus gi
 
 | Command | Purpose |
 |---|---|
-| `/build-feature <description>` | Run typescript-developer → test-engineer → quality-reviewer agent loop for a feature |
+| `/build-feature <description>` | Run the test-engineer → typescript-developer → quality-reviewer TDD agent loop for a feature |
 | `/lint` | Run prettier + eslint + tsc + vitest sequentially |
 | `/seed [empty\|large\|ranking]` | Bring up DynamoDB Local and load seed data |
 | `/new-route <path>` | Scaffold a Route Handler with all required boilerplate |
@@ -175,4 +175,4 @@ Detailed conventions live in `.claude/rules/` (numbered `00`–`70`, always load
 - **Rule 40** — design system & stack (light mode default, no raw hex, lazy-loaded charts)
 - **Rule 50** — security & secrets (two credential concerns, no static AWS keys)
 - **Rule 60** — coding standards (TypeScript strict, validate at the boundary, Vitest)
-- **Rule 70** — typescript-developer → test-engineer → quality-reviewer agent workflow
+- **Rule 70** — test-engineer → typescript-developer → quality-reviewer TDD agent workflow

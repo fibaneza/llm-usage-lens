@@ -27,7 +27,7 @@ Top MCP Servers:
 - [ ] Azure MCP (`@azure/mcp`) — Azure resource access used by the project. Configured in `.mcp.json` at the repo root; ask fibaneza for credentials/access.
 
 ### Skills to Know About
-- `/build-feature <description>` — Runs the full typescript-developer → test-engineer → quality-reviewer agent loop. Use for any non-trivial feature or multi-file change.
+- `/build-feature <description>` — Runs the full test-engineer → typescript-developer → quality-reviewer TDD agent loop (tests first). Use for any non-trivial feature or multi-file change.
 - `/seed [empty|large|ranking]` — Brings up DynamoDB Local and loads seed data. Run this before starting dashboard work.
 - `/lint` — Runs prettier + eslint + tsc + vitest in sequence. Run before opening a PR.
 - `/commit` — Stages and commits with Conventional Commits format (required by commitlint hook).

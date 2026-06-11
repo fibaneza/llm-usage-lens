@@ -390,7 +390,7 @@ sequenceDiagram
     participant AWS as AWS sandbox account
 
     Dev->>CCD: /build-feature "change X"
-    CCD->>CCD: Rule 70 loop<br/>(typescript-developer → test-engineer → quality-reviewer)
+    CCD->>CCD: Rule 70 TDD loop<br/>(test-engineer → typescript-developer → quality-reviewer)
     CCD->>Repo: Open draft PR with template + code changes
     Dev->>Repo: Review, merge to main
     Dev->>GA: workflow_dispatch bedrock-simulator-build.yml
