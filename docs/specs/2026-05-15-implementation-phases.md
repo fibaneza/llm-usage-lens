@@ -51,7 +51,7 @@ Components are built where they are first needed and reused in subsequent pages.
 - [ ] Set up Auth.js (NextAuth v5) authentication
   - Install `next-auth`
   - Configure the Microsoft Entra ID provider in `auth.ts` (provider-agnostic — swappable in one file)
-  - Configure Auth.js middleware to protect `/dashboard/*` and `/api/*` routes
+  - Configure Auth.js in the Next.js proxy (`proxy.ts`) to protect `/dashboard/*` and `/api/*` routes
   - Build sign-in page (`/sign-in`) — single "Sign in with Microsoft" action; no sign-up (identities managed in Entra ID)
   - Set up environment variables
 - [ ] Configure @t3-oss/env-nextjs (type-safe env vars with Zod validation)
@@ -83,42 +83,90 @@ None — infrastructure only.
 
 **Goal:** Responsive layout with sidebar navigation, top bar, global date filter, and command menu. All pages will render inside this shell.
 
-### Tasks
+Phase 2 is split into three sub-phases, each independently deliverable on its own branch and PR — built in order, one visual checkpoint at a time (mirrors the Phase 4 sub-phase model; see [Rule 30](../../.claude/rules/30-phase-discipline.md) branching). Components are introduced in the sub-phase where they are first needed.
 
-- [ ] Build `Sidebar` component (shadcn/ui)
-  - All 9 navigation items with Lucide icons
-  - Active state highlighting
-  - Collapsible on desktop, overlay on mobile
-- [ ] Build top bar
-  - User menu (avatar, name, sign out, Auth.js session) + organization name
-  - `SyncStatusBadge` placeholder (no real data yet)
-  - `SyncCountdown` placeholder
-- [ ] Build responsive layout structure
-  - Breakpoints: 375 / 768 / 1024 / 1440
-  - Content area max-width 1280px, centered
-  - Mobile: single column, collapsible sidebar
-  - Tablet: sidebar overlay
-  - Desktop: persistent sidebar + content
-- [ ] Build `Breadcrumbs` component (shadcn/ui)
-- [ ] Build `CommandMenu` component (shadcn/ui cmdk)
-  - Cmd+K trigger with `Kbd` hint
-  - Skeleton search — navigates to pages (populated with real data in Phase 4)
-- [ ] Build `DateRangePicker` component
-  - shadcn/ui `Calendar` + `Popover`
-  - Presets: 7 days, 30 days, 90 days, Custom range
-  - Default: last 30 days
-  - Persisted in URL via nuqs
-- [ ] Build page header layout (title + breadcrumbs + date filter)
-- [ ] Create placeholder pages for all 9 routes (empty shells inside layout)
-- [ ] Verify: navigation works, sidebar collapses, date filter persists in URL, responsive at all breakpoints
+| Sub-phase | Name | New components |
+|---|---|---|
+| 2.1 | Shell + Navigation | `Sidebar`, top bar + user menu, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder) |
+| 2.2 | Command Menu | `Kbd`, `CommandMenu` |
+| 2.3 | Global Date Filter | `DateRangePicker` (in the top bar) |
+
+### Navigation routes
+
+The sidebar exposes **7 top-level navigation links**: Overview, Ranking, Departments, Teams, Services, Users, Settings. The two detail routes (`departments/[id]`, `teams/[id]`) are reached by drill-down — they get placeholder pages but **no sidebar entry**. Nine route files in total (see Design System spec — Navigation).
 
 ### Dependencies
 
 Phase 1 (Foundation).
 
-### Components Built
+---
 
-`Sidebar`, `Breadcrumbs`, `CommandMenu`, `Kbd`, `DateRangePicker`, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder)
+### Phase 2.1 — Shell + Navigation
+
+**Goal:** The persistent application frame — sidebar, top bar, and responsive layout — with every route navigable as a bare placeholder.
+
+**Tasks:**
+- [ ] Create bare placeholder pages for all 9 routes (title only — the shared top-bar title comes from this shell; the global date filter joins the top bar in 2.3) so navigation has targets: `/dashboard`, `/dashboard/ranking`, `/dashboard/departments`, `/dashboard/departments/[id]`, `/dashboard/teams`, `/dashboard/teams/[id]`, `/dashboard/services`, `/dashboard/users`, `/dashboard/settings`
+- [ ] Build `Sidebar` component (shadcn/ui)
+  - 7 top-level navigation links with Lucide icons (the two `[id]` detail routes are drill-down only — no sidebar entry)
+  - Active state highlighting
+  - Collapsible on desktop, overlay on mobile
+- [ ] Build responsive layout structure (the `/dashboard` layout)
+  - Breakpoints: 375 / 768 / 1024 / 1440
+  - Content area max-width 1280px, centered
+  - Mobile: single column, collapsible sidebar
+  - Tablet: sidebar overlay
+  - Desktop: persistent sidebar + content
+- [ ] Build top bar
+  - User menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`)
+  - `SyncStatusBadge` placeholder (no real data yet — neutral "no sync" state, never an error)
+  - `SyncCountdown` placeholder
+- [ ] Verify: every route is reachable from the sidebar, sidebar collapses on desktop and overlays on mobile, responsive at all breakpoints with no horizontal scroll
+
+**Components Built:** `Sidebar`, top bar + user menu, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder)
+
+---
+
+### Phase 2.2 — Command Menu
+
+**Goal:** Quick-jump search layered onto the shell.
+
+**Dependencies:** Phase 2.1.
+
+**Tasks:**
+- [ ] Build `Kbd` component (keyboard-shortcut hint)
+- [ ] Build `CommandMenu` component (shadcn/ui cmdk)
+  - Cmd+K trigger with `Kbd` hint
+  - Skeleton search — navigates to pages (populated with real data in Phase 5)
+- [ ] Verify: Cmd+K opens the command menu and navigates between pages
+
+**Components Built:** `Kbd`, `CommandMenu`
+
+---
+
+### Phase 2.3 — Global Date Filter
+
+**Goal:** The global date filter, rendered once in the top bar and shared by
+every page. (The "page header" the top bar already provides in 2.1 — title +
+sync status — is the heading; the date filter joins it there rather than in a
+separate content-area band; see design-system spec — Layout / Date Filtering.)
+
+**Dependencies:** Phase 2.2.
+
+**Tasks:**
+- [ ] Build `DateRangePicker` component
+  - Segmented preset toggle (`7D / 30D / 90D`) + a `Custom` trigger opening a
+    shadcn/ui `Calendar` in a `Popover` (see design-system — Control Patterns)
+  - Presets: 7 days, 30 days, 90 days, Custom range
+  - Default: last 30 days
+  - Persisted in URL via nuqs; UTC arithmetic with a 90-day clamp (Rules 20.1, 20.8)
+- [ ] Place the `DateRangePicker` in the top bar (`AppHeader`), wrapped in a
+  `<Suspense>` boundary so pages still prerender statically
+- [ ] Verify: date filter persists in URL, renders on every page via the shared
+  top bar, navigation and responsive behaviour from 2.1 still hold, `next build`
+  succeeds
+
+**Components Built:** `DateRangePicker` (top bar)
 
 ---
 
@@ -303,9 +351,8 @@ Components are introduced in the sub-phase where they are first needed:
 - [ ] Reuse `UsageTable` for teams breakdown
 - [ ] Reuse `CostTrendChart` (stacked by team instead of model)
 - [ ] Top users ranked list (reuse `RankingList`)
-- [ ] Update `Breadcrumbs` (Departments > Engineering)
 - [ ] Connect to Route Handlers: department rollups + team breakdown
-- [ ] Tests: header stats calculation; breadcrumb rendering
+- [ ] Tests: header stats calculation
 - [ ] Verify: page loads for each department in seed data, charts and tables render correctly
 
 ---
@@ -346,7 +393,6 @@ Components are introduced in the sub-phase where they are first needed:
 - [ ] Reuse `UsageTable` for services breakdown
 - [ ] Reuse `UsageTable` for users breakdown (with `UserAvatar` in name column)
 - [ ] Build model usage bar chart (reuse Recharts, `next/dynamic`)
-- [ ] Update `Breadcrumbs` (Teams > Payments Team)
 - [ ] Connect to Route Handlers: team rollups with byService and byUser data
 - [ ] Tests: AccountIdBadge copy functionality; UserAvatar color consistency
 - [ ] Verify: services and users tables populated from seed data, model chart renders

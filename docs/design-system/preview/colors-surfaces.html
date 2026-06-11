@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Colors" name="Surfaces & borders" subtitle="#F5F7FF bg + 3 surface layers + borders" viewport="700x220" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  .swatches { display:grid; grid-template-columns: repeat(4,1fr); gap:10px; }
+  .sw { border-radius:var(--radius-md); border:1px solid var(--border-subtle); padding:10px; height:84px; display:flex; flex-direction:column; justify-content:flex-end; }
+  .sw .n { font-size:var(--text-xs); font-weight:600; color:var(--fg); font-family:var(--font-sans); }
+  .sw .t { font-family:var(--font-mono); font-size:var(--text-2xs); color:var(--fg-subtle); }
+  .border-row { display:flex; gap:10px; }
+  .bsw { flex:1; height:50px; border-radius:var(--radius-md); border:2px solid; display:flex; align-items:flex-end; padding:6px 8px; }
+</style></head>
+<body>
+  <div class="swatches">
+    <div class="sw" style="background:var(--bg)"><span class="n">background</span><span class="t">#F5F7FF</span></div>
+    <div class="sw" style="background:var(--surface-1)"><span class="n">surface-1</span><span class="t">cards · sidebar</span></div>
+    <div class="sw" style="background:var(--surface-2)"><span class="n">surface-2</span><span class="t">rows · inputs</span></div>
+    <div class="sw" style="background:var(--surface-3)"><span class="n">surface-3</span><span class="t">popovers</span></div>
+  </div>
+  <div class="border-row">
+    <div class="bsw" style="background:var(--surface-1); border-color:var(--border)"><span class="t" style="color:var(--fg-muted)">border #E2E8F0</span></div>
+    <div class="bsw" style="background:var(--surface-1); border-color:var(--border-strong)"><span class="t" style="color:var(--fg-muted)">border-strong</span></div>
+    <div class="bsw" style="background:var(--surface-1); border-color:var(--color-muted)"><span class="t" style="color:var(--fg-muted)">muted #94A3B8</span></div>
+  </div>
+</body></html>

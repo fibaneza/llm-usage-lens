@@ -85,6 +85,13 @@ be generically portable to a shared repository (see [Future work](#future-work))
 | `aws-lambda-invoke` | `function-name`\*, `payload`\*, `region`, `expected-status-code`, `response-path` | `status-code`, `function-error`, `response-path` | `aws lambda invoke` with payload written to a temp file internally. Used in 2 workflows. |
 | `aws-capture-diagnostics` | `stack-name`\*, `lambda-name` (optional), `artifact-name`\*, `retention-days`, `region`, `output-dir` | — | Collects CloudFormation stack events + Lambda logs and uploads as an artifact on failure. Used in 2 workflows. |
 
+### `setup-*` family
+
+| Action | Inputs (required \*) | Outputs | Purpose |
+| --- | --- | --- | --- |
+| `node-setup` | `node-version` (default `22`) | — | Installs pnpm via `pnpm/action-setup@v6` then Node.js with pnpm cache via `actions/setup-node@v6`. Used in `bedrock-dashboard-build.yml`. |
+| `aws-sam-setup` | `node-version` (default `22`), `pnpm-version` (default `9`), `cache-pnpm` (default `false`), `cache-dependency-path` | — | Installs Node.js, pnpm, and the AWS SAM CLI for SAM build/deploy jobs. |
+
 ### `github-*` family
 
 | Action | Inputs (required \*) | Outputs | Purpose |

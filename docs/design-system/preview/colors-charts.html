@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Colors" name="Chart categorical palette" subtitle="Model-fixed: Sonnet #3B82F6 · Opus #7C3AED · Haiku #14B8A6" viewport="700x250" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  body { gap:10px; }
+  /* Model palette grid */
+  .models { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .m { border-radius:var(--radius-md); border:1px solid var(--border-subtle); overflow:hidden; }
+  .m .chip { height:56px; }
+  .m .info { padding:8px 10px; }
+  .m .name { font-size:var(--text-xs); font-weight:600; color:var(--fg); font-family:var(--font-sans); }
+  .m .hex { font-family:var(--font-mono); font-size:var(--text-2xs); color:var(--fg-subtle); }
+  /* Stacked bar */
+  .stack { display:flex; height:22px; border-radius:var(--radius-sm); overflow:hidden; margin-top:4px; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; }
+  .leg { display:inline-flex; align-items:center; gap:6px; font-size:var(--text-2xs); color:var(--fg-muted); font-family:var(--font-sans); }
+  .dot { width:8px; height:8px; border-radius:2px; }
+</style></head>
+<body>
+  <div class="models">
+    <div class="m"><div class="chip" style="background:#3B82F6"></div><div class="info"><div class="name">Claude Sonnet</div><div class="hex">#3B82F6</div></div></div>
+    <div class="m"><div class="chip" style="background:#7C3AED"></div><div class="info"><div class="name">Claude Opus</div><div class="hex">#7C3AED</div></div></div>
+    <div class="m"><div class="chip" style="background:#14B8A6"></div><div class="info"><div class="name">Claude Haiku</div><div class="hex">#14B8A6</div></div></div>
+    <div class="m"><div class="chip" style="background:#D97706"></div><div class="info"><div class="name">Other models</div><div class="hex">#D97706</div></div></div>
+  </div>
+  <div style="font-size:var(--text-2xs);color:var(--fg-subtle);font-family:var(--font-sans)">Categorical — each model has a fixed color across all charts</div>
+  <div class="stack">
+    <div style="flex:34; background:#3B82F6"></div>
+    <div style="flex:23; background:#7C3AED"></div>
+    <div style="flex:16; background:#14B8A6"></div>
+    <div style="flex:12; background:#D97706"></div>
+    <div style="flex:9; background:#F43F5E"></div>
+    <div style="flex:6; background:#A855F7"></div>
+  </div>
+  <div class="legend">
+    <span class="leg"><span class="dot" style="background:#3B82F6"></span>Sonnet</span>
+    <span class="leg"><span class="dot" style="background:#7C3AED"></span>Opus</span>
+    <span class="leg"><span class="dot" style="background:#14B8A6"></span>Haiku</span>
+    <span class="leg"><span class="dot" style="background:#D97706"></span>Other</span>
+    <span class="leg"><span class="dot" style="background:#F43F5E"></span>slot 5</span>
+    <span class="leg"><span class="dot" style="background:#A855F7"></span>slot 6</span>
+  </div>
+</body></html>

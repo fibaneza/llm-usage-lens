@@ -305,7 +305,7 @@ jobs:
 
           echo "Checking model invocation logging configuration..."
           MIL=$(aws bedrock get-model-invocation-logging-configuration --output json)
-          MIL_BUCKET=$(echo "$MIL" | jq -r '.loggingConfig.s3Config.s3BucketName // empty')
+          MIL_BUCKET=$(echo "$MIL" | jq -r '.loggingConfig.s3Config.bucketName // empty')
           MIL_LOG_GROUP=$(echo "$MIL" | jq -r '.loggingConfig.cloudWatchConfig.logGroupName // empty')
           if [ "$MIL_BUCKET" != "$BUCKET_NAME" ]; then
             echo "::error::MIL bucket='$MIL_BUCKET', expected '$BUCKET_NAME'"

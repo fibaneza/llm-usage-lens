@@ -192,7 +192,7 @@ misconfiguration fails at build time. The output is a skeleton: no pages yet.
 - [ ] Add the pre-push hook: `tsc --noEmit`
 - [ ] Set up Auth.js (NextAuth v5) with the Microsoft Entra ID provider
 - [ ] Build the sign-in page (`/sign-in`) — single "Sign in with Microsoft" action, no sign-up
-- [ ] Protect `/dashboard/*` and `/api/*` routes via Auth.js middleware
+- [ ] Protect `/dashboard/*` and `/api/*` routes via Auth.js in the Next.js proxy (`proxy.ts`)
 - [ ] Configure `@t3-oss/env-nextjs` (type-safe env vars validated with Zod)
 - [ ] Integrate OpenTelemetry (`@vercel/otel`)
 - [ ] Create `.env.example` (tracked, no values), `.env.local` (ignored), `.env.test` (ignored)
@@ -214,34 +214,42 @@ misconfiguration fails at build time. The output is a skeleton: no pages yet.
 
 **Lesson.** This phase teaches **responsive application layout**. Every page
 later renders inside this shell, so you build it once: a sidebar (persistent on
-desktop, overlay on mobile), a top bar, breadcrumbs, a Cmd+K command menu, and
+desktop, overlay on mobile), a top bar, a Cmd+K command menu, and
 a `DateRangePicker` whose state lives in the **URL** via `nuqs` (not React
 state) — so a date range survives refresh and is shareable. You also learn the
 breakpoint system (375 / 768 / 1024 / 1440) and the centered 1280px content
-area. Components are placeholders where data is not available yet.
+area. Components are placeholders where data is not available yet. The phase is
+split into three sub-phases, each its own branch and PR — build them in order.
 
 **Dependencies.** Phase 1 (green gate).
 
-**Build tasks.**
+**Build tasks — 2.1 Shell + Navigation.**
 
-- [ ] Build the `Sidebar` — 9 nav items with Lucide icons, active state, collapsible (desktop) / overlay (mobile)
-- [ ] Build the top bar — user menu (avatar, name, sign out, Auth.js session) + organization name
-- [ ] Add `SyncStatusBadge` and `SyncCountdown` placeholders to the top bar
+- [ ] Create bare placeholder pages for all 9 routes (title only) so navigation has targets
+- [ ] Build the `Sidebar` — 7 top-level nav links with Lucide icons, active state, collapsible (desktop) / overlay (mobile); the two `[id]` detail routes are drill-down only
 - [ ] Build the responsive layout structure (breakpoints 375/768/1024/1440, content max-width 1280px centered)
-- [ ] Build the `Breadcrumbs` component (shadcn/ui)
+- [ ] Build the top bar — user menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`)
+- [ ] Add `SyncStatusBadge` and `SyncCountdown` placeholders to the top bar
+
+**Build tasks — 2.2 Command Menu.**
+
+- [ ] Build the `Kbd` component (keyboard-shortcut hint)
 - [ ] Build the `CommandMenu` (shadcn/ui cmdk) with Cmd+K trigger and `Kbd` hint — skeleton search
-- [ ] Build the `DateRangePicker` (shadcn Calendar + Popover): 7d / 30d / 90d / custom, default 30 days, persisted in URL via nuqs
-- [ ] Build the page header layout (title + breadcrumbs + date filter)
-- [ ] Create placeholder pages for all 9 routes
+
+**Build tasks — 2.3 Global Date Filter.**
+
+- [ ] Build the `DateRangePicker`: segmented `7D / 30D / 90D` toggle + a `Custom` trigger opening a shadcn Calendar in a Popover; default 30 days, persisted in URL via nuqs (UTC arithmetic, 90-day clamp)
+- [ ] Place it in the top bar (`AppHeader`), wrapped in a `<Suspense>` boundary
+- [ ] Confirm `next build` still prerenders the pages
 
 **Verify.**
 
-- [ ] Navigation works
-- [ ] Sidebar collapses
+- [ ] Navigation works (every route reachable from the sidebar)
+- [ ] Sidebar collapses (desktop) / overlays (mobile)
 - [ ] Date filter persists in the URL
 - [ ] Layout is responsive at all breakpoints
 
-**Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
+**Gate (per sub-phase):**  `[ ] Works   [ ] Tested   [ ] Reviewed`
 
 ---
 
@@ -429,9 +437,8 @@ build `PeriodComparison` for "vs previous 30 days".
 - [ ] Reuse `UsageTable` for the teams breakdown
 - [ ] Reuse `CostTrendChart` stacked by team
 - [ ] Build the top-users ranked list (reuse `RankingList`)
-- [ ] Update `Breadcrumbs` (Departments > Engineering)
 - [ ] Connect to Route Handlers — department rollups + team breakdown
-- [ ] Tests: header stat calculation; breadcrumb rendering
+- [ ] Tests: header stat calculation
 
 **Verify.**
 
@@ -484,7 +491,6 @@ with consistent color) — and learn that a team maps to exactly one AWS account
 - [ ] Reuse `UsageTable` for the services breakdown
 - [ ] Reuse `UsageTable` for the users breakdown (with `UserAvatar` in the name column)
 - [ ] Build the model-usage bar chart (Recharts, `next/dynamic`)
-- [ ] Update `Breadcrumbs` (Teams > Payments Team)
 - [ ] Connect to Route Handlers — team rollups with `byService` and `byUser` data
 - [ ] Tests: `AccountIdBadge` copy; `UserAvatar` color consistency
 

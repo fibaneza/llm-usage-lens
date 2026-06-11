@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Seed Archive Admin - Chromatic Masonry Cost Overview</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#5d5cff", // Electric Indigo
+              "secondary": "#ff6b6b", // Bright Coral
+              "tertiary": "#00d28a", // Emerald
+              "surface": "#f9f9ff", // Lavender-grey canvas
+              "surface-container": "#f3f3fa",
+              "on-surface": "#1a1a2e",
+              "on-surface-variant": "#4a4a6a",
+              "outline-variant": "#e1e1f0",
+              "background": "#f9f9ff"
+            },
+            borderRadius: {
+              "DEFAULT": "8px",
+              "lg": "12px",
+              "xl": "16px",
+              "full": "9999px"
+            },
+            fontFamily: {
+              "space": ["Space Grotesk", "sans-serif"],
+              "mono": ["JetBrains Mono", "monospace"]
+            },
+            boxShadow: {
+              "bento": "0px 12px 24px rgba(0,0,0,0.08)",
+              "bento-hover": "0px 20px 40px rgba(93, 92, 255, 0.15)",
+              "3d": "20px 0 50px rgba(0,0,0,0.1), 0 0 10px rgba(0,0,0,0.05)"
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        
+        body { 
+            font-family: 'Space Grotesk', sans-serif;
+            background: linear-gradient(-45deg, #f9f9ff, #f3f3fa, #ececf7, #f9f9ff);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .font-mono-custom { font-family: 'JetBrains Mono', monospace; }
+
+        .perspective-container {
+            perspective: 2000px;
+        }
+
+        .sidebar-3d {
+            transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+            transform-style: preserve-3d;
+            box-shadow: 10px 0 30px rgba(0, 0, 0, 0.03);
+            will-change: transform, box-shadow;
+        }
+        
+        .sidebar-3d:hover {
+            transform: rotateY(4deg) translateX(4px);
+            box-shadow: 25px 0 50px rgba(93, 92, 255, 0.08);
+        }
+
+        .magnetic-item {
+            display: flex;
+            align-items: center;
+            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.4s ease, box-shadow 0.4s ease;
+            will-change: transform;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .magnetic-item::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 150%;
+            height: 150%;
+            background: radial-gradient(circle, rgba(93, 92, 255, 0.1) 0%, transparent 70%);
+            transform: translate(-50%, -50%) scale(0);
+            transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .magnetic-item:hover::before {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .magnetic-item > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            grid-auto-rows: minmax(160px, auto);
+            gap: 24px;
+        }
+        
+        @media (min-width: 1920px) {
+            .bento-grid {
+                grid-template-columns: repeat(12, 1fr);
+            }
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d9d9e0; border-radius: 10px; }
+
+        .reveal-item {
+            opacity: 0;
+            transform: translateY(30px) scale(0.98);
+            transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1), transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .reveal-item.revealed {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        .tilt-card {
+            transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+            transform-style: preserve-3d;
+        }
+
+        .premium-transition {
+            transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .pulse-ring {
+            position: relative;
+        }
+        .pulse-ring::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.4;
+            animation: pulse-animation 2s infinite;
+        }
+
+        @keyframes pulse-animation {
+            0% { transform: scale(1); opacity: 0.6; }
+            100% { transform: scale(3); opacity: 0; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation: none !important;
+                transition: none !important;
+                transform: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="text-on-surface overflow-hidden">
+<div class="flex h-screen w-full perspective-container">
+<!-- 3D Sidebar -->
+<aside class="sidebar-3d fixed left-0 top-0 h-screen w-[280px] bg-white border-r border-outline-variant flex flex-col py-8 px-6 z-50 origin-left bottom-0" id="sidebar">
+<div class="px-2 mb-10">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20 hover:scale-110 premium-transition">
+<span class="material-symbols-outlined text-3xl" style='font-variation-settings: "FILL" 1;'>spa</span>
+</div>
+<div>
+<h1 class="font-bold text-xl tracking-tight text-on-surface">Seed Archive</h1>
+<p class="font-mono-custom text-[10px] text-primary font-bold uppercase tracking-widest">Greenwood Admin</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 flex flex-col gap-2 overflow-y-auto custom-scrollbar pr-2">
+<div class="font-mono-custom text-[11px] font-bold text-on-surface-variant/40 px-3 py-2 uppercase tracking-[0.2em]">Main</div>
+<a class="magnetic-item group flex items-center gap-3 px-4 py-3 bg-primary text-white rounded-xl shadow-md shadow-primary/20 premium-transition" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-semibold text-sm">Overview</span>
+</a>
+<a class="magnetic-item group flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container rounded-xl premium-transition" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-semibold text-sm">By model</span>
+</a>
+<a class="magnetic-item group flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container rounded-xl premium-transition" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-semibold text-sm">By team</span>
+</a>
+<a class="magnetic-item group flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container rounded-xl premium-transition" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-semibold text-sm">By user</span>
+</a>
+<a class="magnetic-item group flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container rounded-xl premium-transition" href="#">
+<span class="material-symbols-outlined">hub</span>
+<span class="font-semibold text-sm">By service</span>
+</a>
+<div class="font-mono-custom text-[11px] font-bold text-on-surface-variant/40 px-3 py-2 mt-6 uppercase tracking-[0.2em]">Analysis</div>
+<a class="magnetic-item group flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container rounded-xl premium-transition" href="#">
+<span class="material-symbols-outlined">trending_up</span>
+<span class="font-semibold text-sm">Trends</span>
+</a>
+<a class="magnetic-item group flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container rounded-xl premium-transition" href="#">
+<span class="material-symbols-outlined">pie_chart</span>
+<span class="font-semibold text-sm">Breakdown</span>
+</a>
+<a class="magnetic-item group flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container rounded-xl premium-transition" href="#">
+<span class="material-symbols-outlined">notifications_active</span>
+<span class="font-semibold text-sm">Budgets &amp; alerts</span>
+</a>
+</nav>
+<div class="border-t border-outline-variant pt-8 mt-auto flex flex-col gap-2">
+<a class="magnetic-item group flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container rounded-xl premium-transition" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-semibold text-sm">Settings</span>
+</a>
+<a class="magnetic-item group flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container rounded-xl premium-transition" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-semibold text-sm">Collapse</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 ml-[280px] h-screen flex flex-col overflow-hidden">
+<!-- Top Header -->
+<header class="flex justify-between items-center w-full px-6 md:px-12 h-20 bg-white/80 backdrop-blur-md border-b border-outline-variant sticky top-0 z-40">
+<div class="flex items-center gap-6">
+<h2 class="font-bold text-2xl text-on-surface">Cost overview</h2>
+<span class="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container text-primary font-mono-custom text-[10px] font-bold">
+<span class="w-2 h-2 rounded-full bg-primary pulse-ring"></span>
+                    SYNCED 47M AGO
+                </span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex bg-surface-container rounded-xl p-1.5 shadow-inner">
+<button class="px-4 py-1.5 font-mono-custom text-xs text-on-surface-variant hover:text-on-surface premium-transition">7D</button>
+<button class="px-4 py-1.5 font-mono-custom text-xs bg-white text-primary rounded-lg shadow-sm font-bold premium-transition">30D</button>
+<button class="px-4 py-1.5 font-mono-custom text-xs text-on-surface-variant hover:text-on-surface premium-transition">90D</button>
+<button class="px-4 py-1.5 font-mono-custom text-xs text-on-surface-variant hover:text-on-surface premium-transition">YTD</button>
+</div>
+<button class="bg-primary text-white flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm premium-transition hover:shadow-lg hover:shadow-primary/25 active:scale-95">
+<span class="material-symbols-outlined text-lg">download</span>
+                    Export CSV
+                </button>
+<div class="flex items-center gap-4 border-l border-outline-variant pl-6">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary premium-transition">notifications</span>
+<img alt="Admin" class="w-10 h-10 rounded-full border-2 border-primary/20 object-cover hover:scale-110 premium-transition cursor-pointer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPZNLMD3oujcRSmAciQa6Ht4g_3PR5fiYVL3P-gKB_PDOD32uAzwqb3VxVnoe8RXzkeqiiYqDqldBEbz0oEy6tuptBDN1NWVKW1maYYylxwKbp8cehkE3FQRZdnY8Yo12XngUGK1heNV_w9OTrZE2zaNc6GrWo3K0g1LOS0mNVR_WYolcUmmWf9sjSnvuzpJTUYNQBUQYdaUwpfIBs51vefzO5jpXGaQEtR1FFgIIaOM-LnNjcK0xoBVMej2_GBsutLXPhWThRW5ej"/>
+</div>
+</div>
+</header>
+<div class="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar">
+<div class="max-w-[2560px] mx-auto w-full">
+<!-- Filters -->
+<div class="flex items-center gap-3 mb-10 overflow-x-auto pb-2 reveal-item revealed">
+<div class="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border border-outline-variant shadow-sm hover:border-primary/40 premium-transition cursor-pointer group">
+<span class="font-mono-custom text-[11px] text-on-surface-variant uppercase font-bold">Period:</span>
+<span class="text-sm font-bold">Last 30 days</span>
+<span class="material-symbols-outlined text-base cursor-pointer hover:text-secondary group-hover:rotate-90 premium-transition">close</span>
+</div>
+<div class="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border border-outline-variant shadow-sm hover:border-primary/40 premium-transition cursor-pointer group">
+<span class="font-mono-custom text-[11px] text-on-surface-variant uppercase font-bold">Team:</span>
+<span class="text-sm font-bold text-primary">platform</span>
+<span class="material-symbols-outlined text-base cursor-pointer hover:text-secondary group-hover:rotate-90 premium-transition">close</span>
+</div>
+<div class="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border border-outline-variant shadow-sm hover:border-primary/40 premium-transition cursor-pointer group">
+<span class="font-mono-custom text-[11px] text-on-surface-variant uppercase font-bold">Region:</span>
+<span class="text-sm font-bold">us-east-1</span>
+<span class="material-symbols-outlined text-base cursor-pointer hover:text-secondary group-hover:rotate-90 premium-transition">close</span>
+</div>
+<button class="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-primary/40 text-sm font-bold text-primary hover:bg-primary/5 premium-transition">
+<span class="material-symbols-outlined text-base">add</span>
+                    Add filter
+                </button>
+</div>
+<!-- Bento Masonry Grid -->
+<div class="bento-grid" style="gap: 16px;">
+<!-- Total Spend Card (Wide) -->
+<div class="col-span-2 min-[1920px]:col-span-4 bg-primary p-8 rounded-2xl shadow-bento text-white relative overflow-hidden group tilt-card reveal-item revealed border border-white/10">
+<div class="relative z-10 h-full flex flex-col justify-between">
+<div>
+<p class="font-mono-custom text-[11px] font-bold uppercase tracking-widest">Total Spend · MTD</p>
+<h3 class="text-4xl font-bold mt-2 count-up font-black" data-prefix="$" data-target="48210.34">$48,210.34</h3>
+</div>
+<div class="flex items-center gap-3">
+<span class="bg-white/20 px-3 py-1 rounded-lg flex items-center gap-1 font-bold text-sm premium-transition hover:bg-white hover:text-primary">
+<span class="material-symbols-outlined text-sm">arrow_upward</span>
+                                18.3%
+                            </span>
+<span class="font-mono-custom text-[10px] uppercase font-bold opacity-60">vs. prior period</span>
+</div>
+</div>
+<div class="absolute -right-4 -bottom-4 opacity-10 group-hover:rotate-12 group-hover:scale-110 transition-all duration-700 pointer-events-none">
+<span class="material-symbols-outlined text-[120px]">payments</span>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-12 opacity-40 pointer-events-none">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 40">
+<defs>
+<lineargradient id="grad-spend" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="white" stop-opacity="0.4"></stop>
+<stop offset="100%" stop-color="white" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,35 Q10,32 20,34 T40,28 T60,32 T80,25 T100,38 L100,40 L0,40 Z" fill="url(#grad-spend)"></path>
+<path d="M0,35 Q10,32 20,34 T40,28 T60,32 T80,25 T100,38" fill="none" stroke="white" stroke-width="1.5"></path>
+</svg>
+</div></div>
+<!-- Invocations Card -->
+<div class="col-span-1 min-[1920px]:col-span-2 bg-secondary p-6 rounded-2xl shadow-bento text-white tilt-card reveal-item revealed border border-white/10">
+<p class="font-mono-custom text-[10px] font-bold uppercase tracking-widest">Invocations</p>
+<h3 class="text-3xl font-bold mt-2 count-up font-black" data-suffix="M" data-target="1.94">1.94M</h3>
+<div class="mt-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">arrow_downward</span>
+<span class="font-bold text-sm">4.1%</span>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-10 opacity-40 pointer-events-none">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 40">
+<defs>
+<lineargradient id="grad-invocations" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="white" stop-opacity="0.4"></stop>
+<stop offset="100%" stop-color="white" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,38 Q15,35 30,37 T50,30 T70,33 T85,28 T100,25 L100,40 L0,40 Z" fill="url(#grad-invocations)"></path>
+<path d="M0,38 Q15,35 30,37 T50,30 T70,33 T85,28 T100,25" fill="none" stroke="white" stroke-width="1.5"></path>
+</svg>
+</div></div>
+<!-- Tokens Card -->
+<div class="col-span-1 min-[1920px]:col-span-2 bg-tertiary p-6 rounded-2xl shadow-bento text-white tilt-card reveal-item revealed border border-white/10">
+<p class="font-mono-custom text-[10px] font-bold uppercase tracking-widest">Tokens</p>
+<h3 class="text-3xl font-bold mt-2 count-up font-black" data-suffix="B" data-target="1.30">1.30B</h3>
+<div class="mt-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">arrow_upward</span>
+<span class="font-bold text-sm">11.7%</span>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-10 opacity-40 pointer-events-none">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 40">
+<defs>
+<lineargradient id="grad-tokens" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="white" stop-opacity="0.4"></stop>
+<stop offset="100%" stop-color="white" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,38 Q20,36 40,34 T60,25 T80,22 T100,18 L100,40 L0,40 Z" fill="url(#grad-tokens)"></path>
+<path d="M0,38 Q20,36 40,34 T60,25 T80,22 T100,18" fill="none" stroke="white" stroke-width="1.5"></path>
+</svg>
+</div></div>
+<!-- Avg Cost Card -->
+<div class="col-span-2 min-[1920px]:col-span-4 bg-white p-6 rounded-2xl shadow-bento border border-outline-variant tilt-card reveal-item revealed relative overflow-hidden">
+<div class="flex justify-between items-start">
+<div>
+<p class="font-mono-custom text-[10px] font-bold text-on-surface-variant uppercase tracking-widest text-on-surface">Avg Cost / 1K Tok</p>
+<h3 class="text-3xl font-bold mt-2 text-on-surface font-black">$0.0371</h3>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-primary group transition-all duration-300">
+<span class="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">toll</span>
+</div>
+</div>
+<div class="mt-4 flex items-center gap-2">
+<span class="text-tertiary font-bold text-sm flex items-center bg-tertiary/10 px-2 py-0.5 rounded">
+<span class="material-symbols-outlined text-sm mr-1">arrow_downward</span>
+                            2.3%
+                        </span>
+<span class="font-mono-custom text-[10px] text-on-surface-variant/60 font-bold uppercase">vs. prior</span>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-10 opacity-20 pointer-events-none">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 40">
+<defs>
+<lineargradient id="grad-avg" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#00d28a" stop-opacity="0.4"></stop>
+<stop offset="100%" stop-color="#00d28a" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,20 Q20,22 40,28 T60,32 T80,35 T100,38 L100,40 L0,40 Z" fill="url(#grad-avg)"></path>
+<path d="M0,20 Q20,22 40,28 T60,32 T80,35 T100,38" fill="none" stroke="#00d28a" stroke-width="1.5"></path>
+</svg>
+</div></div>
+<!-- Main Chart (Large Block) -->
+<div class="col-span-4 min-[1920px]:col-span-8 row-span-2 bg-white p-8 rounded-2xl shadow-bento border border-outline-variant reveal-item revealed">
+<div class="flex justify-between items-center mb-8">
+<div>
+<h2 class="text-xl font-bold">Spend over time</h2>
+<p class="font-mono-custom text-[10px] text-on-surface-variant font-bold uppercase mt-1">Daily, stacked by model • last 30 days</p>
+</div>
+<div class="flex bg-surface-container rounded-lg p-1">
+<button class="px-4 py-1 text-xs font-bold bg-primary text-white rounded-md shadow-sm premium-transition">COST</button>
+<button class="px-4 py-1 text-xs font-bold text-on-surface-variant hover:text-primary premium-transition">TOKENS</button>
+</div>
+</div>
+<div class="h-[400px] w-full bg-surface-container/50 rounded-xl border border-outline-variant overflow-hidden relative">
+<img alt="Chart" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAaRrNicH72F2yrh6SMitvJhjepmZapjozCnXsE-mUGMehAYFlnSg-SGXOVjKsAV98kJFFct8WyxPRbTEc5krYp3FcOOf_aE6eg3HqcCp_GAAXSN8B4_tkJAcc2cdwsDb_fw-9xfZcoZOyki_g4LP-pN1diGiNPYxpc8CV0se2S6fVEjdADGJcPTpqKh9Vu_moqCY_U9fSSTeg1Aw8Bao4CtgfWhKEzYa100P47HA-3Z2uJD4hrM0D7C3wAoLHB7kZlv4-oZlXROLmO"/>
+<div class="absolute inset-0 bg-gradient-to-t from-white/20 to-transparent pointer-events-none"></div>
+</div>
+<div class="flex justify-center gap-8 mt-6">
+<div class="flex items-center gap-2 cursor-pointer hover:scale-110 premium-transition group">
+<span class="w-3 h-3 rounded-full bg-primary shadow-sm group-hover:ring-4 ring-primary/20 premium-transition"></span>
+<span class="font-mono-custom text-[10px] font-bold text-on-surface">Claude 3.5 Sonnet</span>
+</div>
+<div class="flex items-center gap-2 cursor-pointer hover:scale-110 premium-transition group">
+<span class="w-3 h-3 rounded-full bg-secondary shadow-sm group-hover:ring-4 ring-secondary/20 premium-transition"></span>
+<span class="font-mono-custom text-[10px] font-bold text-on-surface">Titan Text</span>
+</div>
+<div class="flex items-center gap-2 cursor-pointer hover:scale-110 premium-transition group">
+<span class="w-3 h-3 rounded-full bg-tertiary shadow-sm group-hover:ring-4 ring-tertiary/20 premium-transition"></span>
+<span class="font-mono-custom text-[10px] font-bold text-on-surface">Llama 3 70B</span>
+</div>
+</div>
+</div>
+<!-- Donut Chart Block -->
+<div class="col-span-2 min-[1920px]:col-span-4 row-span-2 bg-white p-8 rounded-2xl shadow-bento border border-outline-variant flex flex-col items-center tilt-card reveal-item revealed">
+<div class="w-full text-left mb-6">
+<h2 class="text-xl font-bold">Share of spend</h2>
+<p class="font-mono-custom text-[10px] text-on-surface-variant font-bold uppercase mt-1">By model • MTD</p>
+</div>
+<div class="flex-1 flex flex-col items-center justify-center">
+<div class="w-64 h-64 min-[1920px]:w-80 min-[1920px]:h-80 rounded-full border-[24px] border-surface-container relative flex items-center justify-center group cursor-pointer premium-transition hover:scale-105">
+<div class="absolute inset-0 rounded-full border-[24px] border-primary" style="clip-path: polygon(50% 50%, 50% 0, 100% 0, 100% 100%, 0 100%, 0 40%); transition: clip-path 1.5s cubic-bezier(0.16, 1, 0.3, 1);"></div>
+<div class="text-center group-hover:scale-110 premium-transition">
+<span class="text-3xl block font-bold">$48.2K</span>
+<span class="font-mono-custom text-xs text-primary font-bold uppercase">Total</span>
+</div>
+</div>
+</div>
+<div class="w-full mt-8 space-y-3">
+<div class="flex justify-between items-center p-3 bg-surface-container rounded-xl hover:translate-x-2 premium-transition cursor-pointer group">
+<div class="flex items-center gap-3">
+<div class="w-3 h-3 rounded-sm bg-primary group-hover:scale-125 transition-transform"></div>
+<span class="font-bold text-sm">Claude 3.5 Sonnet</span>
+</div>
+<span class="font-mono-custom text-sm font-bold">42%</span>
+</div>
+<div class="flex justify-between items-center p-3 hover:translate-x-2 premium-transition cursor-pointer group">
+<div class="flex items-center gap-3">
+<div class="w-3 h-3 rounded-sm bg-secondary group-hover:scale-125 transition-transform"></div>
+<span class="font-bold text-sm">Titan Text</span>
+</div>
+<span class="font-mono-custom text-sm font-bold">24%</span>
+</div>
+</div>
+</div>
+<!-- Table Area (Wide Bottom) -->
+<div class="col-span-6 min-[1920px]:col-span-12 bg-white rounded-2xl shadow-bento border border-outline-variant overflow-hidden mb-12 reveal-item revealed">
+<div class="px-8 py-5 border-b border-outline-variant flex justify-between items-center">
+<h2 class="text-lg font-bold">Cost by model</h2>
+<a class="text-primary font-bold text-sm flex items-center gap-2 group premium-transition" href="#">
+                            View all 14 models
+                            <span class="material-symbols-outlined text-base group-hover:translate-x-2 premium-transition">arrow_forward</span>
+</a>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container/50">
+<th class="px-8 py-4 font-mono-custom text-[11px] font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline-variant">Model</th>
+<th class="px-8 py-4 font-mono-custom text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right border-b border-outline-variant">Invocations</th>
+<th class="px-8 py-4 font-mono-custom text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right border-b border-outline-variant">Cost</th>
+<th class="px-8 py-4 font-mono-custom text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right border-b border-outline-variant">% of Total</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<tr class="hover:bg-primary/5 premium-transition group cursor-pointer">
+<td class="px-8 py-5">
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 rounded-full bg-primary group-hover:scale-150 transition-transform"></div>
+<span class="font-bold text-on-surface">Claude 3.5 Sonnet</span>
+</div>
+</td>
+<td class="px-8 py-5 text-right font-mono-custom text-sm">842,109</td>
+<td class="px-8 py-5 text-right font-bold text-primary">$16,402.18</td>
+<td class="px-8 py-5">
+<div class="flex items-center gap-4 justify-end">
+<span class="font-mono-custom text-sm font-bold">34.0%</span>
+<div class="w-32 md:w-64 h-2 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary group-hover:brightness-110 transition-all duration-1000 ease-out" data-width="34%" style="width: 34%;"></div>
+</div>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-secondary/5 premium-transition group cursor-pointer">
+<td class="px-8 py-5">
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 rounded-full bg-secondary group-hover:scale-150 transition-transform"></div>
+<span class="font-bold text-on-surface">Titan Text G1</span>
+</div>
+</td>
+<td class="px-8 py-5 text-right font-mono-custom text-sm">412,055</td>
+<td class="px-8 py-5 text-right font-bold text-secondary">$9,233.10</td>
+<td class="px-8 py-5">
+<div class="flex items-center gap-4 justify-end">
+<span class="font-mono-custom text-sm font-bold">19.1%</span>
+<div class="w-32 md:w-64 h-2 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-secondary group-hover:brightness-110 transition-all duration-1000 ease-out" data-width="19.1%" style="width: 19.1%;"></div>
+</div>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- 1. Enhanced Magnetic Sidebar & Interactive Navigation Items ---
+        const sidebar = document.getElementById('sidebar');
+        const magneticItems = document.querySelectorAll('.magnetic-item');
+        
+        // Sidebar Perspective Effect
+        sidebar.addEventListener('mousemove', (e) => {
+            const rect = sidebar.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            
+            // Calculate a slight rotation based on mouse Y position to give it a slab-like feel
+            const yPercentage = y / rect.height;
+            const rotation = (yPercentage - 0.5) * 4; // Max 2deg rotation
+            
+            sidebar.style.transform = `rotateY(5deg) rotateX(${rotation}deg) translateX(5px)`;
+        });
+
+        sidebar.addEventListener('mouseleave', () => {
+            sidebar.style.transform = `rotateY(0deg) rotateX(0deg) translateX(0px)`;
+        });
+
+        // Navigation Items Magnetic Pull
+        magneticItems.forEach(item => {
+            item.addEventListener('mousemove', (e) => {
+                const rect = item.getBoundingClientRect();
+                // Relative coordinates from center
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                const deltaX = e.clientX - centerX;
+                const deltaY = e.clientY - centerY;
+                
+                // Pull effect: limited to 20% of the distance from center
+                const pullX = deltaX * 0.25;
+                const pullY = deltaY * 0.25;
+                
+                item.style.transform = `translate(${pullX}px, ${pullY}px) scale(1.02)`;
+                item.style.zIndex = "10";
+                
+                // Also tilt the icon slightly
+                const icon = item.querySelector('.material-symbols-outlined');
+                if(icon) {
+                    icon.style.transform = `scale(1.1) rotate(${pullX * 0.2}deg)`;
+                }
+            });
+            
+            item.addEventListener('mouseleave', () => {
+                item.style.transform = `translate(0px, 0px) scale(1)`;
+                item.style.zIndex = "1";
+                const icon = item.querySelector('.material-symbols-outlined');
+                if(icon) {
+                    icon.style.transform = `scale(1) rotate(0deg)`;
+                }
+            });
+        });
+
+        // --- 2. Bento Grid 3D Tilt Effect ---
+        const tiltCards = document.querySelectorAll('.tilt-card');
+        
+        tiltCards.forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const xRotation = 10 * ((y - rect.height / 2) / rect.height);
+                const yRotation = -10 * ((x - rect.width / 2) / rect.width);
+                
+                card.style.transform = `perspective(1000px) rotateX(${xRotation}deg) rotateY(${yRotation}deg) scale(1.01)`;
+                card.style.boxShadow = `0 20px 40px rgba(0,0,0,0.15)`;
+            });
+            
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1)`;
+                card.style.boxShadow = '';
+            });
+        });
+
+        // --- 3. Scroll-Triggered Revealed (Staggered) ---
+        const revealItems = document.querySelectorAll('.reveal-item');
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry, index) => {
+                if (entry.isIntersecting) {
+                    setTimeout(() => {
+                        entry.target.classList.add('revealed');
+                    }, index * 80);
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+
+        revealItems.forEach(item => revealObserver.observe(item));
+
+        // --- 4. Number Counting Animation ---
+        const counters = document.querySelectorAll('.count-up');
+        const countDuration = 2000;
+
+        const animateCounter = (el) => {
+            const target = parseFloat(el.getAttribute('data-target'));
+            const prefix = el.getAttribute('data-prefix') || '';
+            const suffix = el.getAttribute('data-suffix') || '';
+            let startTime = null;
+
+            const updateCount = (currentTime) => {
+                if (!startTime) startTime = currentTime;
+                const progress = Math.min((currentTime - startTime) / countDuration, 1);
+                const easeProgress = 1 - Math.pow(1 - progress, 3);
+                const currentVal = easeProgress * target;
+                
+                const formatted = target % 1 === 0 
+                    ? Math.floor(currentVal) 
+                    : currentVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                
+                el.innerText = `${prefix}${formatted}${suffix}`;
+                
+                if (progress < 1) requestAnimationFrame(updateCount);
+            };
+            requestAnimationFrame(updateCount);
+        };
+
+        const counterObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    animateCounter(entry.target);
+                    counterObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+
+        counters.forEach(counter => counterObserver.observe(counter));
+
+        // Initial Progress Bar Set
+        setTimeout(() => {
+            document.querySelectorAll('[data-width]').forEach(bar => {
+                bar.style.width = bar.getAttribute('data-width');
+            });
+        }, 800);
+    });
+</script>
+</body></html>

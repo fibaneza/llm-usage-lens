@@ -30,7 +30,7 @@ Organization (all authenticated users see all data)
 ## Authentication & Access
 
 - **Dashboard users**: Auth.js (NextAuth v5) with Microsoft Entra ID as the identity provider. Open access — every authenticated member sees all data. Auth.js is the provider abstraction: switching identity providers is a config change in `auth.ts`, not an app change.
-- **Next.js API routes**: Auth.js middleware protects both `/dashboard/*` and `/api/*`. Route Handlers additionally check the session to reject unauthenticated requests.
+- **Next.js API routes**: Auth.js in the Next.js proxy (`proxy.ts`) protects both `/dashboard/*` and `/api/*`. Route Handlers additionally check the session to reject unauthenticated requests.
 - **AWS account users**: AWS access (including Bedrock) is via IAM Identity Center — existing, unchanged, and separate from dashboard login. Bedrock access is **permission-gated** — a user can invoke Bedrock only if their permission set grants Bedrock permissions. Not every team member has access by default. Consequently the dashboard shows only users who have actually invoked Bedrock; CloudTrail records real invocations, so users with no usage never appear.
 - **Lambda collector**: Dedicated IAM service role in the observability account, completely separate from SSO user roles.
 
@@ -152,7 +152,7 @@ AWS Organization
       (no custom IAM roles deployed)
 
 Next.js App (local dev / future deployment)
-  └── Route Handlers → DynamoDB via AWS SDK, protected by Auth.js middleware
+  └── Route Handlers → DynamoDB via AWS SDK, protected by Auth.js in the proxy
 ```
 
 ## Lambda Collector Flow

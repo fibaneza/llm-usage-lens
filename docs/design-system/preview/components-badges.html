@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Badges, chips & deltas" subtitle="Status pills, filter chips, delta arrows" viewport="700x160" -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="_card.css">
+<style>
+  .grp { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .grp + .grp { margin-top:4px; }
+  .badge { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:var(--radius-full);
+    font-size:var(--text-xs); font-weight:500; }
+  .badge svg { width:12px; height:12px; }
+  .solid { background:var(--accent); color:var(--accent-fg); }
+  .b-pos { background:var(--pos-bg); color:var(--pos); }
+  .b-neg { background:var(--neg-bg); color:var(--neg); }
+  .b-warn { background:var(--warn-bg); color:var(--warn); }
+  .b-info { background:var(--info-bg); color:var(--info); }
+  .b-neutral { background:var(--surface-2); color:var(--fg-muted); border:1px solid var(--border); }
+  .chip { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 6px 0 10px; border-radius:var(--radius-full);
+    background:var(--surface-2); border:1px solid var(--border); color:var(--fg-secondary); font-size:var(--text-sm); }
+  .chip b { color:var(--fg); font-weight:500; }
+  .chip .x { display:flex; width:16px; height:16px; align-items:center; justify-content:center; border-radius:var(--radius-full); color:var(--fg-subtle); }
+  .chip .x svg { width:12px; height:12px; }
+  .delta { font-family:var(--font-mono); font-size:var(--text-sm); font-feature-settings:'tnum' 1; }
+</style></head>
+<body>
+  <div class="grp">
+    <span class="badge solid">Live</span>
+    <span class="badge b-pos"><i data-lucide="arrow-down-right"></i> 4.1%</span>
+    <span class="badge b-neg"><i data-lucide="arrow-up-right"></i> 18.3%</span>
+    <span class="badge b-warn">92% of budget</span>
+    <span class="badge b-info">Synced</span>
+    <span class="badge b-neutral">Deprecated</span>
+    <span class="delta" style="color:var(--neg)">▲ 18.3%</span>
+    <span class="delta" style="color:var(--pos)">▼ 4.1%</span>
+  </div>
+  <div class="grp">
+    <span class="chip">Last 30 days <span class="x"><i data-lucide="x"></i></span></span>
+    <span class="chip">team: <b>platform</b> <span class="x"><i data-lucide="x"></i></span></span>
+    <span class="chip">region: <b>us-east-1</b> <span class="x"><i data-lucide="x"></i></span></span>
+    <span class="chip" style="color:var(--accent); border-style:dashed">+ Add filter</span>
+  </div>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons();</script>
+</body></html>

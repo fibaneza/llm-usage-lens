@@ -59,11 +59,11 @@ Decisions on technologies evaluated and excluded, with rationale:
 
 ## Authentication
 
-- **Library:** Auth.js (NextAuth v5) — the provider abstraction. Switching identity providers is a config change in `apps/dashboard/auth.ts`; pages, middleware, and route guards use Auth.js session APIs and never change.
+- **Library:** Auth.js (NextAuth v5) — the provider abstraction. Switching identity providers is a config change in `apps/dashboard/auth.ts`; pages, proxy, and route guards use Auth.js session APIs and never change.
 - **Identity provider:** Microsoft Entra ID. Recommended start: a free Entra tenant, developing against the real provider from day one.
 - **Access model:** Open access — every authenticated member sees all data.
 - **Session:** Auth.js encrypted JWT session cookie.
-- **Middleware:** Auth.js middleware protects all `/dashboard/*` and `/api/*` routes.
+- **Proxy:** Auth.js in the Next.js proxy (`proxy.ts`) protects all `/dashboard/*` and `/api/*` routes.
 - **Sign-in page:** Single "Sign in with Microsoft" action. No sign-up — identities are managed in Entra ID.
 - **User menu:** Custom user menu in the top bar (avatar, name, sign out) backed by the Auth.js session.
 - **Roles:** Not implemented in v1. Entra ID groups can be surfaced as token claims and mapped to app roles later (e.g. restrict Settings to admins) without a redesign.
@@ -202,24 +202,35 @@ Each Bedrock model gets a consistent color across all charts:
 ### Structure
 
 ```
-+-----------------------------------------------------+
-|  Top Bar: User Menu | Org Name | Sync Status         |
 +----------+------------------------------------------+
-|          |                                           |
-| Sidebar  |  Content Area                             |
+| Brand    |  Top Bar: Page title · Sync | [7D 30D 90D] · User menu
++----------+------------------------------------------+
+|  MAIN    |                                           |
+| Overview |  Content Area                             |
 |          |  +--------------------------------------+ |
-| Overview |  |  Page Header + Date Range Filter     | |
-| Ranking  |  +--------------------------------------+ |
-| Depts    |  |                                      | |
-| Teams    |  |  Page Content                        | |
-| Services |  |  (cards, charts, tables)             | |
-| Users    |  +--------------------------------------+ |
-| Settings |                                           |
+| ATTRIB.  |  |  Page Content                        | |
+| Ranking  |  |  (cards, charts, tables)             | |
+| Depts    |  +--------------------------------------+ |
+| Teams    |                                           |
+| Services |                                           |
+| Users    |                                           |
 |          |                                           |
+| Settings |                                           |
 +----------+------------------------------------------+
 ```
 
-- Sidebar: collapsible, persistent on desktop, overlay on mobile
+- Brand (logo + product + org name) sits at the top of the sidebar, not in a
+  full-width header; it collapses to the mark when the rail collapses.
+- Top bar lives **inside** the content area, to the right of the sidebar. The
+  active page title and its sync-status badge read as one unit on the left; the
+  global `DateRangePicker`, command menu, sync countdown, and user menu sit on
+  the right. The date filter lives here — not in a content-area band — so it
+  reads as a single global control across every page (the earlier "Page Header +
+  Date Range Filter" content band was dropped in favour of the top-bar toggle).
+- Page title is the descriptive heading (e.g. "Cost overview"), not the short
+  sidebar label ("Overview").
+- Sidebar: collapsible, persistent on desktop, overlay on mobile; nav is grouped
+  (**Main**, **Attribution**) with Settings pinned to the footer.
 - Content area: max-width 1280px, centered
 - Spacing: 4px/8px grid system
 
@@ -227,17 +238,21 @@ Each Bedrock model gets a consistent color across all charts:
 
 ### Navigation (Sidebar)
 
-| Item | Route | Description |
-|------|-------|-------------|
-| Overview | `/dashboard` | KPI cards, cost trend chart, top consumers |
-| Ranking | `/dashboard/ranking` | Leaderboard with tabs + model filter |
-| Departments | `/dashboard/departments` | Department cards grid |
-| Department Detail | `/dashboard/departments/[id]` | Teams breakdown, cost over time |
-| Teams | `/dashboard/teams` | Teams list, filterable by department |
-| Team Detail | `/dashboard/teams/[id]` | Services + users breakdown |
-| Services | `/dashboard/services` | All services across all accounts |
-| Users | `/dashboard/users` | All users across all accounts |
-| Settings | `/dashboard/settings` | Account registry, sync status, tag coverage |
+Nav is grouped: **Main** (Overview) and **Attribution** (the per-dimension
+breakdowns); Settings is pinned to the sidebar footer. Each item carries a short
+rail label and a descriptive page title shown in the top bar.
+
+| Group | Item (rail label) | Page title | Route | Description |
+|-------|-------------------|------------|-------|-------------|
+| Main | Overview | Cost overview | `/dashboard` | KPI cards, cost trend chart, top consumers |
+| Attribution | Ranking | Cost ranking | `/dashboard/ranking` | Leaderboard with tabs + model filter |
+| Attribution | Departments | Department breakdown | `/dashboard/departments` | Department cards grid |
+| — | Department Detail | Department breakdown | `/dashboard/departments/[id]` | Teams breakdown, cost over time (drill-down, no rail item) |
+| Attribution | Teams | Team breakdown | `/dashboard/teams` | Teams list, filterable by department |
+| — | Team Detail | Team breakdown | `/dashboard/teams/[id]` | Services + users breakdown (drill-down, no rail item) |
+| Attribution | Services | Service breakdown | `/dashboard/services` | All services across all accounts |
+| Attribution | Users | User breakdown | `/dashboard/users` | All users across all accounts |
+| Footer | Settings | Settings | `/dashboard/settings` | Account registry, sync status, tag coverage |
 
 ### Overview Page
 
@@ -305,14 +320,44 @@ Sort and filter controls (`SearchInput`, `ModelFilter`, `ColumnToggle`, `Paginat
 
 ## Date Filtering
 
-Global date filter present in the page header of every dashboard page:
+Global date filter rendered once in the top bar, shared by every dashboard page:
 
 - **Presets:** 7 days, 30 days, 90 days, Custom range
 - **Default:** Last 30 days
-- **Component:** shadcn/ui `Calendar` + `Popover`
-- **Date logic:** date-fns for arithmetic and formatting
-- **Persistence:** nuqs stores selection in URL search params (shareable, bookmarkable)
-- **Scope:** Applies to all charts and tables on the current page
+- **Control:** a segmented toggle (`7D / 30D / 90D / Custom`) on one bordered
+  track; the active preset is filled with the brand primary, inactive segments
+  are muted text (see **Control Patterns**). `Custom` opens a shadcn/ui
+  `Calendar` in a `Popover`.
+- **Date logic:** UTC calendar-day arithmetic (Rule 20.1); custom ranges clamp
+  to a 90-day span (Rule 20.8). date-fns is used for display formatting only.
+- **Persistence:** nuqs stores `dateFrom`/`dateTo` in URL search params
+  (shareable, bookmarkable). The control sits under a `<Suspense>` boundary so
+  pages still prerender statically.
+- **Scope:** Applies to all charts and tables on the current page.
+
+## Control Patterns
+
+Conventions for interactive controls, established with the global
+`DateRangePicker` and applied to every later phase. All use semantic tokens —
+**no raw hex** (Rule 40.2).
+
+- **Segmented toggles** (preset pickers, tab-like switches): a single bordered
+  track (`border-border bg-card`) holding the options. The active option is
+  filled `bg-primary text-primary-foreground`; inactive options are
+  `text-muted-foreground` with a `hover:text-foreground` lift. Expose state with
+  `aria-pressed`.
+- **Icon / navigation buttons** (calendar arrows, close, chevrons): the `ghost`
+  button variant — no bordered box. Muted by default, foreground on hover.
+  Reserve `outline` (bordered) buttons for standalone secondary actions, not for
+  inline icon affordances.
+- **Popovers, dropdowns, and dialogs:** soft floating surfaces — `rounded-xl`,
+  a light `border-border/60`, and `shadow-lg` on `bg-popover`. Avoid heavy
+  full-strength borders on overlays.
+- **Selection & ranges:** the selected item is `bg-primary`; a range band uses
+  `accent`; "today"/current markers are a subtle `accent/60` chip, never a
+  competing fill.
+- **Focus:** keep the visible focus ring (`ring-ring/50`) on every interactive
+  element (Rule 60.30); never remove it to tidy a layout.
 
 ## Component Inventory
 
@@ -321,7 +366,6 @@ Global date filter present in the page header of every dashboard page:
 | Component | Source | Purpose |
 |-----------|--------|---------|
 | `Sidebar` | shadcn/ui | Collapsible navigation with active state |
-| `Breadcrumbs` | shadcn/ui | Navigation context on detail pages (Departments > Engineering > Payments) |
 | `CommandMenu` | shadcn/ui (cmdk) | Cmd+K quick search — jump to any department, team, user, service |
 | `Kbd` | Custom | Keyboard shortcut hints |
 
