@@ -38,7 +38,13 @@ once with `pnpm --dir apps/dashboard exec playwright install --with-deps chromiu
    coverage automatically via `smoke.spec.ts`). A new interactive component
    with no e2e exercise of its key interaction is a BLOCKER — route it to
    the tdd-test-engineer; **you never write the spec yourself**.
-4. **Audit spec quality** against the rules:
+4. **Mind the standing gates.** `accessibility.spec.ts` (axe, serious/critical
+   WCAG 2.0/2.1 A+AA violations) and `responsive.spec.ts` (no horizontal
+   scroll at 375/768/1024/1440 — Rule 40.6) run over every nav page
+   automatically. A failure there is a BLOCKER on the component that
+   introduced it — report the violating selector/rule from the axe output,
+   and route the fix to the typescript-developer.
+5. **Audit spec quality** against the rules:
    - Selectors by role/label (`getByRole`, `getByLabel`) — doubles as a
      cheap accessibility check (Rule 60.30); `data-testid` only as a last
      resort, CSS/XPath selectors are a WARN.

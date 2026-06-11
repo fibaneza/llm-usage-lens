@@ -31,7 +31,9 @@ performs inside the `/build-feature` loop (Rule 70.11).
 4. **Audit coverage:** diff the working tree (`git diff --name-only main`)
    — every added/modified file under `apps/dashboard/components/**` or
    `apps/dashboard/app/**` should be exercised by at least one spec in
-   `apps/dashboard/e2e/` (nav pages are covered automatically by
-   `smoke.spec.ts` via `lib/nav.ts`). List uncovered components.
+   `apps/dashboard/e2e/` (nav pages get render, axe-accessibility, and
+   responsive-breakpoint coverage automatically via `lib/nav.ts` —
+   `smoke.spec.ts`, `accessibility.spec.ts`, `responsive.spec.ts`). List
+   uncovered components.
 5. **Report:** pass/fail counts, failure summaries, coverage gaps, and a
    suggested next step (`/build-feature` for fixes or new specs).
