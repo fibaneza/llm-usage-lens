@@ -26,6 +26,8 @@ export default defineConfig({
       "apps/**/*.{test,spec}.{ts,tsx}",
       "packages/**/*.{test,spec}.{ts,tsx}",
     ],
-    exclude: ["**/node_modules/**", "**/.next/**", "tools/**"],
+    // e2e/ holds Playwright specs — same .spec.ts suffix, but they run under
+    // `playwright test`, never under Vitest.
+    exclude: ["**/node_modules/**", "**/.next/**", "**/e2e/**", "tools/**"],
   },
 });

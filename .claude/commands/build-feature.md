@@ -30,7 +30,8 @@ test first (non-behavioural blockers skip this stage — Rule 70.6).
 
 Dispatch the `typescript-developer` agent with the task description and the
 tdd-test-engineer's red report. It implements until the suite passes and the
-gates (`tsc`, `eslint`, `vitest`) are green — without editing any test. If it
+gates (`tsc`, `eslint`, `vitest`, plus the headless Playwright suite when the
+task touches UI) are green — without editing any test. If it
 disputes a test, re-dispatch the `tdd-test-engineer` for a ruling (UPHOLD /
 AMEND), then resume.
 
@@ -41,6 +42,11 @@ In a **single message**, dispatch in parallel:
 - `quality-reviewer` — holistic spec + rules + standards gatekeeper (always);
   independently re-runs the gates read-only.
 - `spec-guardian` — independent spec audit (always).
+- `playwright-ui-reviewer` — when UI components or pages changed
+  (`apps/dashboard/components/**`, `apps/dashboard/app/**`,
+  `apps/dashboard/e2e/**`): runs the headless Playwright suite (the
+  devcontainer has no display — never `--headed`) and audits that every
+  changed component is exercised by a spec.
 - `ecc:typescript-reviewer` — when `.ts`/`.tsx` changed (almost always).
 - `ecc:security-reviewer` — when auth, Route Handlers, env, or AWS code
   changed.

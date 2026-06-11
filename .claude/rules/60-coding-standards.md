@@ -64,7 +64,11 @@ patterns) and current Next.js App Router guidance.
 ## Testing (Vitest — not Jest)
 
 20. **Tests live next to the code** as `*.test.ts` / `*.test.tsx`, or under
-    `__tests__/`. E2E specs live in `e2e/` (Playwright, Phase 5+).
+    `__tests__/`. E2E specs live in `apps/dashboard/e2e/` (Playwright,
+    **headless only** — devcontainer has no display; see
+    `apps/dashboard/playwright.config.ts`). Smoke specs accrue with UI work
+    through the agent loop (Rule 70.11); the full user journeys land in
+    Phase 5.
 21. **Test behaviour, not implementation.** Assert on rendered output and
     public return values; do not assert on internal calls.
 22. **Zod schemas get valid + invalid cases.** Data-access functions are

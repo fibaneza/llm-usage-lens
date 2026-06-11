@@ -10,11 +10,14 @@ with the `/build-feature` command; this rule is the contract behind it.
 | `tdd-test-engineer` | Writes the failing test suite first (TDD red) from specs + rules | tests only | `.claude/agents/tdd-test-engineer.md` |
 | `typescript-developer` | Implements the feature until the tests pass (TDD green) | production code only | `.claude/agents/typescript-developer.md` |
 | `quality-reviewer` | Gatekeeper — APPROVE / REQUEST CHANGES | nothing (read-only) | `.claude/agents/quality-reviewer.md` |
+| `playwright-ui-reviewer` | Headless browser verification of UI additions/modifications (review fan-out, UI changes only) | nothing (read-only) | `.claude/agents/playwright-ui-reviewer.md` |
 
 The review stage also fans out to existing agents — `spec-guardian`
-(project, spec audit) and the ecc plugin reviewers `ecc:typescript-reviewer`
-and `ecc:security-reviewer`. They do not replace `quality-reviewer`; they add
-language and security depth.
+(project, spec audit), `playwright-ui-reviewer` (headless Playwright run +
+e2e coverage audit, dispatched when UI components or pages changed) and the
+ecc plugin reviewers `ecc:typescript-reviewer` and `ecc:security-reviewer`.
+They do not replace `quality-reviewer`; they add browser, language, and
+security depth.
 
 ## The loop
 
@@ -28,6 +31,7 @@ tdd-test-engineer ─▶ typescript-developer ─▶ review ──────�
                                           done ─────────┘
 
 review = quality-reviewer + spec-guardian + ecc reviewers
+         (+ playwright-ui-reviewer when UI components/pages changed)
 ```
 
 ## Rules
@@ -42,7 +46,9 @@ review = quality-reviewer + spec-guardian + ecc reviewers
    Failing gates at this stage are the expected **red** state, not a defect —
    the tdd-test-engineer reports which failures the implementation must clear.
 4. **The typescript-developer's job is green.** It implements until the
-   suite passes and runs the gates (`tsc`, `eslint`, `vitest`). It never
+   suite passes and runs the gates (`tsc`, `eslint`, `vitest`, plus the
+   headless Playwright suite — `pnpm test:e2e` — when the change touches UI
+   components or pages). It never
    edits, weakens, or deletes a test — a test it believes is wrong goes back
    to the orchestrator, who re-dispatches the tdd-test-engineer to rule on it.
 5. **REQUEST CHANGES if** the gates are not green at review time **or** any
@@ -58,12 +64,18 @@ review = quality-reviewer + spec-guardian + ecc reviewers
    stop and hand the open blockers to the user. Never weaken a test or lower
    the review bar to force an APPROVE.
 8. **Role boundaries hold:** only `typescript-developer` edits production
-   code; `tdd-test-engineer` edits tests only; `quality-reviewer` and
-   `spec-guardian` are strictly read-only.
+   code; `tdd-test-engineer` edits tests only (Vitest **and** Playwright —
+   e2e specs are tests); `quality-reviewer`, `spec-guardian`, and
+   `playwright-ui-reviewer` are strictly read-only.
 9. **The loop never commits.** On APPROVE the orchestrator summarises and
    suggests `/commit` — the user commits.
 10. **One Phase 4 sub-phase per run** (Rule 30.4). Larger requests are split
     before the loop starts.
+11. **E2E runs headless, always.** The devcontainer has no display server —
+    `apps/dashboard/playwright.config.ts` forces headless Chromium on a
+    dedicated port (3211) with a forged-session sign-in helper
+    (`e2e/support/session.ts`); no agent passes `--headed`/`--ui` or adds a
+    production auth bypass for testability.
 
 ## When to use
 

@@ -493,7 +493,16 @@ Components are introduced in the sub-phase where they are first needed:
 - [ ] Verify `prefers-reduced-motion` is respected (animations disabled/reduced)
 - [ ] Populate `CommandMenu` with real data (departments, teams, users, services)
 - [ ] E2E tests with Playwright
-  - Login flow (Auth.js + Microsoft Entra ID, or test auth bypass via `.env.test`)
+  > The Playwright harness itself lands **before** Phase 5: the agent loop
+  > (Rule 70) ships a headless smoke spec with every UI component or page
+  > addition/modification, in `apps/dashboard/e2e/` against
+  > `apps/dashboard/playwright.config.ts` (headless Chromium — the
+  > devcontainer has no display server). Authentication uses a forged
+  > Auth.js session cookie signed with the E2E dev server's `AUTH_SECRET`
+  > (`e2e/support/session.ts`) — real JWT verification, no production
+  > bypass. Phase 5 builds the full user journeys below on that harness.
+  - Login flow (the auth gate redirect is smoke-covered; the full Entra ID
+    round-trip stays out of E2E — forged-session sign-in instead)
   - Overview page loads
   - Ranking tab switching
   - Department → detail drill-down
@@ -653,7 +662,7 @@ jobs:
       - Start DynamoDB Local (Docker service)
       - Create table + seed data
       - Unit + component tests (vitest run)
-      - E2E tests (playwright test) — Phase 5+
+      - E2E tests (playwright test) — smoke specs exist from Phase 2+; wired into CI in Phase 5
 
   build:
     needs: [quality, test]
