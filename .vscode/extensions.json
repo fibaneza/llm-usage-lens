@@ -3,9 +3,9 @@
   // first open, inside or outside the devcontainer. Keep this list in sync
   // with .devcontainer/devcontainer.json `customizations.vscode.extensions`
   // (that list auto-installs them in the container; this one recommends them
-  // everywhere else). Editor settings follow the same pattern: defined in
-  // devcontainer.json (container) and mirrored in .vscode/settings.json
-  // (outside; takes precedence inside).
+  // everywhere else). Editor settings live in .vscode/settings.json only —
+  // workspace settings apply inside the container too, so there is no
+  // devcontainer copy to keep in sync.
   "recommendations": [
     "amazonwebservices.aws-toolkit-vscode", // Browse DynamoDB Local + Lambda collector work (Phase 6)
     "anthropic.claude-vscode", // Claude Code integration
