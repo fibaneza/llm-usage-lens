@@ -1,0 +1,36 @@
+{
+  // Project-level VS Code extension recommendations — VS Code offers these on
+  // first open, inside or outside the devcontainer. Keep this list in sync
+  // with .devcontainer/devcontainer.json `customizations.vscode.extensions`
+  // (that list auto-installs them in the container; this one recommends them
+  // everywhere else). Editor settings follow the same pattern: defined in
+  // devcontainer.json (container) and mirrored in .vscode/settings.json
+  // (outside; takes precedence inside).
+  "recommendations": [
+    "amazonwebservices.aws-toolkit-vscode", // Browse DynamoDB Local + Lambda collector work (Phase 6)
+    "anthropic.claude-vscode", // Claude Code integration
+    "bradlc.vscode-tailwindcss", // Tailwind CSS v4 class completion
+    "davidanson.vscode-markdownlint", // Keep docs/specs/** consistently formatted
+    "dbaeumer.vscode-eslint", // ESLint v9 flat-config diagnostics (Rule 40)
+    "esbenp.prettier-vscode", // Format-on-save matching the Prettier gate
+    "grafana.vscode-grafana", // Author/preview Grafana dashboards
+    "github.vscode-github-actions", // GitHub Actions workflow authoring
+    "ms-azuretools.vscode-docker", // Manage the compose stack from the editor
+    "ms-playwright.playwright", // Run/debug the headless E2E suite (apps/dashboard/e2e)
+    "redhat.vscode-yaml", // Validate docker-compose + otel-collector-config.yaml
+    "usernamehw.errorlens", // Inline diagnostics — pairs with pretty-ts-errors under strict mode
+    "vitest.explorer", // Run/debug Vitest tests in the editor (not Jest)
+    "vivaxy.vscode-conventional-commits", // Guided Conventional Commit messages (commitlint gate)
+    "vscode-icons-team.vscode-icons", // File icon theme; activated via workbench.iconTheme
+    "vstirbu.vscode-mermaid-preview", // Preview Mermaid diagrams (used in docs/specs)
+    "yoavbls.pretty-ts-errors" // Readable errors for TypeScript strict mode
+  ],
+  // The test runner is Vitest and the formatter is Prettier (Rules 40/60) —
+  // steer contributors away from extensions that fight those choices.
+  "unwantedRecommendations": [
+    "orta.vscode-jest", // Vitest, not Jest (Rule 60)
+    "firsttris.vscode-jest-runner", // Vitest, not Jest (Rule 60)
+    "hookyqr.beautify", // Prettier is the single formatter
+    "ms-vscode.vscode-typescript-tslint-plugin" // TSLint is dead; ESLint v9 flat config
+  ]
+}

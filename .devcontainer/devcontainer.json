@@ -59,7 +59,7 @@
         "grafana.vscode-grafana", // Author/preview Grafana dashboards
         "github.vscode-github-actions", // Github Actions
         "ms-azuretools.vscode-docker", // Manage the compose stack from the editor
-        "ms-playwright.playwright", // Run/debug E2E specs (Phase 5+)
+        "ms-playwright.playwright", // Run/debug the headless E2E suite (apps/dashboard/e2e)
         "redhat.vscode-yaml", // Validate docker-compose + otel-collector-config.yaml
         "usernamehw.errorlens", // Inline diagnostics — pairs with pretty-ts-errors under strict mode
         "vitest.explorer", // Run/debug Vitest tests in the editor (not Jest)
@@ -68,6 +68,10 @@
         "vstirbu.vscode-mermaid-preview", // Preview Mermaid diagrams (used in docs/specs) directly in VS Code
         "yoavbls.pretty-ts-errors" // Readable errors for TypeScript strict mode,
       ],
+      // Mirrored in .vscode/settings.json so the same editor config applies
+      // outside the container. Workspace settings take precedence over this
+      // block when both define a key — keep the two in sync (change one,
+      // change the other).
       "settings": {
         "files.autoSave": "afterDelay",
         // Prettier is the single formatter; format on save, but only where a
@@ -135,7 +139,9 @@
         "search.exclude": {
           "**/node_modules": true,
           "**/.next": true,
-          "**/pnpm-lock.yaml": true
+          "**/pnpm-lock.yaml": true,
+          "**/playwright-report": true,
+          "**/test-results": true
         },
         "files.exclude": {
           "**/.DS_Store": true

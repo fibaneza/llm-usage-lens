@@ -1,0 +1,62 @@
+{
+  // Workspace mirror of .devcontainer/devcontainer.json
+  // `customizations.vscode.settings`, so the same editor config applies when
+  // the repo is opened OUTSIDE the devcontainer. Inside the container both
+  // are loaded and this file takes precedence — keep the two in sync (change
+  // one, change the other). Comments explaining each setting live in the
+  // devcontainer copy.
+  "files.autoSave": "afterDelay",
+  "editor.defaultFormatter": null,
+  "editor.formatOnSave": true,
+  "prettier.requireConfig": true,
+  "eslint.useFlatConfig": true,
+  "eslint.workingDirectories": [{ "mode": "auto" }],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.fixAll.markdownlint": "explicit"
+  },
+  "workbench.iconTheme": "vscode-icons",
+  "[typescript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "vscode.css-language-features"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "vscode.markdown-language-features"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "js/ts.tsdk.path": "./node_modules/typescript/lib",
+  "tailwindCSS.experimental.classRegex": [
+    ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+    ["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
+  ],
+  "editor.quickSuggestions": {
+    "strings": "on"
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/pnpm-lock.yaml": true,
+    "**/playwright-report": true,
+    "**/test-results": true
+  },
+  "files.exclude": {
+    "**/.DS_Store": true
+  },
+  "terminal.integrated.cwd": "${workspaceFolder}"
+}
