@@ -67,28 +67,22 @@ means "free of cost."
 
 ## Commands
 
-> The `pnpm <script>` shortcuts (`pnpm dev`, `pnpm build`) require a `package.json` and don't exist until Phase 1. The `pnpm exec …` forms below are runnable as soon as dependencies are installed.
-
-Package manager is **pnpm**.
+Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). The root `package.json` (Phase 1) defines the canonical scripts; run them from the repo root.
 
 | Command | Purpose |
 |---|---|
-| `pnpm dev` | Next.js dev server |
+| `pnpm dev` | Next.js dev server (`apps/dashboard`) |
 | `pnpm build` | `next build` |
-| `pnpm exec prettier --check .` | Format check |
-| `pnpm exec eslint .` | Lint (ESLint v9 flat config, `eslint.config.ts`) |
-| `pnpm exec tsc --noEmit` | Type check (also the pre-push hook) |
-| `pnpm exec vitest run` | Unit + component tests (**Vitest**, not Jest) |
+| `pnpm format:check` | Prettier format check (`pnpm format` to write) |
+| `pnpm lint` | ESLint v9 flat config (`eslint.config.ts`) |
+| `pnpm typecheck` | `tsc --noEmit` across every workspace (`pnpm -r --if-present typecheck`) |
+| `pnpm test` | Unit + component tests (**Vitest**, not Jest) — root `vitest.config.ts`, jsdom, excludes `e2e/` and `tools/` |
 | `pnpm exec vitest run path/to/file.test.ts` | Run a single test file |
-| `pnpm test:e2e` | Headless Playwright E2E (smoke specs accrue with UI work; full journeys Phase 5) |
-| `docker compose up -d dynamodb-local` | Start DynamoDB Local |
-| `pnpm tsx scripts/create-table.ts` | Create the DynamoDB table (idempotent) |
-| `pnpm tsx scripts/seed.ts` | Seed realistic data |
-| `pnpm tsx scripts/seed-empty.ts` | Seed empty state |
-| `pnpm tsx scripts/seed-large.ts` | Seed large dataset |
-| `pnpm tsx scripts/seed-ranking.ts` | Seed ranking-focused dataset (optional) |
+| `pnpm test:e2e` | Headless Playwright E2E in `apps/dashboard/e2e/` (smoke specs accrue with UI work; full journeys Phase 5) |
 
-Pre-commit (Husky + lint-staged): ESLint fix + Prettier on staged files, plus gitleaks secret scan. Commits must follow Conventional Commits (commitlint).
+Phase 3 (Data Layer) adds DynamoDB Local and the `scripts/` directory — these do **not** exist yet. Once present: `docker compose up -d dynamodb-local`, then `pnpm tsx scripts/create-table.ts` and `pnpm tsx scripts/seed.ts` (variants `seed-empty` / `seed-large` / `seed-ranking`). The `/seed` slash command wraps this flow.
+
+**Git hooks (Husky).** Pre-commit: gitleaks (or grep fallback) secret scan + `lint-staged` (ESLint fix + Prettier on staged files). Commit-msg: `commitlint` (Conventional Commits). Pre-push: when `apps/`/`packages/` change, runs `pnpm typecheck` + `pnpm exec vitest run`; when `tools/bedrock-simulator/` changes, runs that workspace's typecheck + tests; then a gitleaks scan of the pushed range. Never bypass with `--no-verify` (Rule 50.5).
 
 ## Slash commands
 

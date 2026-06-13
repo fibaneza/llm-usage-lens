@@ -23,9 +23,11 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
    Do not combine 4.x sub-phases in a single PR unless explicitly asked.
 5. **Phase 6 (the Lambda collector) is last.** The dashboard is developed
    against DynamoDB Local + seed scripts until then.
-6. **Repo state today:** pre-implementation. Only `docs/`, `LICENSE`,
-   `.gitignore`, `.github/`, `.claude/`, and `CLAUDE.md` exist. There is no
-   `package.json` yet. Phase 1 establishes the toolchain.
+6. **Repo state today:** Phases 1–2 are complete — the pnpm monorepo toolchain
+   (`package.json`, `apps/dashboard`, `packages/shared`) and the dashboard
+   layout shell with placeholder pages for every route. **Phase 3 (Data Layer)
+   is next** — `scripts/`, DynamoDB Local, `lib/dynamodb.ts`, and `lib/data/**`
+   do not exist yet. Run `/phase-status` to confirm before starting work.
 
 ## Branching & pull requests
 
