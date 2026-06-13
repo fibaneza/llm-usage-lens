@@ -1,7 +1,7 @@
 name: "bedrock-dashboard: ci - build"
 
-# Phase 1 pipeline: quality + build. The test job (Vitest + DynamoDB Local) is
-# added in Phase 3 and deploy-collector in Phase 6.
+# Pipeline: quality + test + build. The test job (Vitest) lands in Phase 3.1; it
+# gains DynamoDB Local in Phase 3.2 and deploy-collector arrives in Phase 6.
 # Source: docs/specs/2026-05-15-implementation-phases.md §CI/CD — GitHub Actions.
 
 on:
@@ -41,6 +41,19 @@ jobs:
         uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test:
+    name: test
+    needs: [quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/node-setup
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Test
+        run: pnpm exec vitest run
 
   build:
     name: build
