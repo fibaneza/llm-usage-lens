@@ -47,12 +47,11 @@ Important files:
 - `.editorconfig` → consistent editor defaults
 - `.gitattributes` → line endings and diff/merge rules
 
-> **In this project.** The layout above is the *target* (post-Phase-1). Today
-> the repo is pre-implementation: only `docs/`, `.github/`, `.claude/`,
-> `LICENSE`, and config files exist — `apps/`, `packages/`, and `scripts/`
-> arrive with their phases (see
-> [Rule 30](../../.claude/rules/30-phase-discipline.md)). `CONTRIBUTING.md` and
-> `SECURITY.md` live under `.github/`, not the repo root.
+> **In this project.** Phases 1–2 are complete, so most of the layout above is
+> in place: the pnpm monorepo (`apps/dashboard`, `packages/shared`), the root
+> config files, and the dashboard layout shell. `scripts/` still arrives with
+> Phase 3 (see [Rule 30](../../.claude/rules/30-phase-discipline.md)).
+> `CONTRIBUTING.md` and `SECURITY.md` live under `.github/`, not the repo root.
 
 ---
 
