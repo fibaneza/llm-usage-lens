@@ -156,10 +156,10 @@ estimate and always carries `costEstimated: true`. Yesterday's rollup is
 
 ## The Build Path
 
-Six phases, strict order. Phase 4 expands into nine sub-phases.
+Six phases, strict order. Phases 2, 3, and 4 expand into sub-phases.
 
 ```
-1 Foundation → 2 Layout Shell → 3 Data Layer
+1 Foundation → 2 Layout Shell (2.1 → 2.3) → 3 Data Layer (3.1 → 3.3)
   → 4 Pages (4.1 → 4.9, in order)
     → 5 Polish & Accessibility
       → 6 AWS Lambda Collector
@@ -253,7 +253,7 @@ split into three sub-phases, each its own branch and PR — build them in order.
 
 ---
 
-### Phase 3 — Data Layer
+### Phase 3 — Data Layer (3.1 – 3.3)
 
 > Spec: [implementation-phases.md → Phase 3](../specs/2026-05-15-implementation-phases.md),
 > [data-model.md](../specs/2026-05-15-data-model.md)
@@ -271,32 +271,75 @@ must loop on `LastEvaluatedKey` because a page caps at 1 MB. And you learn
 canonical keys (`claude-opus`, `claude-sonnet`, `claude-haiku`, `other`). The
 collector (Phase 6) imports the same package, so the two never drift.
 
+Phase 3 is split into three sub-phases along the data-layer dependency chain —
+schemas → database + access → routes + client — one sub-phase per PR
+(Rule 30.4). Build them in order: **3.1 → 3.2 → 3.3**.
+
+---
+
+#### Phase 3.1 — Shared Schemas & Model Normalization
+
 **Dependencies.** Phase 1, Phase 2 (green gates).
 
 **Build tasks.**
 
-- [ ] Set up DynamoDB Local via Docker (`docker-compose.yml`)
-- [ ] Write `scripts/create-table.ts` — creates `bedrock-usage` (PK/SK + GSI1), idempotent
-- [ ] Write Zod schemas in `packages/shared/src/`: `AccountMetaSchema`, `DailyRollupSchema`, `SyncStatusSchema`
+- [ ] Write Zod schemas in `packages/shared/src/schemas/`: `AccountMetaSchema`, `DailyRollupSchema`, `SyncStatusSchema`
 - [ ] Write the query schemas: `RankingQuerySchema`, `DateRangeQuerySchema` (90-day cap), `TeamsQuerySchema`
 - [ ] Write model ID normalization in `packages/shared/src/models.ts` (raw ID → canonical key → display name + chart CSS token)
+- [ ] Unit-test the Zod schemas (valid/invalid) and model normalization
+- [ ] Add the GitHub Actions `test` job (`pnpm exec vitest run`) — also runs the existing Phase 2 component tests in CI
+
+**Verify.**
+
+- [ ] Schemas + model table importable by the dashboard
+- [ ] `vitest run` is green in CI (no DynamoDB dependency)
+
+**Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
+
+---
+
+#### Phase 3.2 — DynamoDB Local, Table/Seeds & Data Access
+
+**Dependencies.** Phase 3.1.
+
+**Build tasks.**
+
+- [ ] Document DynamoDB Local startup (already in the devcontainer — `docker compose up -d dynamodb-local`)
+- [ ] Write `scripts/create-table.ts` — creates `bedrock-usage` (PK/SK + GSI1), idempotent
 - [ ] Write `scripts/seed.ts` — realistic data (3 depts, 5 teams, 10 users, 8 services, 30 days)
 - [ ] Write `scripts/seed-empty.ts` — empty-state data
 - [ ] Write `scripts/seed-large.ts` — stress data (50 accounts, 90 days, 20 users/team, 15 services)
 - [ ] Build the DynamoDB client (`apps/dashboard/lib/dynamodb.ts`) — AWS SDK v3 document client, configurable endpoint
 - [ ] Build data-access functions in `apps/dashboard/lib/data/` (each imports `server-only`): `getAccountMeta`, `getAllAccounts`, `getAccountsByDepartment`, `getDailyRollups`, `getRollupsByDate` (loops on `LastEvaluatedKey`), `getSyncStatus` (returns "never synced" when no item)
+- [ ] Add the Vitest node-env project split; integration-test the data-access functions against DynamoDB Local
+- [ ] Extend the GitHub Actions `test` job to start DynamoDB Local + create table + seed
+
+**Verify.**
+
+- [ ] The seed script populates DynamoDB Local
+- [ ] Data-access integration tests pass locally and in CI
+
+**Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
+
+---
+
+#### Phase 3.3 — Route Handlers & TanStack Query
+
+**Dependencies.** Phase 3.2.
+
+**Build tasks.**
+
 - [ ] Build the read Route Handlers: `/api/overview`, `/api/ranking`, `/api/departments`, `/api/departments/[id]`, `/api/teams`, `/api/teams/[id]`, `/api/services`, `/api/users`, `/api/sync-status`
 - [ ] Build the account CRUD routes: `GET|POST /api/accounts`, `PATCH|DELETE /api/accounts/[id]`
 - [ ] Enforce the standard response shape, Zod validation, the 90-day cap, and 1-hour server-cache revalidation
 - [ ] Set up TanStack Query (`QueryClientProvider` in root layout, `staleTime` 5 min) and query hooks
-- [ ] Add Vitest + React Testing Library; unit-test the Zod schemas and data-access functions against DynamoDB Local
-- [ ] Add the GitHub Actions test step (Vitest + DynamoDB Local via Docker)
+- [ ] Route Handler tests: `{ data }` / `{ error }` shape + the `401` and `400` paths
 
 **Verify.**
 
-- [ ] The seed script populates data
 - [ ] Route Handlers return validated data
 - [ ] TanStack Query hooks work
+- [ ] `next build` succeeds (unblocks Phase 4)
 
 **Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
 
@@ -706,7 +749,7 @@ Phase 1 ─▶ Phase 2 ─▶ Phase 3 ─┬─▶ Phase 4.1 ─▶ 4.2 ─▶ 4
 |---|---|---|
 | 1 Foundation | — | Starting point |
 | 2 Layout Shell | 1 | — |
-| 3 Data Layer | 1, 2 | Schemas in `packages/shared` are reused by Phase 6 |
+| 3.1 – 3.3 Data Layer | 1, 2, then each prior sub-phase | Strict order (3.1 → 3.3), one sub-phase per PR; 3.1 schemas in `packages/shared` are reused by Phase 6 |
 | 4.1 – 4.9 Pages | 3, then each prior sub-phase | Strict order; one sub-phase per PR |
 | 5 Polish | 4 (all sub-phases) | — |
 | 6 Collector | 5 in practice; 3 for shared schemas | Last build; brings real data |

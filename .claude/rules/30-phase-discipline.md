@@ -5,10 +5,11 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
 ## Build order (strict)
 
 ```
-1 Foundation → 2 Layout Shell (2.1 → 2.3, in order) → 3 Data Layer
-  → 4 Pages (4.1 → 4.9, in order)
-    → 5 Polish & Accessibility
-      → 6 AWS Lambda Collector
+1 Foundation → 2 Layout Shell (2.1 → 2.3, in order)
+  → 3 Data Layer (3.1 → 3.3, in order)
+    → 4 Pages (4.1 → 4.9, in order)
+      → 5 Polish & Accessibility
+        → 6 AWS Lambda Collector
 ```
 
 ## Rules
@@ -26,8 +27,12 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
 6. **Repo state today:** Phases 1–2 are complete — the pnpm monorepo toolchain
    (`package.json`, `apps/dashboard`, `packages/shared`) and the dashboard
    layout shell with placeholder pages for every route. **Phase 3 (Data Layer)
-   is next** — `scripts/`, DynamoDB Local, `lib/dynamodb.ts`, and `lib/data/**`
-   do not exist yet. Run `/phase-status` to confirm before starting work.
+   is underway:** Phase 3.1's shared Zod schemas + model normalization have
+   merged (`packages/shared/src/schemas/**`, `models.ts`); the CI `test` job
+   that completes 3.1 is still outstanding. Phase 3.2 (`scripts/`, DynamoDB
+   Local table/seeds, `lib/dynamodb.ts`, `lib/data/**`) and 3.3 (Route Handlers,
+   TanStack Query) have not started. Run `/phase-status` to confirm before
+   starting work.
 
 ## Branching & pull requests
 
@@ -47,7 +52,8 @@ receives direct commits.
    [Rule 31](31-github-flow.md)). Mark it ready (`gh pr ready`) once the phase's
    "Verify" checklist passes — run `/verify-phase <n>` first; do not mark it
    ready on a failing checklist.
-4. **One phase (or one sub-phase) per PR.** Phase 2 (2.1–2.3) and Phase 4
-   (4.1–4.9) are split into independently deliverable sub-phases — never bundle
-   multiple phases or sub-phases into a single branch or PR.
+4. **One phase (or one sub-phase) per PR.** Phase 2 (2.1–2.3), Phase 3
+   (3.1–3.3), and Phase 4 (4.1–4.9) are split into independently deliverable
+   sub-phases — never bundle multiple phases or sub-phases into a single branch
+   or PR.
 5. **Never commit or merge directly to `main`.**
