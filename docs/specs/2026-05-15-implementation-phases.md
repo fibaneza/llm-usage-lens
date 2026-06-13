@@ -18,7 +18,7 @@ Components are built where they are first needed and reused in subsequent pages.
 |---|---|---|
 | 1 | Foundation | Scaffolded project with auth, linting, monitoring, theme |
 | 2 | Layout Shell | Responsive sidebar, top bar, global filters, navigation |
-| 3 | Data Layer | DynamoDB Local, Zod schemas, Route Handlers, TanStack Query |
+| 3 | Data Layer (3.1–3.3) | DynamoDB Local, Zod schemas, Route Handlers, TanStack Query |
 | 4 | Pages (4.1–4.9) | All 9 dashboard pages, one sub-phase each |
 | 5 | Polish & Accessibility | Error boundaries, accessibility audit, responsive testing |
 | 6 | AWS Lambda Collector | Serverless pipeline (`apps/collector`), shared `packages/shared` |
@@ -174,55 +174,13 @@ separate content-area band; see design-system spec — Layout / Date Filtering.)
 
 **Goal:** DynamoDB Local running, seed data populated, Zod schemas validated, Route Handlers serving data, TanStack Query fetching it.
 
-### Tasks
+Phase 3 is split into three sub-phases, each independently deliverable on its own branch and PR — built in order along a strict linear dependency chain (mirrors the Phase 2 and Phase 4 sub-phase model; see [Rule 30](../../.claude/rules/30-phase-discipline.md) branching). The split follows the natural data-layer boundary: shared schemas → database + data access → routes + client.
 
-- [ ] Set up DynamoDB Local via Docker
-  - `docker-compose.yml` with DynamoDB Local service
-  - Document startup instructions in README
-- [ ] Create DynamoDB table setup script (repo-root `scripts/create-table.ts`, invoked via `pnpm` from workspace root)
-  - Creates `bedrock-usage` table with PK/SK + GSI1
-  - Idempotent (safe to re-run)
-- [ ] Implement Zod v4 validation schemas in `packages/shared/src/schemas/`
-  - `AccountMetaSchema`
-  - `DailyRollupSchema`
-  - `SyncStatusSchema` (includes `nextScheduledAt`)
-  - `RankingQuerySchema` (dateFrom, dateTo, tab, model, sortBy, order, limit)
-  - `DateRangeQuerySchema` (dateFrom, dateTo, accountId; max 90-day span)
-  - `TeamsQuerySchema` (date range + optional `departmentId`)
-- [ ] Implement shared model ID normalization in `packages/shared/src/models.ts`
-  - Raw Bedrock model ID → canonical key → display name + chart CSS token
-  - Re-export from `apps/dashboard/lib/models.ts` if needed for convenience
-  - Same package imported by Lambda in Phase 6 (see System Architecture spec — Shared code layout)
-- [ ] Create seed scripts
-  - `scripts/seed.ts` — realistic data: 3 departments, 5 teams, 10 users, 8 services, 30 days of rollups, multiple models
-  - `scripts/seed-empty.ts` — empty state: accounts exist but no rollups (tests empty states)
-  - `scripts/seed-large.ts` — stress test: 50 accounts, 90 days, 20 users/team, 15 services
-  - `scripts/seed-ranking.ts` (optional) — 100 accounts × 30 days to validate ranking performance at v1 upper bound
-- [ ] Build DynamoDB client (`apps/dashboard/lib/dynamodb.ts`)
-  - AWS SDK v3 document client
-  - Configurable endpoint (DynamoDB Local vs AWS)
-- [ ] Build data access functions (`apps/dashboard/lib/data/`)
-  - `getAccountMeta(accountId)`
-  - `getAllAccounts()`
-  - `getAccountsByDepartment(departmentId)`
-  - `getDailyRollups(accountId, dateFrom, dateTo)`
-  - `getRollupsByDate(date)` — must loop on `LastEvaluatedKey` (GSI1 query can exceed DynamoDB's 1MB limit)
-  - `getSyncStatus()` — return a "never synced" state when no item exists, not an error
-- [ ] Build Route Handlers (`apps/dashboard/app/api/`) — see Data Model spec **API Routes** table; return `401`/`400`/`404` per HTTP status table
-  - `GET /api/overview`, `/api/ranking`, `/api/departments`, `/api/departments/[id]`, `/api/teams`, `/api/teams/[id]`, `/api/services`, `/api/users`, `/api/sync-status`
-  - `GET|POST /api/accounts`, `PATCH|DELETE /api/accounts/[id]` (Settings CRUD)
-  - Standardized response format: `{ data: T }` / `{ error: { code, message } }`
-  - Zod validation on all query params; enforce 90-day max on custom date ranges
-  - Next.js server cache with 1-hour revalidation
-- [ ] Set up TanStack Query
-  - `QueryClientProvider` in root layout
-  - Default `staleTime`: 5 minutes
-  - Query hooks per data access pattern
-- [ ] Add Vitest + React Testing Library
-  - Unit tests for Zod schemas (valid/invalid inputs)
-  - Unit tests for data access functions (against DynamoDB Local)
-- [ ] Add GitHub Actions: test step (Vitest + DynamoDB Local in CI via Docker)
-- [ ] Verify: seed script populates data, Route Handlers return validated data, TanStack Query hooks work
+| Sub-phase | Name | Deliverable |
+|---|---|---|
+| 3.1 | Shared Schemas & Model Normalization | Zod schemas + model-ID table in `packages/shared`; CI `test` job |
+| 3.2 | DynamoDB Local, Table/Seeds & Data Access | DynamoDB Local table/seed scripts, `lib/dynamodb.ts`, the six `lib/data/**` functions |
+| 3.3 | Route Handlers & TanStack Query | 13 Route Handlers + TanStack Query client integration |
 
 ### Dependencies
 
@@ -237,6 +195,91 @@ None — data infrastructure only.
 **Decision:** Use Vitest instead of Jest for all testing.
 
 **Rationale:** Vitest is faster, has native TypeScript and ESM support without additional configuration, uses the same Vite-compatible transform pipeline, and provides a Jest-compatible API — making the transition straightforward for developers familiar with Jest. Vitest also integrates better with modern tooling (TanStack, Next.js App Router) and avoids the CommonJS/ESM configuration complexity that Jest requires for TypeScript projects.
+
+---
+
+### Phase 3.1 — Shared Schemas & Model Normalization
+
+**Goal:** The Zod schemas and model-ID normalization table in `packages/shared`, importable by the dashboard and (later) the collector — plus the CI `test` job that runs the suite.
+
+**Dependencies:** Phase 1 (Foundation).
+
+**Tasks:**
+- [ ] Implement Zod v4 validation schemas in `packages/shared/src/schemas/`
+  - `AccountMetaSchema`
+  - `DailyRollupSchema`
+  - `SyncStatusSchema` (includes `nextScheduledAt`)
+  - `RankingQuerySchema` (dateFrom, dateTo, tab, model, sortBy, order, limit)
+  - `DateRangeQuerySchema` (dateFrom, dateTo, accountId; max 90-day span)
+  - `TeamsQuerySchema` (date range + optional `departmentId`)
+  - Types derived via `z.infer` — never hand-written (Rule 60.3)
+- [ ] Implement shared model ID normalization in `packages/shared/src/models.ts`
+  - Raw Bedrock model ID → canonical key → display name + chart CSS token
+  - Re-export from `apps/dashboard/lib/models.ts` if needed for convenience
+  - Same package imported by Lambda in Phase 6 (see System Architecture spec — Shared code layout)
+- [ ] Unit tests for schemas (valid/invalid inputs, Rule 60.22) and model normalization
+- [ ] Add the GitHub Actions `test` job (`pnpm exec vitest run`) — this also starts running the existing Phase 2 component tests in CI. No DynamoDB needed yet.
+- [ ] Verify: schemas + model table importable by the dashboard; `vitest run` is green in CI; no DynamoDB dependency.
+
+**Components Built:** None — shared validation infrastructure only.
+
+---
+
+### Phase 3.2 — DynamoDB Local, Table/Seeds & Data Access
+
+**Goal:** DynamoDB Local serving the dashboard's reads — table created, seed data populated, and the server-only data-access layer in place.
+
+**Dependencies:** Phase 3.1 (the schemas the data-access functions return), Phase 2 (Layout Shell — for rendering data in pages).
+
+**Tasks:**
+- [ ] Document DynamoDB Local startup (already runs in the devcontainer — `.devcontainer/docker-compose.yml`; document `docker compose up -d dynamodb-local` in the README)
+- [ ] Create DynamoDB table setup script (repo-root `scripts/create-table.ts`, invoked via `pnpm` from workspace root)
+  - Creates `bedrock-usage` table with PK/SK + GSI1 (`ALL` projection)
+  - Idempotent (safe to re-run)
+- [ ] Create seed scripts
+  - `scripts/seed.ts` — realistic data: 3 departments, 5 teams, 10 users, 8 services, 30 days of rollups, multiple models
+  - `scripts/seed-empty.ts` — empty state: accounts exist but no rollups (tests empty states)
+  - `scripts/seed-large.ts` — stress test: 50 accounts, 90 days, 20 users/team, 15 services
+  - `scripts/seed-ranking.ts` (optional) — 100 accounts × 30 days to validate ranking performance at v1 upper bound
+- [ ] Build DynamoDB client (`apps/dashboard/lib/dynamodb.ts`)
+  - AWS SDK v3 document client
+  - Configurable endpoint (DynamoDB Local vs AWS)
+- [ ] Build data access functions (`apps/dashboard/lib/data/`) — each `import "server-only"` (Rule 10)
+  - `getAccountMeta(accountId)`
+  - `getAllAccounts()`
+  - `getAccountsByDepartment(departmentId)`
+  - `getDailyRollups(accountId, dateFrom, dateTo)`
+  - `getRollupsByDate(date)` — must loop on `LastEvaluatedKey` (GSI1 query can exceed DynamoDB's 1MB limit, Rule 20.6)
+  - `getSyncStatus()` — return a "never synced" state when no item exists, not an error (Rule 20.9)
+- [ ] Add the Vitest node-env project split + DynamoDB-Local integration tests for data-access functions (the env split the `vitest.config.ts` comment already anticipates)
+- [ ] Extend the CI `test` job to start DynamoDB Local + create table + seed
+- [ ] Verify: `pnpm tsx scripts/seed.ts` populates DynamoDB Local; data-access integration tests pass locally and in CI.
+
+**Components Built:** None — data infrastructure only.
+
+---
+
+### Phase 3.3 — Route Handlers & TanStack Query
+
+**Goal:** The HTTP backend the pages consume — every Route Handler returning the standard validated shape, with TanStack Query wired into the client.
+
+**Dependencies:** Phase 3.2 (the data-access functions the handlers call).
+
+**Tasks:**
+- [ ] Build Route Handlers (`apps/dashboard/app/api/`) — see Data Model spec **API Routes** table; return `401`/`400`/`404` per HTTP status table
+  - `GET /api/overview`, `/api/ranking`, `/api/departments`, `/api/departments/[id]`, `/api/teams`, `/api/teams/[id]`, `/api/services`, `/api/users`, `/api/sync-status`
+  - `GET|POST /api/accounts`, `PATCH|DELETE /api/accounts/[id]` (Settings CRUD)
+  - Each: Auth.js session check → Zod-validate query/body → data-access call → `{ data: T }` / `{ error: { code, message } }` shape (Rules 10, 20.11)
+  - Zod validation on all query params; enforce 90-day max on custom date ranges
+  - Next.js server cache with 1-hour revalidation (`export const revalidate = 3600`, Rule 60.10)
+- [ ] Set up TanStack Query
+  - `QueryClientProvider` in root layout (beside the existing `NuqsAdapter`)
+  - Default `staleTime`: 5 minutes
+  - Query hooks per data access pattern
+- [ ] Route Handler tests: assert the `{ data }` / `{ error }` shape and cover the `401` (unauthenticated) and `400` (bad input) paths (Rule 60.23)
+- [ ] Verify: Route Handlers return validated data, a TanStack Query hook fetches it, `next build` succeeds — unblocks Phase 4.
+
+**Components Built:** None — data infrastructure only.
 
 ---
 
