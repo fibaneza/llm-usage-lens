@@ -25,7 +25,7 @@ jobs:
       contents: read
       pull-requests: read # gitleaks-action lists PR commits on pull_request events
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # full history for gitleaks
       - uses: ./.github/actions/node-setup
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/node-setup
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -67,7 +67,7 @@ jobs:
       SKIP_ENV_VALIDATION: "1"
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/node-setup
       - name: Install
         run: pnpm install --frozen-lockfile

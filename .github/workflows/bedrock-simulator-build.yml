@@ -42,7 +42,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup SAM toolchain
         uses: ./.github/actions/aws-sam-setup
@@ -74,7 +74,7 @@ jobs:
     # the artifact. Own checkout/install (fresh runner) — pnpm store is cached.
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup SAM toolchain
         uses: ./.github/actions/aws-sam-setup
@@ -134,7 +134,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup SAM toolchain
         uses: ./.github/actions/aws-sam-setup
