@@ -18,8 +18,10 @@ done
 if git diff --name-only $RANGES 2>/dev/null | grep -qE "^apps/|^packages/"; then
   echo "→ dashboard: typecheck"
   (cd "$REPO_ROOT" && pnpm -r --if-present typecheck)
-  echo "→ dashboard: tests"
-  (cd "$REPO_ROOT" && pnpm exec vitest run --passWithNoTests)
+  # Unit project only: integration tests need DynamoDB Local, so they run in CI
+  # and via `pnpm test`.
+  echo "→ dashboard: unit tests (integration tests run in CI and via pnpm test)"
+  (cd "$REPO_ROOT" && pnpm exec vitest run --project unit --passWithNoTests)
 fi
 
 # Simulator: typecheck + tests (mirrors tools/bedrock-simulator/.hooks/pre-push).

@@ -1,7 +1,7 @@
 name: "bedrock-dashboard: ci - build"
 
-# Pipeline: quality + test + build. The test job (Vitest) lands in Phase 3.1; it
-# gains DynamoDB Local in Phase 3.2 and deploy-collector arrives in Phase 6.
+# Pipeline: quality + test + build. The test job (Vitest) landed in Phase 3.1 and
+# gained DynamoDB Local in Phase 3.2; deploy-collector arrives in Phase 6.
 # Source: docs/specs/2026-05-15-implementation-phases.md §CI/CD — GitHub Actions.
 
 on:
@@ -47,11 +47,26 @@ jobs:
     needs: [quality]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      dynamodb-local:
+        image: amazon/dynamodb-local:2.5.4
+        ports:
+          - 8000:8000
+    env:
+      DYNAMODB_ENDPOINT: http://localhost:8000
+      AWS_REGION: us-east-1
+      # Dummy values DynamoDB Local requires - not real AWS keys (Rule 50.1).
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/node-setup
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Create table
+        run: pnpm db:create-table
+      - name: Seed (smoke)
+        run: pnpm db:seed
       - name: Test
         run: pnpm exec vitest run
 
