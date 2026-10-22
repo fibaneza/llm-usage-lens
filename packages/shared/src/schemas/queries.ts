@@ -6,8 +6,8 @@ import { AccountIdSchema, UtcDaySchema, parseUtcDayMs } from "./primitives";
 // API query-param schemas.
 // Source: docs/specs/2026-05-15-data-model.md — "Zod Validation Schemas" and
 // "API Routes". Date params are YYYY-MM-DD UTC calendar days (Rule 20.1);
-// custom ranges are capped at an inclusive 90-day span (Rule 20.8), matching
-// MAX_RANGE_DAYS in apps/dashboard/lib/date-range.ts.
+// custom ranges are capped at an inclusive 90-day span (Rule 20.8); the
+// dashboard's date-range helpers re-export this constant.
 
 export const MAX_RANGE_DAYS = 90;
 
