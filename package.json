@@ -31,6 +31,8 @@
     ]
   },
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1155.0",
+    "@aws-sdk/lib-dynamodb": "^3.1155.0",
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
     "@eslint/js": "^9.39.4",
@@ -43,6 +45,7 @@
     "lint-staged": "^17.0.7",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
+    "tsx": "^4.23.15",
     "typescript": "^6",
     "typescript-eslint": "^8.60.1",
     "vitest": "^4.1.8"

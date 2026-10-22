@@ -3,8 +3,10 @@ packages:
   - "packages/*"
 
 # Native build scripts explicitly allowed:
+#   esbuild       — native binary used by tsx (scripts/*.ts)
 #   sharp         — Next.js image optimization binary
 #   unrs-resolver — native resolver used by eslint-plugin-import-x
 allowBuilds:
+  esbuild: true
   sharp: true
   unrs-resolver: true
