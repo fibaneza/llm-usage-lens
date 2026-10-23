@@ -75,8 +75,6 @@ export default defineConfig({
             AWS_REGION: "us-east-1",
             DYNAMODB_TABLE_NAME: "bedrock-usage-test",
             SKIP_ENV_VALIDATION: "true",
-            AWS_ACCESS_KEY_ID: "local",
-            AWS_SECRET_ACCESS_KEY: "local",
           },
         },
       },

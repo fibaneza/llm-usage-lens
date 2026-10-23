@@ -11,11 +11,13 @@ import {
 } from "@bedrock-usage/shared";
 
 import type { SeedData } from "./seed-data";
+import { runBounded } from "./run-bounded";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Entity Map" (key layout).
 const BATCH_SIZE = 25;
 const MAX_ATTEMPTS = 8;
 const BASE_BACKOFF_MS = 50;
+const CONCURRENCY = 8;
 
 type Item = Record<string, unknown>;
 type WriteRequests = NonNullable<
@@ -71,9 +73,13 @@ export async function writeSeed(
     items.push({ ...data.syncStatus, PK: SYSTEM_PK, SK: SYNC_SK });
   }
 
+  const batches: Item[][] = [];
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
-    await writeBatch(doc, tableName, items.slice(i, i + BATCH_SIZE));
+    batches.push(items.slice(i, i + BATCH_SIZE));
   }
+  await runBounded(batches, CONCURRENCY, (batch) =>
+    writeBatch(doc, tableName, batch),
+  );
 
   return { accounts: data.accounts.length, rollups: data.rollups.length };
 }

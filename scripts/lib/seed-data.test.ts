@@ -191,6 +191,35 @@ describe("buildSeedData — large profile", () => {
     }
   });
 
+  // Source: docs/specs/2026-05-15-implementation-phases.md — Phase 3.2
+  // ("large" profile: 20 users per team, 15 services).
+  it("has 20 distinct users per team across the rollups", () => {
+    const usersByTeam = new Map<string, Set<string>>();
+    for (const r of rollupsOf(seed)) {
+      const users = usersByTeam.get(r.teamId) ?? new Set<string>();
+      for (const usage of Object.values(r.models)) {
+        Object.keys(usage.byUser).forEach((u) => users.add(u));
+      }
+      usersByTeam.set(r.teamId, users);
+    }
+    expect(usersByTeam.size).toBe(
+      new Set(seed.accounts.map((a) => a.teamId)).size,
+    );
+    for (const [, users] of usersByTeam) {
+      expect(users.size).toBe(20);
+    }
+  });
+
+  it("has exactly 15 distinct named services overall (excluding _untagged)", () => {
+    const services = new Set<string>();
+    for (const r of rollupsOf(seed)) {
+      for (const usage of Object.values(r.models)) {
+        Object.keys(usage.byService).forEach((s) => services.add(s));
+      }
+    }
+    expect([...services].filter((s) => s !== "_untagged")).toHaveLength(15);
+  });
+
   it("generates schema-valid rollups", () => {
     expect(seed.rollups).toHaveLength(50 * 90);
     for (const r of seed.rollups) {

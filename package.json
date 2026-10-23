@@ -35,6 +35,10 @@
     "packages/**/*.{ts,tsx}": [
       "eslint --fix",
       "prettier --write"
+    ],
+    "scripts/**/*.ts": [
+      "eslint --fix",
+      "prettier --write"
     ]
   },
   "devDependencies": {

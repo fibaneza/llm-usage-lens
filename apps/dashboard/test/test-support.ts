@@ -10,8 +10,9 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import type { AccountMeta, DailyRollup } from "@bedrock-usage/shared";
 
-import { createTable } from "../../../../scripts/create-table";
-import { writeSeed } from "../../../../scripts/lib/seed-writer";
+import { createTable } from "../../../scripts/create-table";
+import type { SeedData } from "../../../scripts/lib/seed-data";
+import { writeSeed } from "../../../scripts/lib/seed-writer";
 
 export const TEST_TABLE_NAME =
   process.env.DYNAMODB_TABLE_NAME ?? "bedrock-usage-test";
@@ -83,7 +84,7 @@ export async function loadFixtures(data: {
     accounts: data.accounts ?? [],
     rollups: data.rollups ?? [],
     syncStatus: null,
-  } as Parameters<typeof writeSeed>[2]);
+  } satisfies SeedData);
 }
 
 export async function putRaw(item: Record<string, unknown>): Promise<void> {

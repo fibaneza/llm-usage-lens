@@ -10,7 +10,7 @@ import {
   makeRollup,
   putRaw,
   stripDate,
-} from "./test-support";
+} from "@/test/test-support";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Entity: DailyRollup" access
 // patterns + "Query Pagination"; Rules 20.1 (UTC days), 20.6, 60.17.

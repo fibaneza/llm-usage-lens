@@ -185,13 +185,14 @@ done
 
 [ -z "$RANGES" ] && exit 0
 
-# Dashboard: full type-check + test suite.
+# Dashboard: full type-check + unit tests (integration tests need DynamoDB
+# Local and run in CI and via `pnpm test`).
 # shellcheck disable=SC2086
 if git diff --name-only $RANGES 2>/dev/null | grep -qE "^apps/|^packages/"; then
   echo "→ dashboard: typecheck"
   pnpm exec tsc --noEmit
   echo "→ dashboard: tests"
-  pnpm exec vitest run
+  pnpm exec vitest run --project unit
 fi
 
 # Simulator: typecheck + tests (mirrors tools/bedrock-simulator/.hooks/pre-push).
