@@ -52,8 +52,8 @@ docker run -d -p 8000:8000 amazon/dynamodb-local:2.5.4 -jar DynamoDBLocal.jar -i
 | Command | Runs |
 |---|---|
 | `pnpm test:unit` | Unit and component tests (no DynamoDB needed) |
-| `pnpm test:integration` | Data-access tests against DynamoDB Local on `:8000` |
-| `pnpm test` | Both Vitest projects (needs DynamoDB Local, created and seeded) |
+| `pnpm test:integration` | Data-access tests against DynamoDB Local on `:8000` (must be running; tests create and clean up their own table) |
+| `pnpm test` | Both Vitest projects (needs DynamoDB Local running; tests create and clean up their own table) |
 | `pnpm test:e2e` | Headless Playwright E2E |
 
 The pre-push hook runs the unit project only; CI runs everything against a DynamoDB Local service.

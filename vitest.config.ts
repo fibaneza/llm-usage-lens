@@ -68,7 +68,7 @@ export default defineConfig({
           ],
           exclude: ["**/node_modules/**", "**/.next/**", "tools/**"],
           fileParallelism: false,
-          // Dummy values for DynamoDB Local only — not real AWS credentials.
+          // DynamoDB Local settings; no credentials are set here.
           env: {
             DYNAMODB_ENDPOINT:
               process.env.DYNAMODB_ENDPOINT ?? "http://localhost:8000",

@@ -1,16 +1,25 @@
-// Runs `task` over `inputs` with at most `limit` in flight; rejects on the
-// first failure.
+// Runs `task` over `inputs` with at most `limit` in flight. Fail-fast: once any
+// task rejects, no worker takes another input, and the original error rejects.
 export async function runBounded<T>(
   inputs: readonly T[],
   limit: number,
   task: (input: T) => Promise<void>,
 ): Promise<void> {
-  let next = 0;
+  if (limit <= 0) {
+    throw new RangeError(`limit must be positive, received ${limit}`);
+  }
+  const iterator = inputs.values();
+  let failed = false;
   const worker = async (): Promise<void> => {
-    while (next < inputs.length) {
-      const input = inputs[next];
-      next += 1;
-      await task(input as T);
+    while (!failed) {
+      const step = iterator.next();
+      if (step.done) return;
+      try {
+        await task(step.value);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
     }
   };
   await Promise.all(

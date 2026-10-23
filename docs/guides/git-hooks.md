@@ -167,9 +167,6 @@ Allowed types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
 Runs once per push. Heavier checks that are too slow for pre-commit.
 
 ```sh
-#!/usr/bin/env sh
-. "$(dirname "$0")/_/husky.sh"
-
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 ZERO=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
 RANGES=""
@@ -185,14 +182,15 @@ done
 
 [ -z "$RANGES" ] && exit 0
 
-# Dashboard: full type-check + unit tests (integration tests need DynamoDB
-# Local and run in CI and via `pnpm test`).
+# Dashboard workspace: type-check + test suite when apps/, packages/ or scripts/ change.
 # shellcheck disable=SC2086
-if git diff --name-only $RANGES 2>/dev/null | grep -qE "^apps/|^packages/"; then
+if git diff --name-only $RANGES 2>/dev/null | grep -qE "^apps/|^packages/|^scripts/|^tsconfig.scripts.json$"; then
   echo "→ dashboard: typecheck"
-  pnpm exec tsc --noEmit
-  echo "→ dashboard: tests"
-  pnpm exec vitest run --project unit
+  (cd "$REPO_ROOT" && pnpm typecheck)
+  # Unit project only: integration tests need DynamoDB Local, so they run in CI
+  # and via `pnpm test`.
+  echo "→ dashboard: unit tests (integration tests run in CI and via pnpm test)"
+  (cd "$REPO_ROOT" && pnpm exec vitest run --project unit --passWithNoTests)
 fi
 
 # Simulator: typecheck + tests (mirrors tools/bedrock-simulator/.hooks/pre-push).
@@ -205,11 +203,15 @@ if git diff --name-only $RANGES 2>/dev/null | grep -q "^tools/bedrock-simulator/
 fi
 
 # Secret scan — commits being pushed only, not full history.
-echo "→ secret scan (gitleaks)"
-# shellcheck disable=SC2086
-for range in $RANGES; do
-  (cd "$REPO_ROOT" && gitleaks git --no-banner --log-opts="$range")
-done
+echo "→ secret scan"
+if command -v gitleaks >/dev/null 2>&1; then
+  # shellcheck disable=SC2086
+  for range in $RANGES; do
+    (cd "$REPO_ROOT" && gitleaks git --no-banner --log-opts="$range")
+  done
+else
+  echo "  gitleaks not installed; skipping (CI enforces). Install for local coverage."
+fi
 
 echo "→ all checks passed"
 ```
