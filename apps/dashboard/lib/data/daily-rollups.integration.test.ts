@@ -308,3 +308,60 @@ describe("dated read type", () => {
     await expect(getRollupsByDate("2026-10-22")).rejects.toThrow();
   });
 });
+
+// Source: docs/specs/2026-05-15-data-model.md — "`date` attribute": a stored
+// `date` that disagrees with the day in SK fails the read; it never silently
+// picks one of the two days (Rule 60.17).
+describe("stored date vs SK day", () => {
+  it("getDailyRollups rejects when a stored date disagrees with the SK day", async () => {
+    await putRaw({
+      ...makeRollup(acct, "2026-10-11", { cost: 11 }),
+      PK: `ACCT#${acct.accountId}`,
+      SK: "DAILY#2026-10-10",
+      gsi1pk: "DATE#2026-10-10",
+      gsi1sk: `ACCT#${acct.accountId}`,
+    });
+    await expect(
+      getDailyRollups(acct.accountId, "2026-10-09", "2026-10-12"),
+    ).rejects.toThrow();
+  });
+
+  it("getRollupsByDate rejects when a stored date disagrees with the SK day", async () => {
+    await putRaw({
+      ...makeRollup(acct, "2026-10-11", { cost: 11 }),
+      PK: `ACCT#${acct.accountId}`,
+      SK: "DAILY#2026-10-10",
+      gsi1pk: "DATE#2026-10-10",
+      gsi1sk: `ACCT#${acct.accountId}`,
+    });
+    await expect(getRollupsByDate("2026-10-10")).rejects.toThrow();
+  });
+
+  it("getDailyRollups returns normally when the stored date equals the SK day", async () => {
+    await putRaw({
+      ...makeRollup(acct, "2026-10-10", { cost: 10 }),
+      PK: `ACCT#${acct.accountId}`,
+      SK: "DAILY#2026-10-10",
+      gsi1pk: "DATE#2026-10-10",
+      gsi1sk: `ACCT#${acct.accountId}`,
+    });
+    const result = await getDailyRollups(
+      acct.accountId,
+      "2026-10-09",
+      "2026-10-12",
+    );
+    expect(result.map((r) => r.date)).toEqual(["2026-10-10"]);
+  });
+
+  it("getRollupsByDate returns normally when the stored date equals the SK day", async () => {
+    await putRaw({
+      ...makeRollup(acct, "2026-10-10", { cost: 10 }),
+      PK: `ACCT#${acct.accountId}`,
+      SK: "DAILY#2026-10-10",
+      gsi1pk: "DATE#2026-10-10",
+      gsi1sk: `ACCT#${acct.accountId}`,
+    });
+    const result = await getRollupsByDate("2026-10-10");
+    expect(result.map((r) => r.date)).toEqual(["2026-10-10"]);
+  });
+});

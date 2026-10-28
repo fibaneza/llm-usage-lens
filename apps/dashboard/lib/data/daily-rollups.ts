@@ -21,12 +21,23 @@ const DAILY_SK_PREFIX = dailySk("");
 
 // Items stored before `date` existed carry the day only in SK, so derive it
 // there (data-model spec, "`date` attribute" — no backfill required). A stored
-// `date` wins; key attributes are stripped by the schema's object parsing.
+// `date` that disagrees with the SK day fails the read rather than silently
+// picking one (Rule 60.17); key attributes are stripped by the schema's object
+// parsing.
 function parseRollup(item: Record<string, unknown>): DatedDailyRollup {
   const sk = typeof item.SK === "string" ? item.SK : "";
   const derived = sk.startsWith(DAILY_SK_PREFIX)
     ? sk.slice(DAILY_SK_PREFIX.length)
     : undefined;
+  if (
+    derived !== undefined &&
+    typeof item.date === "string" &&
+    item.date !== derived
+  ) {
+    throw new Error(
+      `DailyRollup stored date ${item.date} disagrees with SK day ${derived}`,
+    );
+  }
   return DatedDailyRollupSchema.parse({ date: derived, ...item });
 }
 
