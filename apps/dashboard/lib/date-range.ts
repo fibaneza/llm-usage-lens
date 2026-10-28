@@ -6,6 +6,8 @@
 // helpers) so a non-UTC host can't shift a day boundary and, e.g., let a custom
 // range exceed the 90-day cap.
 
+import { MAX_RANGE_DAYS } from "@bedrock-usage/shared";
+
 export const DATE_RANGE_PRESETS = ["7d", "30d", "90d", "custom"] as const;
 
 export type DateRangePreset = (typeof DATE_RANGE_PRESETS)[number];
@@ -28,8 +30,8 @@ const PRESET_DAYS: Record<Exclude<DateRangePreset, "custom">, number> = {
 
 export const DEFAULT_PRESET: Exclude<DateRangePreset, "custom"> = "30d";
 
-// Maximum inclusive span for a custom range (Rule 20.8).
-export const MAX_RANGE_DAYS = 90;
+// Single source of the 90-day cap (Rule 20.8) lives in the shared query schema.
+export { MAX_RANGE_DAYS };
 
 // Today as a UTC calendar day with the clock zeroed, so the same instant maps to
 // the same `yyyy-MM-dd` regardless of the host timezone.
@@ -65,12 +67,49 @@ export function formatDay(day: Date): string {
   return `${year}-${month}-${date}`;
 }
 
-export function parseDay(value: string): Date {
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+// Strict `yyyy-MM-dd` parse to a UTC-midnight Date. Returns undefined for
+// anything malformed or non-existent (e.g. 2026-02-30), since callers feed it
+// untrusted URL values.
+export function parseDay(value: string): Date | undefined {
+  if (!DAY_PATTERN.test(value)) return undefined;
   const [year, month, day] = value.split("-").map(Number);
   if (year === undefined || month === undefined || day === undefined) {
+    return undefined;
+  }
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(parsed.getTime()) || formatDay(parsed) !== value) {
+    return undefined;
+  }
+  return parsed;
+}
+
+// For values already validated (a `DateRange` produced by this module).
+export function requireDay(value: string): Date {
+  const parsed = parseDay(value);
+  if (parsed === undefined) {
     throw new Error(`Invalid yyyy-MM-dd date: ${value}`);
   }
-  return new Date(Date.UTC(year, month - 1, day));
+  return parsed;
+}
+
+// Resolve untrusted URL endpoints to a safe range: unparseable input falls back
+// to the default preset; otherwise order is normalised and the 90-day cap applied.
+export function resolveUrlRange(
+  dateFrom: string | null | undefined,
+  dateTo: string | null | undefined,
+  now: Date = new Date(),
+): DateRange {
+  if (
+    !dateFrom ||
+    !dateTo ||
+    parseDay(dateFrom) === undefined ||
+    parseDay(dateTo) === undefined
+  ) {
+    return defaultDateRange(now);
+  }
+  return clampCustomRange({ dateFrom, dateTo });
 }
 
 // Resolve a non-custom preset to a concrete `{ dateFrom, dateTo }`, with `dateTo`
@@ -110,14 +149,14 @@ export function presetForRange(
 
 // Inclusive day count between the two endpoints (1 for a single day).
 export function inclusiveSpanDays(range: DateRange): number {
-  return diffUtcDays(parseDay(range.dateFrom), parseDay(range.dateTo)) + 1;
+  return diffUtcDays(requireDay(range.dateFrom), requireDay(range.dateTo)) + 1;
 }
 
 // Clamp a custom range to the 90-day max span and normalize endpoint order.
 // If the span exceeds the cap, `dateFrom` is pulled forward toward `dateTo`.
 export function clampCustomRange(range: DateRange): DateRange {
-  let from = parseDay(range.dateFrom);
-  let to = parseDay(range.dateTo);
+  let from = requireDay(range.dateFrom);
+  let to = requireDay(range.dateTo);
 
   if (from > to) {
     [from, to] = [to, from];

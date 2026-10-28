@@ -15,11 +15,11 @@ import {
 import {
   clampCustomRange,
   type DateRange,
-  defaultDateRange,
   formatDay,
-  parseDay,
   presetForRange,
+  requireDay,
   resolvePreset,
+  resolveUrlRange,
 } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 import { cn } from "@/lib/utils";
@@ -33,8 +33,8 @@ const PRESET_PILLS = [
 ] as const;
 
 function formatRangeLabel(range: DateRange): string {
-  const from = format(parseDay(range.dateFrom), "MMM d");
-  const to = format(parseDay(range.dateTo), "MMM d");
+  const from = format(requireDay(range.dateFrom), "MMM d");
+  const to = format(requireDay(range.dateTo), "MMM d");
   return `${from} – ${to}`;
 }
 
@@ -54,14 +54,12 @@ export function DateRangePicker() {
   const [params, setParams] = useQueryStates(dateRangeSearchParams);
   const [calendarOpen, setCalendarOpen] = useState(false);
 
-  // Default to the last 30 days when the URL carries no range (Rule 20.8 cap is
-  // applied on every custom selection below).
-  const range: DateRange = useMemo(() => {
-    if (params.dateFrom && params.dateTo) {
-      return { dateFrom: params.dateFrom, dateTo: params.dateTo };
-    }
-    return defaultDateRange();
-  }, [params.dateFrom, params.dateTo]);
+  // URL values are untrusted: a missing or malformed range falls back to the
+  // last 30 days; a valid one is order-normalised and capped at 90 days (Rule 20.8).
+  const range: DateRange = useMemo(
+    () => resolveUrlRange(params.dateFrom, params.dateTo),
+    [params.dateFrom, params.dateTo],
+  );
 
   const activePreset = presetForRange(range);
 
@@ -85,8 +83,8 @@ export function DateRangePicker() {
   }
 
   const calendarSelected: CalendarRange = {
-    from: parseDay(range.dateFrom),
-    to: parseDay(range.dateTo),
+    from: requireDay(range.dateFrom),
+    to: requireDay(range.dateTo),
   };
 
   const customActive = activePreset === "custom";
@@ -135,7 +133,7 @@ export function DateRangePicker() {
             mode="range"
             selected={calendarSelected}
             onSelect={onCalendarSelect}
-            defaultMonth={parseDay(range.dateTo)}
+            defaultMonth={requireDay(range.dateTo)}
             numberOfMonths={2}
           />
         </PopoverContent>
