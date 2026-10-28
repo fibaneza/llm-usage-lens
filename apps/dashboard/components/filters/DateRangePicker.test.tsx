@@ -122,4 +122,75 @@ describe("DateRangePicker", () => {
       }
     });
   });
+  // User defect: the custom range label was unreadable in the header pill, and
+  // a new start date could not be chosen (design-system — Date Filtering).
+  describe("custom range label", () => {
+    it("shows the full formatted range in a label that cannot clip or wrap", () => {
+      renderWithUrl({ dateFrom: "2026-01-10", dateTo: "2026-01-20" });
+      const trigger = screen.getByRole("button", {
+        name: "Custom date range: Jan 10 – Jan 20",
+      });
+      const label = screen.getByText("Jan 10 – Jan 20");
+      expect(trigger).toContainElement(label);
+      for (const el of [trigger, label]) {
+        expect(el.className).not.toMatch(
+          /(^|\s)(truncate|overflow-hidden|text-ellipsis)(\s|$)/,
+        );
+        expect(el.className).not.toMatch(/(^|\s)(w|max-w)-(\d|\[)/);
+      }
+      // A label allowed to wrap inside the fixed-height pill is unreadable.
+      expect(`${trigger.className} ${label.className}`).toMatch(
+        /whitespace-nowrap/,
+      );
+    });
+  });
+
+  describe("choosing a custom range", () => {
+    async function pickRange(startDay: number, endDay: number) {
+      const user = userEvent.setup();
+      const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+      renderWithUrl(
+        { dateFrom: "2026-01-10", dateTo: "2026-01-20" },
+        onUrlUpdate,
+      );
+      await user.click(
+        screen.getByRole("button", { name: /custom date range/i }),
+      );
+      for (const day of [startDay, endDay]) {
+        const [cell] = await screen.findAllByRole("button", {
+          name: new RegExp(`January ${day}(st|nd|rd|th), 2026`),
+        });
+        if (!cell) throw new Error(`day ${day} not rendered`);
+        await user.click(cell);
+      }
+      const last = onUrlUpdate.mock.calls.at(-1);
+      if (!last) throw new Error("onUrlUpdate was not called");
+      const { searchParams } = last[0];
+      return {
+        dateFrom: searchParams.get("dateFrom"),
+        dateTo: searchParams.get("dateTo"),
+      };
+    }
+
+    it("takes a start date after the current end, then the end date", async () => {
+      expect(await pickRange(25, 28)).toEqual({
+        dateFrom: "2026-01-25",
+        dateTo: "2026-01-28",
+      });
+    });
+
+    it("takes a start date inside the current range, then the end date", async () => {
+      expect(await pickRange(12, 15)).toEqual({
+        dateFrom: "2026-01-12",
+        dateTo: "2026-01-15",
+      });
+    });
+
+    it("takes a start date earlier than the current range, then the end date", async () => {
+      expect(await pickRange(2, 5)).toEqual({
+        dateFrom: "2026-01-02",
+        dateTo: "2026-01-05",
+      });
+    });
+  });
 });

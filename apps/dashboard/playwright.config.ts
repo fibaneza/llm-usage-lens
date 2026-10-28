@@ -47,6 +47,9 @@ export default defineConfig({
       // Auth.js proxy and authorized() callback run unchanged (no bypass).
       AUTH_SECRET: E2E_AUTH_SECRET,
       NEXT_PUBLIC_APP_URL: E2E_BASE_URL,
+      // SKIP_ENV_VALIDATION bypasses the schema default, so server and client
+      // would render different sidebar text and fail hydration.
+      NEXT_PUBLIC_ORG_NAME: "Organization",
       DYNAMODB_TABLE_NAME: "bedrock-usage",
       DYNAMODB_ENDPOINT: "http://localhost:8000",
     },

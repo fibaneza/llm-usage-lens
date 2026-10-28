@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
   // not a build artifact). See docs/specs/2026-05-15-system-architecture.md —
   // "Shared code layout".
   transpilePackages: ["@bedrock-usage/shared"],
+  // The headless Playwright harness loads the dev server via 127.0.0.1; without
+  // this Next blocks the dev resources and the page never hydrates (Rule 70.11).
+  allowedDevOrigins: ["127.0.0.1"],
 };
 
 export default nextConfig;

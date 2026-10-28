@@ -15,9 +15,7 @@ import {
 import {
   clampCustomRange,
   type DateRange,
-  formatDay,
   presetForRange,
-  requireDay,
   resolvePreset,
   resolveUrlRange,
 } from "@/lib/date-range";
@@ -32,9 +30,21 @@ const PRESET_PILLS = [
   { preset: "90d", label: "90D", aria: "Last 90 days" },
 ] as const;
 
+// URL days are UTC calendar days (Rule 20.1) but react-day-picker and date-fns
+// format in local days; convert at this boundary so a non-UTC host never shifts
+// a day.
+function toLocalDay(day: string): Date {
+  const [year = 0, month = 1, date = 1] = day.split("-").map(Number);
+  return new Date(year, month - 1, date);
+}
+
+function fromLocalDay(day: Date): string {
+  return format(day, "yyyy-MM-dd");
+}
+
 function formatRangeLabel(range: DateRange): string {
-  const from = format(requireDay(range.dateFrom), "MMM d");
-  const to = format(requireDay(range.dateTo), "MMM d");
+  const from = format(toLocalDay(range.dateFrom), "MMM d");
+  const to = format(toLocalDay(range.dateTo), "MMM d");
   return `${from} – ${to}`;
 }
 
@@ -53,6 +63,8 @@ function pillClassName(active: boolean): string {
 export function DateRangePicker() {
   const [params, setParams] = useQueryStates(dateRangeSearchParams);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  // First click of a new range; the URL is written only once the end is chosen.
+  const [pendingStart, setPendingStart] = useState<Date | undefined>();
 
   // URL values are untrusted: a missing or malformed range falls back to the
   // last 30 days; a valid one is order-normalised and capped at 90 days (Rule 20.8).
@@ -71,28 +83,35 @@ export function DateRangePicker() {
     applyRange(resolvePreset(preset));
   }
 
-  function onCalendarSelect(selected: CalendarRange | undefined) {
-    if (!selected?.from) return;
-    const to = selected.to ?? selected.from;
+  function onCalendarDayClick(day: Date) {
+    if (!pendingStart) {
+      setPendingStart(day);
+      return;
+    }
     applyRange(
       clampCustomRange({
-        dateFrom: formatDay(selected.from),
-        dateTo: formatDay(to),
+        dateFrom: fromLocalDay(pendingStart),
+        dateTo: fromLocalDay(day),
       }),
     );
+    setPendingStart(undefined);
   }
 
-  const calendarSelected: CalendarRange = {
-    from: requireDay(range.dateFrom),
-    to: requireDay(range.dateTo),
-  };
+  function onCalendarOpenChange(open: boolean) {
+    setCalendarOpen(open);
+    setPendingStart(undefined);
+  }
+
+  const calendarSelected: CalendarRange = pendingStart
+    ? { from: pendingStart, to: undefined }
+    : { from: toLocalDay(range.dateFrom), to: toLocalDay(range.dateTo) };
 
   const customActive = activePreset === "custom";
 
   return (
     // Segmented control: the preset pills and the custom-range trigger share one
     // bordered track (design reference — TopBar date toggle).
-    <div className="border-border bg-card inline-flex items-center gap-1 rounded-lg border p-1 shadow-xs">
+    <div className="border-border bg-card inline-flex shrink-0 items-center gap-1 rounded-lg border p-1 shadow-xs">
       {PRESET_PILLS.map(({ preset, label, aria }) => (
         <button
           key={preset}
@@ -106,7 +125,7 @@ export function DateRangePicker() {
         </button>
       ))}
 
-      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+      <Popover open={calendarOpen} onOpenChange={onCalendarOpenChange}>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -118,11 +137,13 @@ export function DateRangePicker() {
             aria-pressed={customActive}
             className={cn(
               pillClassName(customActive),
-              "flex items-center gap-1.5",
+              "flex shrink-0 items-center gap-1.5 whitespace-nowrap",
             )}
           >
-            <CalendarIcon className="size-3.5" />
-            <span>{customActive ? formatRangeLabel(range) : "Custom"}</span>
+            <CalendarIcon className="size-3.5 shrink-0" />
+            <span className="whitespace-nowrap">
+              {customActive ? formatRangeLabel(range) : "Custom"}
+            </span>
           </button>
         </PopoverTrigger>
         <PopoverContent
@@ -132,8 +153,8 @@ export function DateRangePicker() {
           <Calendar
             mode="range"
             selected={calendarSelected}
-            onSelect={onCalendarSelect}
-            defaultMonth={requireDay(range.dateTo)}
+            onDayClick={onCalendarDayClick}
+            defaultMonth={toLocalDay(range.dateTo)}
             numberOfMonths={2}
           />
         </PopoverContent>
