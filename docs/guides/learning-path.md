@@ -159,7 +159,7 @@ estimate and always carries `costEstimated: true`. Yesterday's rollup is
 Six phases, strict order. Phases 2, 3, and 4 expand into sub-phases.
 
 ```
-1 Foundation → 2 Layout Shell (2.1 → 2.3) → 3 Data Layer (3.1 → 3.3)
+1 Foundation → 2 Layout Shell (2.1 → 2.3) → 3 Data Layer (3.1 → 3.3, + 3.1a)
   → 4 Pages (4.1 → 4.9, in order)
     → 5 Polish & Accessibility
       → 6 AWS Lambda Collector
@@ -273,7 +273,9 @@ collector (Phase 6) imports the same package, so the two never drift.
 
 Phase 3 is split into three sub-phases along the data-layer dependency chain —
 schemas → database + access → routes + client — one sub-phase per PR
-(Rule 30.4). Build them in order: **3.1 → 3.2 → 3.3**.
+(Rule 30.4). Build them in order: **3.1 → 3.2 → 3.3**. A **3.1a** follow-up
+(non-model cost schema) amends the merged 3.1 schemas and lands before or
+alongside 3.2 ([implementation-phases.md → Phase 3.1a](../specs/2026-05-15-implementation-phases.md)).
 
 ---
 
@@ -704,7 +706,7 @@ dashboard (Phases 1–5) is finished first; Phase 6 is the last build.
 
 - [ ] Create the Lambda project in `apps/collector` (Node.js 22.x, TypeScript), depending on `@bedrock-usage/shared`
 - [ ] Read the account registry from DynamoDB (all active `AccountMeta` items)
-- [ ] Query Cost Explorer (assume `CostExplorerReadRole`): `GetCostAndUsage` for yesterday + today, filtered to `AmazonBedrock`, grouped by `LINKED_ACCOUNT` and `USAGE_TYPE`
+- [ ] Query Cost Explorer (assume `CostExplorerReadRole`): `GetCostAndUsage` for yesterday + today, filtered to `AmazonBedrock` (placeholder until the Phase 6 `SERVICE` ground-truth check), grouped by `LINKED_ACCOUNT` and `USAGE_TYPE`
 - [ ] Query CloudTrail Lake locally: `StartQuery` then poll `GetQueryResults`; Bedrock invocations grouped by account, SSO username, inference profile, model
 - [ ] Query CloudWatch via cross-account observability: `GetMetricData` per `ModelId` (InputTokenCount, OutputTokenCount, Invocations, InvocationLatency)
 - [ ] Normalize raw Bedrock model IDs to canonical keys via `@bedrock-usage/shared`
@@ -749,7 +751,7 @@ Phase 1 ─▶ Phase 2 ─▶ Phase 3 ─┬─▶ Phase 4.1 ─▶ 4.2 ─▶ 4
 |---|---|---|
 | 1 Foundation | — | Starting point |
 | 2 Layout Shell | 1 | — |
-| 3.1 – 3.3 Data Layer | 1, 2, then each prior sub-phase | Strict order (3.1 → 3.3), one sub-phase per PR; 3.1 schemas in `packages/shared` are reused by Phase 6 |
+| 3.1 – 3.3 Data Layer | 1, 2, then each prior sub-phase | Strict order (3.1 → 3.3), with the 3.1a follow-up before or alongside 3.2; one sub-phase per PR; 3.1 schemas in `packages/shared` are reused by Phase 6 |
 | 4.1 – 4.9 Pages | 3, then each prior sub-phase | Strict order; one sub-phase per PR |
 | 5 Polish | 4 (all sub-phases) | — |
 | 6 Collector | 5 in practice; 3 for shared schemas | Last build; brings real data |

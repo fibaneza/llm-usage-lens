@@ -52,7 +52,7 @@ The Lambda collector merges three AWS data sources per run:
 
 | Source | What it provides | Cross-account method |
 |--------|-----------------|----------------------|
-| **AWS Cost Explorer** | Cost ($) per account and per model — exact. `GetCostAndUsage` grouped by `LINKED_ACCOUNT` and `USAGE_TYPE` (Bedrock usage types encode the model). | Collector assumes a single read-only role in the management account. |
+| **AWS Cost Explorer** | Cost ($) per account, per model, and per non-model charge category — exact. `GetCostAndUsage` grouped by `LINKED_ACCOUNT` and `USAGE_TYPE`. Each usage type is classified as model token usage, a non-model charge category, or unclassified (see *Cost Explorer `USAGE_TYPE` classification*). Not every usage type encodes a model. | Collector assumes a single read-only role in the management account. |
 | **Amazon CloudWatch** | Bedrock metrics: InputTokenCount, OutputTokenCount, Invocations, InvocationLatency per ModelId. | CloudWatch cross-account observability — the monitoring account queries all linked source accounts directly. **No role assumption.** |
 | **CloudTrail Lake** | Per-user and per-service Bedrock API calls — SSO username from `userIdentity`, service from the application inference profile in the request, grouped by model. | Org-wide event data store, queried locally in the observability account (CloudTrail delegated administrator). |
 
@@ -128,7 +128,8 @@ AWS Organization
 │           │     └── GetCostAndUsage
 │           │           ├── Filter: Service = AmazonBedrock
 │           │           └── GroupBy: [LINKED_ACCOUNT, USAGE_TYPE]
-│           │                 → per-account + per-model cost (exact)
+│           │                 → classify usage type → per-account + per-model
+│           │                   cost + non-model charges (exact)
 │           │
 │           ├── CloudTrail Lake (local — org event data store)
 │           │     └── StartQuery → poll GetQueryResults (async SQL)
@@ -159,11 +160,12 @@ Next.js App (local dev / future deployment)
 
 Each hourly run performs these steps:
 
-1. Read the account registry from DynamoDB (all `AccountMeta` items with `active: true`). Only registered accounts receive rollups. Member accounts with Bedrock usage but **no** registry entry are ignored until an admin adds them in Settings. Registry accounts with no data for a day are **skipped** (no empty rollup item).
+1. Read the account registry from DynamoDB (all `AccountMeta` items with `active: true`). Only registered accounts receive rollups. Member accounts with Bedrock usage but **no** registry entry are ignored until an admin adds them in Settings. Registry accounts with no data for a day are **skipped** (no empty rollup item). "Data" includes any Cost Explorer Bedrock cost: an account whose only charge that day is idle Provisioned Throughput or model storage still gets a rollup (Data Model spec — *Non-Model Charges*, Rule 5).
 2. Assume `CostExplorerReadRole` in the management account and query **Cost Explorer**:
    - `GetCostAndUsage` for yesterday (finalized) and today (partial).
-   - Filtered to `AmazonBedrock` service.
-   - Grouped by `LINKED_ACCOUNT` and `USAGE_TYPE`. Usage types are parsed to extract the model — this yields exact per-account and per-model cost.
+   - Filtered to the Bedrock service.
+   - Grouped by `LINKED_ACCOUNT` and `USAGE_TYPE`, requesting `UnblendedCost` and `UsageQuantity`.
+   - **Classify** each usage type as model token usage (→ canonical model key), a non-model charge category (→ `nonModel[<category>]`), or unknown (→ `nonModel.unclassified`). See *Cost Explorer `USAGE_TYPE` classification*. This yields exact per-account, per-model, and per-category cost.
 3. Query **CloudTrail Lake** locally (org-wide event data store):
    - `StartQuery` (SQL), then poll `GetQueryResults` until the query completes (async).
    - Bedrock `InvokeModel`/`InvokeModelWithResponseStream` calls grouped by account, SSO username, application inference profile (→ service), and model ID.
@@ -172,7 +174,7 @@ Each hourly run performs these steps:
    - `GetMetricData` with account-scoped queries covering all linked source accounts — issued from the monitoring account, no role assumption.
    - Per `ModelId` dimension: InputTokenCount, OutputTokenCount, Invocations, InvocationLatency.
    - Time range: yesterday + today.
-5. Normalize raw Bedrock model IDs to canonical keys (see Data Model spec — Model ID Normalization), then merge all three data sources per account per day (see **Three-source merge rules** below). Per-user and per-service costs are proportional estimates.
+5. Normalize raw Bedrock model IDs to canonical keys (see Data Model spec — Model ID Normalization), then merge all three data sources per account per day (see **Three-source merge rules** below). Per-user and per-service costs are proportional estimates of **model** cost only. `nonModel` entries pass through from Cost Explorer unsplit, and the rollup `cost` is set to Σ model cost + Σ non-model cost. Compute that sum from the **already-stored entry values** (each rounded to 6 decimals), never from a separately rounded total, so the `|Δ| ≤ 1e-6` invariant holds (Data Model spec — *Schema decisions*). Request Cost Explorer **usage records only**: Cost Explorer can return negative amounts (credits, refunds), and the v1 schema is nonnegative. Exact `RECORD_TYPE` handling is unverified until Phase 6. `nonModel` entries carry `costEstimated` as a boolean in the schema, `false` by convention in v1.
 6. Write/overwrite DailyRollup items to DynamoDB using `BatchWriteItem` (25 items/batch) — yesterday = finalized, today = estimated (see Today's cost fallback below when Cost Explorer returns zero for today).
 7. Update the SyncStatus item (`lastRunAt`, `nextScheduledAt` = next hour boundary, status, counts, errors).
 
@@ -304,23 +306,61 @@ Two IaC artifacts, both deployed through the CloudFormation control plane to dif
 5. **CloudTrail Lake query cost**: CloudTrail Lake charges per query scan. At high Bedrock call volumes, this cost should be monitored.
 6. **Cost Explorer API cost**: Each `GetCostAndUsage` call costs $0.01. Cost Explorer is queried once per day per run (yesterday + today) — 2 calls per hourly run, roughly $1.50/month regardless of the number of accounts.
 7. **Lambda overrun**: With reserved concurrency of 1 and an hourly trigger, a run exceeding 60 minutes would collide with the next invocation. The 5-minute timeout makes this effectively impossible, but EventBridge invocation failures are surfaced via a CloudWatch alarm.
+8. **Bedrock service charges only**: Charges for resources that Bedrock features run on but that bill under other Cost Explorer services are not collected in v1. Examples are OpenSearch Serverless OCUs behind a Knowledge Base vector store, S3 data sources, and Lambda action groups. The dashboard labels totals "Bedrock service charges only" (see *Adjacent services*).
+9. **Non-model cost is not attributed to users or services**: `nonModel` charges appear at account, team, and department level only (Data Model spec — *Non-model cost is account-level only*).
 
 ---
 
 ## Collector Appendices
 
-### Cost Explorer `USAGE_TYPE` → model (parsing)
+### Cost Explorer `USAGE_TYPE` classification
 
-`GetCostAndUsage` is grouped by `USAGE_TYPE`. Bedrock usage types embed the model family. Parse with prefix rules (align with `packages/shared/src/models.ts`):
+**Amendment 2026-10-23.** Not every Bedrock usage type is model token usage. Guardrails, Provisioned Throughput, model storage, Custom Model Import, Knowledge Bases, Flows, Data Automation, and model evaluation each bill under their own usage types. The categories, billing units, and storage rules are in Data Model spec — *Non-Model Charges*.
 
-| Usage type pattern (examples) | Canonical key |
-|-------------------------------|---------------|
-| `*ClaudeOpus*`, `*claude-opus*` | `claude-opus` |
-| `*ClaudeSonnet*`, `*claude-sonnet*`, `*Claude3-5-Sonnet*` | `claude-sonnet` |
-| `*ClaudeHaiku*`, `*claude-haiku*`, `*Claude3-5-Haiku*` | `claude-haiku` |
-| Anything else for `AmazonBedrock` | `other` |
+> **Unverified.** Every usage-type string and substring in this section is an **illustrative pattern family**, not a confirmed AWS value. Confirm exact `USAGE_TYPE` strings (including region prefixes such as `USE1-`), their `UsageQuantity` units, and the Cost Explorer `SERVICE` dimension value(s) against a real `GetCostAndUsage` response and the AWS pricing page in Phase 6, before the classification table is frozen in `packages/shared`. The `Service = AmazonBedrock` filter value used throughout this spec is itself a placeholder until the Phase 6 `SERVICE` ground-truth check (*Proposed collector amendments (audit A2)* item 4).
 
-Log unrecognized usage types to CloudWatch Logs so operators can extend the mapping. Costs without a parseable model roll into account-level totals and `other` as appropriate.
+The classifier is a pure function in `packages/shared`, `classifyUsageType(raw) → { kind: "model", key } | { kind: "nonModel", category } | { kind: "unclassified" }`, driven by an ordered pattern table. It does not return `recurring`; the collector derives that from the category (see Recurring flag below). The signature may gain an optional `service` argument in Phase 6 if the Cost Explorer `SERVICE` ground truth shows that some model families are identifiable only from `SERVICE`, not from `USAGE_TYPE` (see Third-party model billing below). In `{ kind: "nonModel", category }`, `category` is any `NonModelCategorySchema` key **except** `unclassified`; an unmatched usage type returns `{ kind: "unclassified" }`, which the collector writes to `nonModel.unclassified`. The classifier first strips a leading region prefix **at most once** with the placeholder regex `^[A-Z]{2,4}[0-9]+-` (e.g. `USE1-`, `EUC1-`, `APS2-`; unverified, confirm the prefix forms in Phase 6). The match is case-sensitive and runs before case folding. The prefix must end in a digit because the broader `^[A-Z0-9]+-` would also strip leading acronyms such as `BDA-`, hiding the row 9 marker. It then matches the remainder as a case-insensitive substring unless a row says otherwise, and the **first match wins**:
+
+| Order | Pattern family (illustrative, unverified) | Result |
+|---|---|---|
+| 1 | Contains a guardrail marker (e.g. `Guardrail`), or a guardrail policy name (e.g. `ContentFilter`, `DeniedTopic`, `SensitiveInformation`, `ContextualGrounding`, `AutomatedReasoning`) | `nonModel.guardrails` |
+| 2 | Contains a Custom Model Import marker (e.g. `CustomModelUnit`, `ModelImport`), including Custom Model Import storage | `nonModel.custom-model-import` |
+| 3 | Contains a customized-model storage marker (e.g. `CustomModel…Storage`) | `nonModel.custom-model-storage` |
+| 4 | Contains a provisioned-throughput marker (e.g. `ProvisionedThroughput`, `ModelUnit`), including commitment-term variants | `nonModel.provisioned-throughput` |
+| 5 | Contains a customization/training marker (e.g. `Customization`, `FineTuning`, `Training`) | `nonModel.model-customization` |
+| 6 | Contains a Knowledge Base marker (e.g. `KnowledgeBase`, `Retrieve`, `Rerank`) | `nonModel.knowledge-bases` |
+| 7 | Contains an Agents marker (e.g. `Agent`, which also covers `AgentCore`) | `nonModel.agents` |
+| 8 | Contains a Flows marker (e.g. `Flow`, `NodeTransition`) | `nonModel.flows` |
+| 9 | Contains a Data Automation marker: `DataAutomation` as a substring, or `BDA` as a whole token only (bounded by the string start/end, `-`, `_`, or `:`), since a bare `bda` substring also occurs inside unrelated words such as `Lambda` | `nonModel.data-automation` |
+| 10 | Contains an evaluation marker (e.g. `Evaluation`, `HumanTask`) | `nonModel.model-evaluation` |
+| 11 | Contains a prompt-routing, prompt-optimization, or web-search marker (e.g. `PromptRouting`, `PromptOptimization`, `WebSearch`) | `nonModel.other-features` |
+| 12 | Contains a known model family. **Families come from `packages/shared/src/models.ts`** (`claude-opus`, `claude-sonnet`, `claude-haiku`); there is no second family table. The usage-type matcher accepts each family with or without separators and with an optional version, e.g. `ClaudeOpus` / `claude-opus` / `Claude4-Opus` → `claude-opus`, `ClaudeSonnet` / `Claude3-5-Sonnet` / `claude-sonnet` → `claude-sonnet`, `ClaudeHaiku` / `Claude3-5-Haiku` / `claude-haiku` → `claude-haiku`. Includes batch, cache-read/cache-write, cross-Region, and service-tier variants | `models[<key>]` (model cost) |
+| 13 | Contains a token-usage marker (e.g. `input-tokens`, `output-tokens`, `InputToken`, `OutputToken`; illustrative and unverified — input and output usage of an unmapped model must classify the same way) but no known model family | `models.other` (raw usage type appended to its `rawModelIds`) |
+| 14 | Anything else under the Bedrock service | `nonModel.unclassified` |
+
+Rules:
+
+- **Non-model families are tested before model families.** A Provisioned Throughput or storage usage type can embed a model name. Without this ordering it would be misfiled as that model's token cost (Data Model spec — *Non-Model Charges*, Rule 2).
+- **Custom Model Import and custom-model storage are tested before Provisioned Throughput.** Matching is a case-insensitive substring test and the first match wins, so the provisioned-throughput marker `ModelUnit` is a substring of the Custom Model Import marker `CustomModelUnit`. With Provisioned Throughput first, every Custom Model Import charge would be misfiled as Provisioned Throughput.
+- **`other` vs. `unclassified`.** A usage type that is recognizably token usage of an unmapped model goes to `models.other`, as today. A usage type the classifier cannot interpret at all goes to `nonModel.unclassified` and is **not** guessed into a model. Both keep the raw string (`rawModelIds` / `rawUsageTypes`).
+- **Recurring flag.** The collector derives `recurring` from the category; the classifier does not return it: `true` for `provisioned-throughput`, `custom-model-storage`, and `custom-model-import`. For `knowledge-bases` it is `true` when one of its `rawUsageTypes` contains `Storage` (unverified marker). It is `false` otherwise (Data Model spec — *Charge categories*).
+- **Units.** Sum `UsageQuantity` per category. Set `usageUnit` only when every folded usage type reports the same unit; otherwise omit both `usageQuantity` and `usageUnit`, never mixing units.
+- **Observability.** Log every usage type that lands in `nonModel.unclassified` or `models.other` to CloudWatch Logs as a structured warning, so operators can extend the table. Log entries carry the usage-type string and account ID only — never env values or credentials (Rule 50.6).
+- **Third-party model billing.** Some third-party models on Bedrock may bill under a separate Marketplace-style Cost Explorer `SERVICE` value rather than the Bedrock service. If so, the `Service = AmazonBedrock` filter silently drops them. Phase 6 must list the distinct `SERVICE` values carrying Bedrock usage in a real account and widen the filter to an explicit list if needed (unverified; see *Proposed collector amendments (audit A2)* item 4).
+
+### Adjacent services
+
+Some Bedrock features run on resources that bill under **other** Cost Explorer services:
+
+- OpenSearch Serverless OCUs and storage for a Knowledge Base vector store
+- S3 for Knowledge Base data sources and batch inference input/output
+- Lambda for Agent action groups
+- AgentCore, if it bills under its own service (unverified)
+
+These are not Bedrock usage types, so the classifier never sees them.
+
+- **v1: excluded, and labelled.** The collector queries the Bedrock service only. The dashboard states the scope as "Bedrock service charges only" wherever totals appear (Data Model spec — *Dashboard impact*).
+- **Phase 6+ option, behind config.** An optional `ADJACENT_SERVICES` collector setting lists extra Cost Explorer `SERVICE` values to query. Off by default; validated with Zod at startup (Rule 60.19). Without resource-level tags, an account's OpenSearch Serverless spend cannot be attributed to Bedrock, so adjacent charges would need their own top-level rollup field, separate from `nonModel`, and an explicit opt-in. The design is deferred; see [`docs/future-improvements.md`](../future-improvements.md) — *Adjacent-service cost collection*.
 
 ### CloudTrail Lake — sample query (illustrative)
 
@@ -351,7 +391,7 @@ GROUP BY 1, 2, 3, 4
 
 ### Today's cost fallback
 
-When Cost Explorer returns **zero or no rows** for today's UTC day (common due to 8–24h lag):
+When Cost Explorer returns **zero or no rows** for a model on today's UTC day (common due to 8–24h lag). The trigger is evaluated **per model**, over rows that `classifyUsageType` maps to `{ kind: "model" }` only. `nonModel` rows never suppress it: an idle Provisioned Throughput or storage row that posts for today while token rows still lag does not count as Cost Explorer data for any model.
 
 1. Use **CloudWatch token counts** per model for today (exact).
 2. Estimate model cost: `(modelInputTokens × inputPricePer1K + modelOutputTokens × outputPricePer1K) / 1000` using a **static price table** in `packages/shared` (updated manually when AWS publishes new list prices).
@@ -371,8 +411,18 @@ When CloudWatch, CloudTrail, and Cost Explorer disagree, use this precedence for
 | Account/model **tokens & invocations** (totals) | **CloudWatch** — authoritative for rollup-level metrics |
 | `byUser` / `byService` token & invocation counts | **CloudTrail Lake** — only source with attribution |
 | Per-user / per-service **cost** | Proportional split: `(entity tokens for model ÷ CloudWatch model tokens) × model cost` |
+| Account **non-model cost** (`nonModel`) | **Cost Explorer only**: exact, `costEstimated: false`, never token-priced, never split to users/services. Omitted on today's rollup until Cost Explorer reports it |
 
 CloudTrail user/service token sums may not equal CloudWatch model totals (sampling, timing, or untracked calls). Do not rebalance CloudWatch totals to match CloudTrail; keep breakdowns as recorded and accept small drift.
+
+### Proposed collector amendments (audit A2)
+
+> **Proposals, 2026-10-23; not yet adopted.** Each needs a decision before Phase 6 starts. Adopting one means updating the sections it names and the Phase 6 task list.
+
+1. **Resolve ARN-form model IDs before normalization.** CloudTrail and CloudWatch can report an application inference profile ARN (the v1 `byService` mechanism) or a provisioned-model ARN instead of a foundation-model ID. Today these normalize to `other`. Proposed: the collector resolves profile ARNs with `bedrock:GetInferenceProfile` and provisioned-model ARNs with `bedrock:GetProvisionedModelThroughput` to the underlying foundation model, then calls `normalizeModelId`. Results are cached per run, and the two read actions are added to `BedrockCollectorLambdaRole`. An unresolvable ARN stays `other` with the ARN in `rawModelIds` (Data Model spec — *Model ID Normalization*). Cross-account resolution needs the same validation as *Inference profile tag resolution* step 2.
+2. **Widen the CloudTrail event filter to the Converse API.** Step 3 and the sample query match only `InvokeModel`/`InvokeModelWithResponseStream`. Calls made through `Converse`/`ConverseStream` would then be missing from `byUser`/`byService`. Proposed: `eventName IN ('InvokeModel', 'InvokeModelWithResponseStream', 'Converse', 'ConverseStream')`; confirm the event names on real events in Phase 6. **Batch inference** jobs have no per-call CloudTrail invocation events, so batch tokens have no user or service attribution (Data Model spec — *Token-based charges that stay model cost*).
+3. **Zero-denominator rule for the proportional split.** When a model has cost on an account-day but zero CloudWatch tokens (for example batch-only usage, or a metric gap), `entity tokens ÷ CloudWatch model tokens` is undefined. Proposed: never divide by zero. Attribute the whole model cost to a reserved `_unattributed` key in both `byUser` and `byService` (`costEstimated: true`, zero tokens and invocations). Also put the residual there when CloudTrail attribution sums to less than the model cost, so the per-model attribution maps sum to the model cost. `_unattributed` is distinct from `_untagged`, which means a call with no service tag.
+4. **Ground-truth the Cost Explorer `SERVICE` filter (unverified, high impact).** Third-party models, possibly including Anthropic Claude, may bill through AWS Marketplace under per-model `SERVICE` names rather than the Bedrock service. If so, `Service = AmazonBedrock` would miss Claude cost entirely. Phase 6 ground-truth check: run read-only `aws ce get-dimension-values --dimension SERVICE` over a recent window in the bedrock-simulator sandbox. Record every `SERVICE` value that carries Bedrock usage, and set the collector filter to that explicit list (see *Cost Explorer `USAGE_TYPE` classification* — Third-party model billing).
 
 ### Inference profile tag resolution
 

@@ -153,11 +153,14 @@ Selected for enterprise SaaS analytics dashboards — clean, high-contrast, prin
 | Accent/CTA | `#D97706` | `--color-accent` | Warnings, highlights, cost alerts |
 | Background | `#F5F7FF` | `--color-background` | Page background (soft blue-gray canvas) |
 | Foreground | `#0F172A` | `--color-foreground` | Primary text |
-| Muted | `#94A3B8` | `--color-muted` | Placeholders, muted text |
+| Muted foreground | `#94A3B8` | `--color-muted-foreground` | Placeholders, muted text |
+| Muted | `#E2E8F0` | `--color-muted` | Muted surfaces (subtle fills, tracks) |
 | Border | `#E2E8F0` | `--color-border` | Card borders, dividers |
 | Destructive | `#E11D48` | `--color-destructive` | Error states, high cost alerts |
 | Success | `#059669` | `--color-success` | Positive trends, low cost indicators |
 | Ring | `rgba(79,70,229,0.35)` | `--color-ring` | Focus rings |
+
+**Known divergence (pre-existing, Phase 1).** The table lists Accent/CTA `#D97706` as `--color-accent`, but `apps/dashboard/app/globals.css` defines `#D97706` as `--color-warning` and sets `--color-accent` to `#EEF2FF` (shadcn's neutral interactive surface). This spec does not resolve it; a follow-up decision should ratify one mapping and update either this table or the code.
 
 ### Chart Colors (Per Model)
 
@@ -169,6 +172,8 @@ Each Bedrock model gets a consistent color across all charts:
 | Claude Sonnet | Blue | `#3B82F6` |
 | Claude Haiku | Teal | `#14B8A6` |
 | Other models | Amber | `#D97706` |
+
+**Non-model cost.** Bedrock charges that are not model token usage (Data Model spec — *Non-Model Charges*) use one dedicated semantic token, `--color-cost-non-model`, never a model token and never the `other` amber. Its value is `--color-cost-non-model: var(--color-foreground)` (slate `#0F172A`), chosen in Phase 3.1a: about 17.9:1 against the white card, so it passes WCAG 1.4.11's 3:1 non-text contrast minimum for chart series, and its neutral hue stays distinct from the purple, blue, teal and amber model series. It introduces no new raw hex; components reference the token only (Rule 40.2). Phase 5 may swap in a lighter neutral alias only if that alias still passes 3:1 against the card.
 
 ## Typography
 
@@ -268,6 +273,7 @@ Charts:
 - Top 5 departments by cost: horizontal bar chart
 - Model distribution: donut chart
 - Sync status indicator with last update time and countdown to next run
+- Non-model cost (data from Phase 3.1a; built in Phase 4.1): Total Cost shows a model / non-model split, recurring categories carry a "recurring" indicator, non-model cost is its own series in the cost trend and model distribution charts, and totals carry the "Bedrock service charges only" scope note (Data Model spec — *Dashboard impact (v1)*).
 
 ### Ranking Page
 

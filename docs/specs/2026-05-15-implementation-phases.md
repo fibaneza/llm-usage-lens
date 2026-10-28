@@ -18,7 +18,7 @@ Components are built where they are first needed and reused in subsequent pages.
 |---|---|---|
 | 1 | Foundation | Scaffolded project with auth, linting, monitoring, theme |
 | 2 | Layout Shell | Responsive sidebar, top bar, global filters, navigation |
-| 3 | Data Layer (3.1–3.3) | DynamoDB Local, Zod schemas, Route Handlers, TanStack Query |
+| 3 | Data Layer (3.1, 3.1a, 3.2, 3.3) | DynamoDB Local, Zod schemas, Route Handlers, TanStack Query |
 | 4 | Pages (4.1–4.9) | All 9 dashboard pages, one sub-phase each |
 | 5 | Polish & Accessibility | Error boundaries, accessibility audit, responsive testing |
 | 6 | AWS Lambda Collector | Serverless pipeline (`apps/collector`), shared `packages/shared` |
@@ -174,11 +174,12 @@ separate content-area band; see design-system spec — Layout / Date Filtering.)
 
 **Goal:** DynamoDB Local running, seed data populated, Zod schemas validated, Route Handlers serving data, TanStack Query fetching it.
 
-Phase 3 is split into three sub-phases, each independently deliverable on its own branch and PR — built in order along a strict linear dependency chain (mirrors the Phase 2 and Phase 4 sub-phase model; see [Rule 30](../../.claude/rules/30-phase-discipline.md) branching). The split follows the natural data-layer boundary: shared schemas → database + data access → routes + client.
+Phase 3 is split into three sub-phases (3.1 → 3.3), plus the 3.1a follow-up that amends the merged 3.1 schemas (land it before or alongside 3.2), each independently deliverable on its own branch and PR — built in order along a strict linear dependency chain (mirrors the Phase 2 and Phase 4 sub-phase model; see [Rule 30](../../.claude/rules/30-phase-discipline.md) branching). The split follows the natural data-layer boundary: shared schemas → database + data access → routes + client.
 
 | Sub-phase | Name | Deliverable |
 |---|---|---|
 | 3.1 | Shared Schemas & Model Normalization | Zod schemas + model-ID table in `packages/shared`; CI `test` job |
+| 3.1a | Non-Model Cost Schema (follow-up) | Optional `nonModel` map on `DailyRollupSchema` + charge-category enum + `classifyUsageType` table; amends 3.1 after the fact |
 | 3.2 | DynamoDB Local, Table/Seeds & Data Access | DynamoDB Local table/seed scripts, `lib/dynamodb.ts`, the six `lib/data/**` functions |
 | 3.3 | Route Handlers & TanStack Query | 13 Route Handlers + TanStack Query client integration |
 
@@ -225,6 +226,42 @@ None — data infrastructure only.
 
 ---
 
+### Phase 3.1a — Non-Model Cost Schema (follow-up)
+
+**Goal:** Extend the merged 3.1 schemas so a `DailyRollup` can carry Bedrock charges that are not per-model token usage: Guardrails, Provisioned Throughput, model storage, Custom Model Import, Knowledge Bases, and others. Account totals stay exact (Rule 20.3). Spec: Data Model spec — *Non-Model Charges*; System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*.
+
+**Dependencies:** Phase 3.1 (merged). A follow-up to 3.1 on its own branch and PR (`feature/phase-3.1a-non-model-cost`, Rule 30.4). It does not reorder the sub-phases. Land it **before or alongside** 3.2 so the seed scripts can cover `nonModel`. **Seed routing:** if 3.1a merges before 3.2, the seed-coverage tasks below (and the seeded idle-PT Verify item) move into 3.2's `nonModel` pass-through task; if 3.2 merges first, they land as a follow-up commit on the 3.1a branch.
+
+**Tasks:**
+- [ ] Add `NonModelCategorySchema` (closed enum of the canonical category keys) and `NonModelChargeSchema` (`cost`, `costEstimated`, `recurring`, optional `usageQuantity`/`usageUnit`, `rawUsageTypes`) in `packages/shared/src/schemas/`; types via `z.infer` (Rule 60.3)
+- [ ] Add optional `nonModel: z.partialRecord(NonModelCategorySchema, NonModelChargeSchema)`. Export the unrefined `DailyRollupBaseSchema` plus the refined `DailyRollupSchema`, whose refinement enforces `|cost − (Σ models[*].cost + Σ nonModel[*].cost)| ≤ 1e-6` (Data Model spec — *Schema decisions*)
+- [ ] Add the pure `classifyUsageType` function and its ordered pattern table in `packages/shared`. Patterns are placeholders, marked unverified until Phase 6 confirms real `USAGE_TYPE` strings
+- [ ] Add the semantic chart token `--color-cost-non-model: var(--color-foreground)` (Design System spec — *Chart Colors (Per Model)*; no raw hex, Rule 40.2)
+- [ ] If the Data Model spec *`date` attribute* proposal (audit A2) is adopted: add optional `date` (`YYYY-MM-DD`, UTC) to `DailyRollupSchema`, with valid/invalid tests; the `date` ↔ `SK`/`gsi1pk` consistency check goes in a write-side item schema, not `DailyRollupSchema`
+- [ ] Unit tests (Rule 60.22):
+  - valid rollup with and without `nonModel`; a pre-amendment fixture (no `nonModel`) still parses
+  - unknown category key rejected
+  - invariant violation rejected
+  - `DailyRollupBaseSchema` accepts an invariant-violating item and supports `.pick` / `.omit` (the refinement lives only on `DailyRollupSchema`)
+  - a `nonModel` entry carrying token fields (`inputTokens`, etc.) is rejected (`NonModelChargeSchema` is a strict object)
+  - classifier ordering: a provisioned-throughput usage type that names a model → `provisioned-throughput`, not the model
+  - classifier ordering: a `…CustomModelUnit…` usage type → `custom-model-import`, not `provisioned-throughput`
+  - `BDA` matches only as a whole token: a usage type containing `Lambda` is not `data-automation`
+  - an unprefixed `BDA-…` usage type → `data-automation` (the region-prefix strip does not consume `BDA-`)
+  - a Claude family token usage type (e.g. `USE1-Claude3-5-Sonnet-input-tokens`) → model `claude-sonnet`
+  - unknown usage type → `unclassified`
+  - unmapped-model token usage type → `models.other`
+- [ ] Seed coverage (3.2 seed scripts; routed per **Seed routing** above):
+  - `seed.ts` includes guardrail charges on some days
+  - one account with Provisioned Throughput accruing every day, including days with zero invocations (an idle recurring rollup with `models: {}`)
+  - one `unclassified` entry with `rawUsageTypes`
+  - `seed-empty.ts` unchanged
+- [ ] Verify: schema tests green in CI; existing 3.1 tests green, assertions unchanged; fixtures that violate the invariant corrected (the empty-models and hoisted-byUser fixtures move to `cost: 0`, by tdd-test-engineer); a seeded idle-PT day validates (checked wherever the seed tasks land, per **Seed routing**); no DynamoDB dependency added to `packages/shared`.
+
+**Components Built:** None — shared validation infrastructure only.
+
+---
+
 ### Phase 3.2 — DynamoDB Local, Table/Seeds & Data Access
 
 **Goal:** DynamoDB Local serving the dashboard's reads — table created, seed data populated, and the server-only data-access layer in place.
@@ -253,6 +290,7 @@ None — data infrastructure only.
   - `getSyncStatus()` — return a "never synced" state when no item exists, not an error (Rule 20.9)
 - [x] Add the Vitest node-env project split + DynamoDB-Local integration tests for data-access functions (the env split the `vitest.config.ts` comment already anticipates)
 - [x] Extend the CI `test` job to start DynamoDB Local + create table + seed
+- [ ] `nonModel` pass-through: seeds cover `nonModel` per the Phase 3.1a seed-coverage tasks, including a seeded idle-PT day that validates (owned here if 3.1a merges first; via a follow-up commit on the 3.1a branch if 3.2 merges first — Phase 3.1a *Seed routing*), and data-access functions parse each item with the refined `DailyRollupSchema` on read and return `nonModel` unchanged
 - [ ] Verify: `pnpm tsx scripts/seed.ts` populates DynamoDB Local; data-access integration tests pass locally and in CI.
 
 **Components Built:** None — data infrastructure only.
@@ -276,6 +314,7 @@ None — data infrastructure only.
   - `QueryClientProvider` in root layout (beside the existing `NuqsAdapter`)
   - Default `staleTime`: 5 minutes
   - Query hooks per data access pattern
+- [ ] `nonModel` pass-through: `/api/overview`, `/api/departments/[id]`, and `/api/teams/[id]` responses gain the model vs. non-model cost split plus per-category totals with `recurring` (Data Model spec — *Dashboard impact*); response schemas derive from `DailyRollupBaseSchema`
 - [ ] Route Handler tests: assert the `{ data }` / `{ error }` shape and cover the `401` (unauthenticated) and `400` (bad input) paths (Rule 60.23)
 - [ ] Verify: Route Handlers return validated data, a TanStack Query hook fetches it, `next build` succeeds — unblocks Phase 4.
 
@@ -319,9 +358,10 @@ Components are introduced in the sub-phase where they are first needed:
 **Tasks:**
 - [ ] Build `MetricCard` component (shadcn Card + icon + value + trend)
 - [ ] Build `DeltaBadge` component ("+12.3%" green / "-5.1%" red)
-- [ ] Build `CostTrendChart` (Recharts stacked area, `next/dynamic` with `ssr: false`, `ResponsiveContainer`; prop `groupBy: 'model' | 'team'` for reuse on department detail)
-- [ ] Build `ModelBreakdownChart` (Recharts donut, `next/dynamic` with `ssr: false`, `ResponsiveContainer`)
+- [ ] Build `CostTrendChart` (Recharts stacked area, `next/dynamic` with `ssr: false`, `ResponsiveContainer`; prop `groupBy: 'model' | 'team'` for reuse on department detail; non-model cost as its own series/segment (never merged into `other`) using `--color-cost-non-model` (Data Model spec — *Dashboard impact (v1)*; requires Phase 3.1a))
+- [ ] Build `ModelBreakdownChart` (Recharts donut, `next/dynamic` with `ssr: false`, `ResponsiveContainer`; non-model cost as its own series/segment (never merged into `other`) using `--color-cost-non-model` (Data Model spec — *Dashboard impact (v1)*; requires Phase 3.1a))
 - [ ] Build top departments horizontal bar chart
+- [ ] Show the model vs. non-model cost split on Total Cost, a "recurring" indicator for recurring non-model categories, and the "Bedrock service charges only" scope note (Data Model spec — *Dashboard impact*). Requires Phase 3.1a
 - [ ] Connect `SyncStatusBadge` and `SyncCountdown` to real data (SyncStatus entity)
 - [ ] Build `Skeleton` loading states for all 5 sections
 - [ ] Wrap each section in `<Suspense>` with Skeleton fallback
@@ -589,8 +629,10 @@ Phase 4 (all sub-phases complete).
   - Read account registry from DynamoDB (all active accounts)
   - Assume `CostExplorerReadRole` in the management account, query Cost Explorer
     - `GetCostAndUsage` for yesterday (finalized) + today (partial)
-    - Filtered to `AmazonBedrock` service
-    - Grouped by `LINKED_ACCOUNT` and `USAGE_TYPE` (parse usage type → model)
+    - Filtered to `AmazonBedrock` service (placeholder until the `SERVICE` ground-truth check — System Architecture spec — *Proposed collector amendments (audit A2)* item 4)
+    - Grouped by `LINKED_ACCOUNT` and `USAGE_TYPE`, requesting `UnblendedCost` + `UsageQuantity`
+    - Request usage records only: Cost Explorer can return negative amounts (credits, refunds), and the v1 `nonModel` schema is nonnegative. Exact `RECORD_TYPE` filter handling is unverified; confirm it here (Data Model spec — *Schema decisions*)
+    - Classify each usage type with `classifyUsageType` (`@bedrock-usage/shared`): model → `models[<key>]`, charge category → `nonModel[<category>]`, unknown → `nonModel.unclassified` (System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*)
   - Query CloudTrail Lake locally (org event data store)
     - `StartQuery`, then poll `GetQueryResults` until complete (async SQL)
     - Bedrock InvokeModel/InvokeModelWithResponseStream calls grouped by account, SSO username, inference profile (→ service), model ID
@@ -608,6 +650,17 @@ Phase 4 (all sub-phases complete).
 - [ ] Implement two-day refresh strategy (UTC calendar days)
   - Yesterday: costFinalized = true
   - Today: costFinalized = false
+- [ ] Verify the 3.1a classification table against reality, then replace the placeholder patterns:
+  - capture a real `GetCostAndUsage` response (grouped by `USAGE_TYPE`) from an account with Guardrails, Provisioned Throughput, batch, and prompt-cache usage — the bedrock-simulator sandbox can generate these
+  - record the exact usage-type strings and units in the shared table
+  - list the distinct Cost Explorer `SERVICE` values that carry Bedrock usage, including any third-party Marketplace-style service names, and set the filter accordingly
+- [ ] Decide and, if adopted, implement the System Architecture spec *Proposed collector amendments (audit A2)*:
+  - ARN → foundation-model resolution before normalization
+  - `Converse`/`ConverseStream` in the CloudTrail filter
+  - `_unattributed` zero-denominator rule
+  - read-only `aws ce get-dimension-values --dimension SERVICE` ground-truth check in the simulator sandbox
+- [ ] Write rollups for accounts whose only charge that day is a recurring non-model cost (idle Provisioned Throughput / storage), so they are not skipped
+- [ ] Log every `nonModel.unclassified` and `models.other` usage type as a structured warning
 - [ ] Implement per-user and per-service cost estimation
   - `cost = (entityTokensForModel / accountTotalTokensForModel) x accountModelCost`
   - All per-user and per-service values: costEstimated = true
@@ -619,7 +672,7 @@ Phase 4 (all sub-phases complete).
   - `AWS::CloudWatch::Alarm` on EventBridge/Lambda invocation failures
 - [ ] Configure SAM `BuildMethod: esbuild` to bundle the `@bedrock-usage/shared` workspace dependency into the artifact; verify the built bundle contains the shared code
 - [ ] Error handling: partial failures (some accounts fail, others succeed → SyncStatus = "partial")
-- [ ] Tests: unit tests for model normalization, data merging, cost estimation formula
+- [ ] Tests: unit tests for model normalization, usage-type classification (against captured real usage types), the `cost` invariant, data merging, cost estimation formula
 - [ ] Deploy to the observability account via `sam build && sam deploy` (CD `deploy` job, OIDC-assumed role)
 - [ ] Verify: Lambda runs on schedule, DailyRollup items appear in DynamoDB, SyncStatus updates
 - [ ] Switch Next.js app from DynamoDB Local to the production DynamoDB table

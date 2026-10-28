@@ -102,6 +102,37 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 - **References:** [Rule 50.7](../.claude/rules/50-security-and-secrets.md),
   [`system-architecture.md`](specs/2026-05-15-system-architecture.md).
 
+### Adjacent-service cost collection
+
+- **Status:** Deferred.
+- **What:** Optionally query Cost Explorer services other than Bedrock that
+  Bedrock features run on, behind an `ADJACENT_SERVICES` collector setting.
+  Examples: OpenSearch Serverless OCUs behind a Knowledge Base, S3 data
+  sources, and Lambda action groups.
+- **Why deferred:** Without resource-level tags, an account's OpenSearch or S3
+  spend cannot be attributed to Bedrock. It would need its own rollup field
+  (not `nonModel`) and an opt-in. v1 labels totals "Bedrock service charges
+  only" instead.
+- **Adopt when:** Knowledge Base or Agent workloads make adjacent spend
+  material, and the organization tags those resources consistently.
+- **References:** [`system-architecture.md`](specs/2026-05-15-system-architecture.md)
+  (*Adjacent services*, Known Limitations 8),
+  [`data-model.md`](specs/2026-05-15-data-model.md) (*Non-Model Charges*).
+
+### Per-pricing-mode model cost breakdown
+
+- **Status:** Deferred.
+- **What:** Split each model's cost by pricing mode: on-demand, batch,
+  cache read, cache write, cross-Region, and service tier. Batch cost would
+  then no longer be proportionally attributed to real-time callers.
+- **Why deferred:** These charges are correctly model cost in v1. A split adds
+  schema surface before Phase 6 has confirmed the real usage-type strings, and
+  before we know whether batch usage appears in CloudTrail or CloudWatch.
+- **Adopt when:** Phase 6 shows material batch or prompt-cache spend, or
+  per-user cost drift from batch attribution is reported.
+- **References:** [`data-model.md`](specs/2026-05-15-data-model.md)
+  (*Token-based charges that stay model cost*).
+
 ### Build-time S3 artifact upload for the bedrock-simulator deploy
 
 - **Status:** Rejected (kept for the rationale; do not reopen).

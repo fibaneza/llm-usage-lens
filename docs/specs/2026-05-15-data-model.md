@@ -15,6 +15,7 @@ All data is stored in a single DynamoDB table (`bedrock-usage`) with one GSI. Th
 - **Dates**: All date bucketing uses **UTC**. `DAILY#{YYYY-MM-DD}` keys are UTC calendar days, matching the native time zones of Cost Explorer and CloudWatch.
 - **Currency**: All cost values are USD.
 - **Model keys**: The `models` map is keyed by canonical model IDs — see Model ID Normalization below.
+- **Charge categories**: The optional `nonModel` map is keyed by canonical charge-category keys — see Non-Model Charges below.
 
 ## Table Definition
 
@@ -77,13 +78,14 @@ Attributes:
 
   -- Identity --
   accountId        string
+  date             string           (optional) YYYY-MM-DD (UTC) — PROPOSED (audit A2), see note below
   departmentId     string
   departmentName   string           (historical snapshot, see Design Decisions)
   teamId           string
   teamName         string           (historical snapshot, see Design Decisions)
 
-  -- Totals (sum across all models) --
-  cost             number           USD, 6 decimal places
+  -- Totals --
+  cost             number           USD, 6 decimal places — Σ models[*].cost + Σ nonModel[*].cost
   costFinalized    boolean          false = estimated from tokens, true = Cost Explorer data
   inputTokens      number
   outputTokens     number
@@ -122,10 +124,24 @@ Attributes:
     }
   }
 
+  -- Non-model charges (optional; see Non-Model Charges) --
+  nonModel         map {            (absent on items written before this field existed)
+    "<charge-category>": {          e.g. "guardrails", "provisioned-throughput"
+      cost             number       USD, ≥ 0 (exact from Cost Explorer in v1)
+      costEstimated    boolean      (false in v1 by convention — Cost Explorer is the only source)
+      recurring        boolean      true = accrues with time, not with requests (set per category)
+      usageQuantity    number       (optional, ≥ 0) Cost Explorer UsageQuantity, summed
+      usageUnit        string       (optional, independent of usageQuantity)
+      rawUsageTypes    list         non-empty; raw Cost Explorer USAGE_TYPE values folded into this entry
+    }
+  }
+
   -- Metadata --
   lastUpdatedAt    string           ISO8601
   ttl              number           Unix epoch + 365 days
 ```
+
+> **Proposal (audit A2, 2026-10-23; not yet adopted): `date` attribute.** Today the day exists only in `SK` (`DAILY#…`) and `gsi1pk` (`DATE#…`). Those key attributes are not in `DailyRollupSchema`, so a Zod parse strips them, and range or trend consumers lose the day. Proposed: add `date` (`YYYY-MM-DD`, UTC, Rule 20.1) as a plain attribute that the collector and seed scripts write. It is **optional** in `DailyRollupSchema`, so items written before it existed still parse. The check that `date` matches `SK` (`DAILY#…`) and `gsi1pk` (`DATE#…`) belongs in a **write-side item schema** (the full DynamoDB item including key attributes, used by the collector and seed scripts), not in `DailyRollupSchema`, which never sees the key attributes. Items without `date` can derive it from `SK` in the data-access layer, so no backfill is needed. Natural home: Phase 3.1a.
 
 ### Access Patterns
 
@@ -142,7 +158,7 @@ Attributes:
 
 ### Item Size Estimate
 
-Worst case: 10 models x (20 users + 10 services) = 300 nested entries at ~200 bytes each = ~60KB. Well within DynamoDB's 400KB item limit. Safe up to ~50 users and ~30 services per model (~180KB).
+Worst case: 10 models x (20 users + 10 services) = 300 nested entries at ~200 bytes each = ~60KB. Well within DynamoDB's 400KB item limit. Safe up to ~50 users and ~30 services per model (~180KB). The `nonModel` map adds at most one entry per charge category (~12), each a few hundred bytes plus its `rawUsageTypes` list — negligible against the limit.
 
 ### Query Pagination
 
@@ -167,6 +183,85 @@ Normalization rules:
 - Unrecognized model IDs fall into the `other` canonical key. The raw IDs are preserved in a `rawModelIds` list inside that entry so new models can be identified and added to the mapping.
 
 The mapping table lives in `@bedrock-usage/shared` (`packages/shared`) used by both `apps/collector` and `apps/dashboard`, so the two never drift.
+
+> **Proposal (audit A2, 2026-10-23; not yet adopted).** ARN-form model IDs currently fall through to `other`. These include application inference profile ARNs, which carry the v1 `byService` mechanism, and provisioned-model ARNs. Proposed rule: `normalizeModelId` accepts only foundation-model IDs. The **collector** first resolves an inference-profile ARN (via `bedrock:GetInferenceProfile`) or a provisioned-model ARN (via `bedrock:GetProvisionedModelThroughput`) to its underlying foundation model ID, caches the result per run, and only then normalizes. An ARN that cannot be resolved stays `other`, with the ARN in `rawModelIds`. See System Architecture spec — *Proposed collector amendments (audit A2)*.
+
+## Non-Model Charges
+
+**Amendment 2026-10-23.** Amazon Bedrock bills more than per-model token usage. Charges that do not come from a model's input/output tokens are recorded in the optional `nonModel` map on `DailyRollup`, never in `models`. Without this, they would be misfiled under the `other` model or dropped, and account totals would no longer be exact (Rule 20.3). The collector side is in System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*.
+
+### Charge categories
+
+Billing units below come from the [Amazon Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/) and the user guide pages cited, as read on 2026-10-23. This spec deliberately records no prices.
+
+| Category key | Covers | Billing basis | `recurring` |
+|---|---|---|---|
+| `guardrails` | Guardrail policies: content filters, denied topics, sensitive-information filters, contextual grounding checks, image content filters, Automated Reasoning checks | Per 1,000 text units per policy; images per image processed; Automated Reasoning per 1,000 text units per policy. Billed **even when the guardrail blocks the input and the model is never invoked** ([How charges are calculated for Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-how.html#guardrails-charges)) | `false` |
+| `provisioned-throughput` | Provisioned Throughput for base or custom models: no-commitment, 1-month, or 6-month term | Hourly per model unit. **Accrues while idle.** "Billing continues until you delete the Provisioned Throughput" ([Provisioned Throughput](https://docs.aws.amazon.com/bedrock/latest/userguide/prov-throughput.html)) | `true` |
+| `custom-model-storage` | Monthly storage of fine-tuned or customized models | Per custom model per month | `true` |
+| `custom-model-import` | Custom Model Import: active model copies plus storage | Per Custom Model Unit per minute (5-minute windows) while copies are active, plus monthly storage per Custom Model Unit | `true` |
+| `model-customization` | Fine-tuning, continued pre-training, and reinforcement fine-tuning jobs | Per training tokens or training hours | `false` |
+| `knowledge-bases` | Managed Knowledge Base index storage, retrieval, agentic retrieval, structured-data SQL generation, rerank | Storage per GB-month (recurring part); retrieval per 1,000 API calls | `true` if any included usage type contains `Storage` (unverified marker), else `false` |
+| `agents` | Bedrock Agents and AgentCore charges billed under the Bedrock Cost Explorer service | Unverified. The pricing page shows no Agents/AgentCore unit, and AgentCore may bill under its own Cost Explorer service (see *Adjacent services*) | `false` |
+| `flows` | Bedrock Flows | Per node transition | `false` |
+| `data-automation` | Bedrock Data Automation (BDA) | Per page (documents), per image, per minute (audio/video) | `false` |
+| `model-evaluation` | Automatic and human model evaluation jobs | Evaluator tokens; per human task | `false` |
+| `other-features` | Known, minor Bedrock features with no category of their own: Intelligent Prompt Routing, Prompt Optimization, Web Search | Per 1,000 requests, per 1,000 tokens, per query | `false` |
+| `unclassified` | Any Bedrock usage type that matches neither a model nor a category above | Unknown | `false` |
+
+The key list is closed. It lives in `packages/shared` next to the model table, as `NonModelCategorySchema`, so the collector and dashboard share one list (Rule 20.5). Adding a key is a spec change first.
+
+### Token-based charges that stay model cost
+
+Some charges are token usage of a specific model but are **priced differently** from standard on-demand tokens:
+
+- batch inference (discounted against on-demand)
+- prompt caching (cache read and cache write)
+- cross-Region inference (Global and geographic inference profiles)
+- service tiers (Priority, Flex)
+
+These are **model** cost. They go in `models[<canonical-key>].cost`, not in `nonModel`, because they are a model's tokens. Consequences:
+
+- The collector must still extract the model from these usage types, even though their names carry extra batch, cache, or cross-Region markers (System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*).
+- *Today's cost fallback* prices tokens at standard on-demand rates only, so today's estimate is less accurate for accounts that use batch, caching, or other tiers. Yesterday's Cost Explorer figure corrects it.
+- Batch inference may not appear in CloudTrail `InvokeModel` events or CloudWatch per-invocation metrics. Proportional `byUser`/`byService` splits then spread batch cost across real-time callers. This must be verified in Phase 6. A per-pricing-mode breakdown of model cost is deferred (see [`docs/future-improvements.md`](../future-improvements.md) — *Per-pricing-mode model cost breakdown*).
+
+### Rules
+
+1. **Invariant.** `cost = Σ models[*].cost + Σ nonModel[*].cost` on every rollup, within `|Δ| ≤ 1e-6`. When `nonModel` is absent, the second term is 0.
+2. **Never fold a non-model charge into a model's cost**, including `other`. A Provisioned Throughput charge for a Claude Sonnet model unit goes in `provisioned-throughput`, not `claude-sonnet`. The model name may appear in its `rawUsageTypes`.
+3. **Never present non-model charges as tokens.** `nonModel` entries carry no `inputTokens`, `outputTokens`, `invocations`, `byUser`, or `byService`. Rollup token and invocation totals count model usage only. `usageQuantity`/`usageUnit` are Cost Explorer's own units (text units, model-unit hours, GB-months) and are never summed across categories.
+4. **Never coerce missing to 0.** A category is present only when Cost Explorer returned rows for it. A real zero-cost row may be recorded as `cost: 0`. An absent key means "no charge reported", and the dashboard shows it as absent, not as `$0.00`.
+5. **Idle recurring cost must appear.** A `recurring: true` charge on a day with no invocations still produces a `DailyRollup` for that account, with `models: {}` and zero token totals. This overrides the "skip accounts with no data" rule in System Architecture spec — *Lambda Collector Flow* step 1. In that rule, "data" now includes any Cost Explorer Bedrock cost.
+6. **No proportional split.** Non-model cost is never attributed to users or services in v1. CloudTrail token ratios say nothing about who caused a guardrail or provisioned-capacity charge. The Users and Services pages therefore sum model cost only, and their totals can be less than the account total (see Design Decisions — *Non-model cost is account-level only*).
+7. **Unclassified preserves evidence.** `nonModel.unclassified.rawUsageTypes` keeps every unmatched usage type, mirroring `models.other.rawModelIds`, so operators can extend the classification table.
+8. **Today vs. yesterday.** `nonModel` comes only from Cost Explorer. It is never token-estimated. On today's rollup (`costFinalized: false`), when Cost Explorer has not reported yet, `nonModel` is omitted. Absence then means "not yet reported", which the existing "Cost data finalizes within 24h" indicator already covers. Yesterday's rollup carries the full exact map.
+
+### Schema decisions (settled 2026-10-23)
+
+These settle the open `NonModelChargeSchema` / `DailyRollupSchema` choices for Phase 3.1a:
+
+- **`cost`** is a nonnegative number. Cost Explorer can return negative amounts (credits, refunds), but these are out of scope in v1: the collector requests usage records only. The exact Cost Explorer `RECORD_TYPE` handling is unverified and is confirmed in Phase 6.
+- **`costEstimated`** is a `boolean`. It is `false` in v1 **by convention** (Cost Explorer is the only source), not a literal in the schema.
+- **`recurring`** is a `boolean`, derived by the **collector** from the category after classification. `classifyUsageType` returns only `{ kind, key | category }` and does not return `recurring` (System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*, Recurring flag). `knowledge-bases` is recurring only when one of its usage types contains `Storage` (unverified marker; confirm in Phase 6).
+- **`usageQuantity`** is an optional nonnegative number and **`usageUnit`** an optional string. They are independent in the schema; the "same unit or omit both" rule is collector policy (System Architecture spec — Units).
+- **`rawUsageTypes`** is a non-empty array of non-empty strings.
+- **Entry schema is strict.** `NonModelChargeSchema` is a strict object. This deliberately trades forward compatibility of entries for rejecting token fields (Rule 3): an older reader rejects, rather than strips, an unknown entry field. Adding an entry field therefore requires a schema version bump. The rollup object itself stays non-strict (see Backward compatibility).
+- **Invariant tolerance** is `|cost − (Σ models[*].cost + Σ nonModel[*].cost)| ≤ 1e-6` (Rule 1). Entries are 6-dp; the rollup total is their sum. Writers compute the rollup `cost` as the sum of the already-stored, 6-decimal-rounded entry values, never as a separately rounded total (System Architecture spec — *Lambda Collector Flow* step 5).
+- **Base + refined export.** `packages/shared` exports an unrefined `DailyRollupBaseSchema` plus the refined `DailyRollupSchema` (the base with the invariant refinement). Zod 4 forbids `.pick`/`.omit`/`.partial`/`.merge` on refined objects, so Phase 3.3 response schemas derive from `DailyRollupBaseSchema`.
+
+### Backward compatibility
+
+`nonModel` is additive and optional. Items written before this amendment, and seed data that predates it, have no `nonModel` and are read as "no non-model charges recorded". No migration or backfill is required. Older items whose `cost` equals the model sum (within `|Δ| ≤ 1e-6`) stay valid under the invariant. An older item or fixture whose `cost` differs from its model sum (for example a cost with an empty `models` map) fails the refined `DailyRollupSchema` and must be corrected; it still parses under `DailyRollupBaseSchema`. `DailyRollupSchema` stays non-strict, so a reader built before this change strips the field instead of rejecting the item. Only the `nonModel` entry schema is strict (see Schema decisions).
+
+### Dashboard impact (v1)
+
+No new page and no new route. `/api/overview` (and `/api/departments/[id]` and `/api/teams/[id]` where they report totals) adds a model vs. non-model split to its response, plus per-category totals with their `recurring` flag. The Overview page (Phase 4.1):
+
+- shows **Total Cost** with a model / non-model split;
+- marks recurring categories (Provisioned Throughput, custom model storage and import, Knowledge Base storage) with a "recurring" indicator, so idle capacity cost is visible on days with no invocations;
+- shows non-model cost as its own series or segment in the cost trend and model distribution charts. It is never merged into `other`. Non-model series use a dedicated semantic chart token, not a model token (Rule 40.2);
+- carries a scope note, "Bedrock service charges only", because adjacent-service charges are excluded (System Architecture spec — *Adjacent services*).
 
 ## Entity: SyncStatus
 
@@ -204,7 +299,8 @@ All data written to DynamoDB and returned from Next.js Route Handlers is validat
 | Schema | Used by |
 |--------|---------|
 | `AccountMetaSchema` | Settings page CRUD, Lambda registry reads |
-| `DailyRollupSchema` | Lambda writes, API route responses |
+| `DailyRollupBaseSchema` / `DailyRollupSchema` | Lambda writes, API route responses. Optional `nonModel`, validated with `NonModelCategorySchema` keys and `NonModelChargeSchema` entries. `DailyRollupSchema` refines the base with the cost invariant (Non-Model Charges, Rule 1) within `\|Δ\| ≤ 1e-6`; derived schemas (`.pick`/`.omit`/`.partial`/`.merge`) start from the unrefined base (Non-Model Charges — *Schema decisions*) |
+| `NonModelCategorySchema` / `NonModelChargeSchema` | Charge-category key enum + entry shape (Non-Model Charges) |
 | `SyncStatusSchema` | Sync status display, Lambda writes |
 | `RankingQuerySchema` | API query params: dateFrom, dateTo, `tab` (`departments` \| `teams` \| `services` \| `users`), model, sortBy, order, limit |
 | `DateRangeQuerySchema` | API query params: dateFrom, dateTo, accountId (max 90-day span) |
@@ -236,7 +332,11 @@ All routes live under `apps/dashboard/app/api/`, require an Auth.js session, val
 
 ### Model as Primary Breakdown Dimension
 
-All metrics (cost, tokens, invocations) are broken down by model first. User and service are nested inside each model. This matches how the raw data sources group data (CloudWatch and CloudTrail both report per-model) and avoids reshuffling in the Lambda.
+All metrics (cost, tokens, invocations) are broken down by model first. User and service are nested inside each model. This matches how the raw data sources group data (CloudWatch and CloudTrail both report per-model) and avoids reshuffling in the Lambda. Cost that no model's tokens produced sits beside `models` in `nonModel` (see Non-Model Charges). It is not forced into the model dimension.
+
+### Non-model cost is account-level only
+
+`nonModel` has no `byUser`/`byService` breakdown. Department, team, and account totals (Overview, Ranking departments/teams tabs, Departments, Teams) use rollup `cost`, which includes `nonModel`. User and service views use per-model attribution, which excludes it. Such a view shows a "model usage only" note so the gap is not mistaken for missing data. Attributing guardrail or provisioned-capacity charges to callers would need per-request guardrail metadata or resource tags. That is out of scope for v1.
 
 ### Historical Snapshots for Department/Team Names
 
