@@ -256,7 +256,7 @@ None — data infrastructure only.
   - one account with Provisioned Throughput accruing every day, including days with zero invocations (an idle recurring rollup with `models: {}`)
   - one `unclassified` entry with `rawUsageTypes`
   - `seed-empty.ts` unchanged
-- [ ] Verify: schema tests green in CI; existing 3.1 tests green, assertions unchanged; fixtures that violate the invariant corrected (the empty-models and hoisted-byUser fixtures move to `cost: 0`, by tdd-test-engineer); a seeded idle-PT day validates (checked wherever the seed tasks land, per **Seed routing**); `date` valid/invalid tests green, `DailyRollupItemSchema` rejects a `date` ↔ `SK`/`gsi1pk` mismatch, and the `lib/data/**` rollup functions return `date` for items stored without it; no DynamoDB dependency added to `packages/shared`.
+- [x] Verify: schema tests green in CI; existing 3.1 tests green, assertions unchanged; fixtures that violate the invariant corrected (the empty-models and hoisted-byUser fixtures move to `cost: 0`, by tdd-test-engineer); a seeded idle-PT day validates (checked wherever the seed tasks land, per **Seed routing**); `date` valid/invalid tests green, `DailyRollupItemSchema` rejects a `date` ↔ `SK`/`gsi1pk` mismatch, and the `lib/data/**` rollup functions return `date` for items stored without it; no DynamoDB dependency added to `packages/shared`.
 
 **Components Built:** None — shared validation infrastructure only.
 
