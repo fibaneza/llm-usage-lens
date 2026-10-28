@@ -71,6 +71,7 @@
   --color-model-sonnet: #3b82f6;
   --color-model-haiku: #14b8a6;
   --color-model-other: #d97706;
+  --color-cost-non-model: var(--color-foreground);
 
   /* Typography (design-system spec §Typography); bound in app/layout.tsx. */
   --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;

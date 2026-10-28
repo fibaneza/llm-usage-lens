@@ -22,6 +22,7 @@ export type { AccountMeta } from "./schemas/account-meta";
 
 export {
   AttributionEntrySchema,
+  DailyRollupBaseSchema,
   DailyRollupSchema,
   ModelUsageSchema,
 } from "./schemas/daily-rollup";
@@ -30,6 +31,16 @@ export type {
   DailyRollup,
   ModelUsage,
 } from "./schemas/daily-rollup";
+
+export {
+  NON_MODEL_CATEGORIES,
+  NonModelCategorySchema,
+  NonModelChargeSchema,
+} from "./schemas/non-model-charge";
+export type {
+  NonModelCategory,
+  NonModelCharge,
+} from "./schemas/non-model-charge";
 
 export {
   SYNC_STATUSES,
@@ -67,3 +78,5 @@ export {
   datePk,
   deptPk,
 } from "./table";
+export { classifyUsageType } from "./usage-type";
+export type { UsageTypeClassification } from "./usage-type";

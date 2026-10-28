@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AttributionEntrySchema,
+  DailyRollupBaseSchema,
   DailyRollupSchema,
   ModelUsageSchema,
 } from "./daily-rollup";
@@ -128,7 +129,8 @@ describe("DailyRollupSchema", () => {
 
   it("accepts an empty models map (no usage that day)", () => {
     expect(
-      DailyRollupSchema.safeParse({ ...VALID_ROLLUP, models: {} }).success,
+      DailyRollupSchema.safeParse({ ...VALID_ROLLUP, cost: 0, models: {} })
+        .success,
     ).toBe(true);
   });
 
@@ -145,6 +147,7 @@ describe("DailyRollupSchema", () => {
   it("rejects byUser/byService hoisted to the top level of a model-less shape", () => {
     const hoisted = {
       ...VALID_ROLLUP,
+      cost: 0,
       models: {},
       byUser: { "john.doe@company.com": ATTRIBUTION_ENTRY },
     };
@@ -203,5 +206,170 @@ describe("DailyRollupSchema", () => {
     expect(
       DailyRollupSchema.safeParse({ ...VALID_ROLLUP, models }).success,
     ).toBe(false);
+  });
+});
+
+// Source: docs/specs/2026-05-15-data-model.md — "Non-Model Charges" (Rules 1,
+// 4, 5, Backward compatibility) and implementation-phases "Phase 3.1a".
+describe("DailyRollupSchema — nonModel (Phase 3.1a)", () => {
+  const MODEL_SUM = 12.345678;
+  const GUARDRAILS = {
+    cost: 0.5,
+    costEstimated: false,
+    recurring: false,
+    usageQuantity: 1200,
+    usageUnit: "TextUnits",
+    rawUsageTypes: ["USE1-Guardrail-ContentPolicy-Units"],
+  };
+  const PROVISIONED = {
+    cost: 24,
+    costEstimated: false,
+    recurring: true,
+    usageQuantity: 24,
+    usageUnit: "Hrs",
+    rawUsageTypes: ["USE1-ProvisionedThroughput-ModelUnit-ClaudeSonnet"],
+  };
+
+  const withNonModel = (nonModel: unknown, cost = MODEL_SUM + 0.5) => ({
+    ...VALID_ROLLUP,
+    cost,
+    nonModel,
+  });
+
+  it("still parses a pre-amendment item with no nonModel (backward compatible)", () => {
+    const result = DailyRollupSchema.safeParse(VALID_ROLLUP);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.nonModel).toBeUndefined();
+  });
+
+  it("accepts a rollup with a nonModel map when the cost invariant holds", () => {
+    const result = DailyRollupSchema.safeParse(
+      withNonModel({ guardrails: GUARDRAILS }),
+    );
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.nonModel?.guardrails?.cost).toBe(0.5);
+      expect(result.data.nonModel?.guardrails?.rawUsageTypes).toEqual([
+        "USE1-Guardrail-ContentPolicy-Units",
+      ]);
+    }
+  });
+
+  it("accepts an empty nonModel map (invariant: second term is 0)", () => {
+    expect(
+      DailyRollupSchema.safeParse(withNonModel({}, MODEL_SUM)).success,
+    ).toBe(true);
+  });
+
+  it("accepts several categories whose costs sum into the total", () => {
+    expect(
+      DailyRollupSchema.safeParse(
+        withNonModel(
+          { guardrails: GUARDRAILS, "provisioned-throughput": PROVISIONED },
+          MODEL_SUM + 0.5 + 24,
+        ),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("accepts an idle recurring day: models {} with only Provisioned Throughput", () => {
+    const idle = {
+      ...VALID_ROLLUP,
+      cost: 24,
+      inputTokens: 0,
+      outputTokens: 0,
+      invocations: 0,
+      models: {},
+      nonModel: { "provisioned-throughput": PROVISIONED },
+    };
+    expect(DailyRollupSchema.safeParse(idle).success).toBe(true);
+  });
+
+  it("accepts a real zero-cost nonModel row (Rule 4: cost 0 is allowed)", () => {
+    expect(
+      DailyRollupSchema.safeParse(
+        withNonModel({ guardrails: { ...GUARDRAILS, cost: 0 } }, MODEL_SUM),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("rejects an unknown nonModel category key", () => {
+    expect(
+      DailyRollupSchema.safeParse(withNonModel({ "made-up": GUARDRAILS }))
+        .success,
+    ).toBe(false);
+  });
+
+  it("rejects a nonModel entry carrying token fields", () => {
+    const withTokens = { ...GUARDRAILS, inputTokens: 10, outputTokens: 5 };
+    expect(
+      DailyRollupSchema.safeParse(withNonModel({ guardrails: withTokens }))
+        .success,
+    ).toBe(false);
+  });
+
+  it("rejects a total that exceeds Σ models + Σ nonModel", () => {
+    expect(
+      DailyRollupSchema.safeParse(
+        withNonModel({ guardrails: GUARDRAILS }, MODEL_SUM + 0.5 + 1),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("rejects a total that omits nonModel cost (model sum only)", () => {
+    expect(
+      DailyRollupSchema.safeParse(
+        withNonModel({ guardrails: GUARDRAILS }, MODEL_SUM),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("rejects an invariant violation when nonModel is absent", () => {
+    expect(
+      DailyRollupSchema.safeParse({ ...VALID_ROLLUP, cost: 99 }).success,
+    ).toBe(false);
+  });
+
+  it("tolerates sub-6-decimal float drift in the invariant", () => {
+    expect(
+      DailyRollupSchema.safeParse(
+        withNonModel({ guardrails: GUARDRAILS }, MODEL_SUM + 0.5 + 4e-7),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("rejects drift larger than the 6-decimal tolerance", () => {
+    expect(
+      DailyRollupSchema.safeParse(
+        withNonModel({ guardrails: GUARDRAILS }, MODEL_SUM + 0.5 + 1e-4),
+      ).success,
+    ).toBe(false);
+  });
+});
+
+// Source: docs/specs/2026-05-15-data-model.md — "Backward compatibility".
+// The refined schema cannot be picked/omitted (Zod 4), so response schemas
+// derive from the unrefined base.
+describe("DailyRollupBaseSchema", () => {
+  const VIOLATING = { ...VALID_ROLLUP, cost: 99 };
+
+  it("parses an item whose cost violates the invariant, while DailyRollupSchema rejects it", () => {
+    expect(DailyRollupBaseSchema.safeParse(VIOLATING).success).toBe(true);
+    expect(DailyRollupSchema.safeParse(VIOLATING).success).toBe(false);
+  });
+
+  it("supports .pick()", () => {
+    const Picked = DailyRollupBaseSchema.pick({ accountId: true, cost: true });
+    expect(
+      Picked.safeParse({ accountId: "000000000000", cost: 1.5 }).success,
+    ).toBe(true);
+    expect(Picked.safeParse({ accountId: "000000000000" }).success).toBe(false);
+  });
+
+  it("supports .omit()", () => {
+    const Omitted = DailyRollupBaseSchema.omit({ models: true });
+    const withoutModels: Record<string, unknown> = { ...VALID_ROLLUP };
+    delete withoutModels.models;
+    expect(Omitted.safeParse(withoutModels).success).toBe(true);
   });
 });
