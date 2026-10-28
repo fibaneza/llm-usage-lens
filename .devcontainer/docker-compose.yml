@@ -57,15 +57,28 @@ services:
 
   dynamodb-local:
     # Optional — start on demand: `docker compose up -d dynamodb-local` or via /seed
-    image: amazon/dynamodb-local:2.5.4
+    # image: amazon/dynamodb-local:2.5.4
+    image: amazon/dynamodb-local:latest
+    user: root
     command: [ "-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data" ]
     volumes:
       - dynamodb-data:/data
     ports:
       - "8000:8000"
 
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin:latest
+    container_name: dynamodb-admin
+    ports:
+      - "8001:8001"
+    environment:
+      - DYNAMO_ENDPOINT=http://dynamodb-local:8000
+    depends_on:
+      - dynamodb-local
+
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.107.0
+    # image: otel/opentelemetry-collector-contrib:0.107.0
+    image: otel/opentelemetry-collector-contrib:latest
     command: [ "--config=/etc/otelcol/config.yaml" ]
     volumes:
       - ./otel/otel-collector-config.yaml:/etc/otelcol/config.yaml
@@ -82,7 +95,8 @@ services:
       retries: 5
 
   prometheus:
-    image: prom/prometheus:v2.54.1
+    # image: prom/prometheus:v2.54.1
+    image: prom/prometheus:latest
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
@@ -94,7 +108,8 @@ services:
       retries: 5
 
   loki:
-    image: grafana/loki:3.1.2
+    # image: grafana/loki:3.1.2
+    image: grafana/loki:latest
     ports:
       - "3100:3100"
     healthcheck:
@@ -104,7 +119,8 @@ services:
       retries: 5
 
   grafana:
-    image: grafana/grafana:11.2.2
+    # image: grafana/grafana:11.2.2
+    image: grafana/grafana:latest
     ports:
       - "3001:3000"
     environment:

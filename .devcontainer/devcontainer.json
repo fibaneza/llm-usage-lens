@@ -23,7 +23,7 @@
   // otherwise create a missing source as a root-owned directory, or error
   // out); (2) seed the gitignored Grafana admin password from its tracked
   // .example on first start, so the stack comes up without manual setup.
-  "initializeCommand": "mkdir -p \"$HOME/.ssh\" \"$HOME/.aws\" \"$HOME/.azure\"; f=.devcontainer/grafana/grafana_admin_password.txt; [ -f \"$f\" ] || cp \"$f.example\" \"$f\"",
+  "initializeCommand": "[ -f .env ] || cp .env.example .env; mkdir -p \"$HOME/.ssh\" \"$HOME/.aws\" \"$HOME/.azure\"; f=.devcontainer/grafana/grafana_admin_password.txt; [ -f \"$f\" ] || cp \"$f.example\" \"$f\"",
   "features": {
     // The default node user (renamed to match the host user) already contains a lot of common utils, but for now skipping the common-utils feature to save time during image build.
     // "ghcr.io/devcontainers/features/common-utils:2": {
@@ -43,7 +43,7 @@
       "yqVersion": "latest"
     }, // jq, yq, gojq, xq, jaq — various structured-data query tools used in scripts and debugging
     // "ghcr.io/devcontainer-community/devcontainer-features/yq:1": {}, // yq v4 for YAML processing in scripts (separate from the jq-likes version to get the latest)
-    "ghcr.io/customink/codespaces-features/sam-cli:1": {}, 
+    "ghcr.io/customink/codespaces-features/sam-cli:1": {},
     "ghcr.io/stu-bell/devcontainer-features/claude-code:0": {},
     "ghcr.io/shyim/devcontainers-features/bun:0": {} // required by the claude-mem plugin's stop hook (summarize script)
   },

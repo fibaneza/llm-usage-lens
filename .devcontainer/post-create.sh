@@ -50,7 +50,7 @@ claude plugin install ui-ux-pro-max@ui-ux-pro-max-skill            	    # UI/UX 
 
 # Tools — installed system-wide for workflow linting.
 mkdir -p "$HOME/.local/bin" && bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) latest "$HOME/.local/bin"  # Lint .github/workflows/*.yml with: actionlint
-gh extension install nicholasgasior/gh-label-sync                        # Sync GitHub labels from .github/labels.yml with: gh label-sync sync --file .github/labels.yml --dry-run
+gh extension install scttfrdmn/gh-label-sync                        # Sync GitHub labels from .github/labels.yml with: gh label-sync sync --file .github/labels.yml --dry-run
 
 # Playwright — the devcontainer has no display server, so the E2E suite runs
 # headless only (apps/dashboard/playwright.config.ts). Install the Chromium

@@ -5,6 +5,9 @@
 # /etc/claude-code/managed-settings.json (see .devcontainer/Dockerfile).
 input=$(cat)
 
+printf '%s' "$input" | jq -c '{captured_at: (now|floor), rate_limits}' \
+  > "$HOME/.claude/usage-snapshot.json" 2>/dev/null || true
+
 model=$(echo "$input" | jq -r '.model.display_name // "Unknown Model"')
 effort=$(echo "$input" | jq -r '.effort.level // empty')
 used=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
