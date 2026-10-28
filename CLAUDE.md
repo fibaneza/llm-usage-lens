@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-Phases 1–2 are **complete**: the pnpm monorepo toolchain (Phase 1) and the dashboard layout shell — sidebar nav, top bar, date-range filter, sync status, command menu — with placeholder pages for every route (Phase 2). Phase 3 (Data Layer) is split into three sub-phases (3.1 → 3.3, in order) and is **underway**: Phase 3.1 is **complete** (shared Zod schemas + model normalization in `packages/shared`, plus the CI `test` job); 3.2 (DynamoDB Local, `lib/dynamodb.ts`, `lib/data/**`, seed scripts) is **merged into local `main`** and verified locally — its CI Verify bullet waits for `main` to be pushed; 3.3 (Route Handlers, TanStack Query) has not started. Run `/phase-status` to confirm before starting work.
+Phases 1–2 are **complete**: the pnpm monorepo toolchain (Phase 1) and the dashboard layout shell — sidebar nav, top bar, date-range filter, sync status, command menu — with placeholder pages for every route (Phase 2). Phase 3 (Data Layer) is split into sub-phases 3.1 → 3.1a → 3.2 → 3.3 and is **underway**: Phase 3.1 is **complete** (shared Zod schemas + model normalization in `packages/shared`, plus the CI `test` job); 3.1a (non-model Bedrock charges: `DailyRollup.nonModel`, `classifyUsageType`, `--color-cost-non-model`) and 3.2 (DynamoDB Local, `lib/dynamodb.ts`, `lib/data/**`, seed scripts) are **merged into local `main`** and verified locally — their CI Verify bullets wait for `main` to be pushed, and the 3.1a follow-up (non-model seed coverage, rollup `date`) is open; 3.3 (Route Handlers, TanStack Query) has not started. Run `/phase-status` to confirm before starting work.
 
 Supporting infrastructure is in place and active — the devcontainer, the OpenTelemetry/Prometheus/Loki/Grafana observability stack, the `.claude/` rules + agents + commands, the `.mcp.json` config (Azure MCP), the repo-root quality config (`commitlint.config.cjs`, `.gitleaks.toml`, `.editorconfig`, `.gitattributes`), the Husky hooks (see [`docs/guides/git-hooks.md`](docs/guides/git-hooks.md)), and the headless Playwright E2E harness (`apps/dashboard/playwright.config.ts` + `apps/dashboard/e2e/`). Treat all of this as ready; do not rebuild it from scratch.
 
@@ -36,7 +36,7 @@ Not in the reading path above, but worth knowing they exist:
 - `ONBOARDING.md` — new-contributor setup checklist (codebases, MCP servers, skills to know)
 - `docs/superpowers/` — the design spec + implementation plan for the already-shipped `/new-component` command; kept for provenance, not active guidance
 
-Build strictly in phase order (see implementation-phases spec). Phase 2 (2.1–2.3), Phase 3 (3.1–3.3), and Phase 4 (4.1–4.9) are each split into independently deliverable sub-phases — one per PR (Rule 30.4); Phase 4's are one per dashboard page. Components are built where first needed and reused later.
+Build strictly in phase order (see implementation-phases spec). Phase 2 (2.1–2.3), Phase 3 (3.1–3.3, plus the 3.1a follow-up), and Phase 4 (4.1–4.9) are each split into independently deliverable sub-phases — one branch and squash commit each (Rule 30.4); Phase 4's are one per dashboard page. Components are built where first needed and reused later.
 
 Project-specific Claude Code customization lives under `.claude/`:
 - **Rules** — `.claude/rules/` (numbered `00`–`70`; always loaded)

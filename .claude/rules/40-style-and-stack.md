@@ -22,7 +22,8 @@ Source: `docs/specs/2026-05-15-design-system.md`.
    dark theme in v1.
 2. **No raw hex in components** — use the semantic color tokens / CSS
    variables defined in the design system spec. Chart series use the model
-   CSS token from `packages/shared/src/models.ts`.
+   CSS token from `packages/shared/src/models.ts`; non-model cost series use
+   `--color-cost-non-model`, never a model token.
 3. **Lazy-load Recharts:** `next/dynamic(() => import(...), { ssr: false })`.
    Every chart is wrapped in `ResponsiveContainer`.
 4. **Each page section is wrapped in its own `<Suspense>` and

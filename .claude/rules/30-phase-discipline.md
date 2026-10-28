@@ -6,7 +6,7 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
 
 ```
 1 Foundation → 2 Layout Shell (2.1 → 2.3, in order)
-  → 3 Data Layer (3.1 → 3.3, in order)
+  → 3 Data Layer (3.1 → 3.2 → 3.3, in order; 3.1a follow-up before or alongside 3.2)
     → 4 Pages (4.1 → 4.9, in order)
       → 5 Polish & Accessibility
         → 6 AWS Lambda Collector
@@ -29,9 +29,11 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
    layout shell with placeholder pages for every route. **Phase 3 (Data Layer)
    is underway:** Phase 3.1 is complete (shared Zod schemas + model
    normalization in `packages/shared/src/schemas/**` and `models.ts`, plus the
-   CI `test` job). Phase 3.2 (`scripts/`, DynamoDB Local table/seeds,
-   `lib/dynamodb.ts`, `lib/data/**`) is merged into local `main` and verified
-   locally (its CI Verify bullet waits for the push); 3.3 (Route Handlers, TanStack Query) has not started. Run `/phase-status` to confirm before
+   CI `test` job). Phase 3.1a (non-model cost schema, `classifyUsageType`,
+   `--color-cost-non-model`) and Phase 3.2 (`scripts/`, DynamoDB Local
+   table/seeds, `lib/dynamodb.ts`, `lib/data/**`) are merged into local `main`
+   and verified locally; their CI Verify bullets wait for the push, and the
+   3.1a seed coverage + rollup `date` follow-up is open. 3.3 (Route Handlers, TanStack Query) has not started. Run `/phase-status` to confirm before
    starting work.
 
 ## Branching & pull requests
@@ -53,8 +55,8 @@ direct work commits.
    into local `main` (or mark an optional PR ready) only when the phase's
    "Verify" checklist passes. CI-dependent bullets stay unticked until the user
    has pushed and CI is green.
-4. **One phase (or one sub-phase) per branch and squash commit.** Phase 2 (2.1–2.3), Phase 3
-   (3.1–3.3), and Phase 4 (4.1–4.9) are split into independently deliverable
+4. **One phase (or one sub-phase) per branch and squash commit.** Phase 2
+   (2.1–2.3), Phase 3 (3.1, 3.1a, 3.2, 3.3), and Phase 4 (4.1–4.9) are split into independently deliverable
    sub-phases — never bundle multiple phases or sub-phases into a single branch
    or squash commit.
 5. **Never commit work directly on `main`, and never push.** `main` changes

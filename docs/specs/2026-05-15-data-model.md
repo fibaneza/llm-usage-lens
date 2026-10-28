@@ -78,7 +78,7 @@ Attributes:
 
   -- Identity --
   accountId        string
-  date             string           (optional) YYYY-MM-DD (UTC) — PROPOSED (audit A2), see note below
+  date             string           (optional) YYYY-MM-DD (UTC) — adopted 2026-10-28 (audit A2), see note below
   departmentId     string
   departmentName   string           (historical snapshot, see Design Decisions)
   teamId           string
@@ -141,7 +141,7 @@ Attributes:
   ttl              number           Unix epoch + 365 days
 ```
 
-> **Proposal (audit A2, 2026-10-23; not yet adopted): `date` attribute.** Today the day exists only in `SK` (`DAILY#…`) and `gsi1pk` (`DATE#…`). Those key attributes are not in `DailyRollupSchema`, so a Zod parse strips them, and range or trend consumers lose the day. Proposed: add `date` (`YYYY-MM-DD`, UTC, Rule 20.1) as a plain attribute that the collector and seed scripts write. It is **optional** in `DailyRollupSchema`, so items written before it existed still parse. The check that `date` matches `SK` (`DAILY#…`) and `gsi1pk` (`DATE#…`) belongs in a **write-side item schema** (the full DynamoDB item including key attributes, used by the collector and seed scripts), not in `DailyRollupSchema`, which never sees the key attributes. Items without `date` can derive it from `SK` in the data-access layer, so no backfill is needed. Natural home: Phase 3.1a.
+> **`date` attribute (audit A2; adopted 2026-10-28).** Without it, the day exists only in `SK` (`DAILY#…`) and `gsi1pk` (`DATE#…`). Those key attributes are not in `DailyRollupSchema`, so a Zod parse strips them, and range or trend consumers lose the day. Add `date` (`YYYY-MM-DD`, UTC, Rule 20.1) as a plain attribute that the collector and seed scripts write. It is **optional** in `DailyRollupSchema`, so items written before it existed still parse. The check that `date` matches `SK` (`DAILY#…`) and `gsi1pk` (`DATE#…`) belongs in a **write-side item schema**, `DailyRollupItemSchema` in `packages/shared/src/schemas/` (the full DynamoDB item including key attributes, used by the collector and seed scripts), not in `DailyRollupSchema`, which never sees the key attributes. Data-access functions return `date` on every rollup, deriving it from `SK` for items written without it, so no backfill is needed. Lands in Phase 3.1a.
 
 ### Access Patterns
 

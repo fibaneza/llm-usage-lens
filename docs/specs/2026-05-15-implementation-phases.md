@@ -174,12 +174,12 @@ separate content-area band; see design-system spec — Layout / Date Filtering.)
 
 **Goal:** DynamoDB Local running, seed data populated, Zod schemas validated, Route Handlers serving data, TanStack Query fetching it.
 
-Phase 3 is split into three sub-phases (3.1 → 3.3), plus the 3.1a follow-up that amends the merged 3.1 schemas (land it before or alongside 3.2), each independently deliverable on its own branch and PR — built in order along a strict linear dependency chain (mirrors the Phase 2 and Phase 4 sub-phase model; see [Rule 30](../../.claude/rules/30-phase-discipline.md) branching). The split follows the natural data-layer boundary: shared schemas → database + data access → routes + client.
+Phase 3 is split into three sub-phases built as a strict chain (3.1 → 3.2 → 3.3), plus the 3.1a follow-up that amends the merged 3.1 schemas and lands before or alongside 3.2. Each is independently deliverable on its own branch (mirrors the Phase 2 and Phase 4 sub-phase model; see [Rule 30](../../.claude/rules/30-phase-discipline.md) branching). The split follows the natural data-layer boundary: shared schemas → database + data access → routes + client.
 
 | Sub-phase | Name | Deliverable |
 |---|---|---|
 | 3.1 | Shared Schemas & Model Normalization | Zod schemas + model-ID table in `packages/shared`; CI `test` job |
-| 3.1a | Non-Model Cost Schema (follow-up) | Optional `nonModel` map on `DailyRollupSchema` + charge-category enum + `classifyUsageType` table; amends 3.1 after the fact |
+| 3.1a | Non-Model Cost Schema (follow-up) | Optional `nonModel` map on `DailyRollupSchema` + charge-category enum + `classifyUsageType` table; rollup `date` + `DailyRollupItemSchema`; non-model seed coverage; amends 3.1 after the fact |
 | 3.2 | DynamoDB Local, Table/Seeds & Data Access | DynamoDB Local table/seed scripts, `lib/dynamodb.ts`, the six `lib/data/**` functions |
 | 3.3 | Route Handlers & TanStack Query | 13 Route Handlers + TanStack Query client integration |
 
@@ -228,17 +228,17 @@ None — data infrastructure only.
 
 ### Phase 3.1a — Non-Model Cost Schema (follow-up)
 
-**Goal:** Extend the merged 3.1 schemas so a `DailyRollup` can carry Bedrock charges that are not per-model token usage: Guardrails, Provisioned Throughput, model storage, Custom Model Import, Knowledge Bases, and others. Account totals stay exact (Rule 20.3). Spec: Data Model spec — *Non-Model Charges*; System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*.
+**Goal:** Extend the merged 3.1 schemas so a `DailyRollup` can carry Bedrock charges that are not per-model token usage: Guardrails, Provisioned Throughput, model storage, Custom Model Import, Knowledge Bases, and others. Account totals stay exact (Rule 20.3). Also adds the rollup `date` attribute (write-side `DailyRollupItemSchema`, seeds write it, `lib/data/**` returns it). Spec: Data Model spec — *Non-Model Charges*; System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*.
 
-**Dependencies:** Phase 3.1 (merged). A follow-up to 3.1 on its own branch and PR (`feature/phase-3.1a-non-model-cost`, Rule 30.4). It does not reorder the sub-phases. Land it **before or alongside** 3.2 so the seed scripts can cover `nonModel`. **Seed routing:** if 3.1a merges before 3.2, the seed-coverage tasks below (and the seeded idle-PT Verify item) move into 3.2's `nonModel` pass-through task; if 3.2 merges first, they land as a follow-up commit on the 3.1a branch.
+**Dependencies:** Phase 3.1 (merged). A follow-up to 3.1 on its own branch (`feature/phase-3.1a-non-model-cost`, Rule 30.4). It does not reorder the sub-phases. Land it **before or alongside** 3.2 so the seed scripts can cover `nonModel`. **Seed routing:** if 3.1a merges before 3.2, the seed-coverage tasks below (and the seeded idle-PT Verify item) move into 3.2's `nonModel` pass-through task; if 3.2 merges first, they land as a follow-up commit on the 3.1a branch.
 
 **Tasks:**
-- [ ] Add `NonModelCategorySchema` (closed enum of the canonical category keys) and `NonModelChargeSchema` (`cost`, `costEstimated`, `recurring`, optional `usageQuantity`/`usageUnit`, `rawUsageTypes`) in `packages/shared/src/schemas/`; types via `z.infer` (Rule 60.3)
-- [ ] Add optional `nonModel: z.partialRecord(NonModelCategorySchema, NonModelChargeSchema)`. Export the unrefined `DailyRollupBaseSchema` plus the refined `DailyRollupSchema`, whose refinement enforces `|cost − (Σ models[*].cost + Σ nonModel[*].cost)| ≤ 1e-6` (Data Model spec — *Schema decisions*)
-- [ ] Add the pure `classifyUsageType` function and its ordered pattern table in `packages/shared`. Patterns are placeholders, marked unverified until Phase 6 confirms real `USAGE_TYPE` strings
-- [ ] Add the semantic chart token `--color-cost-non-model: var(--color-foreground)` (Design System spec — *Chart Colors (Per Model)*; no raw hex, Rule 40.2)
-- [ ] If the Data Model spec *`date` attribute* proposal (audit A2) is adopted: add optional `date` (`YYYY-MM-DD`, UTC) to `DailyRollupSchema`, with valid/invalid tests; the `date` ↔ `SK`/`gsi1pk` consistency check goes in a write-side item schema, not `DailyRollupSchema`
-- [ ] Unit tests (Rule 60.22):
+- [x] Add `NonModelCategorySchema` (closed enum of the canonical category keys) and `NonModelChargeSchema` (`cost`, `costEstimated`, `recurring`, optional `usageQuantity`/`usageUnit`, `rawUsageTypes`) in `packages/shared/src/schemas/`; types via `z.infer` (Rule 60.3)
+- [x] Add optional `nonModel: z.partialRecord(NonModelCategorySchema, NonModelChargeSchema)`. Export the unrefined `DailyRollupBaseSchema` plus the refined `DailyRollupSchema`, whose refinement enforces `|cost − (Σ models[*].cost + Σ nonModel[*].cost)| ≤ 1e-6` (Data Model spec — *Schema decisions*)
+- [x] Add the pure `classifyUsageType` function and its ordered pattern table in `packages/shared`. Patterns are placeholders, marked unverified until Phase 6 confirms real `USAGE_TYPE` strings
+- [x] Add the semantic chart token `--color-cost-non-model: var(--color-foreground)` (Design System spec — *Chart Colors (Per Model)*; no raw hex, Rule 40.2)
+- [ ] Add optional `date` (`YYYY-MM-DD`, UTC) to `DailyRollupSchema`, with valid/invalid tests; the `date` ↔ `SK`/`gsi1pk` consistency check goes in the write-side `DailyRollupItemSchema` (`packages/shared/src/schemas/`), not `DailyRollupSchema`; seed scripts write `date`, and the `lib/data/**` rollup functions return it, deriving it from `SK` when absent (Data Model spec — *`date` attribute*, adopted 2026-10-28)
+- [x] Unit tests (Rule 60.22):
   - valid rollup with and without `nonModel`; a pre-amendment fixture (no `nonModel`) still parses
   - unknown category key rejected
   - invariant violation rejected
@@ -256,7 +256,7 @@ None — data infrastructure only.
   - one account with Provisioned Throughput accruing every day, including days with zero invocations (an idle recurring rollup with `models: {}`)
   - one `unclassified` entry with `rawUsageTypes`
   - `seed-empty.ts` unchanged
-- [ ] Verify: schema tests green in CI; existing 3.1 tests green, assertions unchanged; fixtures that violate the invariant corrected (the empty-models and hoisted-byUser fixtures move to `cost: 0`, by tdd-test-engineer); a seeded idle-PT day validates (checked wherever the seed tasks land, per **Seed routing**); no DynamoDB dependency added to `packages/shared`.
+- [ ] Verify: schema tests green in CI; existing 3.1 tests green, assertions unchanged; fixtures that violate the invariant corrected (the empty-models and hoisted-byUser fixtures move to `cost: 0`, by tdd-test-engineer); a seeded idle-PT day validates (checked wherever the seed tasks land, per **Seed routing**); `date` valid/invalid tests green, `DailyRollupItemSchema` rejects a `date` ↔ `SK`/`gsi1pk` mismatch, and the `lib/data/**` rollup functions return `date` for items stored without it; no DynamoDB dependency added to `packages/shared`.
 
 **Components Built:** None — shared validation infrastructure only.
 
@@ -645,7 +645,7 @@ Phase 4 (all sub-phases complete).
   - Write `nextScheduledAt` on SyncStatus (next UTC hour boundary)
   - Merge all three data sources per account per day (System Architecture spec — Three-source merge rules)
   - Resolve inference profile tags per Tag resolution appendix
-  - Write/overwrite DailyRollup items to DynamoDB via `BatchWriteItem` (25/batch)
+  - Write/overwrite DailyRollup items to DynamoDB via `BatchWriteItem` (25/batch), each carrying `date` and validated with `DailyRollupItemSchema` (Data Model spec — *`date` attribute*)
   - Update SyncStatus item
 - [ ] Implement two-day refresh strategy (UTC calendar days)
   - Yesterday: costFinalized = true
