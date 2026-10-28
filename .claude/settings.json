@@ -102,7 +102,6 @@
       "Bash(npx *)",
       "Bash(gh *)",
       "Bash(sam build*)",
-      "Bash(sam deploy*)",
       "Bash(sam local *)",
       "Bash(sam logs *)",
       "Bash(sam validate*)",
@@ -120,7 +119,15 @@
       "Edit(/.claude/settings.json)",
       "Edit(/.claude/settings.local.json)",
       "Edit(/.husky/**)",
-      "Edit(/.gitleaks.toml)"
+      "Edit(/.gitleaks.toml)",
+      "Bash(gh api *)",
+      "Bash(git clean*)",
+      "Bash(git checkout -- *)",
+      "Bash(git restore*)",
+      "Bash(git stash drop*)",
+      "Bash(git branch -D*)",
+      "Bash(sed -i*)",
+      "Bash(sam deploy*)"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -131,7 +138,11 @@
       "Bash(aws * delete-*)",
       "Bash(aws dynamodb delete-table*)",
       "Bash(aws cloudformation delete-stack*)",
-      "Bash(sam delete*)"
+      "Bash(sam delete*)",
+      "Bash(gh repo delete*)",
+      "Bash(gh release delete*)",
+      "Bash(gh secret *)",
+      "Bash(find * -delete*)"
     ]
   },
   "hooks": {
