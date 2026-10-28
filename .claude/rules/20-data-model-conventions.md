@@ -27,8 +27,9 @@ Source: `docs/specs/2026-05-15-data-model.md`.
    v1 targets ≤100 accounts × 30 days (~3k items).
 8. **Custom date ranges are capped at 90 days** by `DateRangeQuerySchema`.
 9. **A missing `SyncStatus` item is the "never synced" state, not an error.**
-   Show a neutral message; never crash. `SyncCountdown` reads
-   `nextScheduledAt` when present.
+   Show a neutral message; never crash. When the item exists,
+   `nextScheduledAt` is required (`SyncStatusSchema`) and `SyncCountdown`
+   reads it.
 10. **`byService` comes from CloudTrail inference profiles** (`service=<name>`
     tag), not Cost Explorer billing tags. Untagged usage → `_untagged`.
 11. **Standard response shape** (Route Handlers):

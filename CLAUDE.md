@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-Phases 1–2 are **complete**: the pnpm monorepo toolchain (Phase 1) and the dashboard layout shell — sidebar nav, top bar, date-range filter, sync status, command menu — with placeholder pages for every route (Phase 2). Phase 3 (Data Layer) is split into sub-phases 3.1 → 3.1a → 3.2 → 3.3 and is **underway**: Phase 3.1 is **complete** (shared Zod schemas + model normalization in `packages/shared`, plus the CI `test` job); 3.1a (non-model Bedrock charges: `DailyRollup.nonModel`, `classifyUsageType`, `--color-cost-non-model`) and 3.2 (DynamoDB Local, `lib/dynamodb.ts`, `lib/data/**`, seed scripts) are **merged into local `main`** and verified locally — their CI Verify bullets wait for `main` to be pushed, and the 3.1a follow-up (non-model seed coverage, rollup `date`) is open; 3.3 (Route Handlers, TanStack Query) has not started. Run `/phase-status` to confirm before starting work.
+Current phase progress is not recorded here — run `/phase-status`, which checks the task and Verify checkboxes in [`docs/specs/2026-05-15-implementation-phases.md`](docs/specs/2026-05-15-implementation-phases.md) against the repo and `git log`.
 
 Supporting infrastructure is in place and active — the devcontainer, the OpenTelemetry/Prometheus/Loki/Grafana observability stack, the `.claude/` rules + agents + commands, the `.mcp.json` config (Azure MCP), the repo-root quality config (`commitlint.config.cjs`, `.gitleaks.toml`, `.editorconfig`, `.gitattributes`), the Husky hooks (see [`docs/guides/git-hooks.md`](docs/guides/git-hooks.md)), and the headless Playwright E2E harness (`apps/dashboard/playwright.config.ts` + `apps/dashboard/e2e/`). Treat all of this as ready; do not rebuild it from scratch.
 
@@ -36,7 +36,7 @@ Not in the reading path above, but worth knowing they exist:
 - `ONBOARDING.md` — new-contributor setup checklist (codebases, MCP servers, skills to know)
 - `docs/superpowers/` — the design spec + implementation plan for the already-shipped `/new-component` command; kept for provenance, not active guidance
 
-Build strictly in phase order (see implementation-phases spec). Phase 2 (2.1–2.3), Phase 3 (3.1–3.3, plus the 3.1a follow-up), and Phase 4 (4.1–4.9) are each split into independently deliverable sub-phases — one branch and squash commit each (Rule 30.4); Phase 4's are one per dashboard page. Components are built where first needed and reused later.
+Build strictly in phase order (see implementation-phases spec). Phase 2 (2.1–2.3), Phase 3 (3.1–3.3), and Phase 4 (4.1–4.9) are each split into independently deliverable sub-phases — one per PR (Rule 30.4); Phase 4's are one per dashboard page. Components are built where first needed and reused later.
 
 Project-specific Claude Code customization lives under `.claude/`:
 - **Rules** — `.claude/rules/` (numbered `00`–`70`; always loaded)
@@ -74,7 +74,7 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 | `pnpm dev` | Next.js dev server (`apps/dashboard`) |
 | `pnpm build` | `next build` |
 | `pnpm format:check` | Prettier format check (`pnpm format` to write) |
-| `pnpm lint` | ESLint v9 flat config (`eslint.config.ts`); also enforces Rule 10 (no `@aws-sdk/*` outside the server-only paths, no `lib/data`/`lib/dynamodb`/AWS SDK import in a `"use client"` module) and Rule 60 (`no-console`, no default export outside framework files and configs) |
+| `pnpm lint` | ESLint v9 flat config (`eslint.config.ts`) |
 | `pnpm typecheck` | `tsc --noEmit` across every workspace (`pnpm -r --if-present typecheck`) plus `tsc -p tsconfig.scripts.json` for `scripts/` |
 | `pnpm test` | Unit + integration tests (**Vitest**, not Jest) — root `vitest.config.ts` with two projects; the integration project needs DynamoDB Local on `:8000`; excludes `e2e/` and `tools/` |
 | `pnpm test:unit` | Unit + component tests only (`vitest run --project unit`, jsdom; no DynamoDB needed) |
@@ -82,8 +82,6 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 | `pnpm db:create-table` | Create the `bedrock-usage` table in DynamoDB Local (idempotent) |
 | `pnpm db:seed` / `db:seed:empty` / `db:seed:large` / `db:seed:ranking` | Load seed data (`seed:empty` resets the table first) |
 | `pnpm exec vitest run path/to/file.test.ts` | Run a single test file |
-| `pnpm check` | The local merge gate (Rule 31 step 3): `typecheck` → `lint` → `format:check` → `vitest run` (unit + integration; needs DynamoDB Local on `:8000`) → `build:ci`. Not `pnpm ci` — that is pnpm's built-in clean install |
-| `pnpm build:ci` | `pnpm build` with the CI env (`SKIP_ENV_VALIDATION=1 NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_APP_URL=http://localhost:3000`) |
 | `pnpm test:e2e` | Headless Playwright E2E in `apps/dashboard/e2e/` (smoke specs accrue with UI work; full journeys Phase 5) |
 
 DynamoDB Local (Phase 3.2): `docker compose up -d dynamodb-local` (inside `.devcontainer`; from the host use `docker compose -f .devcontainer/docker-compose.yml up -d dynamodb-local`), then `pnpm db:create-table` and `pnpm db:seed` (variants `db:seed:empty` / `db:seed:large` / `db:seed:ranking`). The scripts default to `http://localhost:8000` and must never target real AWS. The `/seed` slash command wraps this flow. See the [README](README.md) for the macOS volume workaround.

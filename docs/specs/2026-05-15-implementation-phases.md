@@ -31,43 +31,43 @@ Components are built where they are first needed and reused in subsequent pages.
 
 ### Tasks
 
-- [ ] Initialize pnpm workspace monorepo (`pnpm-workspace.yaml`, `packages/shared`, `apps/dashboard`)
+- [x] Initialize pnpm workspace monorepo (`pnpm-workspace.yaml`, `packages/shared`, `apps/dashboard`)
   - `packages/shared`: Zod schemas and `models.ts` consumed by dashboard and (later) collector — see System Architecture spec **Shared code layout**
-- [ ] Initialize Next.js project in `apps/dashboard` with TypeScript strict mode, App Router
-- [ ] Configure Tailwind CSS v4 with light mode theme
+- [x] Initialize Next.js project in `apps/dashboard` with TypeScript strict mode, App Router
+- [x] Configure Tailwind CSS v4 with light mode theme
   - Color tokens (CSS variables from design system spec)
   - Typography (Space Grotesk + JetBrains Mono via Google Fonts)
   - Spacing scale (4px/8px grid)
-- [ ] Initialize shadcn/ui with light theme
-- [ ] Configure ESLint v9 (flat config, `eslint.config.ts`)
-- [ ] Configure Prettier (paired with ESLint)
-- [ ] Set up Husky + lint-staged (pre-commit: ESLint + Prettier on staged files)
-- [ ] Set up gitleaks (pre-commit: secret scanning)
-- [ ] Set up commitlint (conventional commits)
-- [ ] Configure pre-push hook (`tsc --noEmit`)
-- [ ] Wire the two project Claude Code hooks in `.claude/settings.json` — deferred to here because before Phase 1 there is no `package.json`, so the commands would fail (the agent workflow in [Rule 70](../../.claude/rules/70-agent-workflow.md) is likewise dormant until now). These complement the git hooks above, they do not replace them:
+- [x] Initialize shadcn/ui with light theme
+- [x] Configure ESLint v9 (flat config, `eslint.config.ts`)
+- [x] Configure Prettier (paired with ESLint)
+- [x] Set up Husky + lint-staged (pre-commit: ESLint + Prettier on staged files)
+- [x] Set up gitleaks (pre-commit: secret scanning)
+- [x] Set up commitlint (conventional commits)
+- [x] Configure pre-push hook (`tsc --noEmit`)
+- [x] Wire the two project Claude Code hooks in `.claude/settings.json` — deferred to here because before Phase 1 there is no `package.json`, so the commands would fail (the agent workflow in [Rule 70](../../.claude/rules/70-agent-workflow.md) is likewise dormant until now). These complement the git hooks above, they do not replace them:
   - **PostToolUse(`Write|Edit`)** → `prettier --write` the changed file, for format-on-edit feedback ahead of the lint-staged pre-commit pass
   - **PreToolUse(`Write|Edit`)** scoped to `apps/dashboard/**/*.tsx` → guard the [Rule 10](../../.claude/rules/10-server-only-boundary.md) server-only boundary: block an `@aws-sdk/*` or `lib/data/**` import landing in a `"use client"` module (Rule 10 calls this a security bug). This is the one check the git hooks and the `settings.json` deny list cannot easily do at write time
-- [ ] Set up Auth.js (NextAuth v5) authentication
+- [x] Set up Auth.js (NextAuth v5) authentication
   - Install `next-auth`
   - Configure the Microsoft Entra ID provider in `auth.ts` (provider-agnostic — swappable in one file)
   - Configure Auth.js in the Next.js proxy (`proxy.ts`) to protect `/dashboard/*` and `/api/*` routes
   - Build sign-in page (`/sign-in`) — single "Sign in with Microsoft" action; no sign-up (identities managed in Entra ID)
   - Set up environment variables
-- [ ] Configure @t3-oss/env-nextjs (type-safe env vars with Zod validation)
-- [ ] Integrate OpenTelemetry (`@vercel/otel` + `instrumentation.ts`)
+- [x] Configure @t3-oss/env-nextjs (type-safe env vars with Zod validation)
+- [x] Integrate OpenTelemetry (`@vercel/otel` + `instrumentation.ts`)
   - Export errors, traces, and metrics via OTLP to the devcontainer Collector (Prometheus + Loki + Grafana); Grafana Cloud free tier in production
   - Capture server errors via the Next.js `onRequestError` hook
-- [ ] Create environment files
+- [x] Create environment files
   - `.env.example` (template with all required vars, no values — git tracked)
   - `.env.local` (local dev values — git ignored)
   - `.env.test` (test config — git ignored)
-- [ ] Set up GitHub Actions CI pipeline
+- [x] Set up GitHub Actions CI pipeline
   - Lint (ESLint + Prettier check)
   - Type check (`tsc --noEmit`)
   - Secret scan (gitleaks)
   - Build (`next build`)
-- [ ] Verify: project runs with `pnpm dev`, Microsoft Entra ID sign-in works, light theme renders
+- [x] Verify: project runs with `pnpm dev`, Microsoft Entra ID sign-in works, light theme renders
 
 ### Dependencies
 
@@ -106,22 +106,22 @@ Phase 1 (Foundation).
 **Goal:** The persistent application frame — sidebar, top bar, and responsive layout — with every route navigable as a bare placeholder.
 
 **Tasks:**
-- [ ] Create bare placeholder pages for all 9 routes (title only — the shared top-bar title comes from this shell; the global date filter joins the top bar in 2.3) so navigation has targets: `/dashboard`, `/dashboard/ranking`, `/dashboard/departments`, `/dashboard/departments/[id]`, `/dashboard/teams`, `/dashboard/teams/[id]`, `/dashboard/services`, `/dashboard/users`, `/dashboard/settings`
-- [ ] Build `Sidebar` component (shadcn/ui)
+- [x] Create bare placeholder pages for all 9 routes (title only — the shared top-bar title comes from this shell; the global date filter joins the top bar in 2.3) so navigation has targets: `/dashboard`, `/dashboard/ranking`, `/dashboard/departments`, `/dashboard/departments/[id]`, `/dashboard/teams`, `/dashboard/teams/[id]`, `/dashboard/services`, `/dashboard/users`, `/dashboard/settings`
+- [x] Build `Sidebar` component (shadcn/ui)
   - 7 top-level navigation links with Lucide icons (the two `[id]` detail routes are drill-down only — no sidebar entry)
   - Active state highlighting
   - Collapsible on desktop, overlay on mobile
-- [ ] Build responsive layout structure (the `/dashboard` layout)
+- [x] Build responsive layout structure (the `/dashboard` layout)
   - Breakpoints: 375 / 768 / 1024 / 1440
   - Content area max-width 1280px, centered
   - Mobile: single column, collapsible sidebar
   - Tablet: sidebar overlay
   - Desktop: persistent sidebar + content
-- [ ] Build top bar
+- [x] Build top bar
   - User menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`)
   - `SyncStatusBadge` placeholder (no real data yet — neutral "no sync" state, never an error)
   - `SyncCountdown` placeholder
-- [ ] Verify: every route is reachable from the sidebar, sidebar collapses on desktop and overlays on mobile, responsive at all breakpoints with no horizontal scroll
+- [x] Verify: every route is reachable from the sidebar, sidebar collapses on desktop and overlays on mobile, responsive at all breakpoints with no horizontal scroll
 
 **Components Built:** `Sidebar`, top bar + user menu, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder)
 
@@ -134,11 +134,11 @@ Phase 1 (Foundation).
 **Dependencies:** Phase 2.1.
 
 **Tasks:**
-- [ ] Build `Kbd` component (keyboard-shortcut hint)
-- [ ] Build `CommandMenu` component (shadcn/ui cmdk)
+- [x] Build `Kbd` component (keyboard-shortcut hint)
+- [x] Build `CommandMenu` component (shadcn/ui cmdk)
   - Cmd+K trigger with `Kbd` hint
   - Skeleton search — navigates to pages (populated with real data in Phase 5)
-- [ ] Verify: Cmd+K opens the command menu and navigates between pages
+- [x] Verify: Cmd+K opens the command menu and navigates between pages
 
 **Components Built:** `Kbd`, `CommandMenu`
 
@@ -154,15 +154,15 @@ separate content-area band; see design-system spec — Layout / Date Filtering.)
 **Dependencies:** Phase 2.2.
 
 **Tasks:**
-- [ ] Build `DateRangePicker` component
+- [x] Build `DateRangePicker` component
   - Segmented preset toggle (`7D / 30D / 90D`) + a `Custom` trigger opening a
     shadcn/ui `Calendar` in a `Popover` (see design-system — Control Patterns)
   - Presets: 7 days, 30 days, 90 days, Custom range
   - Default: last 30 days
   - Persisted in URL via nuqs; UTC arithmetic with a 90-day clamp (Rules 20.1, 20.8)
-- [ ] Place the `DateRangePicker` in the top bar (`AppHeader`), wrapped in a
+- [x] Place the `DateRangePicker` in the top bar (`AppHeader`), wrapped in a
   `<Suspense>` boundary so pages still prerender statically
-- [ ] Verify: date filter persists in URL, renders on every page via the shared
+- [x] Verify: date filter persists in URL, renders on every page via the shared
   top bar, navigation and responsive behaviour from 2.1 still hold, `next build`
   succeeds
 

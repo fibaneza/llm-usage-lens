@@ -59,7 +59,9 @@ patterns) and current Next.js App Router guidance.
 18. **No `console.log` in committed code.** Use OpenTelemetry for errors; remove
     debug logging before commit. Never log secrets (Rule 50.6).
 19. **Fail fast on misconfiguration.** Env vars go through
-    `@t3-oss/env-nextjs` — never raw `process.env` reads (Rule 50.2).
+    `@t3-oss/env-nextjs` — never raw `process.env` reads in app code
+    (Rule 50.2; `scripts/**`, test helpers, and tool config are the
+    documented exception).
 
 ## Testing (Vitest — not Jest)
 

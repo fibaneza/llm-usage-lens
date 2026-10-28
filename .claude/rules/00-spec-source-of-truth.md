@@ -15,6 +15,11 @@ cite it in your response.
 | Auth.js + Microsoft Entra ID + AWS credential setup | `docs/guides/auth-setup.md` | Anything touching sign-in or AWS credentials |
 | Collector operational runbook, SAM deploy/undeploy | `docs/guides/aws-infrastructure.md` | Phase 6 collector work |
 | Dashboard deployment runbook (Netlify) | `docs/guides/dashboard-deployment.md` | Deployment work |
+| Bedrock simulator (standalone test harness) | `docs/specs/2026-05-24-bedrock-simulator.md`, `docs/guides/bedrock-simulator.md` | Anything under `tools/bedrock-simulator/` |
+| Dynamic workflows (not adopted in v1) | `docs/guides/dynamic-workflows.md` | Proposing multi-agent workflow orchestration |
+| GitHub / Actions practice | `docs/guides/github-best-practices.md` | Workflow, branching, or PR changes |
+| Local git hooks (Husky) | `docs/guides/git-hooks.md` | Changing or debugging hooks |
+| Guided learning path | `docs/guides/learning-path.md` | Onboarding or explaining the build order |
 
 ## Rules
 

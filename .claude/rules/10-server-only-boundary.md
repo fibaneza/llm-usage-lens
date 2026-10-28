@@ -10,7 +10,7 @@ credentials must never reach the browser.
 | Data access functions | `apps/dashboard/lib/data/**` | Must `import "server-only"` at the top |
 | DynamoDB client | `apps/dashboard/lib/dynamodb.ts` | Server only |
 | Route Handlers (the only HTTP backend) | `apps/dashboard/app/api/**` | Validate input with Zod, check the Auth.js session, query DynamoDB, return the standard shape |
-| Table setup + seeds | repo-root `scripts/` | Run via `pnpm tsx scripts/<file>.ts` |
+| Table setup + seeds | repo-root `scripts/` | Run via `pnpm db:create-table` / `pnpm db:seed` (`:empty` / `:large` / `:ranking`) |
 | Shared schemas + model normalization | `packages/shared` (`@bedrock-usage/shared`) | Imported by both `apps/dashboard` and `apps/collector` |
 
 ## Rules

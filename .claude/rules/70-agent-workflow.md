@@ -85,8 +85,10 @@ review = quality-reviewer + spec-guardian + ecc reviewers
    code; `tdd-test-engineer` edits tests only (Vitest **and** Playwright —
    e2e specs are tests); `quality-reviewer`, `spec-guardian`, and
    `playwright-ui-reviewer` are strictly read-only.
-9. **The loop never commits.** On APPROVE the orchestrator summarises and
-   suggests `/commit` — the user commits.
+9. **The loop never commits.** No agent commits. On APPROVE the orchestrator
+   summarises and suggests `/commit`; once the user has authorised the merge,
+   the orchestrator may squash-merge into local `main` per
+   [Rule 31](31-github-flow.md) *Integration workflow*.
 10. **One Phase 4 sub-phase per run** (Rule 30.4). Larger requests are split
     before the loop starts.
 11. **E2E runs headless, always.** The devcontainer has no display server —

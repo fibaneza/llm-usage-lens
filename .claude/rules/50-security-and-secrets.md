@@ -11,9 +11,15 @@
 
 1. **Never use static `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.** Real AWS
    access goes through `aws sso login` + `AWS_PROFILE`. DynamoDB Local needs
-   no real credentials.
+   no real credentials; the dummy `local`/`local` pair is set only when
+   `isLocalEndpoint` is true (`apps/dashboard/lib/dynamodb.ts`,
+   `scripts/lib/dynamodb-local.ts`) — every other endpoint uses the default
+   chain.
 2. **Env vars are validated at build time** by `@t3-oss/env-nextjs` with Zod.
    Add new env vars to the schema, not to ad-hoc `process.env` reads.
+   Exception: code outside the Next.js app — repo-root `scripts/**`, test
+   helpers, and tool config (`vitest.config.ts`, `playwright.config.ts`) —
+   may read `process.env` directly.
 3. **Auth.js is the identity-provider abstraction.** Switching providers is a
    change to `apps/dashboard/auth.ts` only — keep provider-specific code out
    of routes and components.
