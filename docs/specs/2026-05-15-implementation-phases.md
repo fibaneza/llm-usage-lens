@@ -291,7 +291,7 @@ None — data infrastructure only.
 - [x] Add the Vitest node-env project split + DynamoDB-Local integration tests for data-access functions (the env split the `vitest.config.ts` comment already anticipates)
 - [x] Extend the CI `test` job to start DynamoDB Local + create table + seed
 - [x] `nonModel` pass-through: seeds cover `nonModel` per the Phase 3.1a seed-coverage tasks, including a seeded idle-PT day that validates (owned here if 3.1a merges first; via a follow-up commit on the 3.1a branch if 3.2 merges first — Phase 3.1a *Seed routing*), and data-access functions parse each item with the refined `DailyRollupSchema` on read and return `nonModel` unchanged
-- [ ] Verify: `pnpm tsx scripts/seed.ts` populates DynamoDB Local; data-access integration tests pass locally and in CI.
+- [x] Verify: `pnpm tsx scripts/seed.ts` populates DynamoDB Local; data-access integration tests pass locally and in CI.
 
 **Components Built:** None — data infrastructure only.
 
