@@ -17,7 +17,25 @@ The review stage also fans out to existing agents — `spec-guardian`
 e2e coverage audit, dispatched when UI components or pages changed) and the
 ecc plugin reviewers `ecc:typescript-reviewer` and `ecc:security-reviewer`.
 They do not replace `quality-reviewer`; they add browser, language, and
-security depth.
+security depth. The `ecc:*` agents come from an external plugin that is not
+installed in every environment: if unavailable, record "not available" in the
+review summary and continue — `quality-reviewer` then covers TypeScript idiom
+and security itself.
+
+## Model routing
+
+Set the model explicitly on every dispatch; the agent's frontmatter is the fallback:
+
+| Model | Use for |
+|---|---|
+| opus (`claude-opus-5-5`) | Reasoning, design, review verdicts, hard debugging |
+| sonnet (`claude-sonnet-5-5`) | Writing code and tests, medium tasks |
+| haiku (`claude-haiku-5-5`) | Small mechanical tasks — lookups, running a gate and summarising, formatting |
+
+Escalate haiku → sonnet on a wrong or uncertain result, and sonnet → opus after
+failing the acceptance criteria twice; escalations count as retries. Review
+gates never run below opus, except that `ecc:typescript-reviewer` runs on
+sonnet and `ecc:security-reviewer` runs on opus.
 
 ## The loop
 

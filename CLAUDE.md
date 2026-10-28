@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-Phases 1–2 are **complete**: the pnpm monorepo toolchain (Phase 1) and the dashboard layout shell — sidebar nav, top bar, date-range filter, sync status, command menu — with placeholder pages for every route (Phase 2). Phase 3 (Data Layer) is split into three sub-phases (3.1 → 3.3, in order) and is **underway**: Phase 3.1's shared Zod schemas + model normalization (`packages/shared`) have merged; the CI `test` job that completes 3.1 is still outstanding, and 3.2 (DynamoDB Local, `lib/dynamodb.ts`, `lib/data/**`, seed scripts) and 3.3 (Route Handlers, TanStack Query) have not started. Run `/phase-status` to confirm before starting work.
+Phases 1–2 are **complete**: the pnpm monorepo toolchain (Phase 1) and the dashboard layout shell — sidebar nav, top bar, date-range filter, sync status, command menu — with placeholder pages for every route (Phase 2). Phase 3 (Data Layer) is split into three sub-phases (3.1 → 3.3, in order) and is **underway**: Phase 3.1 is **complete** (shared Zod schemas + model normalization in `packages/shared`, plus the CI `test` job); 3.2 (DynamoDB Local, `lib/dynamodb.ts`, `lib/data/**`, seed scripts) is **merged into local `main`** and verified locally — its CI Verify bullet waits for `main` to be pushed; 3.3 (Route Handlers, TanStack Query) has not started. Run `/phase-status` to confirm before starting work.
 
 Supporting infrastructure is in place and active — the devcontainer, the OpenTelemetry/Prometheus/Loki/Grafana observability stack, the `.claude/` rules + agents + commands, the `.mcp.json` config (Azure MCP), the repo-root quality config (`commitlint.config.cjs`, `.gitleaks.toml`, `.editorconfig`, `.gitattributes`), the Husky hooks (see [`docs/guides/git-hooks.md`](docs/guides/git-hooks.md)), and the headless Playwright E2E harness (`apps/dashboard/playwright.config.ts` + `apps/dashboard/e2e/`). Treat all of this as ready; do not rebuild it from scratch.
 
@@ -125,10 +125,10 @@ Two non-obvious constraints:
 - **Workflow-editing PRs can't self-approve.** `claude-code-action` refuses to
   run on a PR that modifies the review workflow; the check only passes once the
   change is on `main`.
-- **Branch protection is documented but not enforced** on the current free
-  private repo — classic branch protection and rulesets both require GitHub Pro
-  or a public repo. The "required checks" in [Rule 31](.claude/rules/31-github-flow.md)
-  are advisory until then.
+- **Branch protection is not enforced** on the current free private repo.
+  Work lands as local squash-merges into `main` that the user pushes
+  ([Rule 31](.claude/rules/31-github-flow.md)), so PR-only checks run only on
+  the optional PR path; CI runs on every push to `main`.
 
 ## Local development environment
 
@@ -143,7 +143,7 @@ A devcontainer (`.devcontainer/`) bundles an observability stack alongside the a
 | Grafana | 3001 | Dashboards for metrics + logs |
 | DynamoDB Local | 8000 | Dashboard's data store in dev (started on demand) |
 
-`OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_SERVICE_NAME` are set in the compose file. Running the `claude` CLI inside the devcontainer auto-exports Claude Code telemetry (sessions, token/cost metrics, prompt/tool/API events) to the collector — metrics land in Prometheus, events in Loki. DynamoDB Local is a separate service started with `/seed` or `docker compose up -d dynamodb-local`.
+`OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_SERVICE_NAME` are set in the compose file. Running the `claude` CLI inside the devcontainer auto-exports Claude Code telemetry (sessions, token/cost metrics, prompt/tool/API events) to the collector — metrics land in Prometheus, events in Loki. DynamoDB Local is a separate service started with `/seed` or `docker compose up -d dynamodb-local` (from the host: `docker compose -f .devcontainer/docker-compose.yml up -d dynamodb-local`).
 
 MCP servers are configured in `.mcp.json` at the repo root (currently: Azure MCP via `@azure/mcp`). Add new MCP servers there rather than to per-user Claude Code settings so the whole team gets them.
 

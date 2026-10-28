@@ -28,9 +28,10 @@ credentials must never reach the browser.
    invent ad-hoc shapes (no bare arrays, no `{ result: ... }`, no top-level
    error strings).
 5. **No AWS SDK imports outside `apps/dashboard/app/api/**`,
-   `apps/dashboard/lib/data/**`, `apps/dashboard/lib/dynamodb.ts`, or
-   `apps/collector/**`.** In particular, no AWS SDK import in any
-   `"use client"` module or in a Server Component's client subtree. If you
+   `apps/dashboard/lib/data/**`, `apps/dashboard/lib/dynamodb.ts`,
+   `apps/collector/**`, or repo-root `scripts/**`** (DynamoDB-Local-only dev
+   tooling that refuses non-local endpoints and is never imported by app
+   code). In particular, no AWS SDK import in any `"use client"` module or in a Server Component's client subtree. If you
    find one, treat it as a security bug.
 
 See `docs/specs/2026-05-15-system-architecture.md`

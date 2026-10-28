@@ -13,9 +13,13 @@ Steps:
 2. Inspect repo state with `ls`/Glob:
    - `package.json`, `pnpm-workspace.yaml` → Phase 1 started?
    - `apps/dashboard/` exists? `apps/collector/`? `packages/shared/`?
-   - `docker-compose.yml`, `scripts/create-table.ts`, `scripts/seed.ts` →
-     Phase 3 started?
-   - `apps/dashboard/app/(routes)/**/page.tsx` → which Phase 4 sub-phases?
+   - `.devcontainer/docker-compose.yml`, `scripts/create-table.ts`,
+     `apps/dashboard/lib/dynamodb.ts`, `apps/dashboard/lib/data/` →
+     Phase 3.2 started?
+   - `apps/dashboard/app/dashboard/**/page.tsx` → which Phase 4 sub-phases?
+   - The CI `test` job in `.github/workflows/bedrock-dashboard-build.yml` and
+     recent `git log` for merged sub-phase PRs — check both before declaring
+     status.
 3. For each phase, list status: **not started / in progress / complete**.
    - A phase is "complete" only if every task box in the spec is plausibly
      done **and** its "Verify" bullets would pass.

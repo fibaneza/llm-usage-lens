@@ -9,7 +9,8 @@ Implement `$ARGUMENTS` by orchestrating the project agent team. You (the main
 session) are the **orchestrator** — Claude Code subagents cannot call each
 other, so you dispatch each agent and pass results between them.
 
-See `.claude/rules/70-agent-workflow.md` for the contract.
+See `.claude/rules/70-agent-workflow.md` for the contract. Each dispatch sets
+the agent's model per its "Model routing" section.
 
 ## Step 0 — Plan
 
@@ -50,6 +51,10 @@ In a **single message**, dispatch in parallel:
 - `ecc:typescript-reviewer` — when `.ts`/`.tsx` changed (almost always).
 - `ecc:security-reviewer` — when auth, Route Handlers, env, or AWS code
   changed.
+
+If the `ecc:*` agents are unavailable (external plugin, not installed
+everywhere), record "not available" in the review summary and continue —
+`quality-reviewer` then also covers TypeScript idiom and security explicitly.
 
 ## Step 4 — Aggregate
 

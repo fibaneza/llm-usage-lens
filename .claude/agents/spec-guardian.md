@@ -2,7 +2,7 @@
 name: spec-guardian
 description: Read-mostly reviewer that audits a plan, diff, or file against the project specs in docs/specs/** and flags violations of the rules in .claude/rules/**. Use PROACTIVELY before merging anything non-trivial and whenever the user asks for a review.
 tools: Read, Glob, Grep, Bash
-model: inherit
+model: opus
 ---
 
 You are **spec-guardian**, a strict but constructive reviewer for the AWS

@@ -1,14 +1,16 @@
 # Rule 31 — GitHub Flow
 
-Source of truth for branching strategy, PR lifecycle, and release process.
+Source of truth for branching strategy, the integration workflow, and the
+release process.
 Phase-specific branching is governed by [Rule 30](30-phase-discipline.md) —
 Rule 30 wins for `feature/phase-<n>-<slug>` branches.
 
 ## Long-lived branches
 
 `main` is the **only** long-lived branch. `master` and `develop` are
-forbidden. All work branches off `main` and merges back to `main` via
-pull request.
+forbidden. All work branches off `main` and is squash-merged back into
+**local** `main` (see *Integration workflow*). The primary checkout stays on
+`main`; topic branches live in worktrees under `.claude/worktrees/`.
 
 ## Branch naming
 
@@ -37,23 +39,49 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
 
 Never bypass the commit-msg hook (`--no-verify`) — Rule 50.5.
 
-## PR lifecycle
+## Integration workflow (local `main`)
 
-1. Branch from `main`.
-2. Commit with Conventional Commits.
-3. **Open as a draft by default** (`gh pr create --draft`). New PRs start as
-   drafts so work-in-progress doesn't trigger the Claude PR review or signal
-   readiness prematurely.
-4. Mark ready-for-review (`gh pr ready`) when the branch is complete and its
-   checklist passes.
-5. Claude PR review runs automatically once the PR is marked ready
-   (`claude-pr-review.yml` skips drafts).
-6. Human review (required — see branch protection below).
-7. **Squash-merge** into `main`. The PR title becomes the sole commit
-   message on `main`, so **PR titles MUST follow Conventional Commits**.
-8. Delete the branch.
+1. **Branch from an up-to-date local `main` into a worktree** —
+   `git worktree add .claude/worktrees/<slug> -b <branch> main` (or the Agent
+   tool's worktree isolation, then `git checkout -b <branch> main` inside it,
+   since agent worktrees start from `origin/main`). Never edit on `main`
+   directly in the primary checkout.
+2. **Commit with Conventional Commits** on the topic branch; hooks run
+   (Rule 50.5).
+3. **Gate before merging** — on the topic branch: `pnpm typecheck`,
+   `pnpm lint`, `pnpm format:check`, `pnpm exec vitest run` (with DynamoDB
+   Local), plus the CI-env `pnpm build` for dashboard changes and
+   `/verify-phase <n>` for phase work. Rule 70 reviews must have approved.
+4. **Squash-merge into local `main`.** Claude may do this without asking each
+   time once the user has authorised the merge:
+   `git merge --squash <branch> && git commit` with a Conventional Commits
+   subject (what a PR title would have been) and a short body. One squash
+   commit per branch; resolve conflicts in favour of what is already on
+   `main` plus the branch's new lines, then re-run the gates on `main`.
+5. **Never push `main`.** Pushing `main` is the user's action; CI
+   (`bedrock-dashboard-build.yml` on `push: main`) runs then. The only push
+   Claude makes is deleting merged remote topic branches (step 7). Never
+   `git push --force`, never rewrite `main`'s history.
+6. **Clean up after the merge** — `git worktree remove .claude/worktrees/<slug>`,
+   then `git branch -D <branch>` (squash-merged branches are not ancestors of
+   `main`, so `-d` refuses; confirm `git diff main <branch>` shows only what
+   `main` superseded first). Also delete orphaned `worktree-agent-*` branches
+   with no unique commits and run `git worktree prune`. Never delete a branch
+   with unmerged work.
+7. **Clean up the remote too.** If the topic branch was pushed, close its PR
+   with a comment pointing at the squash commit (`gh pr close <n> --comment …`)
+   and delete the remote branch (`git push origin --delete <branch>`), then
+   `git fetch --prune`. Until the user pushes `main`, that work exists only in
+   local `main` — say so when reporting the cleanup.
 
-## PR description requirements
+**Optional PR path.** When the user wants GitHub CI or the Claude PR review
+*before* a change lands, push the topic branch, open a draft PR
+(`gh pr create --draft`), mark it ready when its checklist passes, and
+squash-merge it (`gh pr merge --squash`) once checks are green and there is
+no open HIGH finding — no human review required. The PR title must follow
+Conventional Commits. Afterwards fast-forward local `main` from `origin/main`.
+
+## PR description requirements (optional PR path)
 
 Every PR description must include:
 
@@ -90,20 +118,22 @@ Pushing any of the three tag patterns triggers `claude-code-review.yml`
 previous release tag. The first release tag establishes the baseline and
 triggers no Claude invocation.
 
-## Branch protection (required on `main`)
+## Branch protection on `main`
 
-Configure under Settings → Branches → Branch protection rules:
+Not enforced on the current free private repo. Because the user pushes local
+`main` directly, **do not** enable "Require pull request before merging" or
+"Restrict direct push to `main`" if protection is ever turned on. Keep:
 
-- Require pull request before merging (1 approval minimum).
-- Require status checks to pass: `claude: ci - pr review`, `pr title: ci - lint`.
-- Require linear history.
-- Allow squash-merge only — disable merge commits and rebase-merge in
-  Settings → General → Pull Requests.
-- Restrict force-push and direct push to `main`.
-- Recommended once the team is larger than one: enable "Require review
-  from Code Owners".
+- Require linear history (squash commits only).
+- Restrict force-push to `main`.
+- Allow squash-merge only for PRs on the optional PR path.
 
-## Known limitation — incremental pushes and security findings
+## Known limitation — review coverage
+
+Local squash-merges skip the Claude PR review entirely; CI and gitleaks run
+only when the user pushes `main`. The release-tag audit
+(`claude-code-review.yml`) is the authoritative Claude review of what landed.
+On the optional PR path:
 
 `synchronize` events (subsequent pushes to a PR) do not emit a
 `security-summary` block, so the PR-comment / `REQUEST_CHANGES` flow

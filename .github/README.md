@@ -144,12 +144,12 @@ Configure under Settings → Branches → Branch protection rules:
 
 | Setting | Value |
 | --- | --- |
-| Require pull request before merging | ✅ (1 approval) |
+| Require pull request before merging | ❌ — Rule 31: work is squash-merged into local `main` and the user pushes it |
 | Required status checks | `claude: ci - pr review`, `pr title: ci - lint` |
 | Require linear history | ✅ |
 | Allow squash-merge only | ✅ — disable merge commits and rebase-merge in Settings → General → Pull Requests |
 | Restrict force-push to `main` | ✅ |
-| Restrict direct push to `main` | ✅ |
+| Restrict direct push to `main` | ❌ — the user pushes `main` (Rule 31) |
 | Require review from Code Owners | Recommended once team > 1 |
 
 Pre-existing project rules that are the manual counterparts:
