@@ -4,30 +4,80 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 // Root Vitest config scoping the suite to the dashboard workspace (apps +
-// packages) and keeping the standalone simulator out. The React plugin and
-// jsdom environment support component tests (React Testing Library); Phase 3
-// extends this with DynamoDB Local integration tests, which may split the env
-// per project (data-access tests run under node).
+// packages + scripts) and keeping the standalone simulator out. Two projects:
+//  - `unit`: jsdom + React Testing Library; needs no external services, so the
+//    pre-push hook runs only this one.
+//  - `integration`: node, `*.integration.test.ts` against DynamoDB Local
+//    (localhost:8000; Rule 60.22). Files run serially because they share one
+//    table. CI and `pnpm test` run both projects.
+const alias = {
+  // Mirror the dashboard tsconfig "@/*" path alias.
+  "@": fileURLToPath(new URL("./apps/dashboard", import.meta.url)),
+};
+
 export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    // Mirror the dashboard tsconfig "@/*" path alias for component tests.
-    alias: {
-      "@": fileURLToPath(new URL("./apps/dashboard", import.meta.url)),
-    },
-  },
   test: {
-    environment: "jsdom",
-    setupFiles: ["./apps/dashboard/vitest.setup.ts"],
-    // Components import the t3-env object; tests don't carry real secrets, so
-    // skip its build-time validation (the schema itself is covered elsewhere).
-    env: { SKIP_ENV_VALIDATION: "true" },
-    include: [
-      "apps/**/*.{test,spec}.{ts,tsx}",
-      "packages/**/*.{test,spec}.{ts,tsx}",
+    projects: [
+      {
+        plugins: [react()],
+        resolve: { alias },
+        test: {
+          name: "unit",
+          environment: "jsdom",
+          setupFiles: ["./apps/dashboard/vitest.setup.ts"],
+          // Components import the t3-env object; tests don't carry real
+          // secrets, so skip its build-time validation (the schema itself is
+          // covered elsewhere).
+          env: { SKIP_ENV_VALIDATION: "true" },
+          include: [
+            "apps/**/*.{test,spec}.{ts,tsx}",
+            "packages/**/*.{test,spec}.{ts,tsx}",
+            "scripts/**/*.test.ts",
+          ],
+          // e2e/ holds Playwright specs — same .spec.ts suffix, but they run
+          // under `playwright test`, never under Vitest.
+          exclude: [
+            "**/*.integration.test.ts",
+            "**/node_modules/**",
+            "**/.next/**",
+            "**/e2e/**",
+            "tools/**",
+          ],
+        },
+      },
+      {
+        resolve: {
+          alias: {
+            ...alias,
+            // `server-only` throws outside a React Server Components build.
+            "server-only": fileURLToPath(
+              new URL(
+                "./apps/dashboard/test/server-only-stub.ts",
+                import.meta.url,
+              ),
+            ),
+          },
+        },
+        test: {
+          name: "integration",
+          environment: "node",
+          include: [
+            "apps/**/*.integration.test.ts",
+            "packages/**/*.integration.test.ts",
+            "scripts/**/*.integration.test.ts",
+          ],
+          exclude: ["**/node_modules/**", "**/.next/**", "tools/**"],
+          fileParallelism: false,
+          // DynamoDB Local settings; no credentials are set here.
+          env: {
+            DYNAMODB_ENDPOINT:
+              process.env.DYNAMODB_ENDPOINT ?? "http://localhost:8000",
+            AWS_REGION: "us-east-1",
+            DYNAMODB_TABLE_NAME: "bedrock-usage-test",
+            SKIP_ENV_VALIDATION: "true",
+          },
+        },
+      },
     ],
-    // e2e/ holds Playwright specs — same .spec.ts suffix, but they run under
-    // `playwright test`, never under Vitest.
-    exclude: ["**/node_modules/**", "**/.next/**", "**/e2e/**", "tools/**"],
   },
 });

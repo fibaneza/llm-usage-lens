@@ -55,3 +55,15 @@ export type {
   RankingTab,
   TeamsQuery,
 } from "./schemas/queries";
+
+export {
+  GSI1_NAME,
+  META_SK,
+  SYNC_SK,
+  SYSTEM_PK,
+  TABLE_NAME_DEFAULT,
+  accountPk,
+  dailySk,
+  datePk,
+  deptPk,
+} from "./table";

@@ -23,6 +23,8 @@ export default tseslint.config(
       // code re-emitted by the shadcn CLI, not authored against our rules.
       "apps/dashboard/components/ui/**",
       "apps/dashboard/hooks/use-mobile.ts",
+      // Agent worktrees (untracked scratch checkouts) — not part of the workspace.
+      ".claude/worktrees/**",
     ],
   },
   js.configs.recommended,

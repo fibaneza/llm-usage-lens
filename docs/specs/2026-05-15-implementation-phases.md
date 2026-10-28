@@ -205,7 +205,7 @@ None — data infrastructure only.
 **Dependencies:** Phase 1 (Foundation).
 
 **Tasks:**
-- [ ] Implement Zod v4 validation schemas in `packages/shared/src/schemas/`
+- [x] Implement Zod v4 validation schemas in `packages/shared/src/schemas/`
   - `AccountMetaSchema`
   - `DailyRollupSchema`
   - `SyncStatusSchema` (includes `nextScheduledAt`)
@@ -213,13 +213,13 @@ None — data infrastructure only.
   - `DateRangeQuerySchema` (dateFrom, dateTo, accountId; max 90-day span)
   - `TeamsQuerySchema` (date range + optional `departmentId`)
   - Types derived via `z.infer` — never hand-written (Rule 60.3)
-- [ ] Implement shared model ID normalization in `packages/shared/src/models.ts`
+- [x] Implement shared model ID normalization in `packages/shared/src/models.ts`
   - Raw Bedrock model ID → canonical key → display name + chart CSS token
   - Re-export from `apps/dashboard/lib/models.ts` if needed for convenience
   - Same package imported by Lambda in Phase 6 (see System Architecture spec — Shared code layout)
-- [ ] Unit tests for schemas (valid/invalid inputs, Rule 60.22) and model normalization
-- [ ] Add the GitHub Actions `test` job (`pnpm exec vitest run`) — this also starts running the existing Phase 2 component tests in CI. No DynamoDB needed yet.
-- [ ] Verify: schemas + model table importable by the dashboard; `vitest run` is green in CI; no DynamoDB dependency.
+- [x] Unit tests for schemas (valid/invalid inputs, Rule 60.22) and model normalization
+- [x] Add the GitHub Actions `test` job (`pnpm exec vitest run`) — this also starts running the existing Phase 2 component tests in CI. No DynamoDB needed yet.
+- [x] Verify: schemas + model table importable by the dashboard; `vitest run` is green in CI; no DynamoDB dependency.
 
 **Components Built:** None — shared validation infrastructure only.
 
@@ -232,27 +232,27 @@ None — data infrastructure only.
 **Dependencies:** Phase 3.1 (the schemas the data-access functions return), Phase 2 (Layout Shell — for rendering data in pages).
 
 **Tasks:**
-- [ ] Document DynamoDB Local startup (already runs in the devcontainer — `.devcontainer/docker-compose.yml`; document `docker compose up -d dynamodb-local` in the README)
-- [ ] Create DynamoDB table setup script (repo-root `scripts/create-table.ts`, invoked via `pnpm` from workspace root)
+- [x] Document DynamoDB Local startup (already runs in the devcontainer — `.devcontainer/docker-compose.yml`; document `docker compose up -d dynamodb-local` in the README)
+- [x] Create DynamoDB table setup script (repo-root `scripts/create-table.ts`, invoked via `pnpm` from workspace root)
   - Creates `bedrock-usage` table with PK/SK + GSI1 (`ALL` projection)
   - Idempotent (safe to re-run)
-- [ ] Create seed scripts
+- [x] Create seed scripts
   - `scripts/seed.ts` — realistic data: 3 departments, 5 teams, 10 users, 8 services, 30 days of rollups, multiple models
   - `scripts/seed-empty.ts` — empty state: accounts exist but no rollups (tests empty states)
   - `scripts/seed-large.ts` — stress test: 50 accounts, 90 days, 20 users/team, 15 services
   - `scripts/seed-ranking.ts` (optional) — 100 accounts × 30 days to validate ranking performance at v1 upper bound
-- [ ] Build DynamoDB client (`apps/dashboard/lib/dynamodb.ts`)
+- [x] Build DynamoDB client (`apps/dashboard/lib/dynamodb.ts`)
   - AWS SDK v3 document client
   - Configurable endpoint (DynamoDB Local vs AWS)
-- [ ] Build data access functions (`apps/dashboard/lib/data/`) — each `import "server-only"` (Rule 10)
+- [x] Build data access functions (`apps/dashboard/lib/data/`) — each `import "server-only"` (Rule 10)
   - `getAccountMeta(accountId)`
   - `getAllAccounts()`
   - `getAccountsByDepartment(departmentId)`
   - `getDailyRollups(accountId, dateFrom, dateTo)`
   - `getRollupsByDate(date)` — must loop on `LastEvaluatedKey` (GSI1 query can exceed DynamoDB's 1MB limit, Rule 20.6)
   - `getSyncStatus()` — return a "never synced" state when no item exists, not an error (Rule 20.9)
-- [ ] Add the Vitest node-env project split + DynamoDB-Local integration tests for data-access functions (the env split the `vitest.config.ts` comment already anticipates)
-- [ ] Extend the CI `test` job to start DynamoDB Local + create table + seed
+- [x] Add the Vitest node-env project split + DynamoDB-Local integration tests for data-access functions (the env split the `vitest.config.ts` comment already anticipates)
+- [x] Extend the CI `test` job to start DynamoDB Local + create table + seed
 - [ ] Verify: `pnpm tsx scripts/seed.ts` populates DynamoDB Local; data-access integration tests pass locally and in CI.
 
 **Components Built:** None — data infrastructure only.

@@ -75,14 +75,18 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 | `pnpm build` | `next build` |
 | `pnpm format:check` | Prettier format check (`pnpm format` to write) |
 | `pnpm lint` | ESLint v9 flat config (`eslint.config.ts`) |
-| `pnpm typecheck` | `tsc --noEmit` across every workspace (`pnpm -r --if-present typecheck`) |
-| `pnpm test` | Unit + component tests (**Vitest**, not Jest) — root `vitest.config.ts`, jsdom, excludes `e2e/` and `tools/` |
+| `pnpm typecheck` | `tsc --noEmit` across every workspace (`pnpm -r --if-present typecheck`) plus `tsc -p tsconfig.scripts.json` for `scripts/` |
+| `pnpm test` | Unit + integration tests (**Vitest**, not Jest) — root `vitest.config.ts` with two projects; the integration project needs DynamoDB Local on `:8000`; excludes `e2e/` and `tools/` |
+| `pnpm test:unit` | Unit + component tests only (`vitest run --project unit`, jsdom; no DynamoDB needed) |
+| `pnpm test:integration` | Data-access integration tests against DynamoDB Local (`vitest run --project integration`) |
+| `pnpm db:create-table` | Create the `bedrock-usage` table in DynamoDB Local (idempotent) |
+| `pnpm db:seed` / `db:seed:empty` / `db:seed:large` / `db:seed:ranking` | Load seed data (`seed:empty` resets the table first) |
 | `pnpm exec vitest run path/to/file.test.ts` | Run a single test file |
 | `pnpm test:e2e` | Headless Playwright E2E in `apps/dashboard/e2e/` (smoke specs accrue with UI work; full journeys Phase 5) |
 
-Phase 3 (Data Layer) adds DynamoDB Local and the `scripts/` directory — these do **not** exist yet. Once present: `docker compose up -d dynamodb-local`, then `pnpm tsx scripts/create-table.ts` and `pnpm tsx scripts/seed.ts` (variants `seed-empty` / `seed-large` / `seed-ranking`). The `/seed` slash command wraps this flow.
+DynamoDB Local (Phase 3.2): `docker compose up -d dynamodb-local` (inside `.devcontainer`; from the host use `docker compose -f .devcontainer/docker-compose.yml up -d dynamodb-local`), then `pnpm db:create-table` and `pnpm db:seed` (variants `db:seed:empty` / `db:seed:large` / `db:seed:ranking`). The scripts default to `http://localhost:8000` and must never target real AWS. The `/seed` slash command wraps this flow. See the [README](README.md) for the macOS volume workaround.
 
-**Git hooks (Husky).** Pre-commit: gitleaks (or grep fallback) secret scan + `lint-staged` (ESLint fix + Prettier on staged files). Commit-msg: `commitlint` (Conventional Commits). Pre-push: when `apps/`/`packages/` change, runs `pnpm typecheck` + `pnpm exec vitest run`; when `tools/bedrock-simulator/` changes, runs that workspace's typecheck + tests; then a gitleaks scan of the pushed range. Never bypass with `--no-verify` (Rule 50.5).
+**Git hooks (Husky).** Pre-commit: gitleaks (or grep fallback) secret scan + `lint-staged` (ESLint fix + Prettier on staged files). Commit-msg: `commitlint` (Conventional Commits). Pre-push: when `apps/`/`packages/`/`scripts/` change, runs `pnpm typecheck` + `pnpm exec vitest run --project unit` (integration tests run in CI and via `pnpm test`); when `tools/bedrock-simulator/` changes, runs that workspace's typecheck + tests; then a gitleaks scan of the pushed range. Never bypass with `--no-verify` (Rule 50.5).
 
 ## Slash commands
 
