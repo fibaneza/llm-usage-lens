@@ -68,6 +68,10 @@ export default defineConfig({
           ],
           exclude: ["**/node_modules/**", "**/.next/**", "tools/**"],
           fileParallelism: false,
+          // Seed-reset tests write and delete thousands of items against
+          // DynamoDB Local; the 5s default times out on CI runners.
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
           // DynamoDB Local settings; no credentials are set here.
           env: {
             DYNAMODB_ENDPOINT:
