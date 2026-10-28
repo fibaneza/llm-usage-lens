@@ -2,9 +2,11 @@ import { MODEL_KEYS } from "@bedrock-usage/shared";
 import type {
   AccountMeta,
   AttributionEntry,
-  DailyRollup,
+  DailyRollupItem,
   ModelKey,
   ModelUsage,
+  NonModelCategory,
+  NonModelCharge,
   SyncStatus,
 } from "@bedrock-usage/shared";
 
@@ -15,7 +17,12 @@ import type {
 
 export type SeedProfile = "default" | "empty" | "large" | "ranking";
 
-export type SeedRollup = DailyRollup & { date: string };
+// The write-side item minus its DynamoDB key attributes (added by the writer);
+// `date` is required here, optional on the read-side DailyRollup.
+export type SeedRollup = Omit<
+  DailyRollupItem,
+  "PK" | "SK" | "gsi1pk" | "gsi1sk"
+>;
 
 export type SeedData = {
   accounts: AccountMeta[];
@@ -32,6 +39,7 @@ type ProfileConfig = {
   services: number;
   withRollups: boolean;
   withSyncStatus: boolean;
+  withNonModel: boolean;
 };
 
 // default: 3 departments / 5 teams (2+2+1) / 10 users (2 per team) / 8 services.
@@ -45,6 +53,7 @@ const PROFILES: Record<SeedProfile, ProfileConfig> = {
     services: 8,
     withRollups: true,
     withSyncStatus: true,
+    withNonModel: true,
   },
   empty: {
     departments: 3,
@@ -55,6 +64,7 @@ const PROFILES: Record<SeedProfile, ProfileConfig> = {
     services: 8,
     withRollups: false,
     withSyncStatus: false,
+    withNonModel: false,
   },
   large: {
     departments: 5,
@@ -65,6 +75,7 @@ const PROFILES: Record<SeedProfile, ProfileConfig> = {
     services: 15,
     withRollups: true,
     withSyncStatus: true,
+    withNonModel: false,
   },
   ranking: {
     departments: 5,
@@ -75,6 +86,7 @@ const PROFILES: Record<SeedProfile, ProfileConfig> = {
     services: 8,
     withRollups: true,
     withSyncStatus: true,
+    withNonModel: false,
   },
 };
 
@@ -140,6 +152,15 @@ const PRICE_PER_MTOK: Record<ModelKey, { input: number; output: number }> = {
   other: { input: 1, output: 3 },
 };
 const OTHER_RAW_MODEL_IDS = ["amazon.titan-text-express-v1", "meta.llama3-70b"];
+
+// Non-model seed shapes (data-model spec, "Non-Model Charges"). The usage-type
+// strings are illustrative placeholders, not verified AWS values.
+const PT_DAILY_COST = 24;
+const GUARDRAILS_RAW_USAGE_TYPES = ["SEED-PLACEHOLDER-Guardrail-Units"];
+const PT_RAW_USAGE_TYPES = ["SEED-PLACEHOLDER-ProvisionedThroughput-ModelUnit"];
+const UNCLASSIFIED_RAW_USAGE_TYPES = ["SEED-PLACEHOLDER-UnmappedBedrockUsage"];
+const PT_ACCOUNT_INDEX = 0;
+const UNCLASSIFIED_ACCOUNT_INDEX = 1;
 
 function round6(value: number): number {
   return Math.round(value * COST_DECIMALS) / COST_DECIMALS;
@@ -278,7 +299,12 @@ function buildTeams(config: ProfileConfig): Team[] {
   return teams;
 }
 
-type SeedAccount = { meta: AccountMeta; team: Team; scale: number };
+type SeedAccount = {
+  meta: AccountMeta;
+  team: Team;
+  scale: number;
+  index: number;
+};
 
 function buildAccounts(config: ProfileConfig, teams: Team[]): SeedAccount[] {
   return Array.from({ length: config.accounts }, (_, i) => {
@@ -288,6 +314,7 @@ function buildAccounts(config: ProfileConfig, teams: Team[]): SeedAccount[] {
     const rng = createRng(hashSeed(`scale:${accountId}`));
     return {
       team,
+      index: i,
       scale: 0.4 + rng() * 2.2,
       meta: {
         accountId,
@@ -305,11 +332,55 @@ function buildAccounts(config: ProfileConfig, teams: Team[]): SeedAccount[] {
   });
 }
 
+// Non-model charges for one account-day: Guardrails on some days (never when
+// dayIndex % 7 === 0), always-on Provisioned Throughput for one account, and a
+// rare `unclassified` entry. Values are rounded so the day total can be summed
+// from them exactly (Data Model — "Schema decisions").
+function buildNonModel(
+  account: SeedAccount,
+  dayIndex: number,
+  rng: () => number,
+): Partial<Record<NonModelCategory, NonModelCharge>> {
+  const nonModel: Partial<Record<NonModelCategory, NonModelCharge>> = {};
+  if (dayIndex % 7 !== 0 && rng() < 0.25) {
+    nonModel.guardrails = {
+      cost: round6(0.2 + rng() * 2),
+      costEstimated: false,
+      recurring: false,
+      rawUsageTypes: GUARDRAILS_RAW_USAGE_TYPES,
+    };
+  }
+  if (account.index === PT_ACCOUNT_INDEX) {
+    nonModel["provisioned-throughput"] = {
+      cost: PT_DAILY_COST,
+      costEstimated: false,
+      recurring: true,
+      rawUsageTypes: PT_RAW_USAGE_TYPES,
+    };
+  }
+  if (account.index === UNCLASSIFIED_ACCOUNT_INDEX && dayIndex % 11 === 5) {
+    nonModel.unclassified = {
+      cost: round6(0.1 + rng() * 0.5),
+      costEstimated: false,
+      recurring: false,
+      rawUsageTypes: UNCLASSIFIED_RAW_USAGE_TYPES,
+    };
+  }
+  return nonModel;
+}
+
+// The Provisioned Throughput account has no invocations on these days, so its
+// rollup is idle: models {} and cost = the non-model sum (Rule 20.12).
+const isIdlePtDay = (account: SeedAccount, dayIndex: number): boolean =>
+  account.index === PT_ACCOUNT_INDEX && dayIndex % 10 === 3;
+
 function buildRollup(
   account: SeedAccount,
   date: string,
+  dayIndex: number,
   isToday: boolean,
   now: Date,
+  withNonModel: boolean,
 ): SeedRollup {
   const rng = createRng(hashSeed(`${account.meta.accountId}:${date}`));
   const finalized = !isToday;
@@ -317,7 +388,9 @@ function buildRollup(
   const dayFactor = isToday ? 0.4 : 1;
   const { team } = account;
 
+  const idle = withNonModel && isIdlePtDay(account, dayIndex);
   const modelKeys = MODEL_KEYS.filter((key) => {
+    if (idle) return false;
     if (key === "claude-sonnet") return true;
     if (key === "other") return rng() < 0.15;
     return rng() < 0.75;
@@ -353,6 +426,11 @@ function buildRollup(
     };
   }
 
+  const nonModel = withNonModel ? buildNonModel(account, dayIndex, rng) : {};
+  const nonModelCost = Object.values(nonModel).reduce(
+    (acc, charge) => acc + charge.cost,
+    0,
+  );
   const usages = Object.values(models);
   const sum = (pick: (u: ModelUsage) => number) =>
     usages.reduce((acc, u) => acc + pick(u), 0);
@@ -365,12 +443,15 @@ function buildRollup(
     departmentName: team.departmentName,
     teamId: team.teamId,
     teamName: team.teamName,
-    cost: round6(sum((u) => u.cost)),
+    // Sums already-rounded 6-dp entries (Data Model, Schema decisions), not a
+    // separately rounded total.
+    cost: round6(sum((u) => u.cost) + nonModelCost),
     costFinalized: finalized,
     inputTokens: sum((u) => u.inputTokens),
     outputTokens: sum((u) => u.outputTokens),
     invocations: sum((u) => u.invocations),
     models,
+    ...(Object.keys(nonModel).length > 0 ? { nonModel } : {}),
     lastUpdatedAt,
     ttl: Math.floor(Date.parse(lastUpdatedAt) / 1000) + TTL_SECONDS,
   };
@@ -397,7 +478,16 @@ export function buildSeedData(profile: SeedProfile, now: Date): SeedData {
   const today = now.toISOString().slice(0, 10);
 
   const rollups = accounts.flatMap((account) =>
-    days.map((date) => buildRollup(account, date, date === today, now)),
+    days.map((date, dayIndex) =>
+      buildRollup(
+        account,
+        date,
+        dayIndex,
+        date === today,
+        now,
+        config.withNonModel,
+      ),
+    ),
   );
 
   return {

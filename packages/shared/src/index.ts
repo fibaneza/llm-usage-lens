@@ -24,13 +24,18 @@ export {
   AttributionEntrySchema,
   DailyRollupBaseSchema,
   DailyRollupSchema,
+  DatedDailyRollupSchema,
   ModelUsageSchema,
 } from "./schemas/daily-rollup";
 export type {
   AttributionEntry,
   DailyRollup,
+  DatedDailyRollup,
   ModelUsage,
 } from "./schemas/daily-rollup";
+
+export { DailyRollupItemSchema } from "./schemas/daily-rollup-item";
+export type { DailyRollupItem } from "./schemas/daily-rollup-item";
 
 export {
   NON_MODEL_CATEGORIES,

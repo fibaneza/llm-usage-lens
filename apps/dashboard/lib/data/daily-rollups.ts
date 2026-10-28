@@ -2,13 +2,13 @@ import "server-only";
 
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import {
-  DailyRollupSchema,
+  DatedDailyRollupSchema,
   GSI1_NAME,
   accountPk,
   dailySk,
   datePk,
 } from "@bedrock-usage/shared";
-import type { DailyRollup } from "@bedrock-usage/shared";
+import type { DatedDailyRollup } from "@bedrock-usage/shared";
 
 import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 
@@ -17,10 +17,23 @@ import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 
 type QueryInput = ConstructorParameters<typeof QueryCommand>[0];
 
+const DAILY_SK_PREFIX = dailySk("");
+
+// Items stored before `date` existed carry the day only in SK, so derive it
+// there (data-model spec, "`date` attribute" — no backfill required). A stored
+// `date` wins; key attributes are stripped by the schema's object parsing.
+function parseRollup(item: Record<string, unknown>): DatedDailyRollup {
+  const sk = typeof item.SK === "string" ? item.SK : "";
+  const derived = sk.startsWith(DAILY_SK_PREFIX)
+    ? sk.slice(DAILY_SK_PREFIX.length)
+    : undefined;
+  return DatedDailyRollupSchema.parse({ date: derived, ...item });
+}
+
 async function queryAllRollups(
   input: Omit<QueryInput, "TableName" | "ExclusiveStartKey">,
-): Promise<DailyRollup[]> {
-  const rollups: DailyRollup[] = [];
+): Promise<DatedDailyRollup[]> {
+  const rollups: DatedDailyRollup[] = [];
   let startKey: Record<string, unknown> | undefined;
   do {
     const page = await getDocumentClient().send(
@@ -31,7 +44,7 @@ async function queryAllRollups(
       }),
     );
     for (const item of page.Items ?? []) {
-      rollups.push(DailyRollupSchema.parse(item));
+      rollups.push(parseRollup(item));
     }
     startKey = page.LastEvaluatedKey;
   } while (startKey);
@@ -42,7 +55,7 @@ export function getDailyRollups(
   accountId: string,
   dateFrom: string,
   dateTo: string,
-): Promise<DailyRollup[]> {
+): Promise<DatedDailyRollup[]> {
   return queryAllRollups({
     KeyConditionExpression: "PK = :pk AND SK BETWEEN :from AND :to",
     ExpressionAttributeValues: {
@@ -54,7 +67,7 @@ export function getDailyRollups(
   });
 }
 
-export function getRollupsByDate(date: string): Promise<DailyRollup[]> {
+export function getRollupsByDate(date: string): Promise<DatedDailyRollup[]> {
   return queryAllRollups({
     IndexName: GSI1_NAME,
     KeyConditionExpression: "gsi1pk = :pk",

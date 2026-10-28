@@ -1,4 +1,11 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  expectTypeOf,
+  it,
+} from "vitest";
 
 import { getDailyRollups, getRollupsByDate } from "@/lib/data/daily-rollups";
 
@@ -51,18 +58,77 @@ describe("getDailyRollups", () => {
     expect(result.map((r) => r.cost)).toEqual([10, 11, 12]);
   });
 
-  it("returns parsed domain objects with no key attributes or date", async () => {
+  // Spec change (audit A2, adopted 2026-10-28): the rollup now carries `date`.
+  // Source: docs/specs/2026-05-15-data-model.md — "`date` attribute".
+  it("returns parsed domain objects with date but no key attributes", async () => {
     const [first] = await getDailyRollups(
       acct.accountId,
       "2026-10-10",
       "2026-10-10",
     );
-    expect(first).toEqual(
-      stripDate(makeRollup(acct, "2026-10-10", { cost: 10 })),
-    );
+    expect(first).toEqual(makeRollup(acct, "2026-10-10", { cost: 10 }));
+    expect(first?.date).toBe("2026-10-10");
     expect(first).not.toHaveProperty("PK");
     expect(first).not.toHaveProperty("SK");
     expect(first).not.toHaveProperty("gsi1pk");
+    expect(first).not.toHaveProperty("gsi1sk");
+  });
+
+  it("returns date on every rollup in the range", async () => {
+    const result = await getDailyRollups(
+      acct.accountId,
+      "2026-10-09",
+      "2026-10-13",
+    );
+    expect(result.map((r) => r.date)).toEqual(DAYS);
+  });
+
+  it("derives date from SK for an item stored without it (no backfill needed)", async () => {
+    const legacy = acct;
+    await putRaw({
+      ...stripDate(makeRollup(legacy, "2026-10-25", { cost: 25 })),
+      PK: `ACCT#${legacy.accountId}`,
+      SK: "DAILY#2026-10-25",
+      gsi1pk: "DATE#2026-10-25",
+      gsi1sk: `ACCT#${legacy.accountId}`,
+    });
+    const [rollup] = await getDailyRollups(
+      legacy.accountId,
+      "2026-10-25",
+      "2026-10-25",
+    );
+    expect(rollup?.date).toBe("2026-10-25");
+    expect(rollup?.cost).toBe(25);
+    expect(rollup).not.toHaveProperty("SK");
+  });
+
+  it("returns nonModel unchanged for an item that carries it", async () => {
+    const nonModel = {
+      guardrails: {
+        cost: 0.5,
+        costEstimated: false,
+        recurring: false,
+        usageQuantity: 1200,
+        usageUnit: "TextUnits",
+        rawUsageTypes: ["USE1-Guardrail-ContentPolicy-Units"],
+      },
+      "provisioned-throughput": {
+        cost: 24,
+        costEstimated: false,
+        recurring: true,
+        rawUsageTypes: ["USE1-ProvisionedThroughput-ModelUnit"],
+      },
+    };
+    const base = makeRollup(acct, "2026-10-26", { cost: 10 });
+    await loadFixtures({
+      rollups: [{ ...base, cost: 10 + 0.5 + 24, nonModel }],
+    });
+    const [rollup] = await getDailyRollups(
+      acct.accountId,
+      "2026-10-26",
+      "2026-10-26",
+    );
+    expect(rollup?.nonModel).toEqual(nonModel);
   });
 
   it("supports a single-day range", async () => {
@@ -130,6 +196,54 @@ describe("getRollupsByDate", () => {
     expect(await getRollupsByDate("2026-01-01")).toEqual([]);
   });
 
+  it("returns date on every rollup for the day", async () => {
+    await loadFixtures({
+      rollups: [
+        makeRollup(acct, "2026-10-11", { cost: 1 }),
+        makeRollup(other, "2026-10-11", { cost: 2 }),
+      ],
+    });
+    const result = await getRollupsByDate("2026-10-11");
+    expect(result).toHaveLength(2);
+    expect(result.every((r) => r.date === "2026-10-11")).toBe(true);
+    for (const r of result) {
+      expect(r).not.toHaveProperty("PK");
+      expect(r).not.toHaveProperty("SK");
+      expect(r).not.toHaveProperty("gsi1pk");
+      expect(r).not.toHaveProperty("gsi1sk");
+    }
+  });
+
+  it("derives date from SK for an item stored without it", async () => {
+    await putRaw({
+      ...stripDate(makeRollup(other, "2026-10-24", { cost: 7 })),
+      PK: `ACCT#${other.accountId}`,
+      SK: "DAILY#2026-10-24",
+      gsi1pk: "DATE#2026-10-24",
+      gsi1sk: `ACCT#${other.accountId}`,
+    });
+    const [rollup] = await getRollupsByDate("2026-10-24");
+    expect(rollup?.date).toBe("2026-10-24");
+    expect(rollup?.cost).toBe(7);
+  });
+
+  it("returns nonModel unchanged", async () => {
+    const nonModel = {
+      guardrails: {
+        cost: 0.5,
+        costEstimated: true,
+        recurring: false,
+        rawUsageTypes: ["USE1-Guardrail-ContentPolicy-Units"],
+      },
+    };
+    const base = makeRollup(acct, "2026-10-23", { cost: 10 });
+    await loadFixtures({
+      rollups: [{ ...base, cost: 10.5, nonModel }],
+    });
+    const [rollup] = await getRollupsByDate("2026-10-23");
+    expect(rollup?.nonModel).toEqual(nonModel);
+  });
+
   it("loops on LastEvaluatedKey so results beyond 1MB are all returned (Rule 20.6)", async () => {
     const accounts = Array.from({ length: 35 }, (_, i) => makeAccount(200 + i));
     const rollups = accounts.map((a) =>
@@ -156,5 +270,41 @@ describe("getRollupsByDate", () => {
       accountId: "bad",
     });
     await expect(getRollupsByDate("2026-10-21")).rejects.toThrow();
+  });
+});
+
+// Source: docs/specs/2026-05-15-data-model.md — "`date` attribute": data-access
+// functions return `date` on EVERY rollup, so the read type carries a required
+// string `date`; Rule 60.17 (no silent failures — never an undated rollup).
+describe("dated read type", () => {
+  it("types date as a required string on both read functions", () => {
+    expectTypeOf<
+      Awaited<ReturnType<typeof getDailyRollups>>[number]["date"]
+    >().toEqualTypeOf<string>();
+    expectTypeOf<
+      Awaited<ReturnType<typeof getRollupsByDate>>[number]["date"]
+    >().toEqualTypeOf<string>();
+  });
+
+  it("getDailyRollups rejects an item with no date and an SK carrying no valid day", async () => {
+    await putRaw({
+      ...stripDate(makeRollup(acct, "2026-10-20")),
+      PK: `ACCT#${acct.accountId}`,
+      SK: "DAILY#2026-10-2x",
+    });
+    await expect(
+      getDailyRollups(acct.accountId, "2026-10-20", "2026-10-30"),
+    ).rejects.toThrow();
+  });
+
+  it("getRollupsByDate rejects an item with no date and an SK with no DAILY# day", async () => {
+    await putRaw({
+      ...stripDate(makeRollup(acct, "2026-10-22")),
+      PK: `ACCT#${acct.accountId}`,
+      SK: "LEGACY#unknown",
+      gsi1pk: "DATE#2026-10-22",
+      gsi1sk: `ACCT#${acct.accountId}`,
+    });
+    await expect(getRollupsByDate("2026-10-22")).rejects.toThrow();
   });
 });

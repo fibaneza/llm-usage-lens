@@ -301,6 +301,8 @@ All data written to DynamoDB and returned from Next.js Route Handlers is validat
 | `AccountMetaSchema` | Settings page CRUD, Lambda registry reads |
 | `DailyRollupBaseSchema` / `DailyRollupSchema` | Lambda writes, API route responses. Optional `nonModel`, validated with `NonModelCategorySchema` keys and `NonModelChargeSchema` entries. `DailyRollupSchema` refines the base with the cost invariant (Non-Model Charges, Rule 1) within `\|Δ\| ≤ 1e-6`; derived schemas (`.pick`/`.omit`/`.partial`/`.merge`) start from the unrefined base (Non-Model Charges — *Schema decisions*) |
 | `NonModelCategorySchema` / `NonModelChargeSchema` | Charge-category key enum + entry shape (Non-Model Charges) |
+| `DatedDailyRollupSchema` | Read side: `DailyRollupBaseSchema` with a required `date` plus the cost invariant; the return shape of the `lib/data/**` rollup functions (*`date` attribute*) |
+| `DailyRollupItemSchema` | Write side: the full DynamoDB item (key attributes + required `date`, checked against `SK`/`gsi1pk`) plus the cost invariant; used by the seed scripts and the Phase 6 collector |
 | `SyncStatusSchema` | Sync status display, Lambda writes |
 | `RankingQuerySchema` | API query params: dateFrom, dateTo, `tab` (`departments` \| `teams` \| `services` \| `users`), model, sortBy, order, limit |
 | `DateRangeQuerySchema` | API query params: dateFrom, dateTo, accountId (max 90-day span) |

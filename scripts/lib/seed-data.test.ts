@@ -2,6 +2,7 @@ import {
   AccountMetaSchema,
   DailyRollupSchema,
   MODEL_KEYS,
+  NON_MODEL_CATEGORIES,
   SyncStatusSchema,
 } from "@bedrock-usage/shared";
 import { describe, expect, it } from "vitest";
@@ -128,12 +129,20 @@ describe("buildSeedData — default profile", () => {
     }
   });
 
-  it("keeps rollup totals equal to the sum of its models", () => {
+  // Cost invariant (data-model spec, "Non-Model Charges"): cost is Σ models +
+  // Σ nonModel; token and invocation totals stay model-only.
+  it("keeps rollup totals equal to the sum of its models and non-model charges", () => {
     for (const r of rollups) {
       const usages = Object.values(r.models);
       const sum = (f: (u: (typeof usages)[number]) => number) =>
         usages.reduce((acc, u) => acc + f(u), 0);
-      expect(Math.abs(r.cost - sum((u) => u.cost))).toBeLessThan(1e-6);
+      const nonModelCost = Object.values(r.nonModel ?? {}).reduce(
+        (acc, charge) => acc + charge.cost,
+        0,
+      );
+      expect(
+        Math.abs(r.cost - (sum((u) => u.cost) + nonModelCost)),
+      ).toBeLessThan(1e-6);
       expect(r.inputTokens).toBe(sum((u) => u.inputTokens));
       expect(r.outputTokens).toBe(sum((u) => u.outputTokens));
       expect(r.invocations).toBe(sum((u) => u.invocations));
@@ -163,6 +172,164 @@ describe("buildSeedData — default profile", () => {
     const later = buildSeedData("default", new Date("2026-10-25T12:00:00Z"));
     expect(rollupsOf(later).some((r) => r.date === "2026-10-25")).toBe(true);
   });
+});
+
+// Source: docs/specs/2026-05-15-implementation-phases.md — Phase 3.1a "Seed
+// coverage"; docs/specs/2026-05-15-data-model.md — "Non-Model Charges" and
+// "`date` attribute" (adopted 2026-10-28).
+describe("buildSeedData — non-model coverage (default profile)", () => {
+  const seed = buildSeedData("default", NOW);
+  const rollups = rollupsOf(seed);
+  const allDays = new Set(rollups.map((r) => r.date));
+
+  it("every rollup carries a valid UTC date and passes the refined DailyRollupSchema", () => {
+    for (const r of rollups) {
+      expect(r.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      const parsed = DailyRollupSchema.safeParse(r);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) expect(parsed.data.date).toBe(r.date);
+    }
+  });
+
+  it("only uses canonical nonModel category keys", () => {
+    for (const r of rollups) {
+      for (const key of Object.keys(r.nonModel ?? {})) {
+        expect(NON_MODEL_CATEGORIES as readonly string[]).toContain(key);
+      }
+    }
+  });
+
+  it("includes guardrails charges on some, but not all, days", () => {
+    const guardrailDays = new Set(
+      rollups.filter((r) => r.nonModel?.guardrails).map((r) => r.date),
+    );
+    expect(guardrailDays.size).toBeGreaterThan(0);
+    expect(guardrailDays.size).toBeLessThan(allDays.size);
+    for (const r of rollups) {
+      const g = r.nonModel?.guardrails;
+      if (g) expect(g.recurring).toBe(false);
+    }
+  });
+
+  const ptByAccount = () => {
+    const map = new Map<string, SeedRollup[]>();
+    for (const r of rollups) {
+      if (r.nonModel?.["provisioned-throughput"]) {
+        map.set(r.accountId, [...(map.get(r.accountId) ?? []), r]);
+      }
+    }
+    return map;
+  };
+
+  it("has one account with Provisioned Throughput accruing every day (recurring)", () => {
+    const expected = utcDaysEndingAt(NOW, 30);
+    const full = [...ptByAccount().values()].filter(
+      (rs) => rs.length === expected.length,
+    );
+    expect(full.length).toBeGreaterThanOrEqual(1);
+    for (const rs of full) {
+      expect(rs.map((r) => r.date).sort()).toEqual(expected);
+      for (const r of rs) {
+        expect(r.nonModel?.["provisioned-throughput"]?.recurring).toBe(true);
+        expect(r.nonModel?.["provisioned-throughput"]?.cost).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("includes an idle recurring day: PT-only, models {}, zero tokens, still valid", () => {
+    const idle = [...ptByAccount().values()]
+      .flat()
+      .filter((r) => r.invocations === 0);
+    expect(idle.length).toBeGreaterThanOrEqual(1);
+    for (const r of idle) {
+      expect(r.models).toEqual({});
+      expect(r.inputTokens).toBe(0);
+      expect(r.outputTokens).toBe(0);
+      expect(r.cost).toBeGreaterThan(0);
+      expect(r.nonModel?.["provisioned-throughput"]?.recurring).toBe(true);
+      expect(DailyRollupSchema.safeParse(r).success).toBe(true);
+    }
+  });
+
+  it("includes an unclassified entry with non-empty rawUsageTypes", () => {
+    const entries = rollups
+      .map((r) => r.nonModel?.unclassified)
+      .filter((e) => e !== undefined);
+    expect(entries.length).toBeGreaterThanOrEqual(1);
+    for (const entry of entries) {
+      expect(entry.rawUsageTypes.length).toBeGreaterThan(0);
+      for (const type of entry.rawUsageTypes)
+        expect(type.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps non-model charges off the model breakdown (no token fields on nonModel)", () => {
+    for (const r of rollups) {
+      for (const charge of Object.values(r.nonModel ?? {})) {
+        expect(charge).not.toHaveProperty("inputTokens");
+        expect(charge).not.toHaveProperty("invocations");
+      }
+    }
+  });
+});
+
+// Source: docs/specs/2026-05-15-data-model.md — "Non-Model Charges" (Rules 1,
+// 4, backward compatibility); Rule 20.3 (exact totals), Rule 20.12.
+describe("buildSeedData — non-model separation (default profile)", () => {
+  const rollups = rollupsOf(buildSeedData("default", NOW));
+  const modelSum = (r: SeedRollup) =>
+    Object.values(r.models).reduce((acc, u) => acc + u.cost, 0);
+  const nonModelSum = (r: SeedRollup) =>
+    Object.values(r.nonModel ?? {}).reduce((acc, c) => acc + c.cost, 0);
+
+  it("omits the nonModel key entirely (not {}) on a rollup with no non-model charges", () => {
+    const plain = rollups.filter((r) => nonModelSum(r) === 0);
+    expect(plain.length).toBeGreaterThan(0);
+    for (const r of plain) expect(r).not.toHaveProperty("nonModel");
+    for (const r of rollups) {
+      if ("nonModel" in r) {
+        expect(Object.keys(r.nonModel ?? {}).length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("never folds non-model cost into a model: idle PT days have models {}", () => {
+    const idle = rollups.filter(
+      (r) => r.nonModel?.["provisioned-throughput"] && r.invocations === 0,
+    );
+    expect(idle.length).toBeGreaterThan(0);
+    for (const r of idle) {
+      expect(r.models).toEqual({});
+      expect(r.cost).toBeCloseTo(nonModelSum(r), 6);
+    }
+  });
+
+  it("never folds non-model cost into a model: on PT days with invocations, cost - Σ models = Σ nonModel", () => {
+    const busy = rollups.filter(
+      (r) => r.nonModel?.["provisioned-throughput"] && r.invocations > 0,
+    );
+    expect(busy.length).toBeGreaterThan(0);
+    for (const r of busy) {
+      expect(modelSum(r)).toBeLessThan(r.cost);
+      expect(Math.abs(r.cost - modelSum(r) - nonModelSum(r))).toBeLessThan(
+        1e-6,
+      );
+    }
+  });
+});
+
+describe("buildSeedData — date on every profile", () => {
+  it.each(["large", "ranking"] as const)(
+    "%s profile rollups all carry date and pass DailyRollupSchema",
+    (profile) => {
+      const rollups = rollupsOf(buildSeedData(profile, NOW));
+      expect(rollups.length).toBeGreaterThan(0);
+      for (const r of rollups) {
+        expect(r.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(DailyRollupSchema.safeParse(r).success).toBe(true);
+      }
+    },
+  );
 });
 
 describe("buildSeedData — empty profile", () => {

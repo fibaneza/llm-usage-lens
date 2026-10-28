@@ -4,6 +4,7 @@ import {
   GetCommand,
   ScanCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { DailyRollupItemSchema } from "@bedrock-usage/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createTable } from "../create-table";
@@ -94,6 +95,95 @@ describe("writeSeed", () => {
       cost: rollup.cost,
       gsi1pk: `DATE#${rollup.date}`,
       gsi1sk: `ACCT#${rollup.accountId}`,
+    });
+  });
+
+  // Source: docs/specs/2026-05-15-data-model.md — "`date` attribute": seed
+  // scripts write `date`; the write-side item schema checks it against SK/gsi1pk.
+  it("writes every rollup item so that it passes DailyRollupItemSchema", async () => {
+    await writeSeed(doc, tableName, seed);
+    let checked = 0;
+    let startKey: Record<string, unknown> | undefined;
+    do {
+      const page = await doc.send(
+        new ScanCommand({
+          TableName: tableName,
+          FilterExpression: "begins_with(SK, :daily)",
+          ExpressionAttributeValues: { ":daily": "DAILY#" },
+          ExclusiveStartKey: startKey,
+        }),
+      );
+      for (const item of page.Items ?? []) {
+        const parsed = DailyRollupItemSchema.safeParse(item);
+        expect(parsed.success).toBe(true);
+        checked += 1;
+      }
+      startKey = page.LastEvaluatedKey;
+    } while (startKey);
+    expect(checked).toBe(seed.rollups.length);
+  });
+
+  it("persists nonModel on the rollup item unchanged", async () => {
+    await writeSeed(doc, tableName, seed);
+    const withNonModel = seed.rollups.find((r) => r.nonModel);
+    if (!withNonModel) throw new Error("default seed has no nonModel rollup");
+    const { Item } = await doc.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: {
+          PK: `ACCT#${withNonModel.accountId}`,
+          SK: `DAILY#${withNonModel.date}`,
+        },
+      }),
+    );
+    expect(Item?.nonModel).toEqual(withNonModel.nonModel);
+    expect(Item?.date).toBe(withNonModel.date);
+  });
+
+  // Source: docs/specs/2026-05-15-data-model.md — "`date` attribute" (write-side
+  // DailyRollupItemSchema is the gate); Rule 60.17 (no silent failures).
+  describe("rejects an invalid rollup before writing anything", () => {
+    const countItems = async (table: string): Promise<number> => {
+      let count = 0;
+      let startKey: Record<string, unknown> | undefined;
+      do {
+        const page = await doc.send(
+          new ScanCommand({
+            TableName: table,
+            Select: "COUNT",
+            ExclusiveStartKey: startKey,
+          }),
+        );
+        count += page.Count ?? 0;
+        startKey = page.LastEvaluatedKey;
+      } while (startKey);
+      return count;
+    };
+
+    const freshTable = async (): Promise<string> => {
+      const name = `bedrock-usage-test-swr-${Math.random().toString(36).slice(2, 10)}`;
+      await createTable(raw, name);
+      return name;
+    };
+
+    const [good, victim] = seed.rollups;
+    if (!good || !victim) throw new Error("default seed has too few rollups");
+
+    it.each([
+      ["a broken cost invariant", { ...victim, cost: victim.cost + 1 }],
+      ["a malformed date", { ...victim, date: "2026-13-01" }],
+    ])("writes nothing when a rollup has %s", async (_label, bad) => {
+      const table = await freshTable();
+      try {
+        const data = {
+          ...seed,
+          rollups: [...seed.rollups.filter((r) => r !== victim), bad],
+        };
+        await expect(writeSeed(doc, table, data)).rejects.toThrow();
+        expect(await countItems(table)).toBe(0);
+      } finally {
+        await raw.send(new DeleteTableCommand({ TableName: table }));
+      }
     });
   });
 

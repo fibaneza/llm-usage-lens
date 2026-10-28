@@ -5,7 +5,7 @@ import {
   NonModelCategorySchema,
   NonModelChargeSchema,
 } from "./non-model-charge";
-import { AccountIdSchema, Iso8601Schema } from "./primitives";
+import { AccountIdSchema, Iso8601Schema, UtcDaySchema } from "./primitives";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Entity: DailyRollup".
 // Model is the primary breakdown dimension; byUser and byService are nested
@@ -43,9 +43,33 @@ const COST_INVARIANT_TOLERANCE = 1e-6;
 const sumCosts = (entries: ReadonlyArray<{ cost: number } | undefined>) =>
   entries.reduce((total, entry) => total + (entry?.cost ?? 0), 0);
 
+// Cost invariant (data-model spec, "Non-Model Charges"): the day total is the
+// model charges plus the non-model charges. Tolerance absorbs float drift.
+// Shared by DailyRollupSchema and the write-side DailyRollupItemSchema.
+export const hasConsistentCost = (rollup: {
+  cost: number;
+  models: Record<string, { cost: number } | undefined>;
+  nonModel?: Record<string, { cost: number } | undefined> | undefined;
+}): boolean =>
+  Math.abs(
+    rollup.cost -
+      (sumCosts(Object.values(rollup.models)) +
+        sumCosts(Object.values(rollup.nonModel ?? {}))),
+  ) <= COST_INVARIANT_TOLERANCE;
+
+export const COST_INVARIANT_REFINEMENT = {
+  message:
+    "cost must equal Σ models[*].cost + Σ nonModel[*].cost (within 1e-6)",
+  path: ["cost"],
+};
+
 // Unrefined base: Zod 4 throws on .pick/.omit/.partial/.merge of a refined
 // object, so Phase 3.3 response schemas derive from this, not DailyRollupSchema.
 export const DailyRollupBaseSchema = z.object({
+  // UTC calendar day of the rollup (audit A2; data-model spec, "`date`
+  // attribute"). Optional so items written before it existed still parse.
+  date: UtcDaySchema.optional(),
+
   accountId: AccountIdSchema,
   departmentId: z.string().min(1),
   departmentName: z.string().min(1),
@@ -73,21 +97,17 @@ export const DailyRollupBaseSchema = z.object({
   ttl: z.number().int().positive(),
 });
 
-export const DailyRollupSchema = DailyRollupBaseSchema
-  // Cost invariant (data-model spec, "Non-Model Charges"): the day total is the
-  // model charges plus the non-model charges. Tolerance absorbs float drift.
-  .refine(
-    (rollup) =>
-      Math.abs(
-        rollup.cost -
-          (sumCosts(Object.values(rollup.models)) +
-            sumCosts(Object.values(rollup.nonModel ?? {}))),
-      ) <= COST_INVARIANT_TOLERANCE,
-    {
-      message:
-        "cost must equal Σ models[*].cost + Σ nonModel[*].cost (within 1e-6)",
-      path: ["cost"],
-    },
-  );
+export const DailyRollupSchema = DailyRollupBaseSchema.refine(
+  hasConsistentCost,
+  COST_INVARIANT_REFINEMENT,
+);
+
+// Read-side rollup with a REQUIRED `date` (data-model spec, "`date` attribute":
+// data-access functions return `date` on every rollup). Same cost invariant.
+export const DatedDailyRollupSchema = DailyRollupBaseSchema.extend({
+  date: UtcDaySchema,
+}).refine(hasConsistentCost, COST_INVARIANT_REFINEMENT);
+
+export type DatedDailyRollup = z.infer<typeof DatedDailyRollupSchema>;
 
 export type DailyRollup = z.infer<typeof DailyRollupSchema>;

@@ -373,3 +373,54 @@ describe("DailyRollupBaseSchema", () => {
     expect(Omitted.safeParse(withoutModels).success).toBe(true);
   });
 });
+
+// Source: docs/specs/2026-05-15-data-model.md — "`date` attribute (audit A2;
+// adopted 2026-10-28)": optional `YYYY-MM-DD` (UTC, Rule 20.1) so items
+// written before it existed still parse; implementation-phases "Phase 3.1a".
+describe.each([
+  ["DailyRollupSchema", DailyRollupSchema],
+  ["DailyRollupBaseSchema", DailyRollupBaseSchema],
+] as const)("%s — date attribute (Phase 3.1a)", (_name, schema) => {
+  it("accepts a valid UTC YYYY-MM-DD date and preserves it", () => {
+    const result = schema.safeParse({ ...VALID_ROLLUP, date: "2026-10-27" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.date).toBe("2026-10-27");
+  });
+
+  it("accepts a leap day", () => {
+    const result = schema.safeParse({ ...VALID_ROLLUP, date: "2028-02-29" });
+    expect(result.success).toBe(true);
+  });
+
+  it("still parses a rollup without date (backward compatible)", () => {
+    const result = schema.safeParse(VALID_ROLLUP);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.date).toBeUndefined();
+  });
+
+  it.each([
+    ["month 13", "2026-13-01"],
+    ["impossible day", "2026-02-31"],
+    ["non-leap Feb 29", "2027-02-29"],
+    ["slashes", "2026/10/27"],
+    ["no separators", "20261027"],
+    ["timestamp", "2026-10-27T00:00:00Z"],
+    ["empty string", ""],
+    ["a number", 20261027],
+    ["null", null],
+  ])("rejects a malformed date (%s)", (_label, date) => {
+    expect(schema.safeParse({ ...VALID_ROLLUP, date }).success).toBe(false);
+  });
+});
+
+describe("DailyRollupSchema — date with the cost invariant (Phase 3.1a)", () => {
+  it("still enforces the cost invariant when date is present", () => {
+    expect(
+      DailyRollupSchema.safeParse({
+        ...VALID_ROLLUP,
+        date: "2026-10-27",
+        cost: 99,
+      }).success,
+    ).toBe(false);
+  });
+});

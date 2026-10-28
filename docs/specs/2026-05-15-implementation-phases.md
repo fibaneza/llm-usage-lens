@@ -230,14 +230,14 @@ None — data infrastructure only.
 
 **Goal:** Extend the merged 3.1 schemas so a `DailyRollup` can carry Bedrock charges that are not per-model token usage: Guardrails, Provisioned Throughput, model storage, Custom Model Import, Knowledge Bases, and others. Account totals stay exact (Rule 20.3). Also adds the rollup `date` attribute (write-side `DailyRollupItemSchema`, seeds write it, `lib/data/**` returns it). Spec: Data Model spec — *Non-Model Charges*; System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*.
 
-**Dependencies:** Phase 3.1 (merged). A follow-up to 3.1 on its own branch (`feature/phase-3.1a-non-model-cost`, Rule 30.4). It does not reorder the sub-phases. Land it **before or alongside** 3.2 so the seed scripts can cover `nonModel`. **Seed routing:** if 3.1a merges before 3.2, the seed-coverage tasks below (and the seeded idle-PT Verify item) move into 3.2's `nonModel` pass-through task; if 3.2 merges first, they land as a follow-up commit on the 3.1a branch.
+**Dependencies:** Phase 3.1 (merged). A follow-up to 3.1 on its own branch (`feature/phase-3.1a-non-model-cost`, Rule 30.4). It does not reorder the sub-phases. Land it **before or alongside** 3.2 so the seed scripts can cover `nonModel`. **Seed routing:** if 3.1a merges before 3.2, the seed-coverage tasks below (and the seeded idle-PT Verify item) move into 3.2's `nonModel` pass-through task; if 3.2 merges first, they land on a 3.1a follow-up branch (as happened: `feature/phase-3.1a-followup`).
 
 **Tasks:**
 - [x] Add `NonModelCategorySchema` (closed enum of the canonical category keys) and `NonModelChargeSchema` (`cost`, `costEstimated`, `recurring`, optional `usageQuantity`/`usageUnit`, `rawUsageTypes`) in `packages/shared/src/schemas/`; types via `z.infer` (Rule 60.3)
 - [x] Add optional `nonModel: z.partialRecord(NonModelCategorySchema, NonModelChargeSchema)`. Export the unrefined `DailyRollupBaseSchema` plus the refined `DailyRollupSchema`, whose refinement enforces `|cost − (Σ models[*].cost + Σ nonModel[*].cost)| ≤ 1e-6` (Data Model spec — *Schema decisions*)
 - [x] Add the pure `classifyUsageType` function and its ordered pattern table in `packages/shared`. Patterns are placeholders, marked unverified until Phase 6 confirms real `USAGE_TYPE` strings
 - [x] Add the semantic chart token `--color-cost-non-model: var(--color-foreground)` (Design System spec — *Chart Colors (Per Model)*; no raw hex, Rule 40.2)
-- [ ] Add optional `date` (`YYYY-MM-DD`, UTC) to `DailyRollupSchema`, with valid/invalid tests; the `date` ↔ `SK`/`gsi1pk` consistency check goes in the write-side `DailyRollupItemSchema` (`packages/shared/src/schemas/`), not `DailyRollupSchema`; seed scripts write `date`, and the `lib/data/**` rollup functions return it, deriving it from `SK` when absent (Data Model spec — *`date` attribute*, adopted 2026-10-28)
+- [x] Add optional `date` (`YYYY-MM-DD`, UTC) to `DailyRollupSchema`, with valid/invalid tests; the `date` ↔ `SK`/`gsi1pk` consistency check goes in the write-side `DailyRollupItemSchema` (`packages/shared/src/schemas/`), not `DailyRollupSchema`; seed scripts write `date`, and the `lib/data/**` rollup functions return it, deriving it from `SK` when absent (Data Model spec — *`date` attribute*, adopted 2026-10-28)
 - [x] Unit tests (Rule 60.22):
   - valid rollup with and without `nonModel`; a pre-amendment fixture (no `nonModel`) still parses
   - unknown category key rejected
@@ -251,7 +251,7 @@ None — data infrastructure only.
   - a Claude family token usage type (e.g. `USE1-Claude3-5-Sonnet-input-tokens`) → model `claude-sonnet`
   - unknown usage type → `unclassified`
   - unmapped-model token usage type → `models.other`
-- [ ] Seed coverage (3.2 seed scripts; routed per **Seed routing** above):
+- [x] Seed coverage (3.2 seed scripts; routed per **Seed routing** above):
   - `seed.ts` includes guardrail charges on some days
   - one account with Provisioned Throughput accruing every day, including days with zero invocations (an idle recurring rollup with `models: {}`)
   - one `unclassified` entry with `rawUsageTypes`
@@ -290,7 +290,7 @@ None — data infrastructure only.
   - `getSyncStatus()` — return a "never synced" state when no item exists, not an error (Rule 20.9)
 - [x] Add the Vitest node-env project split + DynamoDB-Local integration tests for data-access functions (the env split the `vitest.config.ts` comment already anticipates)
 - [x] Extend the CI `test` job to start DynamoDB Local + create table + seed
-- [ ] `nonModel` pass-through: seeds cover `nonModel` per the Phase 3.1a seed-coverage tasks, including a seeded idle-PT day that validates (owned here if 3.1a merges first; via a follow-up commit on the 3.1a branch if 3.2 merges first — Phase 3.1a *Seed routing*), and data-access functions parse each item with the refined `DailyRollupSchema` on read and return `nonModel` unchanged
+- [x] `nonModel` pass-through: seeds cover `nonModel` per the Phase 3.1a seed-coverage tasks, including a seeded idle-PT day that validates (owned here if 3.1a merges first; via a follow-up commit on the 3.1a branch if 3.2 merges first — Phase 3.1a *Seed routing*), and data-access functions parse each item with the refined `DailyRollupSchema` on read and return `nonModel` unchanged
 - [ ] Verify: `pnpm tsx scripts/seed.ts` populates DynamoDB Local; data-access integration tests pass locally and in CI.
 
 **Components Built:** None — data infrastructure only.

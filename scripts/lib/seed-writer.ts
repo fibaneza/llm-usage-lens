@@ -1,6 +1,7 @@
 import { BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import {
+  DailyRollupItemSchema,
   META_SK,
   SYNC_SK,
   SYSTEM_PK,
@@ -61,13 +62,17 @@ export async function writeSeed(
       gsi1pk: deptPk(account.departmentId),
       gsi1sk: accountPk(account.accountId),
     })),
-    ...data.rollups.map((rollup) => ({
-      ...rollup,
-      PK: accountPk(rollup.accountId),
-      SK: dailySk(rollup.date),
-      gsi1pk: datePk(rollup.date),
-      gsi1sk: accountPk(rollup.accountId),
-    })),
+    // parse() throws on a date/key mismatch or cost-invariant violation so a
+    // bad seed never reaches the table (Rule 60.17).
+    ...data.rollups.map((rollup) =>
+      DailyRollupItemSchema.parse({
+        ...rollup,
+        PK: accountPk(rollup.accountId),
+        SK: dailySk(rollup.date),
+        gsi1pk: datePk(rollup.date),
+        gsi1sk: accountPk(rollup.accountId),
+      }),
+    ),
   ];
   if (data.syncStatus) {
     items.push({ ...data.syncStatus, PK: SYSTEM_PK, SK: SYNC_SK });

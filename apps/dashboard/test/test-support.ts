@@ -8,7 +8,12 @@ import {
   PutCommand,
   ScanCommand,
 } from "@aws-sdk/lib-dynamodb";
-import type { AccountMeta, DailyRollup } from "@bedrock-usage/shared";
+import type {
+  AccountMeta,
+  DailyRollup,
+  DatedDailyRollupSchema,
+} from "@bedrock-usage/shared";
+import type { z } from "zod";
 
 import { createTable } from "../../../scripts/create-table";
 import type { SeedData } from "../../../scripts/lib/seed-data";
@@ -17,7 +22,7 @@ import { writeSeed } from "../../../scripts/lib/seed-writer";
 export const TEST_TABLE_NAME =
   process.env.DYNAMODB_TABLE_NAME ?? "bedrock-usage-test";
 
-export type DatedRollup = DailyRollup & { date: string };
+export type DatedRollup = z.infer<typeof DatedDailyRollupSchema>;
 
 let rawCached: DynamoDBClient | undefined;
 let cached: DynamoDBDocumentClient | undefined;
