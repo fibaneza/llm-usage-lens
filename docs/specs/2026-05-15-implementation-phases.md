@@ -304,18 +304,18 @@ None — data infrastructure only.
 **Dependencies:** Phase 3.2 (the data-access functions the handlers call).
 
 **Tasks:**
-- [ ] Build Route Handlers (`apps/dashboard/app/api/`) — see Data Model spec **API Routes** table; return `401`/`400`/`404` per HTTP status table
+- [x] Build Route Handlers (`apps/dashboard/app/api/`) — see Data Model spec **API Routes** table; return `401`/`400`/`404` per HTTP status table
   - `GET /api/overview`, `/api/ranking`, `/api/departments`, `/api/departments/[id]`, `/api/teams`, `/api/teams/[id]`, `/api/services`, `/api/users`, `/api/sync-status`
   - `GET|POST /api/accounts`, `PATCH|DELETE /api/accounts/[id]` (Settings CRUD)
   - Each: Auth.js session check → Zod-validate query/body → data-access call → `{ data: T }` / `{ error: { code, message } }` shape (Rules 10, 20.11)
   - Zod validation on all query params; enforce 90-day max on custom date ranges
   - Next.js server cache with 1-hour revalidation (`export const revalidate = 3600`, Rule 60.10)
-- [ ] Set up TanStack Query
+- [x] Set up TanStack Query
   - `QueryClientProvider` in root layout (beside the existing `NuqsAdapter`)
   - Default `staleTime`: 5 minutes
   - Query hooks per data access pattern
-- [ ] `nonModel` pass-through: `/api/overview`, `/api/departments/[id]`, and `/api/teams/[id]` responses gain the model vs. non-model cost split plus per-category totals with `recurring` (Data Model spec — *Dashboard impact*); response schemas derive from `DailyRollupBaseSchema`
-- [ ] Route Handler tests: assert the `{ data }` / `{ error }` shape and cover the `401` (unauthenticated) and `400` (bad input) paths (Rule 60.23)
+- [x] `nonModel` pass-through: `/api/overview`, `/api/departments/[id]`, and `/api/teams/[id]` responses gain the model vs. non-model cost split plus per-category totals with `recurring` (Data Model spec — *Dashboard impact*); response schemas derive from `DailyRollupBaseSchema`
+- [x] Route Handler tests: assert the `{ data }` / `{ error }` shape and cover the `401` (unauthenticated) and `400` (bad input) paths (Rule 60.23)
 - [ ] Verify: Route Handlers return validated data, a TanStack Query hook fetches it, `next build` succeeds — unblocks Phase 4.
 
 **Components Built:** None — data infrastructure only.

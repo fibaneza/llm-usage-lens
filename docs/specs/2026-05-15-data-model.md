@@ -307,6 +307,17 @@ All data written to DynamoDB and returned from Next.js Route Handlers is validat
 | `RankingQuerySchema` | API query params: dateFrom, dateTo, `tab` (`departments` \| `teams` \| `services` \| `users`), model, sortBy, order, limit |
 | `DateRangeQuerySchema` | API query params: dateFrom, dateTo, accountId (max 90-day span) |
 | `TeamsQuerySchema` | Extends date range with optional `departmentId` filter (`GET /api/teams`) |
+| `CreateAccountInputSchema` | `POST /api/accounts` body: `AccountMetaSchema` without `active`, `createdAt`, `updatedAt` (server sets `active: true` and both timestamps) |
+| `UpdateAccountPatchSchema` | `PATCH /api/accounts/[id]` body: `AccountMetaSchema` without `accountId`, `active`, `createdAt`, `updatedAt`, every field optional; `accountId` is immutable, deactivation is `DELETE` only |
+| `ApiErrorBodySchema` / `apiSuccessSchema(T)` / `apiResponseSchema(T)` | Standard `{ error: { code, message } }` / `{ data: T }` envelope; route handlers emit `code` ∈ `UNAUTHORIZED` \| `BAD_REQUEST` \| `NOT_FOUND` \| `INTERNAL` (`ApiErrorCodeSchema`) |
+| `SyncStatusResultSchema` | `GET /api/sync-status` data: `{ state: "never-synced" }` \| `{ state: "synced", status: SyncStatus }` (a missing item is a handled state) |
+| `AccountListSchema` | `GET /api/accounts` data: `AccountMeta[]` |
+| `OverviewResponseSchema` | `GET /api/overview` data: `totalCost`, `modelCost`, `nonModelCost`, `inputTokens`, `outputTokens`, `invocations`, `costFinalized`, `activeAccounts`, `mostUsedModel` (model key or `null`), `byModel[]` (`model`, `cost`, tokens, `invocations`), `nonModelByCategory[]` (`category`, `cost`, `recurring`; empty when no charge reported), `dailyTrend[]` (`date`, `cost`, `modelCost`, `nonModelCost`, `byModel` partial record), `topDepartments[]` (`departmentId`, `departmentName`, `cost`) |
+| `RankingResponseSchema` | `GET /api/ranking` data: `tab`, `rows[]` (`id`, `name`, `cost`, `costEstimated`, tokens, `invocations`) |
+| `DepartmentsResponseSchema` / `TeamsResponseSchema` | `GET /api/departments` / `GET /api/teams` data: `departments[]` / `teams[]` rows with ids, names (teams add `departmentId`, `departmentName`) and totals `cost`, `modelCost`, `nonModelCost`, tokens, `invocations` |
+| `DepartmentDetailResponseSchema` | `GET /api/departments/[id]` data: department row plus `nonModelByCategory[]`, `teams[]`, `dailyTrend[]`, `topUsers[]`, `teamTrend[]` (`date`, `teams[]` of `teamId`, `cost`) |
+| `TeamDetailResponseSchema` | `GET /api/teams/[id]` data: team row plus `nonModelByCategory[]`, `accounts[]` (`accountId` and totals), `dailyTrend[]`, `byModel[]`, `services[]`, `users[]` |
+| `ServicesResponseSchema` / `UsersResponseSchema` | `GET /api/services` / `GET /api/users` data: `services[]` (`serviceName`) / `users[]` (`userId`), each with `cost`, `costEstimated: true`, tokens (`inputTokens`, `outputTokens`), `invocations`; model cost only, non-model excluded |
 
 ## API Routes
 

@@ -17,3 +17,21 @@ export const AccountMetaSchema = z.object({
 });
 
 export type AccountMeta = z.infer<typeof AccountMetaSchema>;
+
+// Settings CRUD bodies — docs/specs/2026-05-15-data-model.md "API Routes".
+export const CreateAccountInputSchema = AccountMetaSchema.omit({
+  active: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type CreateAccountInput = z.infer<typeof CreateAccountInputSchema>;
+
+export const UpdateAccountPatchSchema = AccountMetaSchema.omit({
+  accountId: true,
+  active: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
+export type UpdateAccountPatch = z.infer<typeof UpdateAccountPatchSchema>;

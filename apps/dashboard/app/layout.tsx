@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 
+import { QueryProvider } from "@/components/providers/QueryProvider";
+
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -33,7 +35,9 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
     >
       <body className="min-h-dvh antialiased">
-        <NuqsAdapter>{children}</NuqsAdapter>
+        <NuqsAdapter>
+          <QueryProvider>{children}</QueryProvider>
+        </NuqsAdapter>
       </body>
     </html>
   );
