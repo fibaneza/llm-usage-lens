@@ -31,6 +31,59 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...next,
   prettier,
+  // Project rules as gates (Rules 10, 60). The `no-restricted-syntax` selector
+  // keys on the "use client" directive itself, so it catches server-only
+  // imports in any client module wherever it lives. esquery regex literals
+  // cannot contain `/`, hence `.` as the path separator.
+  {
+    rules: {
+      "no-console": "error",
+      "import/no-default-export": "error",
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@aws-sdk/*"],
+              message:
+                "Rule 10.5: the AWS SDK is allowed only in app/api/**, lib/data/**, lib/dynamodb.ts, apps/collector/** and scripts/**.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            'Program:has(> ExpressionStatement[directive="use client"]) ImportDeclaration[source.value=/(^|.)lib.(data|dynamodb)(.|$)|^@aws-sdk./]',
+          message:
+            "Rule 10.1: Client Components never import lib/data/**, lib/dynamodb or @aws-sdk/* — pass data as props or fetch a Route Handler.",
+        },
+      ],
+    },
+  },
+  {
+    files: [
+      "apps/dashboard/app/api/**",
+      "apps/dashboard/lib/data/**",
+      "apps/dashboard/lib/dynamodb.ts",
+      "apps/collector/**",
+      "scripts/**",
+      "apps/dashboard/test/**",
+      "**/*.test.{ts,tsx}",
+    ],
+    rules: { "no-restricted-imports": "off" },
+  },
+  // Framework entry points and tool configs that require a default export
+  // (Rule 60.5).
+  {
+    files: [
+      "apps/dashboard/app/**/{page,layout,template,loading,error,global-error,not-found,default,route}.{ts,tsx}",
+      "apps/dashboard/{proxy,auth}.ts",
+      "**/*.config.{ts,mts,mjs,cjs,js}",
+    ],
+    rules: { "import/no-default-export": "off" },
+  },
   // CommonJS config files (e.g. commitlint.config.cjs) run under Node.
   {
     files: ["**/*.cjs"],

@@ -48,10 +48,12 @@ Never bypass the commit-msg hook (`--no-verify`) — Rule 50.5.
    directly in the primary checkout.
 2. **Commit with Conventional Commits** on the topic branch; hooks run
    (Rule 50.5).
-3. **Gate before merging** — on the topic branch: `pnpm typecheck`,
-   `pnpm lint`, `pnpm format:check`, `pnpm exec vitest run` (with DynamoDB
-   Local), plus the CI-env `pnpm build` for dashboard changes and
-   `/verify-phase <n>` for phase work. Rule 70 reviews must have approved.
+3. **Gate before merging** — on the topic branch run `pnpm check` (with
+   DynamoDB Local on `:8000`): `pnpm typecheck`, `pnpm lint`,
+   `pnpm format:check`, `vitest run` (unit + integration) and the CI-env
+   build (`pnpm build:ci`), stopping at the first failure. Not `pnpm ci` —
+   that is pnpm's built-in clean install. Add `/verify-phase <n>` for phase
+   work. Rule 70 reviews must have approved.
 4. **Squash-merge into local `main`.** Claude may do this without asking each
    time once the user has authorised the merge:
    `git merge --squash <branch> && git commit` with a Conventional Commits

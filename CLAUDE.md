@@ -74,7 +74,7 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 | `pnpm dev` | Next.js dev server (`apps/dashboard`) |
 | `pnpm build` | `next build` |
 | `pnpm format:check` | Prettier format check (`pnpm format` to write) |
-| `pnpm lint` | ESLint v9 flat config (`eslint.config.ts`) |
+| `pnpm lint` | ESLint v9 flat config (`eslint.config.ts`); also enforces Rule 10 (no `@aws-sdk/*` outside the server-only paths, no `lib/data`/`lib/dynamodb`/AWS SDK import in a `"use client"` module) and Rule 60 (`no-console`, no default export outside framework files and configs) |
 | `pnpm typecheck` | `tsc --noEmit` across every workspace (`pnpm -r --if-present typecheck`) plus `tsc -p tsconfig.scripts.json` for `scripts/` |
 | `pnpm test` | Unit + integration tests (**Vitest**, not Jest) — root `vitest.config.ts` with two projects; the integration project needs DynamoDB Local on `:8000`; excludes `e2e/` and `tools/` |
 | `pnpm test:unit` | Unit + component tests only (`vitest run --project unit`, jsdom; no DynamoDB needed) |
@@ -82,6 +82,8 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 | `pnpm db:create-table` | Create the `bedrock-usage` table in DynamoDB Local (idempotent) |
 | `pnpm db:seed` / `db:seed:empty` / `db:seed:large` / `db:seed:ranking` | Load seed data (`seed:empty` resets the table first) |
 | `pnpm exec vitest run path/to/file.test.ts` | Run a single test file |
+| `pnpm check` | The local merge gate (Rule 31 step 3): `typecheck` → `lint` → `format:check` → `vitest run` (unit + integration; needs DynamoDB Local on `:8000`) → `build:ci`. Not `pnpm ci` — that is pnpm's built-in clean install |
+| `pnpm build:ci` | `pnpm build` with the CI env (`SKIP_ENV_VALIDATION=1 NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_APP_URL=http://localhost:3000`) |
 | `pnpm test:e2e` | Headless Playwright E2E in `apps/dashboard/e2e/` (smoke specs accrue with UI work; full journeys Phase 5) |
 
 DynamoDB Local (Phase 3.2): `docker compose up -d dynamodb-local` (inside `.devcontainer`; from the host use `docker compose -f .devcontainer/docker-compose.yml up -d dynamodb-local`), then `pnpm db:create-table` and `pnpm db:seed` (variants `db:seed:empty` / `db:seed:large` / `db:seed:ranking`). The scripts default to `http://localhost:8000` and must never target real AWS. The `/seed` slash command wraps this flow. See the [README](README.md) for the macOS volume workaround.
