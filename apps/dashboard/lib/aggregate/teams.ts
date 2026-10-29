@@ -30,12 +30,12 @@ function teamRow(
   fallbackName = teamId,
 ): TeamRow {
   // Rollups arrive in ascending day order; the latest carries the current name.
-  const first = list[list.length - 1];
+  const latest = list[list.length - 1];
   return {
     teamId,
-    teamName: first?.teamName ?? fallbackName,
-    departmentId: first?.departmentId ?? "",
-    departmentName: first?.departmentName ?? "",
+    teamName: latest?.teamName ?? fallbackName,
+    departmentId: latest?.departmentId ?? "",
+    departmentName: latest?.departmentName ?? "",
     ...totalsOf(list),
   };
 }

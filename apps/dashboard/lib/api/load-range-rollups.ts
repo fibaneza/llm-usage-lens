@@ -32,8 +32,10 @@ const getRollupsByDateCached = unstable_cache(
 // Rankings and aggregates are computed in memory after fetching every day via
 // GSI1 (Rule 20.7); the range is already capped at 90 days by the query schema.
 // Reads are bounded so a 90-day range cannot flood DynamoDB, and results are
-// assembled by day index so order never depends on completion order.
-async function readRange(
+// assembled by day index so order never depends on completion order. Caching
+// happens per day; bounding, ordering and the accountId filter stay outside the
+// cache so overlapping ranges and accounts reuse day entries.
+export async function loadRangeRollups(
   dateFrom: string,
   dateTo: string,
   accountId?: string,
@@ -50,7 +52,3 @@ async function readRange(
   const all = perDay.flat();
   return accountId ? all.filter((r) => r.accountId === accountId) : all;
 }
-
-// Caching happens per day; bounding, ordering and the accountId filter stay
-// outside the cache so overlapping ranges and accounts reuse day entries.
-export const loadRangeRollups = readRange;
