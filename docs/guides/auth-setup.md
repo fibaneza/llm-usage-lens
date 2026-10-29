@@ -54,6 +54,8 @@ The three `AUTH_MICROSOFT_ENTRA_ID_*` variables are optional **as a group**: set
 
 ### 4. `apps/dashboard/auth.ts`
 
+The snippet below shows the Entra-only shape. The shipped `auth.ts` registers providers conditionally — see *Dev-only local login* below.
+
 Auth.js v5 auto-reads the `AUTH_MICROSOFT_ENTRA_ID_*` variables from the dashboard app env.
 
 ```ts
@@ -90,6 +92,8 @@ export const config = {
 
 ### 7. Sign-in page — `apps/dashboard/app/sign-in/page.tsx`
 
+The shipped page renders one action per configured provider (`components/auth/SignInOptions.tsx`); the snippet shows the Entra-only shape.
+
 ```tsx
 import { signIn } from "@/auth"
 
@@ -125,7 +129,7 @@ Run from the repo root (workspace script targets `apps/dashboard`) or from `apps
 
 ## Dev-only local login (no Entra tenant)
 
-Decided 2026-10-29 (System Architecture spec — *Authentication & Access*). **Not yet implemented** — lands with the Phase 1 amendment task in the implementation-phases spec; until then `env.ts` still requires the Entra variables. To run the dashboard locally without an Entra tenant, leave the three `AUTH_MICROSOFT_ENTRA_ID_*` variables unset and add:
+Decided 2026-10-29 (System Architecture spec — *Authentication & Access*). To run the dashboard locally without an Entra tenant, leave the three `AUTH_MICROSOFT_ENTRA_ID_*` variables unset and add:
 
 ```
 AUTH_DEV_LOGIN=true
@@ -133,7 +137,7 @@ AUTH_DEV_LOGIN=true
 
 - `auth.ts` then registers an Auth.js Credentials provider that signs in a local identity without a password (JWT session). It is registered only when `NODE_ENV !== "production"` **and** `AUTH_DEV_LOGIN=true`.
 - The sign-in page lists only the configured providers: the Microsoft button appears only when Entra is configured, the local button only when the dev login is enabled.
-- **Fail closed.** With no provider configured, env validation fails in every environment. In production it also fails when Entra is not configured or `AUTH_DEV_LOGIN` has any non-empty value, and `auth.ts` repeats the check at runtime, so the server never starts with no provider or with the dev login.
+- **Fail closed.** With no provider configured, env validation fails in every environment. In production it also fails when Entra is not configured or `AUTH_DEV_LOGIN` has any non-empty value, and `auth.ts` repeats the check at runtime even when `SKIP_ENV_VALIDATION` is set, so every sign-in and session request fails (500) rather than opening access. The check is skipped only inside `next build`, where it cannot enable the dev login.
 - A production password login is not available; it would need an amendment to the System Architecture spec first. Email magic links are not adopted.
 
 ---

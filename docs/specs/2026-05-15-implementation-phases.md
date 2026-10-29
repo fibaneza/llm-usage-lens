@@ -68,11 +68,11 @@ Components are built where they are first needed and reused in subsequent pages.
   - Secret scan (gitleaks)
   - Build (`next build`)
 - [x] Verify: project runs with `pnpm dev`, Microsoft Entra ID sign-in works, light theme renders
-- [ ] Amendment (decided 2026-10-29; ships on its own `fix/` branch, not tied to a later phase): optional Entra ID plus a dev-only local login (System Architecture spec — *Authentication & Access*)
+- [x] Amendment (decided 2026-10-29; ships on its own `fix/` branch, not tied to a later phase): optional Entra ID plus a dev-only local login (System Architecture spec — *Authentication & Access*)
   - `env.ts`: the three `AUTH_MICROSOFT_ENTRA_ID_*` variables optional as a group; `AUTH_DEV_LOGIN`; fail when no provider is configured; in production fail when Entra is absent or `AUTH_DEV_LOGIN` is set
   - `auth.ts`: register providers conditionally (Credentials dev provider only when `NODE_ENV !== "production"` and `AUTH_DEV_LOGIN=true`); repeat the production check at runtime
   - Sign-in page lists only configured providers; add `AUTH_DEV_LOGIN=` to `.env.example`
-  - Verify: dev login works with no Entra variables; production with no provider or with `AUTH_DEV_LOGIN` set fails to start; the Entra button appears only when Entra is configured
+  - Verify: dev login works with no Entra variables; production with no provider or with `AUTH_DEV_LOGIN` set fails env validation, and with validation skipped every auth request fails; the Entra button appears only when Entra is configured
 
 ### Dependencies
 
@@ -744,6 +744,9 @@ OTEL_SERVICE_NAME=bedrock-cost-dashboard
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Framework-set, never set manually; read through env.ts for the sign-in provider checks
+# NODE_ENV, NEXT_PHASE
 ```
 
 All validated at build time by @t3-oss/env-nextjs. Missing variables fail the build with a clear error.

@@ -1,4 +1,12 @@
-import { signIn } from "@/auth";
+import {
+  enabledSignInProviders,
+  signInWithDevLogin,
+  signInWithEntra,
+} from "@/auth";
+import { SignInOptions } from "@/components/auth/SignInOptions";
+
+// Enabled providers depend on runtime env, so never prerender at build time.
+export const dynamic = "force-dynamic";
 
 export default function SignInPage() {
   return (
@@ -6,19 +14,11 @@ export default function SignInPage() {
       <h1 className="text-foreground text-2xl font-semibold">
         Bedrock Cost Dashboard
       </h1>
-      <form
-        action={async () => {
-          "use server";
-          await signIn("microsoft-entra-id", { redirectTo: "/dashboard" });
-        }}
-      >
-        <button
-          type="submit"
-          className="bg-primary text-primary-foreground ring-ring rounded-md px-5 py-2.5 font-medium outline-none focus-visible:ring-2"
-        >
-          Sign in with Microsoft
-        </button>
-      </form>
+      <SignInOptions
+        {...enabledSignInProviders}
+        entraAction={signInWithEntra}
+        devLoginAction={signInWithDevLogin}
+      />
     </main>
   );
 }

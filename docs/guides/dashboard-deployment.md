@@ -90,6 +90,8 @@ Names mirror `.env.example`.
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME` | OpenTelemetry OTLP export (Grafana Cloud) |
 | `NEXT_PUBLIC_APP_URL` | Deployed site URL |
 
+Do not override `NODE_ENV` in production: the dev-only login is kept out of production by `NODE_ENV=production` (set by `next start`) together with an unset `AUTH_DEV_LOGIN`.
+
 `DYNAMODB_ENDPOINT` is **not** set in production — it is for DynamoDB Local
 only. Leaving it unset makes the SDK target real AWS DynamoDB.
 

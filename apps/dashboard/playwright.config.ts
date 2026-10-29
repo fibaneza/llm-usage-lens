@@ -43,6 +43,8 @@ export default defineConfig({
       // Real Entra ID secrets are absent in E2E; skip t3-env validation the
       // same way the vitest suite does (see vitest.config.ts).
       SKIP_ENV_VALIDATION: "1",
+      // Dev-only local login (auth guide); no Entra vars are set in E2E.
+      AUTH_DEV_LOGIN: "true",
       // The session-forging helper signs JWTs with this same value — the
       // Auth.js proxy and authorized() callback run unchanged (no bypass).
       AUTH_SECRET: E2E_AUTH_SECRET,
