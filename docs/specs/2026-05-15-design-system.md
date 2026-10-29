@@ -384,7 +384,7 @@ Conventions for interactive controls, established with the global
 
 | Component | Source | Purpose |
 |-----------|--------|---------|
-| `Sidebar` | shadcn/ui | Collapsible navigation with active state. Locally patched (2026-10-29): `components/ui/sidebar.tsx` renders desktop markup until hydrated and `hooks/use-mobile.ts` uses `useSyncExternalStore`, so a late-hydrating `<Suspense>` does not mismatch at mobile widths — re-apply after any `shadcn add sidebar` |
+| `Sidebar` | shadcn/ui | Collapsible navigation with active state. Locally patched (2026-10-29): `components/ui/sidebar.tsx` renders desktop markup until hydrated, uses the `border-sidebar-border` token for its edge, and `hooks/use-mobile.ts` uses `useSyncExternalStore`, so a late-hydrating `<Suspense>` does not mismatch at mobile widths; the mobile sheet returns focus to the `SidebarTrigger` on close (`onCloseAutoFocus`), and `SidebarMenuButton` tooltips are held closed on mobile so a single Escape closes the sheet — re-apply after any `shadcn add sidebar`. Nav and brand links close the mobile sheet on click (`AppSidebar`) |
 | `CommandMenu` | shadcn/ui (cmdk) | Cmd+K quick search — jump to any department, team, user, service |
 | `Kbd` | Custom | Keyboard shortcut hints |
 
@@ -422,8 +422,8 @@ Conventions for interactive controls, established with the global
 
 | Component | Source | Purpose |
 |-----------|--------|---------|
-| `SyncStatusBadge` | Custom (shadcn Badge) | Last sync time + status indicator |
-| `SyncCountdown` | Custom | "Next sync in 42 min" live countdown in top bar; uses `SyncStatus.nextScheduledAt` when present, otherwise `lastRunAt + 1h` |
+| `SyncStatusBadge` | Custom (shadcn Badge) | Last sync time + status indicator; ARIA `role="status"` (polite live region) |
+| `SyncCountdown` | Custom | "Next sync in 42 min" countdown in top bar; uses `SyncStatus.nextScheduledAt` when present, otherwise `lastRunAt + 1h`. ARIA `role="timer"` (implicit `aria-live="off"`), so ticks are not announced — never a `status` live region (decided 2026-10-29) |
 | `CostEstimateIndicator` | Custom (shadcn Badge) | Subtle badge when cost is estimated (not finalized) |
 | `TagCoverageBar` | Custom | Progress bar showing % of tagged usage per team |
 | `EmptyState` | Custom | Reusable empty state with icon, message, and optional CTA |

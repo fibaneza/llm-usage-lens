@@ -50,12 +50,17 @@ export function AppSidebarFallback() {
 
 function SidebarNav({ toHref }: { toHref: ToHref }) {
   const pathname = usePathname();
-  const { state, toggleSidebar } = useSidebar();
+  const { state, toggleSidebar, setOpenMobile } = useSidebar();
 
   const collapsed = state === "collapsed";
   const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
   const SettingsIcon = SETTINGS_NAV_ITEM.icon;
   const settingsActive = isNavItemActive(pathname, SETTINGS_NAV_ITEM.href);
+
+  // The layout persists across client navigations, so the mobile sheet's open
+  // state would otherwise outlive the click that navigated away. A no-op on
+  // desktop, where the mobile state is already closed.
+  const closeMobileSheet = () => setOpenMobile(false);
 
   return (
     <Sidebar collapsible="icon" className="border-sidebar-border">
@@ -64,6 +69,7 @@ function SidebarNav({ toHref }: { toHref: ToHref }) {
       <SidebarHeader className="border-sidebar-border h-(--header-height) justify-center border-b">
         <Link
           href={toHref("/dashboard")}
+          onClick={closeMobileSheet}
           className="flex items-center gap-2.5 px-1"
           aria-label="Bedrock Cost — go to overview"
         >
@@ -98,6 +104,7 @@ function SidebarNav({ toHref }: { toHref: ToHref }) {
                       >
                         <Link
                           href={toHref(item.href)}
+                          onClick={closeMobileSheet}
                           aria-current={active ? "page" : undefined}
                         >
                           <Icon />
@@ -124,6 +131,7 @@ function SidebarNav({ toHref }: { toHref: ToHref }) {
             >
               <Link
                 href={toHref(SETTINGS_NAV_ITEM.href)}
+                onClick={closeMobileSheet}
                 aria-current={settingsActive ? "page" : undefined}
               >
                 <SettingsIcon />

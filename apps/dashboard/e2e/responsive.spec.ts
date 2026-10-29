@@ -118,6 +118,111 @@ test.describe("mobile sidebar sheet", () => {
   });
 });
 
+// WAI-ARIA modal dialog pattern for the mobile sheet: Escape dismisses it and
+// focus returns to the control that opened it; following a nav link navigates
+// and closes it, since the layout (and so the sheet's open state) persists
+// across client-side navigations (design-system — Layout → Sidebar: overlay on
+// mobile). The whole block also fails on any console error or uncaught
+// exception, like the breakpoint checks above.
+test.describe("mobile sidebar sheet - dismissal", () => {
+  let clientErrors: string[];
+
+  test.beforeEach(async ({ context, page }) => {
+    await signInAsTestUser(context);
+    await page.setViewportSize({ width: 375, height: 812 });
+    clientErrors = collectConsoleErrors(page);
+    page.on("pageerror", (error) => clientErrors.push(error.message));
+  });
+
+  test.afterEach(() => {
+    expect(clientErrors).toEqual([]);
+  });
+
+  // The only "Toggle Sidebar" button at 375px: the sheet's rail is `hidden
+  // sm:flex`, and the closed sheet renders no nodes.
+  const sidebarTrigger = (page: import("@playwright/test").Page) =>
+    page.getByRole("button", { name: "Toggle Sidebar" });
+
+  test("closes on Escape and returns focus to the sidebar trigger", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    await waitForHydration(page);
+
+    const trigger = sidebarTrigger(page);
+    await trigger.click();
+    const sheet = page.getByRole("dialog", { name: "Sidebar" });
+    await expect(sheet).toBeVisible();
+
+    await page.keyboard.press("Escape");
+
+    await expect(sheet).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+
+  test("closes the sheet and navigates when a nav link is clicked", async ({
+    page,
+  }) => {
+    // Compile the destination before the click so the dev server's first-hit
+    // compile does not race the assertions (Rule 60.24 - no sleeps).
+    await page.request.get("/dashboard/ranking");
+    await page.goto("/dashboard");
+    await waitForHydration(page);
+
+    await sidebarTrigger(page).click();
+    const sheet = page.getByRole("dialog", { name: "Sidebar" });
+    await expect(sheet).toBeVisible();
+
+    await sheet.getByRole("link", { name: "Ranking" }).click();
+
+    await expect(page).toHaveURL(/\/dashboard\/ranking(\?|$)/);
+    // Sheet first: while a modal is open Radix marks the rest of the page
+    // aria-hidden, so a role query for the heading cannot see it.
+    await expect(sheet).toBeHidden();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Cost ranking" }),
+    ).toBeVisible();
+  });
+
+  test("closes the sheet and navigates when the footer Settings link is clicked", async ({
+    page,
+  }) => {
+    await page.request.get("/dashboard/settings");
+    await page.goto("/dashboard");
+    await waitForHydration(page);
+
+    await sidebarTrigger(page).click();
+    const sheet = page.getByRole("dialog", { name: "Sidebar" });
+    await expect(sheet).toBeVisible();
+
+    await sheet.getByRole("link", { name: "Settings" }).click();
+
+    await expect(page).toHaveURL(/\/dashboard\/settings(\?|$)/);
+    await expect(sheet).toBeHidden();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Settings" }),
+    ).toBeVisible();
+  });
+
+  test("reopens on the first trigger click after navigating from the sheet", async ({
+    page,
+  }) => {
+    await page.request.get("/dashboard/ranking");
+    await page.goto("/dashboard");
+    await waitForHydration(page);
+
+    await sidebarTrigger(page).click();
+    const sheet = page.getByRole("dialog", { name: "Sidebar" });
+    await sheet.getByRole("link", { name: "Ranking" }).click();
+    await expect(page).toHaveURL(/\/dashboard\/ranking(\?|$)/);
+    await expect(sheet).toBeHidden();
+
+    await sidebarTrigger(page).click();
+
+    await expect(page.getByRole("dialog", { name: "Sidebar" })).toBeVisible();
+  });
+});
+
 // Top bar: may wrap only below `md`; from 768px up it stays one row, and its
 // bottom border lines up with the sidebar header's (design-system — layout,
 // breakpoints; Rule 40.6).
@@ -216,6 +321,26 @@ test.describe("top bar controls", () => {
       ).toBeVisible();
       await expect(h.getByLabel(/^Sync status/)).toBeVisible();
       await expect(h.getByLabel(/^Next sync/)).toBeVisible();
+    });
+  }
+
+  // ARIA roles (WAI-ARIA timer pattern): the countdown is a `timer`, which is
+  // implicitly aria-live="off" so it does not announce every tick; the sync
+  // badge stays a `status` live region. The countdown must not be a `status`.
+  for (const width of [768, 1024, 1440]) {
+    test(`countdown is a timer and the sync badge a status at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/dashboard");
+      const h = header(page);
+      await expect(h.getByRole("timer", { name: /^Next sync/ })).toBeVisible();
+      await expect(
+        h.getByRole("status", { name: /^Sync status/ }),
+      ).toBeVisible();
+      await expect(h.getByRole("status", { name: /^Next sync/ })).toHaveCount(
+        0,
+      );
     });
   }
 

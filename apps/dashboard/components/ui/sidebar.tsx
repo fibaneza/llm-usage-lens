@@ -208,6 +208,13 @@ function Sidebar({
             } as React.CSSProperties
           }
           side={side}
+          onCloseAutoFocus={(event) => {
+            // No SheetTrigger here, so Radix has no trigger to refocus on close.
+            event.preventDefault()
+            document
+              .querySelector<HTMLElement>('[data-sidebar="trigger"]')
+              ?.focus()
+          }}
         >
           <SheetHeader className="sr-only">
             <SheetTitle>Sidebar</SheetTitle>
@@ -524,6 +531,7 @@ function SidebarMenuButton({
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const Comp = asChild ? Slot.Root : "button"
   const { isMobile, state } = useSidebar()
+  const [tooltipOpen, setTooltipOpen] = React.useState(false)
 
   const button = (
     <Comp
@@ -547,7 +555,16 @@ function SidebarMenuButton({
   }
 
   return (
-    <Tooltip>
+    // Controlled so the trigger markup is unchanged, but never open on mobile:
+    // a tooltip opened by the sheet's autofocus would swallow the first Escape.
+    // Changes are ignored there too, or `true` would latch (Radix drops the
+    // blur's `false` as it equals the forced `open={false}`).
+    <Tooltip
+      open={tooltipOpen && !isMobile}
+      onOpenChange={(open) => {
+        if (!isMobile) setTooltipOpen(open)
+      }}
+    >
       <TooltipTrigger asChild>{button}</TooltipTrigger>
       <TooltipContent
         side="right"

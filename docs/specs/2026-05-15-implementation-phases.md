@@ -116,6 +116,7 @@ Phase 1 (Foundation).
   - 7 top-level navigation links with Lucide icons (the two `[id]` detail routes are drill-down only — no sidebar entry)
   - Active state highlighting
   - Collapsible on desktop, overlay on mobile
+  - Mobile overlay closes on Escape and on nav-link click, returning focus to the `SidebarTrigger` (Design System *Component Inventory* — `Sidebar`; follow-up, 2026-10-29)
 - [x] Build responsive layout structure (the `/dashboard` layout)
   - Breakpoints: 375 / 768 / 1024 / 1440
   - Content area max-width 1280px, centered
@@ -579,7 +580,7 @@ Components are introduced in the sub-phase where they are first needed:
   - Keyboard navigation: all interactive elements reachable via Tab
   - aria-labels: icon-only buttons, charts, status indicators
   - Focus rings: 2-4px, visible on all interactive elements
-  - Screen reader: meaningful alt text, aria-live regions for dynamic updates
+  - Screen reader: meaningful alt text, aria-live regions for dynamic updates (except `SyncCountdown`, a `timer` with implicit `aria-live="off"` — Design System *Component Inventory*)
 - [ ] Responsive testing at all breakpoints (375 / 768 / 1024 / 1440)
   > The no-horizontal-scroll check runs continuously before Phase 5
   > (`apps/dashboard/e2e/responsive.spec.ts`, all four breakpoints, every

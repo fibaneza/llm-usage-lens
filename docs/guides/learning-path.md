@@ -657,7 +657,7 @@ tests for the critical user journeys.
 - [ ] Accessibility: verify 4.5:1 contrast minimum (target 7:1 on key text)
 - [ ] Accessibility: verify all interactive elements are keyboard-reachable
 - [ ] Accessibility: add aria-labels to icon-only buttons, charts, status indicators
-- [ ] Accessibility: verify 2–4px visible focus rings; meaningful alt text; aria-live regions for dynamic updates
+- [ ] Accessibility: verify 2–4px visible focus rings; meaningful alt text; aria-live regions for dynamic updates (the `SyncCountdown` stays a `timer`, not a live region)
 - [ ] Responsive: verify all breakpoints (375 / 768 / 1024 / 1440), no horizontal scroll, charts resize, 44×44px touch targets
 - [ ] Verify empty states on all pages with `seed-empty.ts`
 - [ ] Performance-test with `seed-large.ts` (pagination at scale, chart render, no memory issues)
