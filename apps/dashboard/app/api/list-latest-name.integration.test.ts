@@ -25,6 +25,16 @@ vi.mock("next/cache", async () => {
   return mod.passThroughNextCache;
 });
 
+type Handler = (
+  request: Request,
+  ctx: { params: Promise<{ id: string }> },
+) => Promise<Response>;
+
+const call = (handler: unknown, url: string, id = "x") =>
+  (handler as Handler)(new Request(`http://localhost${url}`), {
+    params: Promise.resolve({ id }),
+  });
+
 const RANGE = "dateFrom=2026-10-01&dateTo=2026-10-02";
 const acct = (n: number) => String(n).padStart(12, "0");
 
@@ -61,9 +71,7 @@ describe("list routes show the latest name in range", () => {
         day("2026-10-02", "dept-x", "New Dept", "New Team"),
       ],
     });
-    const res = await getDepartments(
-      new Request(`http://localhost/api/departments?${RANGE}`),
-    );
+    const res = await call(getDepartments, `/api/departments?${RANGE}`);
     expect(res.status).toBe(200);
     const { data } = await res.json();
     const rows = DepartmentsResponseSchema.parse(data).departments.filter(
@@ -81,9 +89,7 @@ describe("list routes show the latest name in range", () => {
         day("2026-10-02", "dept-new", "New Dept", "New Team"),
       ],
     });
-    const res = await getTeams(
-      new Request(`http://localhost/api/teams?${RANGE}`),
-    );
+    const res = await call(getTeams, `/api/teams?${RANGE}`);
     expect(res.status).toBe(200);
     const { data } = await res.json();
     const rows = TeamsResponseSchema.parse(data).teams.filter(
