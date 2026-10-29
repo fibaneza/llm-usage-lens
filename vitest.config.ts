@@ -9,11 +9,14 @@ import { defineConfig } from "vitest/config";
 //    pre-push hook runs only this one.
 //  - `integration`: node, `*.integration.test.ts` against DynamoDB Local
 //    (localhost:8000; Rule 60.22). Files run serially because they share one
-//    table. CI and `pnpm test` run both projects.
+//    table, named per run so concurrent runs (e.g. several worktrees) against
+//    the same DynamoDB Local never clear each other's data; the global setup
+//    deletes it afterwards. CI and `pnpm test` run both projects.
 const alias = {
   // Mirror the dashboard tsconfig "@/*" path alias.
   "@": fileURLToPath(new URL("./apps/dashboard", import.meta.url)),
 };
+const integrationTableName = `bedrock-usage-test-${process.pid}`;
 
 export default defineConfig({
   test: {
@@ -68,6 +71,7 @@ export default defineConfig({
           ],
           exclude: ["**/node_modules/**", "**/.next/**", "tools/**"],
           fileParallelism: false,
+          globalSetup: ["./apps/dashboard/test/integration-global-setup.ts"],
           // Seed-reset tests write and delete thousands of items against
           // DynamoDB Local; the 5s default times out on CI runners.
           testTimeout: 60_000,
@@ -77,7 +81,7 @@ export default defineConfig({
             DYNAMODB_ENDPOINT:
               process.env.DYNAMODB_ENDPOINT ?? "http://localhost:8000",
             AWS_REGION: "us-east-1",
-            DYNAMODB_TABLE_NAME: "bedrock-usage-test",
+            DYNAMODB_TABLE_NAME: integrationTableName,
             SKIP_ENV_VALIDATION: "true",
           },
         },
