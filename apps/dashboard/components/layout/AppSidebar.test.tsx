@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
@@ -18,6 +18,16 @@ function renderSidebar(pathname: string, search = "") {
   mockUseSearchParams.mockReturnValue(new URLSearchParams(search));
   return render(
     <SidebarProvider>
+      <AppSidebar />
+    </SidebarProvider>,
+  );
+}
+
+function renderRail(defaultOpen: boolean) {
+  mockUsePathname.mockReturnValue("/dashboard");
+  mockUseSearchParams.mockReturnValue(new URLSearchParams());
+  return render(
+    <SidebarProvider defaultOpen={defaultOpen}>
       <AppSidebar />
     </SidebarProvider>,
   );
@@ -99,16 +109,6 @@ describe("AppSidebar", () => {
 // viewport (jsdom default, >= md). Pointer-out dismissal depends on Radix's
 // grace area, which needs real layout, so it is covered in e2e/sidebar.spec.ts.
 describe("AppSidebar - rail tooltips", () => {
-  function renderRail(defaultOpen: boolean) {
-    mockUsePathname.mockReturnValue("/dashboard");
-    mockUseSearchParams.mockReturnValue(new URLSearchParams());
-    return render(
-      <SidebarProvider defaultOpen={defaultOpen}>
-        <AppSidebar />
-      </SidebarProvider>,
-    );
-  }
-
   it("names a link in a tooltip on hover when collapsed", async () => {
     const user = userEvent.setup();
     renderRail(false);
@@ -124,7 +124,7 @@ describe("AppSidebar - rail tooltips", () => {
     const user = userEvent.setup();
     renderRail(false);
 
-    await user.hover(screen.getByRole("button", { name: "Collapse" }));
+    await user.hover(screen.getByRole("button", { name: "Expand" }));
 
     expect(
       await screen.findByRole("tooltip", { name: "Expand" }),
@@ -172,5 +172,92 @@ describe("AppSidebar - rail tooltips", () => {
 
     expect(screen.getByRole("link", { name: "Ranking" })).toHaveFocus();
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+});
+
+// WCAG 4.1.2 Name, Role, Value (Rule 60.30): the footer toggle's accessible name
+// must describe the action pressing it performs, not a fixed label. On the
+// desktop rail that action flips with the rail state; the tooltip repeats the
+// same word. useIsMobile reads window.innerWidth (md breakpoint is 768), so pin
+// a wide desktop viewport (design-system - Layout, breakpoints).
+describe("AppSidebar - rail toggle accessible name (desktop, 1440px)", () => {
+  const originalWidth = window.innerWidth;
+
+  beforeEach(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 1440,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: originalWidth,
+    });
+  });
+
+  it("is named Collapse while the rail is expanded", () => {
+    renderRail(true);
+
+    expect(screen.getByRole("button", { name: "Collapse" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Expand" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("is named Expand while the rail is collapsed to icons", () => {
+    renderRail(false);
+
+    expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Collapse" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("repeats its accessible name in the tooltip when collapsed", async () => {
+    const user = userEvent.setup();
+    renderRail(false);
+    const toggle = screen.getByRole("button", { name: "Expand" });
+
+    await user.hover(toggle);
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent(/^Expand$/);
+    expect(toggle).toHaveAccessibleName("Expand");
+  });
+
+  it("shows no tooltip while expanded, so the visible label is the name", async () => {
+    const user = userEvent.setup();
+    renderRail(true);
+    const toggle = screen.getByRole("button", { name: "Collapse" });
+
+    await user.hover(toggle);
+
+    await waitFor(() =>
+      expect(toggle.getAttribute("data-state")).toMatch(/-open$/),
+    );
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("renames itself with each press: Collapse, then Expand, then Collapse", async () => {
+    const user = userEvent.setup();
+    renderRail(true);
+
+    await user.click(screen.getByRole("button", { name: "Collapse" }));
+
+    expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Collapse" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Expand" }));
+
+    expect(screen.getByRole("button", { name: "Collapse" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Expand" }),
+    ).not.toBeInTheDocument();
   });
 });

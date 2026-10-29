@@ -50,10 +50,15 @@ export function AppSidebarFallback() {
 
 function SidebarNav({ toHref }: { toHref: ToHref }) {
   const pathname = usePathname();
-  const { state, toggleSidebar, setOpenMobile } = useSidebar();
+  const { state, isMobile, toggleSidebar, setOpenMobile } = useSidebar();
 
-  const collapsed = state === "collapsed";
-  const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
+  // The toggle is named for the action it performs (WCAG 4.1.2, Rule 60.30). In
+  // the mobile sheet it always closes an expanded sheet, whatever the stale
+  // desktop `state`. Hydration-safe: `state` starts "expanded" on server and
+  // client alike, so the first render reads "Collapse" with or without isMobile.
+  const toggleCollapses = isMobile || state === "expanded";
+  const toggleLabel = toggleCollapses ? "Collapse" : "Expand";
+  const ToggleIcon = toggleCollapses ? PanelLeftClose : PanelLeftOpen;
   const SettingsIcon = SETTINGS_NAV_ITEM.icon;
   const settingsActive = isNavItemActive(pathname, SETTINGS_NAV_ITEM.href);
 
@@ -142,11 +147,11 @@ function SidebarNav({ toHref }: { toHref: ToHref }) {
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={toggleSidebar}
-              tooltip={collapsed ? "Expand" : "Collapse"}
+              tooltip={toggleLabel}
               className="h-9 rounded-lg"
             >
-              <CollapseIcon />
-              <span>Collapse</span>
+              <ToggleIcon />
+              <span>{toggleLabel}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

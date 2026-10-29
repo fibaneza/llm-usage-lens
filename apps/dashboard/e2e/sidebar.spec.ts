@@ -81,9 +81,61 @@ for (const width of [768, 1440]) {
       await page.keyboard.press("Tab");
 
       await expect(
-        page.getByRole("button", { name: "Collapse" }),
+        page.getByRole("button", { name: "Expand", exact: true }),
       ).toBeFocused();
       await expect(tooltip(page, "Expand")).toBeVisible();
+    });
+
+    // WCAG 4.1.2 (Rule 60.30): the toggle is named for the action it performs.
+    test("the toggle is named Collapse while expanded and Expand once collapsed", async ({
+      page,
+    }) => {
+      await expect(
+        page.getByRole("button", { name: "Collapse", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Expand", exact: true }),
+      ).toHaveCount(0);
+
+      await collapseRail(page);
+
+      await expect(
+        page.getByRole("button", { name: "Expand", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Collapse", exact: true }),
+      ).toHaveCount(0);
+    });
+
+    test("collapsed: hovering the toggle shows a tooltip equal to its name", async ({
+      page,
+    }) => {
+      await collapseRail(page);
+
+      const toggle = page.getByRole("button", { name: "Expand", exact: true });
+      await toggle.hover();
+
+      await expect(tooltip(page, "Expand")).toBeVisible();
+      await expect(toggle).toHaveAccessibleName("Expand");
+    });
+
+    test("the toggle expands the collapsed rail and is named Collapse again", async ({
+      page,
+    }) => {
+      await collapseRail(page);
+
+      await page.getByRole("button", { name: "Expand", exact: true }).click();
+
+      await expect(page.locator('[data-slot="sidebar"]')).toHaveAttribute(
+        "data-state",
+        "expanded",
+      );
+      await expect(
+        page.getByRole("button", { name: "Collapse", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Expand", exact: true }),
+      ).toHaveCount(0);
     });
 
     test("expanded: hovering a link shows no tooltip", async ({ page }) => {

@@ -117,6 +117,7 @@ Phase 1 (Foundation).
   - Active state highlighting
   - Collapsible on desktop, overlay on mobile
   - Mobile overlay closes on Escape and on nav-link click, returning focus to the `SidebarTrigger` (Design System *Component Inventory* — `Sidebar`; follow-up, 2026-10-29)
+  - Footer rail toggle is named for its action — "Collapse" when the rail is expanded and in the mobile sheet, "Expand" when the desktop rail is collapsed; the icon and the collapsed-rail tooltip follow the same word (WCAG 4.1.2, Rule 60.30; follow-up, 2026-10-30)
 - [x] Build responsive layout structure (the `/dashboard` layout)
   - Breakpoints: 375 / 768 / 1024 / 1440
   - Content area max-width 1280px, centered

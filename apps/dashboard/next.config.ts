@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
   // The headless Playwright harness loads the dev server via 127.0.0.1; without
   // this Next blocks the dev resources and the page never hydrates (Rule 70.11).
   allowedDevOrigins: ["127.0.0.1"],
+  // The dev indicator defaults to bottom-left, where it covers the collapsed
+  // sidebar rail's footer toggle and intercepts its pointer events (dev only).
+  devIndicators: { position: "bottom-right" },
 };
 
 export default nextConfig;

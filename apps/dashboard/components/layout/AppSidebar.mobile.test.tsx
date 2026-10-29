@@ -1,9 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 
 // A minimal client router: <Link> clicks change the pathname and notify
@@ -79,11 +83,18 @@ function PathnameProbe() {
   return <output data-testid="pathname">{pathname}</output>;
 }
 
-function renderMobileShell() {
+// The desktop rail state the provider keeps while the viewport is mobile.
+function RailStateProbe() {
+  const { state } = useSidebar();
+  return <output data-testid="rail-state">{state}</output>;
+}
+
+function renderMobileShell({ defaultOpen = true } = {}) {
   return render(
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={defaultOpen}>
       <SidebarTrigger />
       <PathnameProbe />
+      <RailStateProbe />
       <AppSidebar />
     </SidebarProvider>,
   );
@@ -209,5 +220,60 @@ describe("AppSidebar - mobile sheet (375px)", () => {
     expect(
       await screen.findByRole("dialog", { name: "Sidebar" }),
     ).toBeInTheDocument();
+  });
+});
+
+// WCAG 4.1.2 Name, Role, Value (Rule 60.30): in the sheet the content is always
+// shown expanded and the footer toggle closes it, so its name is "Collapse"
+// whatever the desktop rail's state. `defaultOpen={false}` is a user who
+// collapsed the rail at desktop width and then narrowed the window: the desktop
+// state stays "collapsed" (useSidebar().state) while isMobile is true. The name
+// must follow the mobile context, not that stale desktop state. (The resize
+// itself needs a real matchMedia, so it is exercised in e2e/responsive.spec.ts.)
+describe("AppSidebar - mobile sheet rail toggle name (375px)", () => {
+  const originalWidth = window.innerWidth;
+
+  beforeEach(() => {
+    route.state.pathname = "/dashboard";
+    setViewportWidth(375);
+  });
+
+  afterEach(() => {
+    setViewportWidth(originalWidth);
+  });
+
+  it.each([
+    { desktopRail: "expanded", defaultOpen: true },
+    { desktopRail: "collapsed", defaultOpen: false },
+  ])(
+    "is named Collapse in the sheet when the desktop rail is $desktopRail",
+    async ({ desktopRail, defaultOpen }) => {
+      const user = userEvent.setup();
+      renderMobileShell({ defaultOpen });
+      // Premise: the stale desktop state is what the toggle must ignore here.
+      expect(screen.getByTestId("rail-state")).toHaveTextContent(desktopRail);
+
+      await user.click(screen.getByRole("button", { name: "Toggle Sidebar" }));
+      const dialog = await screen.findByRole("dialog", { name: "Sidebar" });
+
+      expect(
+        within(dialog).getByRole("button", { name: "Collapse" }),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).queryByRole("button", { name: "Expand" }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("closes the sheet when pressed, as its name says, even if the desktop rail is collapsed", async () => {
+    const user = userEvent.setup();
+    renderMobileShell({ defaultOpen: false });
+
+    await user.click(screen.getByRole("button", { name: "Toggle Sidebar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Sidebar" });
+
+    await user.click(within(dialog).getByRole("button", { name: "Collapse" }));
+
+    expect(dialog).not.toBeInTheDocument();
   });
 });

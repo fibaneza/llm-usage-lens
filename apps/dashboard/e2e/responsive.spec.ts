@@ -223,6 +223,75 @@ test.describe("mobile sidebar sheet - dismissal", () => {
   });
 });
 
+// WCAG 4.1.2 (Rule 60.30): in the sheet the content is always expanded and the
+// footer toggle closes it, so it is named "Collapse" even after the user
+// collapsed the desktop rail and then narrowed the window. The sidebar state
+// is not read from the cookie on load, so the collapse must happen in-session
+// at desktop width.
+test.describe("mobile sidebar sheet - rail toggle name", () => {
+  let clientErrors: string[];
+
+  test.beforeEach(async ({ context, page }) => {
+    await signInAsTestUser(context);
+    clientErrors = collectConsoleErrors(page);
+    page.on("pageerror", (error) => clientErrors.push(error.message));
+  });
+
+  test.afterEach(() => {
+    expect(clientErrors).toEqual([]);
+  });
+
+  test("is named Collapse in the sheet from load at 375px", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/dashboard");
+    await waitForHydration(page);
+
+    await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+    const sheet = page.getByRole("dialog", { name: "Sidebar" });
+
+    await expect(
+      sheet.getByRole("button", { name: "Collapse", exact: true }),
+    ).toBeVisible();
+    await expect(
+      sheet.getByRole("button", { name: "Expand", exact: true }),
+    ).toHaveCount(0);
+  });
+
+  test("stays Collapse in the sheet after collapsing the rail at 1440px and resizing to 375px", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/dashboard");
+    await waitForHydration(page);
+    await page.getByRole("button", { name: "Collapse", exact: true }).click();
+    await expect(page.locator('[data-slot="sidebar"]')).toHaveAttribute(
+      "data-state",
+      "collapsed",
+    );
+    await expect(
+      page.getByRole("button", { name: "Expand", exact: true }),
+    ).toBeVisible();
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+    const sheet = page.getByRole("dialog", { name: "Sidebar" });
+
+    await expect(sheet).toBeVisible();
+    await expect(
+      sheet.getByRole("button", { name: "Collapse", exact: true }),
+    ).toBeVisible();
+    await expect(
+      sheet.getByRole("button", { name: "Expand", exact: true }),
+    ).toHaveCount(0);
+
+    await sheet.getByRole("button", { name: "Collapse", exact: true }).click();
+
+    await expect(sheet).toBeHidden();
+  });
+});
+
 // Top bar: may wrap only below `md`; from 768px up it stays one row, and its
 // bottom border lines up with the sidebar header's (design-system — layout,
 // breakpoints; Rule 40.6).
