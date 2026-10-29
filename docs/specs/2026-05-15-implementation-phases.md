@@ -50,9 +50,9 @@ Components are built where they are first needed and reused in subsequent pages.
   - **PreToolUse(`Write|Edit`)** scoped to `apps/dashboard/**/*.tsx` → guard the [Rule 10](../../.claude/rules/10-server-only-boundary.md) server-only boundary: block an `@aws-sdk/*` or `lib/data/**` import landing in a `"use client"` module (Rule 10 calls this a security bug). This is the one check the git hooks and the `settings.json` deny list cannot easily do at write time
 - [x] Set up Auth.js (NextAuth v5) authentication
   - Install `next-auth`
-  - Configure the Microsoft Entra ID provider in `auth.ts` (provider-agnostic — swappable in one file)
+  - Configure the Microsoft Entra ID provider in `auth.ts` (provider-agnostic — swappable in one file; superseded 2026-10-29, see the amendment below)
   - Configure Auth.js in the Next.js proxy (`proxy.ts`) to protect `/dashboard/*` and `/api/*` routes
-  - Build sign-in page (`/sign-in`) — single "Sign in with Microsoft" action; no sign-up (identities managed in Entra ID)
+  - Build sign-in page (`/sign-in`) — single "Sign in with Microsoft" action; no sign-up (identities managed in Entra ID) (superseded 2026-10-29, see the amendment below)
   - Set up environment variables
 - [x] Configure @t3-oss/env-nextjs (type-safe env vars with Zod validation)
 - [x] Integrate OpenTelemetry (`@vercel/otel` + `instrumentation.ts`)
@@ -68,6 +68,11 @@ Components are built where they are first needed and reused in subsequent pages.
   - Secret scan (gitleaks)
   - Build (`next build`)
 - [x] Verify: project runs with `pnpm dev`, Microsoft Entra ID sign-in works, light theme renders
+- [ ] Amendment (decided 2026-10-29; ships on its own `fix/` branch, not tied to a later phase): optional Entra ID plus a dev-only local login (System Architecture spec — *Authentication & Access*)
+  - `env.ts`: the three `AUTH_MICROSOFT_ENTRA_ID_*` variables optional as a group; `AUTH_DEV_LOGIN`; fail when no provider is configured; in production fail when Entra is absent or `AUTH_DEV_LOGIN` is set
+  - `auth.ts`: register providers conditionally (Credentials dev provider only when `NODE_ENV !== "production"` and `AUTH_DEV_LOGIN=true`); repeat the production check at runtime
+  - Sign-in page lists only configured providers; add `AUTH_DEV_LOGIN=` to `.env.example`
+  - Verify: dev login works with no Entra variables; production with no provider or with `AUTH_DEV_LOGIN` set fails to start; the Entra button appears only when Entra is configured
 
 ### Dependencies
 
@@ -538,6 +543,8 @@ Components are introduced in the sub-phase where they are first needed:
   - Deactivate with confirmation dialog
   - Zod validation on all form inputs
   - `next-safe-action` for all Server Actions
+  - The `/api/accounts` Route Handlers (Phase 3.3) are the Settings CRUD HTTP contract; a Server Action, if used, calls the same `lib/data/account-meta.ts` functions rather than a second write path (decided 2026-10-29)
+  - **Open decision (recorded 2026-10-29):** who may create, edit and deactivate accounts. System Architecture gives every authenticated member read access to all data; choose a role model for these mutations before Phase 4.9 starts; adopting one amends Design System spec — *Authentication* ("Roles: Not implemented in v1"). Until then the `/api/accounts` write routes require only a session.
 - [ ] Build sync status display
   - Connect `SyncStatusBadge` and `SyncCountdown` to SyncStatus entity
   - Show: last run time, status (success/partial/error), accounts processed, duration, errors list
@@ -719,10 +726,11 @@ Prerequisite: organization-wide OTel instrumentation of every Bedrock caller.
 AUTH_SECRET=
 AUTH_URL=http://localhost:3000
 
-# Microsoft Entra ID (Auth.js provider)
+# Microsoft Entra ID (Auth.js provider) — all three or none; required in production
 AUTH_MICROSOFT_ENTRA_ID_ID=
 AUTH_MICROSOFT_ENTRA_ID_SECRET=
 AUTH_MICROSOFT_ENTRA_ID_ISSUER=
+AUTH_DEV_LOGIN=                       # "true" enables the dev-only local login; rejected in production
 
 # AWS / DynamoDB
 AWS_REGION=us-east-1

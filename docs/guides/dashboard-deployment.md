@@ -82,6 +82,7 @@ Names mirror `.env.example`.
 | `AUTH_MICROSOFT_ENTRA_ID_ID` | Entra ID app client ID |
 | `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Entra ID app client secret |
 | `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Entra ID issuer URL |
+| `AUTH_DEV_LOGIN` | **Must be unset** in production — any non-empty value fails startup (dev-only local login) |
 | `AWS_REGION` | `us-east-1` |
 | `AWS_ACCESS_KEY_ID` | Scoped read-only IAM user key (see §2) |
 | `AWS_SECRET_ACCESS_KEY` | Scoped read-only IAM user secret (see §2) |

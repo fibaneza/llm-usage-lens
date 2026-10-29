@@ -59,14 +59,14 @@ Decisions on technologies evaluated and excluded, with rationale:
 
 ## Authentication
 
-- **Library:** Auth.js (NextAuth v5) — the provider abstraction. Switching identity providers is a config change in `apps/dashboard/auth.ts`; pages, proxy, and route guards use Auth.js session APIs and never change.
-- **Identity provider:** Microsoft Entra ID. Recommended start: a free Entra tenant, developing against the real provider from day one.
+- **Library:** Auth.js (NextAuth v5) — the provider abstraction. Switching identity providers is a config change in `apps/dashboard/auth.ts` (plus its variables in `env.ts`); pages, proxy, and route guards use Auth.js session APIs and never change.
+- **Identity provider:** Microsoft Entra ID in production. Recommended start: a free Entra tenant, developing against the real provider from day one; without a tenant, a dev-only local login is available outside production (System Architecture spec — *Authentication & Access*, decided 2026-10-29).
 - **Access model:** Open access — every authenticated member sees all data.
 - **Session:** Auth.js encrypted JWT session cookie.
 - **Proxy:** Auth.js in the Next.js proxy (`proxy.ts`) protects all `/dashboard/*` and `/api/*` routes.
-- **Sign-in page:** Single "Sign in with Microsoft" action. No sign-up — identities are managed in Entra ID.
+- **Sign-in page:** One action per configured provider — "Sign in with Microsoft" when Entra ID is configured, a local dev sign-in only when the dev login is enabled outside production. No sign-up — identities are managed in Entra ID.
 - **User menu:** Custom user menu in the top bar (avatar, name, sign out) backed by the Auth.js session.
-- **Roles:** Not implemented in v1. Entra ID groups can be surfaced as token claims and mapped to app roles later (e.g. restrict Settings to admins) without a redesign.
+- **Roles:** Not implemented in v1 (an account-mutation role model is an open decision before Phase 4.9; adopting one amends this line). Entra ID groups can be surfaced as token claims and mapped to app roles later (e.g. restrict Settings to admins) without a redesign.
 
 ## Data Access Boundary
 

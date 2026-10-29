@@ -44,8 +44,11 @@ patterns) and current Next.js App Router guidance.
 13. **`params`/`searchParams` are Promises** in the App Router — `await` them.
 14. **Keys are stable IDs**, never array indices. Effects declare complete
     dependency arrays.
-15. **Server Actions** (Settings CRUD) go through `next-safe-action` with a
-    Zod input schema and an Auth.js session check.
+15. **Settings CRUD's HTTP contract is the `/api/accounts` Route Handlers**
+    (Data Model spec — *API Routes*; implementation-phases Phase 4.9). A
+    Server Action, if Phase 4.9 adds one, goes through `next-safe-action` with
+    a Zod input schema and an Auth.js session check, and calls the same
+    `lib/data/account-meta.ts` functions.
 
 ## Validation & errors
 

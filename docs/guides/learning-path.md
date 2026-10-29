@@ -177,7 +177,7 @@ Next.js App Router project is scaffolded in TypeScript strict mode, and how
 quality gates (ESLint, Prettier, Husky, gitleaks, commitlint) catch problems
 before they reach a PR. You also wire **Auth.js v5 + Microsoft Entra ID** — the
 identity-provider abstraction — and learn that switching providers later is a
-change to `auth.ts` only. Env vars go through `@t3-oss/env-nextjs` so
+change to `auth.ts` (and its variables in `env.ts`). Env vars go through `@t3-oss/env-nextjs` so
 misconfiguration fails at build time. The output is a skeleton: no pages yet.
 
 **Dependencies.** None — this is the starting point.
@@ -191,9 +191,10 @@ misconfiguration fails at build time. The output is a skeleton: no pages yet.
 - [ ] Configure ESLint v9 (flat config), Prettier, Husky + lint-staged, gitleaks, commitlint
 - [ ] Add the pre-push hook: `tsc --noEmit`
 - [ ] Set up Auth.js (NextAuth v5) with the Microsoft Entra ID provider
-- [ ] Build the sign-in page (`/sign-in`) — single "Sign in with Microsoft" action, no sign-up
+- [ ] Build the sign-in page (`/sign-in`) — one action per configured provider, no sign-up
 - [ ] Protect `/dashboard/*` and `/api/*` routes via Auth.js in the Next.js proxy (`proxy.ts`)
 - [ ] Configure `@t3-oss/env-nextjs` (type-safe env vars validated with Zod)
+- [ ] Amendment (2026-10-29): Entra variables optional as a group plus a dev-only local login (`AUTH_DEV_LOGIN`), failing closed in production
 - [ ] Integrate OpenTelemetry (`@vercel/otel`)
 - [ ] Create `.env.example` (tracked, no values), `.env.local` (ignored), `.env.test` (ignored)
 - [ ] Set up GitHub Actions CI: lint, type check, secret scan, build
@@ -604,10 +605,11 @@ cost is split proportionally from token ratios.
 
 #### Phase 4.9 — Settings Page (`/dashboard/settings`)
 
-**Lesson.** The only page with **write operations**. You learn **Server
-Actions** through `next-safe-action` — every action has a Zod input schema and
-an Auth.js session check — and that a missing `SyncStatus` item is a valid
-"never synced" state, not an error.
+**Lesson.** The only page with **write operations**. The `/api/accounts`
+Route Handlers stay the HTTP contract; if the page adds **Server Actions**,
+they go through `next-safe-action` — a Zod input schema and an Auth.js session
+check — and call the same data-access functions. You also learn that a missing
+`SyncStatus` item is a valid "never synced" state, not an error.
 
 **Dependencies.** Phase 4.8.
 

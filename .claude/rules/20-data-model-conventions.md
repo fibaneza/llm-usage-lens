@@ -43,4 +43,5 @@ Source: `docs/specs/2026-05-15-data-model.md`.
     never split across users or services. Idle recurring cost still produces a
     rollup (Data Model spec — *Non-Model Charges*).
 13. **Rollups carry their UTC `date`** (`YYYY-MM-DD`), written by the collector
-    and seeds and derived from `SK` on read when absent.
+    and seeds and derived from `SK` on read when absent. A stored `date` that
+    disagrees with `SK` fails the read (the item is corrupt).

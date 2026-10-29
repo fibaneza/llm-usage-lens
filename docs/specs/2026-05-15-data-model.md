@@ -323,7 +323,7 @@ All data written to DynamoDB and returned from Next.js Route Handlers is validat
 
 All routes live under `apps/dashboard/app/api/`, require an Auth.js session, validate query/body with Zod, and return `{ data: T }` or `{ error: { code, message } }`. Date params use `YYYY-MM-DD` (UTC).
 
-**HTTP status codes:** `200` success · `400` validation error (Zod) · `401` no session · `404` account/department/team not found · `500` unexpected server error.
+**HTTP status codes:** `200` success · `400` request parsing or validation error (malformed JSON body, or a failed Zod parse of query, path or body; also `POST /api/accounts` for an account that already exists) · `401` no session · `404` account/department/team not found · `500` unexpected server error, including a stored item or a response that fails its Zod schema (a server-side defect, not bad input).
 
 | Route | Method | Schema / params | Data access |
 |-------|--------|-----------------|-------------|
@@ -337,8 +337,8 @@ All routes live under `apps/dashboard/app/api/`, require an Auth.js session, val
 | `/api/users` | GET | `DateRangeQuerySchema` | Rollups → merge `byUser` across accounts |
 | `/api/sync-status` | GET | — | `getSyncStatus()` |
 | `/api/accounts` | GET | — | `getAllAccounts()` |
-| `/api/accounts` | POST | `AccountMetaSchema` (create) | Settings CRUD |
-| `/api/accounts/[id]` | PATCH | `AccountMetaSchema` (partial) | Settings CRUD |
+| `/api/accounts` | POST | `CreateAccountInputSchema` | Settings CRUD |
+| `/api/accounts/[id]` | PATCH | `UpdateAccountPatchSchema` | Settings CRUD |
 | `/api/accounts/[id]` | DELETE | — | Soft-deactivate (`active: false`) |
 
 ## Design Decisions

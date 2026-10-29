@@ -10,7 +10,7 @@ Do not confuse these:
 
 | Concern | What it is | How it is handled |
 |---|---|---|
-| **Dashboard login** | How users sign into the dashboard | Auth.js (NextAuth v5) + Microsoft Entra ID |
+| **Dashboard login** | How users sign into the dashboard | Auth.js (NextAuth v5) + Microsoft Entra ID (dev-only local login outside production — see below) |
 | **App → AWS credentials** | How the Next.js server authenticates to DynamoDB | AWS SDK default credential chain (see below) |
 
 ## AWS Credentials for Local Development
@@ -49,6 +49,8 @@ AUTH_MICROSOFT_ENTRA_ID_ID=<application/client id>
 AUTH_MICROSOFT_ENTRA_ID_SECRET=<client secret value>
 AUTH_MICROSOFT_ENTRA_ID_ISSUER=https://login.microsoftonline.com/<tenant id>/v2.0
 ```
+
+The three `AUTH_MICROSOFT_ENTRA_ID_*` variables are optional **as a group**: set all three or none. Production requires them (System Architecture spec — *Authentication & Access*).
 
 ### 4. `apps/dashboard/auth.ts`
 
@@ -121,6 +123,21 @@ Run from the repo root (workspace script targets `apps/dashboard`) or from `apps
 
 ---
 
+## Dev-only local login (no Entra tenant)
+
+Decided 2026-10-29 (System Architecture spec — *Authentication & Access*). **Not yet implemented** — lands with the Phase 1 amendment task in the implementation-phases spec; until then `env.ts` still requires the Entra variables. To run the dashboard locally without an Entra tenant, leave the three `AUTH_MICROSOFT_ENTRA_ID_*` variables unset and add:
+
+```
+AUTH_DEV_LOGIN=true
+```
+
+- `auth.ts` then registers an Auth.js Credentials provider that signs in a local identity without a password (JWT session). It is registered only when `NODE_ENV !== "production"` **and** `AUTH_DEV_LOGIN=true`.
+- The sign-in page lists only the configured providers: the Microsoft button appears only when Entra is configured, the local button only when the dev login is enabled.
+- **Fail closed.** With no provider configured, env validation fails in every environment. In production it also fails when Entra is not configured or `AUTH_DEV_LOGIN` has any non-empty value, and `auth.ts` repeats the check at runtime, so the server never starts with no provider or with the dev login.
+- A production password login is not available; it would need an amendment to the System Architecture spec first. Email magic links are not adopted.
+
+---
+
 ## Switching Providers Later
 
-Auth.js is the provider abstraction. To switch identity providers, change only `apps/dashboard/auth.ts` — swap `MicrosoftEntraID` for another provider and update its environment variables. Steps 5–8 never change.
+Auth.js is the provider abstraction. To switch identity providers, change `apps/dashboard/auth.ts` — swap `MicrosoftEntraID` for another provider — and its environment variables and provider checks in `apps/dashboard/env.ts`. Steps 5–8 never change.

@@ -4,7 +4,7 @@
 
 | Concern | Mechanism | Where it lives |
 |---|---|---|
-| Dashboard login (who the user is) | Auth.js v5 + Microsoft Entra ID | `apps/dashboard/auth.ts` |
+| Dashboard login (who the user is) | Auth.js v5 + Microsoft Entra ID (dev-only local login outside production, fail closed) | `apps/dashboard/auth.ts` |
 | AWS access (how the server reads DynamoDB / collector reads AWS) | AWS SDK default credential chain | Process environment (SSO + `AWS_PROFILE`) |
 
 ## Rules
@@ -21,8 +21,8 @@
    helpers, and tool config (`vitest.config.ts`, `playwright.config.ts`) —
    may read `process.env` directly.
 3. **Auth.js is the identity-provider abstraction.** Switching providers is a
-   change to `apps/dashboard/auth.ts` only — keep provider-specific code out
-   of routes and components.
+   change to `apps/dashboard/auth.ts` (and its variables in `env.ts`) only —
+   keep provider-specific code out of routes and components.
 4. **All Route Handlers must check the Auth.js session** and return `401`
    when unauthenticated, before any DynamoDB call.
 5. **Never bypass git hooks.** Do not run `git commit --no-verify` or
