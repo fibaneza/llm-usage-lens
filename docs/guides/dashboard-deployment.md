@@ -34,15 +34,28 @@ variables.
 policy — `dynamodb:GetItem`, `Query`, `Scan` on the `bedrock-usage` table and
 its GSI1 only, nothing else. Store its access key in Netlify env vars.
 
-This is a deliberate, documented exception to the spec rule "never use static
-`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`." That rule targets the *collector*,
-which runs in AWS and has roles available. A third-party host has no role
-mechanism; a tightly-scoped read-only key is the accepted tradeoff. Mitigations:
+> **Pending decision — not yet an approved exception.** Rule 50.1 ("never use
+> static `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`") covers all real-AWS
+> access, including this dashboard's server — not only the collector. The specs
+> keep dashboard hosting a future decision (implementation-phases spec, CD
+> section), so this key is a **proposal**: it becomes an exception only when the
+> System Architecture spec (*Authentication & Access*) records it and Rule 50.1
+> cites that entry. Do not deploy with it before then.
+
+The proposal: a host with no role mechanism gets a tightly-scoped key.
+Mitigations:
 
 - Read-only and scoped to one table — a leak cannot write data or reach other
   resources.
 - Rotate the key on a schedule.
 - The collector continues to use roles/OIDC — it is unaffected.
+
+**Settings writes.** Phase 3.3 added `POST`/`PATCH`/`DELETE /api/accounts`,
+which write `AccountMeta` items (`PutItem` with a condition, `UpdateItem`). A
+read-only key makes those routes fail with a 500 — every read page still
+works. Whether Phase 4.9 widens the key or uses a separate write principal is
+part of the same spec decision, together with the open account-mutation
+role-model decision (implementation-phases spec, Phase 4.9).
 
 ---
 
