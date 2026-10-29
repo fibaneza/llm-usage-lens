@@ -40,6 +40,15 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 180_000,
     env: {
+      // Process env beats Next's .env loading, so pin every var the suite
+      // depends on: a developer's gitignored .env/.env.local must not leak in.
+      AUTH_URL: E2E_BASE_URL,
+      AUTH_MICROSOFT_ENTRA_ID_ID: "",
+      AUTH_MICROSOFT_ENTRA_ID_SECRET: "",
+      AUTH_MICROSOFT_ENTRA_ID_ISSUER: "",
+      AWS_REGION: "us-east-1",
+      AWS_PROFILE: "",
+      OTEL_EXPORTER_OTLP_ENDPOINT: "",
       // Real Entra ID secrets are absent in E2E; skip t3-env validation the
       // same way the vitest suite does (see vitest.config.ts).
       SKIP_ENV_VALIDATION: "1",
