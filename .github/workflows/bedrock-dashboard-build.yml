@@ -81,16 +81,13 @@ jobs:
     needs: [quality]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      NEXT_TELEMETRY_DISABLED: "1"
-      # No secrets in CI; real deployments leave this unset so @t3-oss/env-nextjs
-      # fails the build on missing vars (Rule 50.2).
-      SKIP_ENV_VALIDATION: "1"
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/node-setup
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Build
-        run: pnpm build
+        # build:ci supplies non-secret placeholders so @t3-oss/env-nextjs
+        # validates the env schema (defaults and the sign-in provider checks)
+        # instead of being skipped (Rule 50.2).
+        run: pnpm build:ci

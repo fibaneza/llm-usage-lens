@@ -9,9 +9,10 @@ import {
   resolveSignInProviders,
 } from "@/lib/auth/auth-config";
 
-// `next build` runs with NODE_ENV=production and no secrets (build:ci), so the
-// runtime guard must not fire then; it still fires when SKIP_ENV_VALIDATION is
-// set at runtime, repeating the production rules (auth guide).
+// `next build` runs with NODE_ENV=production and may lack runtime secrets, so
+// the runtime guard must not fire then; it still fires when
+// SKIP_ENV_VALIDATION is set at runtime, repeating the production rules (auth
+// guide).
 const isBuildPhase = env.NEXT_PHASE === "phase-production-build";
 
 export const enabledSignInProviders = isBuildPhase

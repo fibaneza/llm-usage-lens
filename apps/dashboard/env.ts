@@ -8,10 +8,11 @@ import {
 
 // Type-safe environment variables (Rule 50.2 — never read process.env directly).
 // Variable set defined in docs/specs/2026-05-15-implementation-phases.md
-// §Required Environment Variables. SKIP_ENV_VALIDATION lets `next build` and
-// lint run without secrets present (e.g. CI, ephemeral containers); real
-// deployments leave it unset so missing vars fail the build. Entra ID is
-// optional; sign-in provider rules are cross-checked by resolveSignInProviders.
+// §Required Environment Variables. SKIP_ENV_VALIDATION lets tests and the e2e
+// dev server run without secrets; builds (including `pnpm build:ci`, which
+// uses non-secret placeholders) validate, so missing vars fail the build.
+// Entra ID is optional; sign-in provider rules are cross-checked by
+// resolveSignInProviders.
 export const env = createEnv({
   server: {
     AUTH_SECRET: z.string().min(1),
