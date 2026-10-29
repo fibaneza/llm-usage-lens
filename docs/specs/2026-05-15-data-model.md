@@ -309,7 +309,7 @@ All data written to DynamoDB and returned from Next.js Route Handlers is validat
 | `TeamsQuerySchema` | Extends date range with optional `departmentId` filter (`GET /api/teams`) |
 | `CreateAccountInputSchema` | `POST /api/accounts` body: `AccountMetaSchema` without `active`, `createdAt`, `updatedAt` (server sets `active: true` and both timestamps) |
 | `UpdateAccountPatchSchema` | `PATCH /api/accounts/[id]` body: `AccountMetaSchema` without `accountId`, `active`, `createdAt`, `updatedAt`, every field optional; `accountId` is immutable, deactivation is `DELETE` only |
-| `ApiErrorBodySchema` / `apiSuccessSchema(T)` / `apiResponseSchema(T)` | Standard `{ error: { code, message } }` / `{ data: T }` envelope; route handlers emit `code` ∈ `UNAUTHORIZED` \| `BAD_REQUEST` \| `NOT_FOUND` \| `INTERNAL` (`ApiErrorCodeSchema`) |
+| `ApiErrorBodySchema` / `apiSuccessSchema(T)` / `apiResponseSchema(T)` | Standard `{ error: { code, message } }` / `{ data: T }` envelope; route handlers emit `code` ∈ `UNAUTHORIZED` \| `FORBIDDEN` \| `BAD_REQUEST` \| `NOT_FOUND` \| `INTERNAL` (`ApiErrorCodeSchema`) |
 | `SyncStatusResultSchema` | `GET /api/sync-status` data: `{ state: "never-synced" }` \| `{ state: "synced", status: SyncStatus }` (a missing item is a handled state) |
 | `AccountListSchema` | `GET /api/accounts` data: `AccountMeta[]` |
 | `OverviewResponseSchema` | `GET /api/overview` data: `totalCost`, `modelCost`, `nonModelCost`, `inputTokens`, `outputTokens`, `invocations`, `costFinalized`, `activeAccounts`, `mostUsedModel` (model key or `null`), `byModel[]` (`model`, `cost`, tokens, `invocations`), `nonModelByCategory[]` (`category`, `cost`, `recurring`; empty when no charge reported), `dailyTrend[]` (`date`, `cost`, `modelCost`, `nonModelCost`, `byModel` partial record), `topDepartments[]` (`departmentId`, `departmentName`, `cost`) |
@@ -323,7 +323,7 @@ All data written to DynamoDB and returned from Next.js Route Handlers is validat
 
 All routes live under `apps/dashboard/app/api/`, require an Auth.js session, validate query/body with Zod, and return `{ data: T }` or `{ error: { code, message } }`. Date params use `YYYY-MM-DD` (UTC).
 
-**HTTP status codes:** `200` success · `400` request parsing or validation error (malformed JSON body, or a failed Zod parse of query, path or body; also `POST /api/accounts` for an account that already exists) · `401` no session · `404` account/department/team not found — for department and team detail, "found" means present in `AccountMeta` **or** in any rollup in the requested range (historical departments/teams keep their snapshot names; see *Historical Snapshots for Department/Team Names*), so a historical id queried for a range with no rollups is `404` · `500` unexpected server error, including a stored item or a response that fails its Zod schema (a server-side defect, not bad input).
+**HTTP status codes:** `200` success · `400` request parsing or validation error (malformed JSON body, or a failed Zod parse of query, path or body; also `POST /api/accounts` for an account that already exists) · `401` no session · `403` signed in without the `Admin` role on an account write route (`POST /api/accounts`, `PATCH`/`DELETE /api/accounts/[id]`), checked after the session and before input parsing, so a non-admin gets `403`, never `400`/`404` (System Architecture — *Authentication & Access*) · `404` account/department/team not found — for department and team detail, "found" means present in `AccountMeta` **or** in any rollup in the requested range (historical departments/teams keep their snapshot names; see *Historical Snapshots for Department/Team Names*), so a historical id queried for a range with no rollups is `404` · `500` unexpected server error, including a stored item or a response that fails its Zod schema (a server-side defect, not bad input).
 
 | Route | Method | Schema / params | Data access |
 |-------|--------|-----------------|-------------|
@@ -337,9 +337,9 @@ All routes live under `apps/dashboard/app/api/`, require an Auth.js session, val
 | `/api/users` | GET | `DateRangeQuerySchema` | Rollups → merge `byUser` across accounts |
 | `/api/sync-status` | GET | — | `getSyncStatus()` |
 | `/api/accounts` | GET | — | `getAllAccounts()` |
-| `/api/accounts` | POST | `CreateAccountInputSchema` | Settings CRUD |
-| `/api/accounts/[id]` | PATCH | `UpdateAccountPatchSchema` | Settings CRUD |
-| `/api/accounts/[id]` | DELETE | — | Soft-deactivate (`active: false`) |
+| `/api/accounts` | POST | `CreateAccountInputSchema` | Settings CRUD (`Admin`) |
+| `/api/accounts/[id]` | PATCH | `UpdateAccountPatchSchema` | Settings CRUD (`Admin`) |
+| `/api/accounts/[id]` | DELETE | — | Soft-deactivate (`active: false`; `Admin`) |
 
 ## Design Decisions
 

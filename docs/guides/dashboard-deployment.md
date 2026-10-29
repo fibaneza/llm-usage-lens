@@ -54,8 +54,8 @@ Mitigations:
 which write `AccountMeta` items (`PutItem` with a condition, `UpdateItem`). A
 read-only key makes those routes fail with a 500 — every read page still
 works. Whether Phase 4.9 widens the key or uses a separate write principal is
-part of the same spec decision, together with the open account-mutation
-role-model decision (implementation-phases spec, Phase 4.9).
+part of the same spec decision. Who may write is decided: only the `Admin`
+app role (System Architecture spec — *Authentication & Access*, 2026-10-29).
 
 ---
 

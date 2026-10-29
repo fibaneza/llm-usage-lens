@@ -61,12 +61,12 @@ Decisions on technologies evaluated and excluded, with rationale:
 
 - **Library:** Auth.js (NextAuth v5) — the provider abstraction. Switching identity providers is a config change in `apps/dashboard/auth.ts` (plus its variables in `env.ts`); pages, proxy, and route guards use Auth.js session APIs and never change.
 - **Identity provider:** Microsoft Entra ID in production. Recommended start: a free Entra tenant, developing against the real provider from day one; without a tenant, a dev-only local login is available outside production (System Architecture spec — *Authentication & Access*, decided 2026-10-29).
-- **Access model:** Open access — every authenticated member sees all data.
-- **Session:** Auth.js encrypted JWT session cookie.
+- **Access model:** Open read access — every authenticated member sees all data; account mutations require the `Admin` role (see *Roles*).
+- **Session:** Auth.js encrypted JWT session cookie; it ends 8 hours after sign-in regardless of activity (System Architecture — *Authentication & Access*).
 - **Proxy:** Auth.js in the Next.js proxy (`proxy.ts`) protects all `/dashboard/*` and `/api/*` routes.
 - **Sign-in page:** One action per configured provider — "Sign in with Microsoft" when Entra ID is configured, a local dev sign-in only when the dev login is enabled outside production. No sign-up — identities are managed in Entra ID.
 - **User menu:** Custom user menu in the top bar (avatar, name, sign out) backed by the Auth.js session.
-- **Roles:** Not implemented in v1 (an account-mutation role model is an open decision before Phase 4.9; adopting one amends this line). Entra ID groups can be surfaced as token claims and mapped to app roles later (e.g. restrict Settings to admins) without a redesign.
+- **Roles:** One app role, `Admin`, gates account mutations (System Architecture — *Authentication & Access*, decided 2026-10-29). Every signed-in member reads all pages; Settings hides add/edit/deactivate controls from non-admins, and the write routes return `403` regardless of the UI.
 
 ## Data Access Boundary
 
@@ -74,7 +74,7 @@ DynamoDB and the AWS SDK are **server-only**. Client Components never access the
 
 - Data-access functions live in `apps/dashboard/lib/data/` and import `server-only` — imported only by Route Handlers and Server Components. A client-side import is a build error.
 - **Client Components** get data two ways: as props from a Server Component, or via TanStack Query calling a same-origin Route Handler over HTTP. They never import `apps/dashboard/lib/data/` or the AWS SDK.
-- **Route Handlers** (`apps/dashboard/app/api/*`) are the only HTTP-reachable backend: validate input with Zod, check the Auth.js session, query DynamoDB, return the standardized `{ data }` / `{ error }` shape.
+- **Route Handlers** (`apps/dashboard/app/api/*`) are the only HTTP-reachable backend: check the Auth.js session (and the `Admin` role on account writes), validate input with Zod, query DynamoDB, return the standardized `{ data }` / `{ error }` shape.
 - AWS credentials and the AWS SDK never ship to the browser.
 
 ## Caching Strategy
@@ -323,7 +323,7 @@ Sortable data table columns:
 
 ### Settings Page
 
-- Account registry: add/edit/deactivate accounts, map to dept/team
+- Account registry: add/edit/deactivate accounts, map to dept/team (`Admin` role; read-only for other members)
 - Sync status: last run time, success/error count, next scheduled run
 - Tag coverage: per-team percentage of tagged vs untagged usage
 - Data retention: TTL configuration display

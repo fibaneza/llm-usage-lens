@@ -77,6 +77,10 @@ const CREATE_BODY = {
   region: "us-east-1",
 };
 const SESSION = { user: { name: "t", email: "t@company.com" } };
+// Account writes need the Admin role (System Architecture — Authentication &
+// Access, Account-mutation role; Data Model — HTTP status codes: 403 for a
+// signed-in non-admin). Reads and the cache tests keep the role-less SESSION.
+const ADMIN_SESSION = { user: { ...SESSION.user, roles: ["Admin"] } };
 const ctx = (id = acct(1)) => ({ params: Promise.resolve({ id }) });
 const get = (url: string) => new Request(`http://localhost${url}`);
 const write = (method: string, body: unknown) =>
@@ -187,6 +191,10 @@ describe("auth stays outside the cache", () => {
 });
 
 describe("account writes invalidate the accounts tag", () => {
+  beforeEach(() => {
+    auth.mockResolvedValue(ADMIN_SESSION);
+  });
+
   async function warmThenWrite(run: () => Promise<Response>) {
     await callGet(getAccounts, "/api/accounts");
     expect(data.getAllAccounts).toHaveBeenCalledTimes(1);
@@ -211,6 +219,27 @@ describe("account writes invalidate the accounts tag", () => {
 
   it("DELETE /api/accounts/[id]", () =>
     warmThenWrite(() => DELETE(write("DELETE", {}), ctx())));
+
+  it.each([
+    ["POST", () => POST(write("POST", CREATE_BODY))],
+    ["PATCH", () => PATCH(write("PATCH", { accountName: "renamed" }), ctx())],
+    ["DELETE", () => DELETE(write("DELETE", {}), ctx())],
+  ])(
+    "a signed-in non-admin %s is 403 and neither writes nor revalidates",
+    async (_method, run) => {
+      auth.mockResolvedValue(SESSION);
+      await callGet(getAccounts, "/api/accounts");
+      const res = await run();
+      expect(res.status).toBe(403);
+      expect((await res.json()).error.code).toBe("FORBIDDEN");
+      expect(data.createAccount).not.toHaveBeenCalled();
+      expect(data.updateAccount).not.toHaveBeenCalled();
+      expect(data.deactivateAccount).not.toHaveBeenCalled();
+      expect(revalidatedTags).toEqual([]);
+      await callGet(getAccounts, "/api/accounts");
+      expect(data.getAllAccounts).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("an unauthenticated write neither writes nor revalidates", async () => {
     auth.mockResolvedValue(null);

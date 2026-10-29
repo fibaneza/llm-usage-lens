@@ -20,24 +20,30 @@ type IdContext = { params: Promise<{ id: string }> };
 
 const notFound = (id: string) => new NotFoundError(`Account ${id} not found`);
 
-const patchHandler = withRoute(async (request, ctx) => {
-  const id = parseInput((await ctx.params).id, AccountIdSchema);
-  const patch = await parseJsonBody(request, UpdateAccountPatchSchema);
-  const updated = await updateAccount(id, patch);
-  if (!updated) throw notFound(id);
-  const parsed = AccountMetaSchema.parse(updated);
-  revalidateAccounts();
-  return jsonData(parsed);
-});
+const patchHandler = withRoute(
+  async (request, ctx) => {
+    const id = parseInput((await ctx.params).id, AccountIdSchema);
+    const patch = await parseJsonBody(request, UpdateAccountPatchSchema);
+    const updated = await updateAccount(id, patch);
+    if (!updated) throw notFound(id);
+    const parsed = AccountMetaSchema.parse(updated);
+    revalidateAccounts();
+    return jsonData(parsed);
+  },
+  { requireAdmin: true },
+);
 
-const deleteHandler = withRoute(async (_request, ctx) => {
-  const id = parseInput((await ctx.params).id, AccountIdSchema);
-  const deactivated = await deactivateAccount(id);
-  if (!deactivated) throw notFound(id);
-  const parsed = AccountMetaSchema.parse(deactivated);
-  revalidateAccounts();
-  return jsonData(parsed);
-});
+const deleteHandler = withRoute(
+  async (_request, ctx) => {
+    const id = parseInput((await ctx.params).id, AccountIdSchema);
+    const deactivated = await deactivateAccount(id);
+    if (!deactivated) throw notFound(id);
+    const parsed = AccountMetaSchema.parse(deactivated);
+    revalidateAccounts();
+    return jsonData(parsed);
+  },
+  { requireAdmin: true },
+);
 
 export const PATCH = (request: Request, ctx: IdContext) =>
   patchHandler(request, ctx);

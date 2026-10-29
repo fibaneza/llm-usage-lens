@@ -5,6 +5,7 @@ import { z } from "zod";
 
 export const API_ERROR_CODES = [
   "UNAUTHORIZED",
+  "FORBIDDEN",
   "BAD_REQUEST",
   "NOT_FOUND",
   "INTERNAL",

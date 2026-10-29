@@ -14,7 +14,11 @@ The handler **must**:
 1. Live in `apps/dashboard/app/api/...route.ts` matching `$ARGUMENTS`.
 2. Start with `import "server-only";`.
 3. Check the Auth.js session via `auth()` and return `401`
-   `{ error: { code: "unauthorized", message: "..." } }` if missing.
+   `{ error: { code: "UNAUTHORIZED", message: "..." } }` if missing. An
+   account write route then returns `403` `FORBIDDEN` when the session lacks
+   the `Admin` role, before parsing input — wrap it in
+   `withRoute(handler, { requireAdmin: true })` (`lib/api/respond.ts`), which
+   enforces that order; never hand-write the check.
 4. Parse query params with a Zod schema from `@bedrock-usage/shared`
    (re-use existing `DateRangeQuerySchema` / `RankingQuerySchema` /
    `TeamsQuerySchema` when applicable). Return `400` on parse failure.
@@ -32,4 +36,5 @@ Steps:
    not, ask the user — do not invent endpoints.
 2. Generate the route file and the matching data-access function stub if it
    doesn't exist (use `/new-data-access` conventions).
-3. Add a Vitest test stub that asserts the response shape and a `401` path.
+3. Add a Vitest test stub that asserts the response shape and a `401` path
+   (plus a `403` path for an account write route).

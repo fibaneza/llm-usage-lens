@@ -52,6 +52,26 @@ describe("GET /api/accounts", () => {
     expect(await res.json()).toEqual({ data: [] });
   });
 
+  // Reading stays open to every signed-in member; only writes need Admin
+  // (system-architecture spec — Authentication & Access).
+  it.each([
+    ["no roles claim", { user: { name: "M" } }],
+    ["an empty roles list", { user: { name: "M", roles: [] } }],
+    ["other roles only", { user: { name: "M", roles: ["Reader"] } }],
+  ])(
+    "lets a signed-in non-admin with %s read the list",
+    async (_n, session) => {
+      auth.mockResolvedValue(session);
+      const a = makeAccount(1);
+      await loadFixtures({ accounts: [a] });
+      const res = await call();
+      expect(res.status).toBe(200);
+      const body = apiResponseSchema(AccountListSchema).parse(await res.json());
+      if (!("data" in body)) throw new Error("expected data");
+      expect(body.data.map((x) => x.accountId)).toEqual([a.accountId]);
+    },
+  );
+
   it("returns every account as { data: AccountMeta[] } validated by the response schema", async () => {
     auth.mockResolvedValue({ user: {} });
     const a = makeAccount(1);

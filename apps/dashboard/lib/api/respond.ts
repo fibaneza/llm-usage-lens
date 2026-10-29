@@ -6,9 +6,11 @@ import { ZodError } from "zod";
 import type { ZodType, z } from "zod";
 
 import { auth } from "@/auth";
+import { ADMIN_ROLE, hasAdminRole } from "@/lib/auth/roles";
 
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes"; Rule 10.3,
-// Rule 50.4 (401 before any data access), Rule 50.6, Rule 60.18.
+// Rule 50.4 (401 before any data access), Rule 50.6, Rule 60.18; System
+// Architecture — "Account-mutation role" (403 for the account write routes).
 
 export class NotFoundError extends Error {
   constructor(message: string) {
@@ -50,7 +52,7 @@ export function jsonData<T>(data: T, init?: ResponseInit): Response {
 }
 
 export function jsonError(
-  status: 400 | 401 | 404 | 500,
+  status: 400 | 401 | 403 | 404 | 500,
   code: ApiErrorCode,
   message: string,
 ): Response {
@@ -103,8 +105,11 @@ const tracer = trace.getTracer("bedrock-usage-dashboard");
 // Each request runs in its own span so recordException always lands (Rule
 // 60.17). The span name is fixed and carries no attributes: nothing from env,
 // headers, cookies or the query string reaches telemetry (Rule 50.6).
+// `requireAdmin` rejects a signed-in non-admin with 403 right after the session
+// check, so the role is enforced before the handler parses input or reads data.
 export function withRoute(
   handler: (request: Request, ctx: RouteContext) => Promise<Response>,
+  options: { requireAdmin?: boolean } = {},
 ) {
   return (request: Request, ctx: RouteContext): Promise<Response> =>
     tracer.startActiveSpan("api.route", async (span) => {
@@ -112,6 +117,9 @@ export function withRoute(
         const session = await auth();
         if (!session) {
           return jsonError(401, "UNAUTHORIZED", "Not authenticated");
+        }
+        if (options.requireAdmin && !hasAdminRole(session)) {
+          return jsonError(403, "FORBIDDEN", `${ADMIN_ROLE} role required`);
         }
         return await handler(request, ctx);
       } catch (error) {

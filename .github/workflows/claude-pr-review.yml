@@ -116,6 +116,7 @@ jobs:
             Then audit for security (OWASP Top 10 + project-specific):
             - Hardcoded secrets, API keys, credentials
             - Missing Auth.js session checks in Route Handlers (must return 401)
+            - Missing `Admin` role check on `POST /api/accounts` and `PATCH`/`DELETE /api/accounts/[id]` (must return 403 before input parsing)
             - Server-only boundary violations: `@aws-sdk/*` or DynamoDB client in client/shared code
             - Static AWS keys (project uses SSO + AWS_PROFILE — Rule 50)
             - Secrets in logs or telemetry

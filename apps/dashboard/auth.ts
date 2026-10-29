@@ -8,6 +8,11 @@ import {
   DEV_LOGIN_PROVIDER_ID,
   resolveSignInProviders,
 } from "@/lib/auth/auth-config";
+import { ADMIN_ROLE, parseRoles, rolesFromProfile } from "@/lib/auth/roles";
+import {
+  SESSION_MAX_AGE_SECONDS,
+  isWithinSessionLifetime,
+} from "@/lib/auth/session-lifetime";
 
 // `next build` runs with NODE_ENV=production and may lack runtime secrets, so
 // the runtime guard must not fire then; it still fires when
@@ -53,13 +58,40 @@ if (enabledSignInProviders.devLogin) {
 // Auth.js session APIs and never change. See docs/guides/auth-setup.md.
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers,
-  session: { strategy: "jwt" },
+  // Roles are read at sign-in, so a revoked Admin keeps access until the
+  // session ends. `maxAge` is only the idle timeout (Auth.js re-issues the JWT
+  // on every request); the jwt callback enforces the absolute 8-hour lifetime
+  // (System Architecture — "Account-mutation role").
+  session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_SECONDS },
   pages: {
     signIn: "/sign-in",
   },
   callbacks: {
     // Gates the routes matched by proxy.ts.
     authorized: ({ auth }) => !!auth,
+    // `account` is set only on the sign-in call, which starts a new session
+    // (even over an expired token). Later calls keep the token while it is
+    // within the lifetime; a token with no valid sign-in time is rejected, and
+    // returning null makes Auth.js clear the session. iat/exp/jti are re-issued
+    // per request, so they are never used as the sign-in time.
+    jwt: ({ token, account, profile }) => {
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      if (account) {
+        token.roles =
+          account.provider === DEV_LOGIN_PROVIDER_ID
+            ? [ADMIN_ROLE]
+            : rolesFromProfile(profile);
+        token.signedInAt = nowSeconds;
+        return token;
+      }
+      return isWithinSessionLifetime(token.signedInAt, nowSeconds)
+        ? token
+        : null;
+    },
+    session: ({ session, token }) => ({
+      ...session,
+      user: { ...session.user, roles: parseRoles(token.roles) },
+    }),
   },
 });
 

@@ -336,7 +336,8 @@ alongside 3.2 ([implementation-phases.md → Phase 3.1a](../specs/2026-05-15-imp
 - [ ] Build the account CRUD routes: `GET|POST /api/accounts`, `PATCH|DELETE /api/accounts/[id]`
 - [ ] Enforce the standard response shape, Zod validation, the 90-day cap, and 1-hour server-cache revalidation
 - [ ] Set up TanStack Query (`QueryClientProvider` in root layout, `staleTime` 5 min) and query hooks
-- [ ] Route Handler tests: `{ data }` / `{ error }` shape + the `401` and `400` paths
+- [ ] Route Handler tests: `{ data }` / `{ error }` shape + the `401` and `400` paths (and `403` on account writes)
+- [ ] Amendment (2026-10-29): `Admin` app-role gate (`403`) on the account write routes
 
 **Verify.**
 
@@ -607,8 +608,9 @@ cost is split proportionally from token ratios.
 
 **Lesson.** The only page with **write operations**. The `/api/accounts`
 Route Handlers stay the HTTP contract; if the page adds **Server Actions**,
-they go through `next-safe-action` — a Zod input schema and an Auth.js session
-check — and call the same data-access functions. You also learn that a missing
+they go through `next-safe-action` — a Zod input schema, an Auth.js session
+check and the `Admin` role check — and call the same data-access functions.
+Only `Admin` members see the write controls. You also learn that a missing
 `SyncStatus` item is a valid "never synced" state, not an error.
 
 **Dependencies.** Phase 4.8.
@@ -624,11 +626,11 @@ check — and call the same data-access functions. You also learn that a missing
 - [ ] Build the `TagCoverageBar` component (tagged vs `_untagged` percentage per team)
 - [ ] Build the `CostEstimateIndicator` component (subtle badge for estimated cost)
 - [ ] Build the data-retention display (TTL info, read-only)
-- [ ] Tests: CRUD against DynamoDB Local; form validation; tag-coverage calculation
+- [ ] Tests: CRUD against DynamoDB Local; form validation; tag-coverage calculation; a non-admin sees no write controls and Server Actions reject it
 
 **Verify.**
 
-- [ ] Can add / edit / deactivate accounts
+- [ ] Can add / edit / deactivate accounts as `Admin`; non-admins see the registry read-only and get `403`
 - [ ] Sync status displays correctly
 - [ ] Tag coverage renders
 

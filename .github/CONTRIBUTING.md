@@ -114,7 +114,7 @@ and Playwright for E2E (Phase 5+). See Rule 60 for the testing conventions.
 - Test behaviour, not implementation.
 - Zod schemas need both valid and invalid cases.
 - Data-access tests run against DynamoDB Local, not mocks.
-- Route Handler tests must cover the `401` (unauthenticated) and `400` (bad input) paths.
+- Route Handler tests must cover the `401` (unauthenticated) and `400` (bad input) paths, plus `403` (no `Admin` role) on the account write routes.
 - 80% coverage minimum.
 
 Run tests with `pnpm exec vitest run` (Phase 1+).

@@ -21,19 +21,22 @@ export const GET = withRoute(async () =>
   jsonData(AccountListSchema.parse(await getAllAccountsCached())),
 );
 
-const createHandler = withRoute(async (request) => {
-  const input = await parseJsonBody(request, CreateAccountInputSchema);
-  try {
-    const created = AccountMetaSchema.parse(await createAccount(input));
-    revalidateAccounts();
-    return jsonData(created);
-  } catch (error) {
-    if (error instanceof ConditionalCheckFailedException) {
-      return jsonError(400, "BAD_REQUEST", "Account already exists");
+const createHandler = withRoute(
+  async (request) => {
+    const input = await parseJsonBody(request, CreateAccountInputSchema);
+    try {
+      const created = AccountMetaSchema.parse(await createAccount(input));
+      revalidateAccounts();
+      return jsonData(created);
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        return jsonError(400, "BAD_REQUEST", "Account already exists");
+      }
+      throw error;
     }
-    throw error;
-  }
-});
+  },
+  { requireAdmin: true },
+);
 
 export const POST = (request: Request) =>
   createHandler(request, { params: Promise.resolve({}) });

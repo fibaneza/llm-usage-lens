@@ -31,6 +31,7 @@ Do not use static `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. Short-lived SSO
 - Redirect URI → platform **Web** → `http://localhost:3000/api/auth/callback/microsoft-entra-id`
 - Copy the **Application (client) ID** and **Directory (tenant) ID**.
 - Certificates & secrets → **New client secret** → copy the secret **value** (shown once).
+- App roles → **Create app role**: display name "Admin", allowed member types **Users/Groups**, value `Admin`. Then Enterprise applications → this app → Users and groups → assign the people who may manage accounts in Settings (assigning a group requires Entra ID P1/P2; on a free tenant assign users directly). Roles are read at sign-in, so a change takes effect at the user's next sign-in; every session ends 8 hours after sign-in, even for an active user. The first deploy of this rule signs everyone out once (older sessions carry no sign-in time). Entra emits assigned roles in the ID token's `roles` claim; members without `Admin` can still read every page but get `403` from the account write routes (System Architecture spec — *Authentication & Access*).
 
 ### 2. Install Auth.js
 
@@ -136,6 +137,7 @@ AUTH_DEV_LOGIN=true
 ```
 
 - `auth.ts` then registers an Auth.js Credentials provider that signs in a local identity without a password (JWT session). It is registered only when `NODE_ENV !== "production"` **and** `AUTH_DEV_LOGIN=true`.
+- The local identity carries the `Admin` role, so the Settings account actions work locally.
 - The sign-in page lists only the configured providers: the Microsoft button appears only when Entra is configured, the local button only when the dev login is enabled.
 - **Fail closed.** With no provider configured, env validation fails in every environment. In production it also fails when Entra is not configured or `AUTH_DEV_LOGIN` has any non-empty value, and `auth.ts` repeats the check at runtime even when `SKIP_ENV_VALIDATION` is set, so every sign-in and session request fails (500) rather than opening access. The check is skipped only inside `next build`, where it cannot enable the dev login.
 - A production password login is not available; it would need an amendment to the System Architecture spec first. Email magic links are not adopted.
@@ -144,4 +146,4 @@ AUTH_DEV_LOGIN=true
 
 ## Switching Providers Later
 
-Auth.js is the provider abstraction. To switch identity providers, change `apps/dashboard/auth.ts` — swap `MicrosoftEntraID` for another provider — and its environment variables and provider checks in `apps/dashboard/env.ts`. Steps 5–8 never change.
+Auth.js is the provider abstraction. To switch identity providers, change `apps/dashboard/auth.ts` (swap `MicrosoftEntraID` for another provider) and its environment variables and provider checks in `apps/dashboard/env.ts`. Also map the new provider's role claim to `session.user.roles` in `auth.ts`. Steps 5–8 never change.

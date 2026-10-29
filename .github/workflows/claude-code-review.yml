@@ -118,7 +118,7 @@ jobs:
 
             ## Security audit
             Security audit required: ${{ needs.scope.outputs.security_relevant }}
-            ${{ needs.scope.outputs.security_relevant == 'true' && 'Audit the changed files for OWASP Top 10 + project-specific issues: hardcoded secrets/API keys/credentials; missing Auth.js session checks in Route Handlers (must return 401); server-only boundary violations (@aws-sdk/* or DynamoDB client in client/shared code); static AWS keys (project uses SSO + AWS_PROFILE per Rule 50); secrets in logs or telemetry; vulnerable dependencies introduced by this release.' || 'No security audit required for this release — skip security findings.' }}
+            ${{ needs.scope.outputs.security_relevant == 'true' && 'Audit the changed files for OWASP Top 10 + project-specific issues: hardcoded secrets/API keys/credentials; missing Auth.js session checks in Route Handlers (must return 401); missing Admin role check on POST /api/accounts and PATCH/DELETE /api/accounts/[id] (must return 403 before input parsing); server-only boundary violations (@aws-sdk/* or DynamoDB client in client/shared code); static AWS keys (project uses SSO + AWS_PROFILE per Rule 50); secrets in logs or telemetry; vulnerable dependencies introduced by this release.' || 'No security audit required for this release — skip security findings.' }}
 
             Severity scale: HIGH = directly exploitable; MEDIUM = exploitable under specific conditions; LOW = best-practice.
 

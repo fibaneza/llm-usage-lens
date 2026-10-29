@@ -8,23 +8,45 @@ import {
   apiResponseSchema,
   apiSuccessSchema,
 } from "./api";
+import type { ApiErrorCode } from "./api";
 
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes" (standard
-// response shape); Rule 20.11, Rule 10.4, Rule 60.22 (valid + invalid cases).
+// response shape; error codes ∈ UNAUTHORIZED | FORBIDDEN | BAD_REQUEST |
+// NOT_FOUND | INTERNAL, 403 for a signed-in user without the Admin role on an
+// account write route); Rule 20.11, Rule 10.4, Rule 60.22 (valid + invalid cases).
 
 describe("API_ERROR_CODES / ApiErrorCodeSchema", () => {
-  it("lists the four error codes", () => {
+  it("lists the five error codes in spec order", () => {
     expect([...API_ERROR_CODES]).toEqual([
       "UNAUTHORIZED",
+      "FORBIDDEN",
       "BAD_REQUEST",
       "NOT_FOUND",
       "INTERNAL",
     ]);
   });
 
-  it("accepts known codes and rejects unknown ones", () => {
-    expect(ApiErrorCodeSchema.safeParse("NOT_FOUND").success).toBe(true);
-    expect(ApiErrorCodeSchema.safeParse("TEAPOT").success).toBe(false);
+  it.each(API_ERROR_CODES)("accepts the known code %s", (code) => {
+    expect(ApiErrorCodeSchema.safeParse(code).success).toBe(true);
+  });
+
+  it("accepts FORBIDDEN (signed in without the Admin role)", () => {
+    expect(ApiErrorCodeSchema.parse("FORBIDDEN")).toBe("FORBIDDEN");
+    const code: ApiErrorCode = "FORBIDDEN";
+    expect(code).toBe("FORBIDDEN");
+  });
+
+  it.each([
+    ["an unknown code", "TEAPOT"],
+    ["FORBIDDEN in lower case", "forbidden"],
+    ["FORBIDDEN with trailing whitespace", "FORBIDDEN "],
+    ["a near miss", "FORBIDEN"],
+    ["an empty string", ""],
+    ["a number", 403],
+    ["null", null],
+    ["undefined", undefined],
+  ])("rejects %s", (_name, code) => {
+    expect(ApiErrorCodeSchema.safeParse(code).success).toBe(false);
   });
 });
 
@@ -33,6 +55,14 @@ describe("ApiErrorBodySchema", () => {
     expect(
       ApiErrorBodySchema.safeParse({
         error: { code: "INTERNAL", message: "x" },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts a FORBIDDEN error body", () => {
+    expect(
+      ApiErrorBodySchema.safeParse({
+        error: { code: "FORBIDDEN", message: "Admin role required" },
       }).success,
     ).toBe(true);
   });

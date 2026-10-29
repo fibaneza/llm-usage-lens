@@ -12,13 +12,29 @@ export const E2E_USER = {
   email: "e2e@example.test",
 };
 
+export type TestUserOptions = {
+  // Epoch seconds of the forged sign-in. Defaults to now. `null` omits the
+  // claim, which the dev server's jwt callback must reject (a token without a
+  // sign-in time fails closed; System Architecture — Account-mutation role).
+  signedInAt?: number | null;
+};
+
 // Signs a real Auth.js session JWT with the dev server's AUTH_SECRET and
 // plants it as a cookie. This is not an auth bypass: proxy.ts and the
 // authorized() callback verify the token exactly as in production — only the
 // Entra ID round-trip is skipped (auth-setup guide; Rule 50.4 still holds).
-export async function signInAsTestUser(context: BrowserContext): Promise<void> {
+// The token carries `signedInAt` because sessions end 8 hours after sign-in
+// regardless of activity and a token without it is rejected.
+export async function signInAsTestUser(
+  context: BrowserContext,
+  { signedInAt = Math.floor(Date.now() / 1000) }: TestUserOptions = {},
+): Promise<void> {
   const sessionToken = await encode({
-    token: { ...E2E_USER, sub: "e2e-user" },
+    token: {
+      ...E2E_USER,
+      sub: "e2e-user",
+      ...(signedInAt === null ? {} : { signedInAt }),
+    },
     secret: E2E_AUTH_SECRET,
     salt: SESSION_COOKIE,
   });

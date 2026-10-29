@@ -23,8 +23,12 @@
 3. **Auth.js is the identity-provider abstraction.** Switching providers is a
    change to `apps/dashboard/auth.ts` (and its variables in `env.ts`) only —
    keep provider-specific code out of routes and components.
+   `auth.ts` maps the provider's role claim to `session.user.roles`; role
+   names and the role check live in `apps/dashboard/lib/auth/` — never as
+   string literals in routes or components.
 4. **All Route Handlers must check the Auth.js session** and return `401`
-   when unauthenticated, before any DynamoDB call.
+   when unauthenticated, and the account write routes return `403` without
+   the `Admin` role, before any DynamoDB call.
 5. **Never bypass git hooks.** Do not run `git commit --no-verify` or
    `git push --no-verify`. Gitleaks runs in pre-commit and must pass.
 6. **Never log or echo secrets.** Don't print env values, OAuth client

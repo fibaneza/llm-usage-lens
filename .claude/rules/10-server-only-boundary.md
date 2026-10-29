@@ -9,7 +9,7 @@ credentials must never reach the browser.
 |---|---|---|
 | Data access functions | `apps/dashboard/lib/data/**` | Must `import "server-only"` at the top |
 | DynamoDB client | `apps/dashboard/lib/dynamodb.ts` | Server only |
-| Route Handlers (the only HTTP backend) | `apps/dashboard/app/api/**` | Validate input with Zod, check the Auth.js session, query DynamoDB, return the standard shape |
+| Route Handlers (the only HTTP backend) | `apps/dashboard/app/api/**` | Check the Auth.js session (and the `Admin` role on account writes), validate input with Zod, query DynamoDB, return the standard shape |
 | Table setup + seeds | repo-root `scripts/` | Run via `pnpm db:create-table` / `pnpm db:seed` (`:empty` / `:large` / `:ranking`) |
 | Shared schemas + model normalization (+ pure, dependency-free utilities used by ≥2 workspaces) | `packages/shared` (`@bedrock-usage/shared`) | Imported by both `apps/dashboard` and `apps/collector` |
 
@@ -21,6 +21,9 @@ credentials must never reach the browser.
 2. **Every data-access file starts with `import "server-only";`.**
 3. **Route Handlers are the only HTTP-reachable backend.** They must:
    - Check the Auth.js session and return `401` if unauthenticated.
+   - On the account write routes (`POST /api/accounts`, `PATCH`/`DELETE
+     /api/accounts/[id]`), return `403` `FORBIDDEN` when the session lacks the
+     `Admin` role — before input parsing.
    - Validate query/body with Zod (`400` on failure).
    - Return `{ data: T }` on success, `{ error: { code, message } }` on failure.
    - Use the `DateRangeQuerySchema` 90-day cap on custom ranges.

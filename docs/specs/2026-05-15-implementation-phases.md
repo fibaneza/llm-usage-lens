@@ -313,7 +313,7 @@ None — data infrastructure only.
 - [x] Build Route Handlers (`apps/dashboard/app/api/`) — see Data Model spec **API Routes** table; return `401`/`400`/`404` per HTTP status table
   - `GET /api/overview`, `/api/ranking`, `/api/departments`, `/api/departments/[id]`, `/api/teams`, `/api/teams/[id]`, `/api/services`, `/api/users`, `/api/sync-status`
   - `GET|POST /api/accounts`, `PATCH|DELETE /api/accounts/[id]` (Settings CRUD)
-  - Each: Auth.js session check → Zod-validate query/body → data-access call → `{ data: T }` / `{ error: { code, message } }` shape (Rules 10, 20.11)
+  - Each: Auth.js session check → Zod-validate query/body → data-access call → `{ data: T }` / `{ error: { code, message } }` shape (Rules 10, 20.11) (account writes: role gate added 2026-10-29, see the amendment below)
   - Zod validation on all query params; enforce 90-day max on custom date ranges
   - Next.js server cache with 1-hour revalidation (`export const revalidate = 3600`, Rule 60.10); data reads wrapped in `unstable_cache` — rollups per UTC day, accounts tagged (1 h) and sync status tagged (5 min, Design System *Caching Strategy*), account writes revalidate the `accounts` tag (follow-up, 2026-10-29)
 - [x] Set up TanStack Query
@@ -322,6 +322,11 @@ None — data infrastructure only.
   - Query hooks per data access pattern
 - [x] `nonModel` pass-through: `/api/overview`, `/api/departments/[id]`, and `/api/teams/[id]` responses gain the model vs. non-model cost split plus per-category totals with `recurring` (Data Model spec — *Dashboard impact*); response schemas derive from `DailyRollupBaseSchema`
 - [x] Route Handler tests: assert the `{ data }` / `{ error }` shape and cover the `401` (unauthenticated) and `400` (bad input) paths (Rule 60.23)
+- [x] Amendment (decided 2026-10-29; ships on its own `fix/` branch): `Admin` app-role gate on account writes (System Architecture spec — *Authentication & Access*)
+  - `auth.ts`: Zod-parse the ID-token `roles` claim into the JWT and `session.user.roles`; sessions end 8 hours after sign-in regardless of activity (sign-in time in the JWT; `maxAge` 8 hours as the idle timeout); the dev-only login signs in with `["Admin"]`; the role name and check live in `lib/auth/`
+  - `packages/shared`: add `FORBIDDEN` to `ApiErrorCodeSchema`
+  - `POST /api/accounts`, `PATCH`/`DELETE /api/accounts/[id]`: `403 FORBIDDEN` after the session check, before input parsing and any DynamoDB call; `GET` routes unchanged
+  - Verify: a session without `Admin` gets `403 { error: { code: "FORBIDDEN" } }` from each write route with no DynamoDB write; an `Admin` session succeeds; reads unaffected; the dev login carries `Admin`; a token whose sign-in time is more than 8 hours old is rejected even while the user stays active
 - [ ] Verify: Route Handlers return validated data, a TanStack Query hook fetches it, `next build` succeeds — unblocks Phase 4.
 
 **Components Built:** None — data infrastructure only.
@@ -545,7 +550,7 @@ Components are introduced in the sub-phase where they are first needed:
   - Zod validation on all form inputs
   - `next-safe-action` for all Server Actions
   - The `/api/accounts` Route Handlers (Phase 3.3) are the Settings CRUD HTTP contract; a Server Action, if used, calls the same `lib/data/account-meta.ts` functions rather than a second write path (decided 2026-10-29)
-  - **Open decision (recorded 2026-10-29):** who may create, edit and deactivate accounts. System Architecture gives every authenticated member read access to all data; choose a role model for these mutations before Phase 4.9 starts; adopting one amends Design System spec — *Authentication* ("Roles: Not implemented in v1"). Until then the `/api/accounts` write routes require only a session.
+  - **Account-mutation role (decided 2026-10-29):** only the `Admin` app role may create, edit and deactivate accounts (System Architecture — *Authentication & Access*). The `/api/accounts` write routes return `403 FORBIDDEN` without it (Phase 3.3 amendment); the Settings page hides the add/edit/deactivate controls from non-admins, and any Server Action checks the same role.
 - [ ] Build sync status display
   - Connect `SyncStatusBadge` and `SyncCountdown` to SyncStatus entity
   - Show: last run time, status (success/partial/error), accounts processed, duration, errors list
@@ -553,8 +558,8 @@ Components are introduced in the sub-phase where they are first needed:
   - Calculate from byService data: tagged vs `_untagged` percentage
 - [ ] Build `CostEstimateIndicator` component (subtle badge for estimated costs)
 - [ ] Build data retention display (TTL info, read-only)
-- [ ] Tests: CRUD operations against DynamoDB Local; form validation; tag coverage calculation
-- [ ] Verify: can add/edit/deactivate accounts, sync status displays correctly, tag coverage renders
+- [ ] Tests: CRUD operations against DynamoDB Local; form validation; tag coverage calculation; a non-admin session sees no add/edit/deactivate controls and Server Actions reject it (e2e needs admin and non-admin forged sessions)
+- [ ] Verify: can add/edit/deactivate accounts as `Admin`; a non-admin sees the registry read-only and gets `403` from the write routes; sync status displays correctly, tag coverage renders
 
 ---
 

@@ -29,7 +29,8 @@ that defines what "done" means — before any production code exists.
    - Data-access functions: run against **DynamoDB Local** (use `/seed` if
      data is needed), never mocks (Rule 60.22).
    - Route Handlers: assert the `{ data }` / `{ error }` shape; cover the
-     `401` and `400` paths (Rule 60.23).
+     `401` and `400` paths, plus `403` (no `Admin` role) on the account
+     write routes (Rule 60.23).
    - Components: assert rendered output and behaviour, not internals; cover
      empty states and the loading skeleton.
    - **UI components or pages added/modified:** also write or extend a
