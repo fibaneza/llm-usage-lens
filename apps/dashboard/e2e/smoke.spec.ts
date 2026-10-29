@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 import { NAV_ITEMS } from "../lib/nav";
+import { collectConsoleErrors } from "./support/console-errors";
+import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 
 test.describe("auth gate", () => {
@@ -28,8 +30,12 @@ test.describe("dashboard shell", () => {
     }) => {
       const pageErrors: Error[] = [];
       page.on("pageerror", (error) => pageErrors.push(error));
+      // Any console.error fails the page (hydration mismatches, ErrorBoundary
+      // fallbacks, failed fetches, key warnings) except allowlisted noise.
+      const consoleErrors = collectConsoleErrors(page);
 
       await page.goto(item.href);
+      await waitForHydration(page);
 
       // Still on the dashboard route — the forged session was accepted.
       await expect(page).toHaveURL(item.href);
@@ -43,6 +49,7 @@ test.describe("dashboard shell", () => {
       ).toBeVisible();
 
       expect(pageErrors).toEqual([]);
+      expect(consoleErrors).toEqual([]);
     });
   }
 });

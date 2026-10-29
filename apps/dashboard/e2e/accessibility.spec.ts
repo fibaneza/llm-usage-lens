@@ -43,3 +43,34 @@ test.describe("accessibility (axe)", () => {
     });
   }
 });
+
+// /sign-in is the one public page (not in NAV_ITEMS), so it is checked
+// without a session.
+test.describe("accessibility (axe) - public pages", () => {
+  test("sign-in page has no serious or critical violations", async ({
+    page,
+  }) => {
+    await page.goto("/sign-in");
+    await expect(
+      page.getByRole("heading", { name: "Bedrock Cost Dashboard" }),
+    ).toBeVisible();
+
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+
+    const blocking = results.violations.filter(
+      (violation) =>
+        violation.impact === "serious" || violation.impact === "critical",
+    );
+
+    expect(
+      blocking.map((violation) => ({
+        id: violation.id,
+        impact: violation.impact,
+        help: violation.help,
+        nodes: violation.nodes.map((node) => node.target.join(" ")),
+      })),
+    ).toEqual([]);
+  });
+});

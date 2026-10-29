@@ -25,6 +25,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
+function subscribeNoop() {
+  return () => {}
+}
+
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "14.4rem"
@@ -163,7 +167,17 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { isMobile: isMobileViewport, state, openMobile, setOpenMobile } =
+    useSidebar()
+  // The sidebar sits under a Suspense boundary that can hydrate after the
+  // provider already flipped isMobile; React reads the server snapshot while
+  // hydrating, so the first client render matches the SSR desktop markup.
+  const hydrated = React.useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false
+  )
+  const isMobile = isMobileViewport && hydrated
 
   if (collapsible === "none") {
     return (

@@ -140,7 +140,7 @@ Selected for enterprise SaaS analytics dashboards — clean, high-contrast, prin
 
 - **Mode support:** Light primary
 - **Performance:** Excellent
-- **Accessibility:** WCAG AAA target
+- **Accessibility:** WCAG AAA target for key text; muted/secondary text meets AA (4.5:1) on every surface it sits on
 - **Key effects:** Soft indigo shadows, subtle surface layering, high readability, visible focus states
 
 ## Color Palette
@@ -153,12 +153,14 @@ Selected for enterprise SaaS analytics dashboards — clean, high-contrast, prin
 | Accent/CTA | `#D97706` | `--color-accent` | Warnings, highlights, cost alerts |
 | Background | `#F5F7FF` | `--color-background` | Page background (soft blue-gray canvas) |
 | Foreground | `#0F172A` | `--color-foreground` | Primary text |
-| Muted foreground | `#94A3B8` | `--color-muted-foreground` | Placeholders, muted text |
+| Muted foreground | `#566880` | `--color-muted-foreground` | Placeholders, muted text |
 | Muted | `#E2E8F0` | `--color-muted` | Muted surfaces (subtle fills, tracks) |
 | Border | `#E2E8F0` | `--color-border` | Card borders, dividers |
 | Destructive | `#E11D48` | `--color-destructive` | Error states, high cost alerts |
 | Success | `#059669` | `--color-success` | Positive trends, low cost indicators |
 | Ring | `rgba(79,70,229,0.35)` | `--color-ring` | Focus rings |
+
+**Muted foreground (changed 2026-10-29).** Raised from `#94A3B8` (2.0–2.6:1) to `#566880` so muted text meets WCAG AA 4.5:1 on card, background, muted, accent and sidebar surfaces (lowest: 4.62:1 on Muted `#E2E8F0`). `apps/dashboard/app/globals-contrast.test.ts` enforces it. The vendored `docs/design-system/` previews still show the old value; this table wins.
 
 **Known divergence (pre-existing, Phase 1).** The table lists Accent/CTA `#D97706` as `--color-accent`, but `apps/dashboard/app/globals.css` defines `#D97706` as `--color-warning` and sets `--color-accent` to `#EEF2FF` (shadcn's neutral interactive surface). This spec does not resolve it; a follow-up decision should ratify one mapping and update either this table or the code.
 
@@ -371,7 +373,7 @@ Conventions for interactive controls, established with the global
 
 | Component | Source | Purpose |
 |-----------|--------|---------|
-| `Sidebar` | shadcn/ui | Collapsible navigation with active state |
+| `Sidebar` | shadcn/ui | Collapsible navigation with active state. Locally patched (2026-10-29): `components/ui/sidebar.tsx` renders desktop markup until hydrated and `hooks/use-mobile.ts` uses `useSyncExternalStore`, so a late-hydrating `<Suspense>` does not mismatch at mobile widths — re-apply after any `shadcn add sidebar` |
 | `CommandMenu` | shadcn/ui (cmdk) | Cmd+K quick search — jump to any department, team, user, service |
 | `Kbd` | Custom | Keyboard shortcut hints |
 
