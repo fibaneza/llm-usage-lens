@@ -14,8 +14,8 @@ The handler **must**:
 1. Live in `apps/dashboard/app/api/...route.ts` matching `$ARGUMENTS`.
 2. Start with `import "server-only";`.
 3. Check the Auth.js session via `auth()` and return `401`
-   `{ error: { code: "UNAUTHORIZED", message: "..." } }` if missing. An
-   account write route then returns `403` `FORBIDDEN` when the session lacks
+   `{ error: { code: "UNAUTHORIZED", message: "..." } }` if missing. A
+   write route (`POST`/`PUT`/`PATCH`/`DELETE`) then returns `403` `FORBIDDEN` when the session lacks
    the `Admin` role, before parsing input — wrap it in
    `withRoute(handler, { requireAdmin: true })` (`lib/api/respond.ts`), which
    enforces that order; never hand-write the check.
@@ -37,4 +37,4 @@ Steps:
 2. Generate the route file and the matching data-access function stub if it
    doesn't exist (use `/new-data-access` conventions).
 3. Add a Vitest test stub that asserts the response shape and a `401` path
-   (plus a `403` path for an account write route).
+   (plus a `403` path for a write route).

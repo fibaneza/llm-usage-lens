@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import {
   AuthConfigError,
+  ENTRA_TENANT_ISSUER_MESSAGE,
+  ENTRA_TENANT_ISSUER_PATTERN,
   resolveSignInProviders,
 } from "@/lib/auth/auth-config";
 
@@ -19,7 +21,10 @@ export const env = createEnv({
     AUTH_URL: z.url().optional(),
     AUTH_MICROSOFT_ENTRA_ID_ID: z.string().min(1).optional(),
     AUTH_MICROSOFT_ENTRA_ID_SECRET: z.string().min(1).optional(),
-    AUTH_MICROSOFT_ENTRA_ID_ISSUER: z.url().optional(),
+    AUTH_MICROSOFT_ENTRA_ID_ISSUER: z
+      .string()
+      .regex(ENTRA_TENANT_ISSUER_PATTERN, ENTRA_TENANT_ISSUER_MESSAGE)
+      .optional(),
     AUTH_DEV_LOGIN: z.string().optional(),
     NODE_ENV: z.enum(["development", "test", "production"]).optional(),
     NEXT_PHASE: z.string().optional(),

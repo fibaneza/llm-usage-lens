@@ -71,9 +71,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     authorized: ({ auth }) => !!auth,
     // `account` is set only on the sign-in call, which starts a new session
     // (even over an expired token). Later calls keep the token while it is
-    // within the lifetime; a token with no valid sign-in time is rejected, and
-    // returning null makes Auth.js clear the session. iat/exp/jti are re-issued
-    // per request, so they are never used as the sign-in time.
+    // within the lifetime; a token with no valid sign-in time, or one dated
+    // more than the clock-skew allowance ahead, is rejected, and returning null
+    // makes Auth.js clear the session. The `session` payload of an `update` is
+    // never merged, so roles and the sign-in time change only at sign-in.
+    // iat/exp/jti are re-issued per request, so they are never used as the
+    // sign-in time.
     jwt: ({ token, account, profile }) => {
       const nowSeconds = Math.floor(Date.now() / 1000);
       if (account) {

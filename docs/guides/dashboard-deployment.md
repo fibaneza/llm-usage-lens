@@ -94,7 +94,7 @@ Names mirror `.env.example`.
 | `AUTH_URL` | Deployed site URL (e.g. `https://<site>.netlify.app`) |
 | `AUTH_MICROSOFT_ENTRA_ID_ID` | Entra ID app client ID |
 | `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Entra ID app client secret |
-| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Entra ID issuer URL |
+| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Tenant-specific issuer `https://login.microsoftonline.com/<Directory (tenant) ID>/v2.0`: lowercase GUID, no trailing slash; `common`, `organizations` and `consumers` fail the build (System Architecture spec — *Authentication & Access*) |
 | `AUTH_DEV_LOGIN` | **Must be unset** in production — any non-empty value fails startup (dev-only local login) |
 | `AWS_REGION` | `us-east-1` |
 | `AWS_ACCESS_KEY_ID` | Scoped read-only IAM user key (see §2) |
@@ -191,6 +191,7 @@ aws iam update-access-key --user-name <dashboard-reader-user> \
 
 | Symptom | Likely cause |
 |---------|--------------|
+| Build fails: `AUTH_MICROSOFT_ENTRA_ID_ISSUER must be https://login.microsoftonline.com/<tenant GUID, lowercase>/v2.0` | The issuer uses `common`/`organizations`/`consumers`, a domain name, an uppercase GUID or a trailing slash. Copy the Directory (tenant) ID from the app registration |
 | Build fails resolving `@bedrock-usage/shared` | Base directory not the repo root, or pnpm not enabled — check §3 |
 | Build fails with a missing-env-var error | `@t3-oss/env-nextjs` validation — set the variable in Netlify (see §4) |
 | Sign-in redirect loop or `redirect_uri_mismatch` | Entra ID app registration missing the Netlify callback URL, or `AUTH_URL` wrong |

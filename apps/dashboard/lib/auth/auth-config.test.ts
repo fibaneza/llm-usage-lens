@@ -10,7 +10,8 @@ import {
 const ENTRA = {
   entraId: "client-id",
   entraSecret: "client-secret",
-  entraIssuer: "https://login.microsoftonline.com/tenant/v2.0",
+  entraIssuer:
+    "https://login.microsoftonline.com/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d/v2.0",
 };
 
 const resolve = (input: Partial<AuthEnvInput>) =>
@@ -167,6 +168,94 @@ describe("resolveSignInProviders", () => {
       expect(() => resolve({ ...production, devLogin: "true" })).toThrow(
         AuthConfigError,
       );
+    });
+  });
+
+  // Source: docs/specs/2026-05-15-system-architecture.md — "Authentication &
+  // Access" → "Sign-in providers": the issuer must be tenant-specific
+  // (`https://login.microsoftonline.com/<tenant GUID>/v2.0`, lowercase as Entra
+  // publishes it) and `auth.ts` repeats the issuer check at runtime with the
+  // other provider checks, so a skipped env validation (`SKIP_ENV_VALIDATION`)
+  // can never enable Entra with the multi-tenant `common`, `organizations` or
+  // `consumers` issuer. Same rule as `env.ts` (see env.test.ts).
+  describe("Entra issuer (runtime repeat of the env.ts check)", () => {
+    const TENANT = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
+    const issuerFor = (tenant: string) =>
+      `https://login.microsoftonline.com/${tenant}/v2.0`;
+    const withIssuer = (
+      entraIssuer: string,
+      extra: Partial<AuthEnvInput> = {},
+    ) => resolve({ ...ENTRA, entraIssuer, ...extra });
+
+    describe.each(["development", "production"])("in %s", (nodeEnv) => {
+      it.each([
+        ["a lowercase tenant GUID", issuerFor(TENANT)],
+        [
+          "the CI build placeholder (nil GUID)",
+          issuerFor("00000000-0000-0000-0000-000000000000"),
+        ],
+      ])("enables Entra with %s", (_n, issuer) => {
+        expect(withIssuer(issuer, { nodeEnv })).toMatchObject({ entra: true });
+      });
+
+      it.each([
+        ["common", issuerFor("common")],
+        ["organizations", issuerFor("organizations")],
+        ["consumers", issuerFor("consumers")],
+        ["Common (mixed case)", issuerFor("Common")],
+        ["an uppercase tenant GUID", issuerFor(TENANT.toUpperCase())],
+        [
+          "a tenant GUID with one hex letter uppercased",
+          issuerFor(TENANT.replace(/[a-f]/, (c) => c.toUpperCase())),
+        ],
+        ["a word that is not a GUID", issuerFor("tenant")],
+        ["a tenant domain name", issuerFor("contoso.onmicrosoft.com")],
+        ["another host", `https://evil.example.com/${TENANT}/v2.0`],
+        [
+          "a host that merely starts with login.microsoftonline.com",
+          `https://login.microsoftonline.com.evil.example.com/${TENANT}/v2.0`,
+        ],
+        [
+          "a plain-http scheme",
+          `http://login.microsoftonline.com/${TENANT}/v2.0`,
+        ],
+        ["no version segment", `https://login.microsoftonline.com/${TENANT}`],
+        [
+          "a trailing slash after /v2.0",
+          `https://login.microsoftonline.com/${TENANT}/v2.0/`,
+        ],
+        [
+          "a query string after /v2.0",
+          `https://login.microsoftonline.com/${TENANT}/v2.0?tenant=common`,
+        ],
+      ])("throws AuthConfigError for %s", (_n, issuer) => {
+        expect(() => withIssuer(issuer, { nodeEnv })).toThrow(AuthConfigError);
+      });
+    });
+
+    it("does not fall back to the dev login when the issuer is rejected", () => {
+      expect(() =>
+        withIssuer(issuerFor("common"), { devLogin: "true" }),
+      ).toThrow(AuthConfigError);
+    });
+
+    it("still enables the dev login alone when no Entra variable is set", () => {
+      expect(resolve({ devLogin: "true" })).toEqual({
+        entra: false,
+        devLogin: true,
+      });
+    });
+
+    it("names the variable and never echoes the rejected value", () => {
+      const rejected = issuerFor(TENANT.toUpperCase());
+      let message = "";
+      try {
+        withIssuer(rejected);
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).toContain("AUTH_MICROSOFT_ENTRA_ID_ISSUER");
+      expect(message).not.toContain(TENANT.toUpperCase());
     });
   });
 

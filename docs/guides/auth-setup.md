@@ -51,7 +51,7 @@ AUTH_MICROSOFT_ENTRA_ID_SECRET=<client secret value>
 AUTH_MICROSOFT_ENTRA_ID_ISSUER=https://login.microsoftonline.com/<tenant id>/v2.0
 ```
 
-The three `AUTH_MICROSOFT_ENTRA_ID_*` variables are optional **as a group**: set all three or none. Production requires them (System Architecture spec — *Authentication & Access*).
+The three `AUTH_MICROSOFT_ENTRA_ID_*` variables are optional **as a group**: set all three or none. Production requires them (System Architecture spec — *Authentication & Access*). The issuer must name your tenant ID as a lowercase GUID, exactly as the portal shows the Directory (tenant) ID; `common`, `organizations` and `consumers` are rejected.
 
 ### 4. `apps/dashboard/auth.ts`
 
@@ -139,7 +139,7 @@ AUTH_DEV_LOGIN=true
 - `auth.ts` then registers an Auth.js Credentials provider that signs in a local identity without a password (JWT session). It is registered only when `NODE_ENV !== "production"` **and** `AUTH_DEV_LOGIN=true`.
 - The local identity carries the `Admin` role, so the Settings account actions work locally.
 - The sign-in page lists only the configured providers: the Microsoft button appears only when Entra is configured, the local button only when the dev login is enabled.
-- **Fail closed.** With no provider configured, env validation fails in every environment. In production it also fails when Entra is not configured or `AUTH_DEV_LOGIN` has any non-empty value, and `auth.ts` repeats the check at runtime even when `SKIP_ENV_VALIDATION` is set, so every sign-in and session request fails (500) rather than opening access. The check is skipped only inside `next build`, where it cannot enable the dev login.
+- **Fail closed.** With no provider configured, env validation fails in every environment. In production it also fails when Entra is not configured or `AUTH_DEV_LOGIN` has any non-empty value, and a configured issuer that is not tenant-specific fails in every environment; `auth.ts` repeats these checks at runtime even when `SKIP_ENV_VALIDATION` is set, so every sign-in and session request fails (500) rather than opening access. The check is skipped only inside `next build`, where it cannot enable the dev login.
 - A production password login is not available; it would need an amendment to the System Architecture spec first. Email magic links are not adopted.
 
 ---

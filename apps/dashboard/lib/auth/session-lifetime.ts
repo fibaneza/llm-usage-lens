@@ -7,6 +7,10 @@ import { z } from "zod";
 // `signedInAt` at sign-in and rejects tokens older than this cap.
 export const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 
+// A sign-in time up to this far in the future is tolerated as clock skew; a
+// later one would outlive the cap, so it is rejected (same spec section).
+export const SESSION_CLOCK_SKEW_SECONDS = 60;
+
 // Zod v4 numbers reject NaN and Infinity, so a malformed value fails closed.
 const SignedInAtSchema = z.number();
 
@@ -15,5 +19,10 @@ export function isWithinSessionLifetime(
   nowSeconds: number,
 ): boolean {
   const parsed = SignedInAtSchema.safeParse(signedInAt);
-  return parsed.success && nowSeconds - parsed.data <= SESSION_MAX_AGE_SECONDS;
+  if (!parsed.success) return false;
+  const ageSeconds = nowSeconds - parsed.data;
+  return (
+    ageSeconds >= -SESSION_CLOCK_SKEW_SECONDS &&
+    ageSeconds <= SESSION_MAX_AGE_SECONDS
+  );
 }

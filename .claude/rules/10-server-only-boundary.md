@@ -21,9 +21,12 @@ credentials must never reach the browser.
 2. **Every data-access file starts with `import "server-only";`.**
 3. **Route Handlers are the only HTTP-reachable backend.** They must:
    - Check the Auth.js session and return `401` if unauthenticated.
-   - On the account write routes (`POST /api/accounts`, `PATCH`/`DELETE
-     /api/accounts/[id]`), return `403` `FORBIDDEN` when the session lacks the
-     `Admin` role — before input parsing.
+   - Every write Route Handler (`POST`/`PUT`/`PATCH`/`DELETE`) under
+     `app/api/`, except Auth.js's `auth/[...nextauth]` handler — today
+     `POST /api/accounts` and `PATCH`/`DELETE /api/accounts/[id]` — returns
+     `403` `FORBIDDEN` when the session lacks the `Admin` role, before input
+     parsing (`withRoute(..., { requireAdmin: true })`; enforced by
+     `app/api/write-routes.integration.test.ts`).
    - Validate query/body with Zod (`400` on failure).
    - Return `{ data: T }` on success, `{ error: { code, message } }` on failure.
    - Use the `DateRangeQuerySchema` 90-day cap on custom ranges.

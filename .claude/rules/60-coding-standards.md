@@ -85,7 +85,7 @@ patterns) and current Next.js App Router guidance.
     tested against DynamoDB Local, not mocks.
 23. **Route Handler tests assert the `{ data }` / `{ error }` shape** and
     cover the `401` (unauthenticated) and `400` (bad input) paths, plus `403`
-    (no `Admin` role) on the account write routes.
+    (no `Admin` role) on every write route.
 24. **No flaky tests.** No real network, no wall-clock `sleep`; control time
     with `vi.useFakeTimers()`.
 

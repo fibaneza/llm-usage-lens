@@ -29,7 +29,7 @@ const ENTRA = {
   AUTH_MICROSOFT_ENTRA_ID_ID: "client-id",
   AUTH_MICROSOFT_ENTRA_ID_SECRET: "client-secret",
   AUTH_MICROSOFT_ENTRA_ID_ISSUER:
-    "https://login.microsoftonline.com/tenant/v2.0",
+    "https://login.microsoftonline.com/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d/v2.0",
 };
 
 function stubBase(overrides: Record<string, string>) {
@@ -767,5 +767,302 @@ describe("auth.ts ends a session 8 hours after sign-in, regardless of activity",
     expect(await jwt({ token })).not.toBeNull();
     setNow(8 * HOUR + SECOND);
     expect(await jwt({ token })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hardening. Source: docs/specs/2026-05-15-system-architecture.md —
+// "Authentication & Access" → "Account-mutation role": the jwt callback also
+// rejects a token whose sign-in time is more than 60 seconds in the future
+// (clock-skew allowance), because a future stamp would otherwise outlive the
+// 8-hour cap; "Roles and the sign-in time change only at sign-in; a session
+// `update` cannot alter them". implementation-phases — Phase 3.3 amendment,
+// "Hardening". Time is controlled with fake timers (Rule 60.24).
+// ---------------------------------------------------------------------------
+
+describe("auth.ts rejects a sign-in time in the future", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  const NOW = new Date("2026-10-29T01:00:00.000Z");
+  const NOW_SECONDS = NOW.getTime() / 1000;
+  const HOUR_SECONDS = 60 * 60;
+  const YEAR_2100_SECONDS = 4_102_444_800;
+
+  async function startClock() {
+    const config = await loadWithConfig({ NODE_ENV: "development", ...ENTRA });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    return rawCallbackOf(config, "jwt");
+  }
+
+  const tokenSignedInAt = (signedInAt: number): Json => ({
+    sub: "entra-user-1",
+    roles: ["Admin"],
+    signedInAt,
+  });
+
+  it.each([
+    ["at the current time", 0],
+    ["30 seconds ahead", 30],
+    ["exactly 60 seconds ahead (the skew allowance is inclusive)", 60],
+  ])("keeps a token signed in %s", async (_n, ahead) => {
+    const jwt = await startClock();
+    expect(await jwt({ token: tokenSignedInAt(NOW_SECONDS + ahead) })).toEqual(
+      tokenSignedInAt(NOW_SECONDS + ahead),
+    );
+  });
+
+  it.each([
+    ["61 seconds ahead", 61],
+    ["5 minutes ahead", 5 * 60],
+    ["1 hour ahead", HOUR_SECONDS],
+    ["8 hours ahead", 8 * HOUR_SECONDS],
+    ["1 year ahead", 365 * 24 * HOUR_SECONDS],
+    ["the year 2100", YEAR_2100_SECONDS - NOW_SECONDS],
+  ])(
+    "returns null for a token signed in %s, so Auth.js clears the session",
+    async (_n, ahead) => {
+      const jwt = await startClock();
+      expect(
+        await jwt({ token: tokenSignedInAt(NOW_SECONDS + ahead) }),
+      ).toBeNull();
+    },
+  );
+
+  it("measures the allowance against the current time as it advances", async () => {
+    const jwt = await startClock();
+    const token = tokenSignedInAt(NOW_SECONDS + 60);
+    expect(await jwt({ token })).not.toBeNull();
+    vi.setSystemTime(new Date(NOW.getTime() - 1000));
+    expect(await jwt({ token })).toBeNull();
+  });
+
+  it("starts a clean session when the user signs in over a future-dated token", async () => {
+    const jwt = await startClock();
+    const token = await jwt(
+      entraSignIn(
+        { roles: ["Reader"] },
+        { sub: "entra-user-1", signedInAt: YEAR_2100_SECONDS },
+      ),
+    );
+    expect(token).toMatchObject({
+      roles: ["Reader"],
+      signedInAt: NOW_SECONDS,
+    });
+  });
+});
+
+describe("auth.ts session update cannot change roles or the sign-in time", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  const NOW = new Date("2026-10-29T01:00:00.000Z");
+  const NOW_SECONDS = NOW.getTime() / 1000;
+  const HOUR_SECONDS = 60 * 60;
+
+  async function startClock() {
+    const config = await loadWithConfig({ NODE_ENV: "development", ...ENTRA });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    return { config, jwt: rawCallbackOf(config, "jwt") };
+  }
+
+  // What a browser can send through Auth.js's client `update(data)`: arbitrary
+  // JSON reaching the jwt callback as `session` with `trigger: "update"`.
+  const CLIENT_PAYLOADS: [string, unknown][] = [
+    [
+      "user.roles and a fresh sign-in time",
+      { user: { roles: ["Admin"] }, signedInAt: NOW_SECONDS },
+    ],
+    ["top-level roles", { roles: ["Admin"] }],
+    ["user.roles only", { user: { name: "Ada", roles: ["Admin"] } }],
+    ["a fresh sign-in time only", { signedInAt: NOW_SECONDS }],
+    [
+      "a nested token override",
+      { token: { roles: ["Admin"], signedInAt: NOW_SECONDS } },
+    ],
+    ["an empty object", {}],
+    ["null", null],
+  ];
+
+  const memberToken = (): Json => ({
+    sub: "entra-user-1",
+    name: "Ada",
+    email: "ada@company.com",
+    roles: ["Reader"],
+    signedInAt: NOW_SECONDS - HOUR_SECONDS,
+  });
+
+  const update = (token: Json, session: unknown): Json => ({
+    token,
+    session,
+    trigger: "update",
+  });
+
+  // These two already hold before the hardening; they are guards so a later
+  // change that merges `session` into the token fails here.
+  it.each(CLIENT_PAYLOADS)(
+    "leaves token.roles unchanged on a non-admin token when the client sends %s",
+    async (_n, session) => {
+      const { jwt } = await startClock();
+      const result = await jwt(update(memberToken(), session));
+      expect(result).not.toBeNull();
+      expect(result?.roles).toEqual(["Reader"]);
+    },
+  );
+
+  it.each(CLIENT_PAYLOADS)(
+    "leaves token.signedInAt unchanged when the client sends %s",
+    async (_n, session) => {
+      const { jwt } = await startClock();
+      const result = await jwt(update(memberToken(), session));
+      expect(result?.signedInAt).toBe(NOW_SECONDS - HOUR_SECONDS);
+    },
+  );
+
+  it("does not strip roles from an Admin token when the client sends an empty list", async () => {
+    const { jwt } = await startClock();
+    const admin = { ...memberToken(), roles: ["Admin"] };
+    const result = await jwt(update(admin, { user: { roles: [] }, roles: [] }));
+    expect(result?.roles).toEqual(["Admin"]);
+  });
+
+  it("keeps the rest of the token on an update", async () => {
+    const { jwt } = await startClock();
+    const result = await jwt(
+      update(memberToken(), { user: { name: "Mallory" }, name: "Mallory" }),
+    );
+    expect(result).toMatchObject({
+      sub: "entra-user-1",
+      name: "Ada",
+      email: "ada@company.com",
+    });
+  });
+
+  it("returns null for an expired token even when the update carries a fresh sign-in time", async () => {
+    const { jwt } = await startClock();
+    const expired = {
+      ...memberToken(),
+      signedInAt: NOW_SECONDS - 8 * HOUR_SECONDS - 1,
+    };
+    expect(await jwt(update(expired, { signedInAt: NOW_SECONDS }))).toBeNull();
+  });
+
+  it("returns null for a token with no sign-in time even when the update supplies one", async () => {
+    const { jwt } = await startClock();
+    const withoutSignedInAt = memberToken();
+    delete withoutSignedInAt.signedInAt;
+    expect(
+      await jwt(update(withoutSignedInAt, { signedInAt: NOW_SECONDS })),
+    ).toBeNull();
+  });
+
+  it("returns null for a future-dated token on update", async () => {
+    const { jwt } = await startClock();
+    const future = { ...memberToken(), signedInAt: NOW_SECONDS + 3600 };
+    expect(await jwt(update(future, { signedInAt: NOW_SECONDS }))).toBeNull();
+  });
+
+  it("does not extend the session: an update cannot push the 8-hour cap out", async () => {
+    const { jwt } = await startClock();
+    const signedIn = await jwt(entraSignIn({ roles: ["Reader"] }));
+    if (signedIn === null) throw new Error("jwt callback returned null");
+
+    vi.setSystemTime(new Date(NOW.getTime() + 7 * HOUR_SECONDS * 1000));
+    const updated = await jwt(
+      update(signedIn, {
+        signedInAt: NOW_SECONDS + 7 * HOUR_SECONDS,
+      }),
+    );
+    expect(updated).not.toBeNull();
+
+    vi.setSystemTime(new Date(NOW.getTime() + (8 * HOUR_SECONDS + 1) * 1000));
+    expect(await jwt({ token: updated })).toBeNull();
+  });
+
+  it("the session callback ignores client-supplied update data (roles come from the token)", async () => {
+    const config = await loadWithConfig({ NODE_ENV: "development", ...ENTRA });
+    const session = await callbackOf(
+      config,
+      "session",
+    )({
+      session: {
+        user: { name: "Ada", email: "ada@company.com" },
+        expires: "2099-01-01T00:00:00.000Z",
+      },
+      token: { sub: "entra-user-1", roles: ["Reader"] },
+      newSession: { user: { roles: ["Admin"] }, roles: ["Admin"] },
+      trigger: "update",
+    });
+    expect(rolesOf(session)).toEqual(["Reader"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Runtime issuer check. Source: docs/specs/2026-05-15-system-architecture.md —
+// "Authentication & Access" → "Sign-in providers": the Entra issuer must be
+// tenant-specific (lowercase tenant GUID), and `auth.ts` repeats the issuer
+// check at runtime with the other provider checks, so a skipped validation
+// (`SKIP_ENV_VALIDATION`, set by `stubBase`) never enables Entra with the
+// multi-tenant `common`, `organizations` or `consumers` issuer: loading auth.ts
+// throws AuthConfigError, so every sign-in and session request fails.
+// ---------------------------------------------------------------------------
+
+describe("auth.ts runtime Entra issuer check (env validation skipped)", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  const TENANT = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
+  const issuerFor = (tenant: string) =>
+    `https://login.microsoftonline.com/${tenant}/v2.0`;
+  const withIssuer = (
+    issuer: string,
+    nodeEnv: string,
+    extra: Record<string, string> = {},
+  ) => ({
+    NODE_ENV: nodeEnv,
+    ...ENTRA,
+    AUTH_MICROSOFT_ENTRA_ID_ISSUER: issuer,
+    ...extra,
+  });
+
+  describe.each(["development", "production"])("in %s", (nodeEnv) => {
+    it.each([
+      ["the common issuer", issuerFor("common")],
+      ["the organizations issuer", issuerFor("organizations")],
+      ["the consumers issuer", issuerFor("consumers")],
+      ["an uppercase tenant GUID", issuerFor(TENANT.toUpperCase())],
+      ["a tenant that is not a GUID", issuerFor("tenant")],
+    ])("throws AuthConfigError for %s", async (_n, issuer) => {
+      stubBase(withIssuer(issuer, nodeEnv));
+      await expectAuthConfigError();
+    });
+
+    it("loads with a lowercase tenant GUID and enables Entra", async () => {
+      stubBase(withIssuer(issuerFor(TENANT), nodeEnv));
+      const mod = await loadAuth();
+      expect(mod.enabledSignInProviders.entra).toBe(true);
+    });
+  });
+
+  it("does not fall back to the dev login when the issuer is rejected", async () => {
+    stubBase(
+      withIssuer(issuerFor("common"), "development", {
+        AUTH_DEV_LOGIN: "true",
+      }),
+    );
+    await expectAuthConfigError();
   });
 });

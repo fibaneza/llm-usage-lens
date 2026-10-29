@@ -74,7 +74,7 @@ DynamoDB and the AWS SDK are **server-only**. Client Components never access the
 
 - Data-access functions live in `apps/dashboard/lib/data/` and import `server-only` — imported only by Route Handlers and Server Components. A client-side import is a build error.
 - **Client Components** get data two ways: as props from a Server Component, or via TanStack Query calling a same-origin Route Handler over HTTP. They never import `apps/dashboard/lib/data/` or the AWS SDK.
-- **Route Handlers** (`apps/dashboard/app/api/*`) are the only HTTP-reachable backend: check the Auth.js session (and the `Admin` role on account writes), validate input with Zod, query DynamoDB, return the standardized `{ data }` / `{ error }` shape.
+- **Route Handlers** (`apps/dashboard/app/api/*`) are the only HTTP-reachable backend: check the Auth.js session (and the `Admin` role on every write route), validate input with Zod, query DynamoDB, return the standardized `{ data }` / `{ error }` shape.
 - AWS credentials and the AWS SDK never ship to the browser.
 
 ## Caching Strategy

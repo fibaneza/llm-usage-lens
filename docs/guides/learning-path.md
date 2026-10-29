@@ -338,6 +338,7 @@ alongside 3.2 ([implementation-phases.md → Phase 3.1a](../specs/2026-05-15-imp
 - [ ] Set up TanStack Query (`QueryClientProvider` in root layout, `staleTime` 5 min) and query hooks
 - [ ] Route Handler tests: `{ data }` / `{ error }` shape + the `401` and `400` paths (and `403` on account writes)
 - [ ] Amendment (2026-10-29): `Admin` app-role gate (`403`) on the account write routes
+- [ ] Hardening (2026-10-29): future sign-in times (> 60 s) rejected, session update cannot change roles, structural write-route test, tenant-specific Entra issuer
 
 **Verify.**
 

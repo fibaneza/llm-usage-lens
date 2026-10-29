@@ -1,12 +1,17 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // t3-env only validates server vars when `window` is undefined, hence the node
-// environment. Rules: docs/guides/auth-setup.md; Rule 50.2.
+// environment. Rules: docs/guides/auth-setup.md; Rule 50.2. The fixture issuer
+// names a tenant GUID: env validation rejects any other issuer (System
+// Architecture — "Sign-in providers").
 const ENTRA = {
   AUTH_MICROSOFT_ENTRA_ID_ID: "client-id",
   AUTH_MICROSOFT_ENTRA_ID_SECRET: "client-secret",
   AUTH_MICROSOFT_ENTRA_ID_ISSUER:
-    "https://login.microsoftonline.com/tenant/v2.0",
+    "https://login.microsoftonline.com/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d/v2.0",
 };
 
 function stubBase(overrides: Record<string, string>) {
@@ -72,5 +77,251 @@ describe("env.ts sign-in provider cross-check", () => {
     stubBase({ NODE_ENV: "production", ...ENTRA });
     const { env } = await loadEnv();
     expect(env.AUTH_MICROSOFT_ENTRA_ID_ID).toBe("client-id");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tenant-specific Entra issuer. Source: docs/specs/2026-05-15-system-architecture.md
+// — "Authentication & Access" → "Sign-in providers": the issuer must be
+// `https://login.microsoftonline.com/<tenant GUID>/v2.0`, lowercase as Entra
+// publishes it (Auth.js compares the issuer exactly); the multi-tenant
+// `common`, `organizations` and `consumers` issuers fail env validation,
+// because an app role grants writes. docs/guides/auth-setup.md — "The issuer
+// must name your tenant ID as a lowercase GUID". implementation-phases —
+// Phase 3.3 amendment, "Hardening". Rule 50.2.
+// ---------------------------------------------------------------------------
+
+const TENANT = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
+const CI_PLACEHOLDER_ISSUER =
+  "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0";
+
+const withIssuer = (issuer: string, nodeEnv = "development") => ({
+  NODE_ENV: nodeEnv,
+  ...ENTRA,
+  AUTH_MICROSOFT_ENTRA_ID_ISSUER: issuer,
+});
+
+describe("env.ts requires a tenant-specific Entra issuer", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  describe("accepts", () => {
+    it.each([
+      ["a tenant GUID", `https://login.microsoftonline.com/${TENANT}/v2.0`],
+      ["the CI build placeholder (nil GUID)", CI_PLACEHOLDER_ISSUER],
+    ])("%s", async (_n, issuer) => {
+      stubBase(withIssuer(issuer));
+      const { env } = await loadEnv();
+      expect(env.AUTH_MICROSOFT_ENTRA_ID_ISSUER).toBe(issuer);
+    });
+
+    it("accepts a tenant GUID in production", async () => {
+      const issuer = `https://login.microsoftonline.com/${TENANT}/v2.0`;
+      stubBase(withIssuer(issuer, "production"));
+      const { env } = await loadEnv();
+      expect(env.AUTH_MICROSOFT_ENTRA_ID_ISSUER).toBe(issuer);
+    });
+
+    it("accepts the placeholder that root package.json build:ci passes to the build", async () => {
+      const manifest: unknown = JSON.parse(
+        readFileSync(join(__dirname, "../../package.json"), "utf8"),
+      );
+      const buildCi =
+        typeof manifest === "object" &&
+        manifest !== null &&
+        "scripts" in manifest &&
+        typeof manifest.scripts === "object" &&
+        manifest.scripts !== null &&
+        "build:ci" in manifest.scripts
+          ? manifest.scripts["build:ci"]
+          : undefined;
+      const issuer =
+        typeof buildCi === "string"
+          ? /AUTH_MICROSOFT_ENTRA_ID_ISSUER=(\S+)/.exec(buildCi)?.[1]
+          : undefined;
+      expect(issuer).toBe(CI_PLACEHOLDER_ISSUER);
+
+      stubBase(withIssuer(issuer ?? "", "production"));
+      const { env } = await loadEnv();
+      expect(env.AUTH_MICROSOFT_ENTRA_ID_ISSUER).toBe(CI_PLACEHOLDER_ISSUER);
+    });
+  });
+
+  describe("rejects", () => {
+    it.each([
+      ["common", `https://login.microsoftonline.com/common/v2.0`],
+      ["organizations", `https://login.microsoftonline.com/organizations/v2.0`],
+      ["consumers", `https://login.microsoftonline.com/consumers/v2.0`],
+      ["Common (mixed case)", `https://login.microsoftonline.com/Common/v2.0`],
+      ["COMMON", `https://login.microsoftonline.com/COMMON/v2.0`],
+      [
+        "Organizations (mixed case)",
+        `https://login.microsoftonline.com/Organizations/v2.0`,
+      ],
+      [
+        "Consumers (mixed case)",
+        `https://login.microsoftonline.com/Consumers/v2.0`,
+      ],
+    ])("the multi-tenant %s issuer", async (_n, issuer) => {
+      stubBase(withIssuer(issuer));
+      await expect(loadEnv()).rejects.toThrow();
+    });
+
+    it.each(["common", "organizations", "consumers"])(
+      "the multi-tenant %s issuer in production",
+      async (tenant) => {
+        stubBase(
+          withIssuer(
+            `https://login.microsoftonline.com/${tenant}/v2.0`,
+            "production",
+          ),
+        );
+        await expect(loadEnv()).rejects.toThrow();
+      },
+    );
+
+    it.each([
+      [
+        "a word that is not a GUID",
+        `https://login.microsoftonline.com/tenant/v2.0`,
+      ],
+      [
+        "a tenant domain name",
+        `https://login.microsoftonline.com/contoso.onmicrosoft.com/v2.0`,
+      ],
+      [
+        "a GUID that is too short",
+        `https://login.microsoftonline.com/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6/v2.0`,
+      ],
+      [
+        "a GUID with an extra segment",
+        `https://login.microsoftonline.com/${TENANT}-1234/v2.0`,
+      ],
+      [
+        "a GUID with non-hex characters",
+        `https://login.microsoftonline.com/zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz/v2.0`,
+      ],
+      [
+        "a GUID without hyphens",
+        `https://login.microsoftonline.com/${TENANT.replaceAll("-", "")}/v2.0`,
+      ],
+      [
+        "a GUID in braces",
+        `https://login.microsoftonline.com/{${TENANT}}/v2.0`,
+      ],
+      ["an empty tenant segment", `https://login.microsoftonline.com//v2.0`],
+      [
+        "a placeholder left in from the docs",
+        `https://login.microsoftonline.com/<tenant id>/v2.0`,
+      ],
+    ])("a tenant that is %s", async (_n, issuer) => {
+      stubBase(withIssuer(issuer));
+      await expect(loadEnv()).rejects.toThrow();
+    });
+
+    it.each([
+      ["another host", `https://evil.example.com/${TENANT}/v2.0`],
+      [
+        "a host that merely starts with login.microsoftonline.com",
+        `https://login.microsoftonline.com.evil.example.com/${TENANT}/v2.0`,
+      ],
+      [
+        "a host that embeds login.microsoftonline.com in its path",
+        `https://evil.example.com/login.microsoftonline.com/${TENANT}/v2.0`,
+      ],
+      [
+        "login.microsoftonline.com as userinfo in front of another host",
+        `https://login.microsoftonline.com@evil.example.com/${TENANT}/v2.0`,
+      ],
+      ["the v1 sts.windows.net host", `https://sts.windows.net/${TENANT}/v2.0`],
+      [
+        "a plain-http scheme",
+        `http://login.microsoftonline.com/${TENANT}/v2.0`,
+      ],
+    ])(
+      "a host that is not login.microsoftonline.com over https: %s",
+      async (_n, issuer) => {
+        stubBase(withIssuer(issuer));
+        await expect(loadEnv()).rejects.toThrow();
+      },
+    );
+
+    it.each([
+      ["no version segment", `https://login.microsoftonline.com/${TENANT}`],
+      ["the v1.0 endpoint", `https://login.microsoftonline.com/${TENANT}/v1.0`],
+      [
+        "a trailing slash instead of /v2.0",
+        `https://login.microsoftonline.com/${TENANT}/`,
+      ],
+      [
+        "extra path after /v2.0",
+        `https://login.microsoftonline.com/${TENANT}/v2.0/extra`,
+      ],
+      [
+        "a query string after /v2.0",
+        `https://login.microsoftonline.com/${TENANT}/v2.0?tenant=common`,
+      ],
+      [
+        "a fragment after /v2.0",
+        `https://login.microsoftonline.com/${TENANT}/v2.0#common`,
+      ],
+      [
+        "an extra path segment before the tenant",
+        `https://login.microsoftonline.com/common/${TENANT}/v2.0`,
+      ],
+    ])("an issuer with %s", async (_n, issuer) => {
+      stubBase(withIssuer(issuer));
+      await expect(loadEnv()).rejects.toThrow();
+    });
+
+    // The issuer is the lowercase GUID Entra publishes, with no trailing slash:
+    // Auth.js compares it exactly, so a differently written value would pass
+    // validation and then fail every sign-in. Each case is otherwise a valid
+    // configuration, so only the case or the slash can be the reason.
+    describe.each(["development", "production"])(
+      "in %s, a canonical-looking issuer that is not exactly the published form",
+      (nodeEnv) => {
+        it.each([
+          [
+            "an uppercase tenant GUID",
+            `https://login.microsoftonline.com/${TENANT.toUpperCase()}/v2.0`,
+          ],
+          [
+            "a tenant GUID with its first hex letter uppercased",
+            `https://login.microsoftonline.com/${TENANT.replace(/[a-f]/, (c) => c.toUpperCase())}/v2.0`,
+          ],
+          [
+            "a tenant GUID with its last hex letter uppercased",
+            `https://login.microsoftonline.com/${TENANT.replace(/[a-f](?=[^a-f]*$)/, (c) => c.toUpperCase())}/v2.0`,
+          ],
+          [
+            "a trailing slash after /v2.0",
+            `https://login.microsoftonline.com/${TENANT}/v2.0/`,
+          ],
+        ])("%s is rejected", async (_n, issuer) => {
+          expect(issuer).not.toBe(
+            `https://login.microsoftonline.com/${TENANT}/v2.0`,
+          );
+          stubBase(withIssuer(issuer, nodeEnv));
+          await expect(loadEnv()).rejects.toThrow();
+        });
+
+        it("the same configuration with the exact published form is accepted", async () => {
+          const issuer = `https://login.microsoftonline.com/${TENANT}/v2.0`;
+          stubBase(withIssuer(issuer, nodeEnv));
+          const { env } = await loadEnv();
+          expect(env.AUTH_MICROSOFT_ENTRA_ID_ISSUER).toBe(issuer);
+        });
+      },
+    );
+  });
+
+  it("still treats an unset issuer as unconfigured (the dev login can run alone)", async () => {
+    stubBase({ NODE_ENV: "development", AUTH_DEV_LOGIN: "true" });
+    const { env } = await loadEnv();
+    expect(env.AUTH_MICROSOFT_ENTRA_ID_ISSUER).toBeUndefined();
   });
 });

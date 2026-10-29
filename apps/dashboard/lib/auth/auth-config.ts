@@ -1,5 +1,18 @@
 export const DEV_LOGIN_PROVIDER_ID = "dev-login";
 
+// An app role grants writes, so the issuer must name one tenant: the
+// multi-tenant `common`/`organizations`/`consumers` issuers are not GUIDs and
+// fail. Anchored on both ends; lowercase hex and no trailing slash match the
+// issuer Entra publishes, which Auth.js compares exactly (System Architecture —
+// "Authentication & Access" → "Sign-in providers"). `env.ts` applies it per
+// field; `resolveSignInProviders` repeats it so a skipped validation cannot
+// enable Entra with a multi-tenant issuer.
+export const ENTRA_TENANT_ISSUER_PATTERN =
+  /^https:\/\/login\.microsoftonline\.com\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/v2\.0$/;
+
+export const ENTRA_TENANT_ISSUER_MESSAGE =
+  "AUTH_MICROSOFT_ENTRA_ID_ISSUER must be https://login.microsoftonline.com/<tenant GUID, lowercase>/v2.0; common, organizations and consumers are not allowed.";
+
 export type AuthEnvInput = {
   nodeEnv: string | undefined;
   entraId?: string;
@@ -35,6 +48,9 @@ export function resolveSignInProviders(input: AuthEnvInput): SignInProviders {
     );
   }
   const entra = entraSet === 3;
+  if (entra && !ENTRA_TENANT_ISSUER_PATTERN.test(input.entraIssuer ?? "")) {
+    throw new AuthConfigError(ENTRA_TENANT_ISSUER_MESSAGE);
+  }
 
   if (production && isSet(input.devLogin)) {
     throw new AuthConfigError("AUTH_DEV_LOGIN must not be set in production.");
