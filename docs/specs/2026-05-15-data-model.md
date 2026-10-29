@@ -323,7 +323,7 @@ All data written to DynamoDB and returned from Next.js Route Handlers is validat
 
 All routes live under `apps/dashboard/app/api/`, require an Auth.js session, validate query/body with Zod, and return `{ data: T }` or `{ error: { code, message } }`. Date params use `YYYY-MM-DD` (UTC).
 
-**HTTP status codes:** `200` success · `400` request parsing or validation error (malformed JSON body, or a failed Zod parse of query, path or body; also `POST /api/accounts` for an account that already exists) · `401` no session · `404` account/department/team not found · `500` unexpected server error, including a stored item or a response that fails its Zod schema (a server-side defect, not bad input).
+**HTTP status codes:** `200` success · `400` request parsing or validation error (malformed JSON body, or a failed Zod parse of query, path or body; also `POST /api/accounts` for an account that already exists) · `401` no session · `404` account/department/team not found — for department and team detail, "found" means present in `AccountMeta` **or** in any rollup in the requested range (historical departments/teams keep their snapshot names; see *Historical Snapshots for Department/Team Names*), so a historical id queried for a range with no rollups is `404` · `500` unexpected server error, including a stored item or a response that fails its Zod schema (a server-side defect, not bad input).
 
 | Route | Method | Schema / params | Data access |
 |-------|--------|-----------------|-------------|
@@ -353,7 +353,7 @@ All metrics (cost, tokens, invocations) are broken down by model first. User and
 
 ### Historical Snapshots for Department/Team Names
 
-`departmentName` and `teamName` are duplicated from AccountMeta into every DailyRollup. If a team moves departments, old rollups retain the historical assignment. This is intentional: financial reporting should reflect where costs were attributed at the time they occurred.
+`departmentName` and `teamName` are duplicated from AccountMeta into every DailyRollup. If a team moves departments, old rollups retain the historical assignment. This is intentional: financial reporting should reflect where costs were attributed at the time they occurred. When an id was renamed inside a requested range, its aggregate row (list and detail routes) shows the latest name in that range (decided 2026-10-29).
 
 ### DynamoDB over a Relational Database
 

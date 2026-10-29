@@ -5,24 +5,28 @@ import {
   CreateAccountInputSchema,
 } from "@bedrock-usage/shared";
 
+import { revalidateAccounts } from "@/lib/api/revalidate-accounts";
 import {
   jsonData,
   jsonError,
   parseJsonBody,
   withRoute,
 } from "@/lib/api/respond";
-import { createAccount, getAllAccounts } from "@/lib/data/account-meta";
+import { getAllAccountsCached } from "@/lib/api/cached-reads";
+import { createAccount } from "@/lib/data/account-meta";
 
 export const revalidate = 3600;
 
 export const GET = withRoute(async () =>
-  jsonData(AccountListSchema.parse(await getAllAccounts())),
+  jsonData(AccountListSchema.parse(await getAllAccountsCached())),
 );
 
 const createHandler = withRoute(async (request) => {
   const input = await parseJsonBody(request, CreateAccountInputSchema);
   try {
-    return jsonData(AccountMetaSchema.parse(await createAccount(input)));
+    const created = AccountMetaSchema.parse(await createAccount(input));
+    revalidateAccounts();
+    return jsonData(created);
   } catch (error) {
     if (error instanceof ConditionalCheckFailedException) {
       return jsonError(400, "BAD_REQUEST", "Account already exists");

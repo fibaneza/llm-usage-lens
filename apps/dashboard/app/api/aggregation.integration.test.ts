@@ -36,6 +36,10 @@ import { GET as getUsers } from "./users/route";
 // docs/specs/2026-05-15-data-model.md — "API Routes", "In-Memory Aggregation";
 // Rules 10.3, 20.8, 20.11, 50.4, 60.23. Only the session (`@/auth`) is mocked.
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("next/cache", async () => {
+  const mod = await import("@/test/next-cache-fake");
+  return mod.passThroughNextCache;
+});
 
 const RANGE = "dateFrom=2026-10-01&dateTo=2026-10-02";
 const eng = makeAccount(1);

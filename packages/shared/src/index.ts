@@ -11,6 +11,8 @@ export {
 } from "./models";
 export type { ModelKey, ModelMeta } from "./models";
 
+export { runBounded } from "./run-bounded";
+
 export {
   AccountIdSchema,
   Iso8601Schema,

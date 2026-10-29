@@ -15,7 +15,7 @@ export function aggregateDepartments(
   return [...groupBy(rollups, (r) => r.departmentId).entries()]
     .map(([departmentId, list]) => ({
       departmentId,
-      departmentName: list[0]?.departmentName ?? departmentId,
+      departmentName: list[list.length - 1]?.departmentName ?? departmentId,
       ...totalsOf(list),
     }))
     .sort((a, b) => b.cost - a.cost);
@@ -29,7 +29,7 @@ export function aggregateDepartmentDetail(
   const own = rollups.filter((r) => r.departmentId === departmentId);
   return {
     departmentId,
-    departmentName: own[0]?.departmentName ?? fallbackName,
+    departmentName: own[own.length - 1]?.departmentName ?? fallbackName,
     ...totalsOf(own),
     nonModelByCategory: splitCosts(own).nonModelByCategory,
     teams: aggregateTeams(own),

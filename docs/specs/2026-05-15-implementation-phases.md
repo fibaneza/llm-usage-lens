@@ -314,7 +314,7 @@ None — data infrastructure only.
   - `GET|POST /api/accounts`, `PATCH|DELETE /api/accounts/[id]` (Settings CRUD)
   - Each: Auth.js session check → Zod-validate query/body → data-access call → `{ data: T }` / `{ error: { code, message } }` shape (Rules 10, 20.11)
   - Zod validation on all query params; enforce 90-day max on custom date ranges
-  - Next.js server cache with 1-hour revalidation (`export const revalidate = 3600`, Rule 60.10)
+  - Next.js server cache with 1-hour revalidation (`export const revalidate = 3600`, Rule 60.10); data reads wrapped in `unstable_cache` — rollups per UTC day, accounts tagged (1 h) and sync status tagged (5 min, Design System *Caching Strategy*), account writes revalidate the `accounts` tag (follow-up, 2026-10-29)
 - [x] Set up TanStack Query
   - `QueryClientProvider` in root layout (beside the existing `NuqsAdapter`)
   - Default `staleTime`: 5 minutes

@@ -18,6 +18,10 @@ const acct = (n: number) => String(n).padStart(12, "0");
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes" (Settings CRUD);
 // contract-3.3 U3; Rules 10.3, 50.4, 60.23. Only `@/auth` is mocked.
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("next/cache", async () => {
+  const mod = await import("@/test/next-cache-fake");
+  return mod.passThroughNextCache;
+});
 
 const existing = makeAccount(1);
 const body = {

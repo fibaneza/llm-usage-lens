@@ -1,6 +1,8 @@
 import { BatchWriteCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
+import { runBounded } from "@bedrock-usage/shared";
+
 import { createTable } from "../create-table";
 import {
   createScriptClient,
@@ -8,7 +10,6 @@ import {
   log,
   resolveTarget,
 } from "./dynamodb-local";
-import { runBounded } from "./run-bounded";
 import { buildSeedData } from "./seed-data";
 import type { SeedProfile } from "./seed-data";
 import { writeSeed } from "./seed-writer";

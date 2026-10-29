@@ -1,6 +1,6 @@
 import "server-only";
 
-import { trace } from "@opentelemetry/api";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 import type { ApiErrorCode } from "@bedrock-usage/shared";
 import { ZodError } from "zod";
 import type { ZodType, z } from "zod";
@@ -98,25 +98,34 @@ export async function parseJsonBody<S extends ZodType>(
   return parseInput(payload, schema);
 }
 
+const tracer = trace.getTracer("bedrock-usage-dashboard");
+
+// Each request runs in its own span so recordException always lands (Rule
+// 60.17). The span name is fixed and carries no attributes: nothing from env,
+// headers, cookies or the query string reaches telemetry (Rule 50.6).
 export function withRoute(
   handler: (request: Request, ctx: RouteContext) => Promise<Response>,
 ) {
-  return async (request: Request, ctx: RouteContext): Promise<Response> => {
-    try {
-      const session = await auth();
-      if (!session) return jsonError(401, "UNAUTHORIZED", "Not authenticated");
-      return await handler(request, ctx);
-    } catch (error) {
-      if (isBadRequestError(error)) {
-        return jsonError(400, "BAD_REQUEST", error.firstMessage);
+  return (request: Request, ctx: RouteContext): Promise<Response> =>
+    tracer.startActiveSpan("api.route", async (span) => {
+      try {
+        const session = await auth();
+        if (!session) {
+          return jsonError(401, "UNAUTHORIZED", "Not authenticated");
+        }
+        return await handler(request, ctx);
+      } catch (error) {
+        if (isBadRequestError(error)) {
+          return jsonError(400, "BAD_REQUEST", error.firstMessage);
+        }
+        if (error instanceof NotFoundError) {
+          return jsonError(404, "NOT_FOUND", error.message);
+        }
+        span.recordException(error instanceof Error ? error : String(error));
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        return jsonError(500, "INTERNAL", "Internal server error");
+      } finally {
+        span.end();
       }
-      if (error instanceof NotFoundError) {
-        return jsonError(404, "NOT_FOUND", error.message);
-      }
-      trace
-        .getActiveSpan()
-        ?.recordException(error instanceof Error ? error : String(error));
-      return jsonError(500, "INTERNAL", "Internal server error");
-    }
-  };
+    });
 }

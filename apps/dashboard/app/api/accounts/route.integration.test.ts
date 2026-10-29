@@ -3,6 +3,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.fn();
 vi.mock("@/auth", () => ({ auth: () => auth() }));
+vi.mock("next/cache", async () => {
+  const mod = await import("@/test/next-cache-fake");
+  return mod.passThroughNextCache;
+});
 
 import { GET, revalidate } from "@/app/api/accounts/route";
 

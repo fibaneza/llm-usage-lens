@@ -460,4 +460,6 @@ The Next.js app and Lambda collector share schemas and model normalization witho
 └── ...
 ```
 
+Besides schemas and model normalization, `packages/shared` may hold small pure, dependency-free utilities used by two or more of the dashboard, the collector and `scripts/` (e.g. `runBounded`, bounded-concurrency mapping — decided 2026-10-29). Nothing with I/O or AWS SDK imports.
+
 Both apps depend on `@bedrock-usage/shared` (workspace package). Phase 1 scaffolds the workspace; Phase 3 implements schemas in `packages/shared`; Phase 6 imports the same package in the collector bundle.

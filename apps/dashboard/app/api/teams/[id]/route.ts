@@ -11,7 +11,7 @@ import {
   parseSearchParams,
   withRoute,
 } from "@/lib/api/respond";
-import { getAllAccounts } from "@/lib/data/account-meta";
+import { getAllAccountsCached } from "@/lib/api/cached-reads";
 
 export const revalidate = 3600;
 
@@ -22,15 +22,18 @@ export const GET = withRoute(async (request, { params }) => {
     request,
     DateRangeQuerySchema,
   );
-  const meta = (await getAllAccounts()).find((a) => a.teamId === id);
-  if (!meta) throw new NotFoundError(`Team ${id} not found`);
+  const meta = (await getAllAccountsCached()).find((a) => a.teamId === id);
   const rollups = await loadRangeRollups(dateFrom, dateTo, accountId);
-  const detail = aggregateTeamDetail(rollups, id, { teamName: meta.teamName });
+  // A team that left AccountMeta but has rollups in range is historical.
+  const historical = [...rollups].reverse().find((r) => r.teamId === id);
+  const teamName = meta?.teamName ?? historical?.teamName;
+  if (teamName === undefined) throw new NotFoundError(`Team ${id} not found`);
+  const detail = aggregateTeamDetail(rollups, id, { teamName });
   return jsonData(
     TeamDetailResponseSchema.parse({
       ...detail,
-      departmentId: detail.departmentId || meta.departmentId,
-      departmentName: detail.departmentName || meta.departmentName,
+      departmentId: detail.departmentId || meta?.departmentId,
+      departmentName: detail.departmentName || meta?.departmentName,
     }),
   );
 });

@@ -29,7 +29,8 @@ function teamRow(
   list: readonly DatedDailyRollup[],
   fallbackName = teamId,
 ): TeamRow {
-  const first = list[0];
+  // Rollups arrive in ascending day order; the latest carries the current name.
+  const first = list[list.length - 1];
   return {
     teamId,
     teamName: first?.teamName ?? fallbackName,

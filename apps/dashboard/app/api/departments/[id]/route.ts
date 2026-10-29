@@ -11,7 +11,7 @@ import {
   parseSearchParams,
   withRoute,
 } from "@/lib/api/respond";
-import { getAccountsByDepartment } from "@/lib/data/account-meta";
+import { getAccountsByDepartmentCached } from "@/lib/api/cached-reads";
 
 export const revalidate = 3600;
 
@@ -22,12 +22,15 @@ export const GET = withRoute(async (request, { params }) => {
     request,
     DateRangeQuerySchema,
   );
-  const [meta] = await getAccountsByDepartment(id);
-  if (!meta) throw new NotFoundError(`Department ${id} not found`);
+  const [meta] = await getAccountsByDepartmentCached(id);
   const rollups = await loadRangeRollups(dateFrom, dateTo, accountId);
+  // A department that left AccountMeta but has rollups in range is historical.
+  const historical = [...rollups].reverse().find((r) => r.departmentId === id);
+  const name = meta?.departmentName ?? historical?.departmentName;
+  if (name === undefined) throw new NotFoundError(`Department ${id} not found`);
   return jsonData(
     DepartmentDetailResponseSchema.parse(
-      aggregateDepartmentDetail(rollups, id, meta.departmentName),
+      aggregateDepartmentDetail(rollups, id, name),
     ),
   );
 });

@@ -32,10 +32,14 @@ patterns) and current Next.js App Router guidance.
    `apps/dashboard/lib/data/**` or `@aws-sdk/*` (see Rule 10). It receives
    data from a Server Component or fetches a Route Handler via TanStack Query.
 9. **`async`/`await` Server Components for data**, not `useEffect` fetching.
-10. **Caching is explicit.** Route Handlers set `export const revalidate =
-    3600;` (matches the hourly Lambda cycle) unless the spec says otherwise.
-    Wrap data-access reads in `unstable_cache` when a Server Component calls
-    them directly.
+10. **Caching is explicit.** Data reads in Route Handlers and Server
+    Components go through `unstable_cache` (`revalidate: 3600`, matching the
+    hourly Lambda cycle, with named tags) unless the spec says otherwise
+    (`SyncStatus` uses 5 minutes — Design System *Caching Strategy*); keep
+    each entry small (rollups are cached per UTC day — Next's data cache caps
+    an entry at 2 MB). The Auth.js session check stays outside the cache, and
+    a Route Handler that writes calls `revalidateTag` for the tags it affects.
+    `export const revalidate = 3600` stays as the declarative default.
 11. **Charts and other browser-only libraries** load via
     `next/dynamic(() => import(...), { ssr: false })`. Recharts is always
     wrapped in `ResponsiveContainer`.

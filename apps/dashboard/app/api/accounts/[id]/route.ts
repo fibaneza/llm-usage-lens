@@ -11,6 +11,7 @@ import {
   parseJsonBody,
   withRoute,
 } from "@/lib/api/respond";
+import { revalidateAccounts } from "@/lib/api/revalidate-accounts";
 import { deactivateAccount, updateAccount } from "@/lib/data/account-meta";
 
 export const revalidate = 3600;
@@ -24,14 +25,18 @@ const patchHandler = withRoute(async (request, ctx) => {
   const patch = await parseJsonBody(request, UpdateAccountPatchSchema);
   const updated = await updateAccount(id, patch);
   if (!updated) throw notFound(id);
-  return jsonData(AccountMetaSchema.parse(updated));
+  const parsed = AccountMetaSchema.parse(updated);
+  revalidateAccounts();
+  return jsonData(parsed);
 });
 
 const deleteHandler = withRoute(async (_request, ctx) => {
   const id = parseInput((await ctx.params).id, AccountIdSchema);
   const deactivated = await deactivateAccount(id);
   if (!deactivated) throw notFound(id);
-  return jsonData(AccountMetaSchema.parse(deactivated));
+  const parsed = AccountMetaSchema.parse(deactivated);
+  revalidateAccounts();
+  return jsonData(parsed);
 });
 
 export const PATCH = (request: Request, ctx: IdContext) =>

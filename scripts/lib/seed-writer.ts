@@ -9,10 +9,10 @@ import {
   dailySk,
   datePk,
   deptPk,
+  runBounded,
 } from "@bedrock-usage/shared";
 
 import type { SeedData } from "./seed-data";
-import { runBounded } from "./run-bounded";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Entity Map" (key layout).
 const BATCH_SIZE = 25;
