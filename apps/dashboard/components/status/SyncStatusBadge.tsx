@@ -4,12 +4,19 @@ import { Badge } from "@/components/ui/badge";
 
 // Placeholder until SyncStatus data exists (wired in Phase 4.1). A missing
 // SyncStatus item is the "never synced" state and is shown neutrally — never an
-// error (Rule 20.9).
+// error (Rule 20.9). Below `lg` only the icon shows (the label lives in the
+// aria-label and title) so the top bar stays on one row (design-system — Layout).
 export function SyncStatusBadge() {
   return (
-    <Badge variant="outline" className="gap-1.5">
+    <Badge
+      variant="outline"
+      role="status"
+      aria-label="Sync status: no sync yet"
+      title="Sync status: no sync yet"
+      className="gap-1.5"
+    >
       <CircleDashed className="size-3.5" aria-hidden />
-      No sync yet
+      <span className="hidden lg:inline">No sync yet</span>
     </Badge>
   );
 }

@@ -13,14 +13,17 @@ export function PageTitle({ className }: { className?: string }) {
   const pathname = usePathname();
   const active = NAV_ITEMS.find((item) => isNavItemActive(pathname, item.href));
 
+  const title = active?.pageTitle ?? "Dashboard";
+
   return (
     <h1
+      title={title}
       className={cn(
         "text-foreground text-lg font-semibold tracking-tight",
         className,
       )}
     >
-      {active?.pageTitle ?? "Dashboard"}
+      {title}
     </h1>
   );
 }

@@ -126,6 +126,7 @@ Phase 1 (Foundation).
   - User menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`)
   - `SyncStatusBadge` placeholder (no real data yet — neutral "no sync" state, never an error)
   - `SyncCountdown` placeholder
+  - Compact forms per breakpoint (badge/countdown icon-only below `lg`, search icon-only `md`–1439) per Design System *Layout* (follow-up, 2026-10-29)
 - [x] Verify: every route is reachable from the sidebar, sidebar collapses on desktop and overlays on mobile, responsive at all breakpoints with no horizontal scroll
 
 **Components Built:** `Sidebar`, top bar + user menu, `SyncStatusBadge` (placeholder), `SyncCountdown` (placeholder)

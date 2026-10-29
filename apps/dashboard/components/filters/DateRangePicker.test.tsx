@@ -192,5 +192,41 @@ describe("DateRangePicker", () => {
         dateTo: "2026-01-05",
       });
     });
+
+    it("orders the range when the later day is clicked first", async () => {
+      expect(await pickRange(28, 25)).toEqual({
+        dateFrom: "2026-01-25",
+        dateTo: "2026-01-28",
+      });
+    });
+
+    it("discards a pending start when the popover closes without a second click", async () => {
+      const user = userEvent.setup();
+      const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+      renderWithUrl(
+        { dateFrom: "2026-01-10", dateTo: "2026-01-20" },
+        onUrlUpdate,
+      );
+      const trigger = screen.getByRole("button", {
+        name: /custom date range/i,
+      });
+      await user.click(trigger);
+      const [first] = await screen.findAllByRole("button", {
+        name: /January 25(st|nd|rd|th), 2026/,
+      });
+      if (!first) throw new Error("day 25 not rendered");
+      await user.click(first);
+      await user.keyboard("{Escape}");
+      expect(onUrlUpdate).not.toHaveBeenCalled();
+
+      // Reopened: the next click must start a fresh range, not finish the old one.
+      await user.click(trigger);
+      const [second] = await screen.findAllByRole("button", {
+        name: /January 28(st|nd|rd|th), 2026/,
+      });
+      if (!second) throw new Error("day 28 not rendered");
+      await user.click(second);
+      expect(onUrlUpdate).not.toHaveBeenCalled();
+    });
   });
 });

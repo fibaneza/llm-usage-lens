@@ -21,7 +21,7 @@ export default function DashboardLayout({
       <Suspense fallback={<AppSidebarFallback />}>
         <AppSidebar />
       </Suspense>
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <AppHeader />
         <div className="mx-auto w-full max-w-[1280px] flex-1 p-4 md:p-6">
           {children}

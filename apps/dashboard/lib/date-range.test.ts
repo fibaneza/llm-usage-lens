@@ -1,14 +1,16 @@
 import { MAX_RANGE_DAYS as SHARED_MAX_RANGE_DAYS } from "@bedrock-usage/shared";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   clampCustomRange,
   defaultDateRange,
+  fromLocalDay,
   inclusiveSpanDays,
   MAX_RANGE_DAYS,
   parseDay,
   presetForRange,
   resolvePreset,
+  toLocalDay,
 } from "./date-range";
 
 // A fixed reference instant so preset arithmetic is deterministic (Rule 60.24 —
@@ -107,5 +109,71 @@ describe("parseDay", () => {
 describe("MAX_RANGE_DAYS", () => {
   it("equals the shared DateRangeQuerySchema constant", () => {
     expect(MAX_RANGE_DAYS).toBe(SHARED_MAX_RANGE_DAYS);
+  });
+});
+
+// Local-day <-> UTC-day boundary conversion (design-system — Date Filtering:
+// URL days are UTC calendar days, date-fns/react-day-picker work in local days;
+// date-fns is for display only). Node re-reads process.env.TZ on assignment,
+// so each case pins an explicit zone and restores it afterwards.
+describe("toLocalDay / fromLocalDay", () => {
+  const originalTz = process.env.TZ;
+
+  afterEach(() => {
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
+  });
+
+  const ZONES = [
+    "UTC",
+    "America/Los_Angeles", // UTC-8/-7
+    "Pacific/Auckland", // UTC+12/+13
+    "Pacific/Kiritimati", // UTC+14
+  ];
+
+  describe.each(ZONES)("in %s", (tz) => {
+    const DAYS = [
+      "2026-01-01",
+      "2025-12-31", // year boundary
+      "2026-02-28",
+      "2028-02-29", // leap day
+      "2026-03-01", // month boundary
+      "2026-03-08", // US spring-forward
+      "2026-11-01", // US fall-back
+      "2026-09-27", // NZ spring-forward
+      "2026-04-05", // NZ fall-back
+    ];
+
+    it.each(DAYS)(
+      "toLocalDay(%s) is local midnight of that calendar day",
+      (day) => {
+        process.env.TZ = tz;
+        const [y, m, d] = day.split("-").map(Number);
+        const local = toLocalDay(day);
+        expect(local.getFullYear()).toBe(y);
+        expect(local.getMonth()).toBe((m ?? 1) - 1);
+        expect(local.getDate()).toBe(d);
+        expect(local.getHours()).toBe(0);
+        expect(local.getMinutes()).toBe(0);
+      },
+    );
+
+    it.each(DAYS)("round-trips %s unchanged", (day) => {
+      process.env.TZ = tz;
+      expect(fromLocalDay(toLocalDay(day))).toBe(day);
+    });
+
+    it("fromLocalDay ignores the time of day within the local day", () => {
+      process.env.TZ = tz;
+      expect(fromLocalDay(new Date(2026, 5, 10, 0, 0, 0))).toBe("2026-06-10");
+      expect(fromLocalDay(new Date(2026, 5, 10, 23, 59, 59))).toBe(
+        "2026-06-10",
+      );
+    });
+
+    it("pads single-digit months and days", () => {
+      process.env.TZ = tz;
+      expect(fromLocalDay(new Date(2026, 0, 5))).toBe("2026-01-05");
+    });
   });
 });

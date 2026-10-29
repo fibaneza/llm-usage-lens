@@ -235,6 +235,16 @@ Each Bedrock model gets a consistent color across all charts:
   the right. The date filter lives here — not in a content-area band — so it
   reads as a single global control across every page (the earlier "Page Header +
   Date Range Filter" content band was dropped in favour of the top-bar toggle).
+- Top bar responsiveness (decided 2026-10-29): below `md` (768) it may wrap to
+  two rows; from `md` up it is one row whose bottom border aligns with the
+  sidebar header. To fit, the sync-status badge and sync countdown show
+  icon-only below `lg` (1024) and icon + text from `lg`; the command-menu
+  trigger is icon-only from `md` to 1439 px and shows its "Search…" label and
+  ⌘K hint from 1440. Compact forms keep their full meaning in `aria-label` and
+  `title` (the search trigger also carries `aria-keyshortcuts`); nothing in the
+  top bar is hidden from `md` up. Thresholds from `md` up use only the
+  breakpoints below (Rule 40.6); below `md`, where the bar may wrap, the
+  countdown is hidden under Tailwind's `sm` (640).
 - Page title is the descriptive heading (e.g. "Cost overview"), not the short
   sidebar label ("Overview").
 - Sidebar: collapsible, persistent on desktop, overlay on mobile; nav is grouped

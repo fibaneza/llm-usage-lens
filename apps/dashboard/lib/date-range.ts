@@ -169,3 +169,19 @@ export function clampCustomRange(range: DateRange): DateRange {
 
   return { dateFrom: formatDay(from), dateTo: formatDay(to) };
 }
+
+// URL days are UTC calendar days (Rule 20.1) but react-day-picker and date-fns
+// work in local days; convert at that boundary so a non-UTC host never shifts a
+// day. date-fns stays display-only (design-system spec). Callers pass an
+// already-validated YYYY-MM-DD string.
+export function toLocalDay(day: string): Date {
+  const [year = 0, month = 1, date = 1] = day.split("-").map(Number);
+  return new Date(year, month - 1, date);
+}
+
+export function fromLocalDay(day: Date): string {
+  const year = day.getFullYear().toString().padStart(4, "0");
+  const month = (day.getMonth() + 1).toString().padStart(2, "0");
+  const date = day.getDate().toString().padStart(2, "0");
+  return `${year}-${month}-${date}`;
+}

@@ -15,9 +15,11 @@ import {
 import {
   clampCustomRange,
   type DateRange,
+  fromLocalDay,
   presetForRange,
   resolvePreset,
   resolveUrlRange,
+  toLocalDay,
 } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 import { cn } from "@/lib/utils";
@@ -29,18 +31,6 @@ const PRESET_PILLS = [
   { preset: "30d", label: "30D", aria: "Last 30 days" },
   { preset: "90d", label: "90D", aria: "Last 90 days" },
 ] as const;
-
-// URL days are UTC calendar days (Rule 20.1) but react-day-picker and date-fns
-// format in local days; convert at this boundary so a non-UTC host never shifts
-// a day.
-function toLocalDay(day: string): Date {
-  const [year = 0, month = 1, date = 1] = day.split("-").map(Number);
-  return new Date(year, month - 1, date);
-}
-
-function fromLocalDay(day: Date): string {
-  return format(day, "yyyy-MM-dd");
-}
 
 function formatRangeLabel(range: DateRange): string {
   const from = format(toLocalDay(range.dateFrom), "MMM d");

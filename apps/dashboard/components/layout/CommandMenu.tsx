@@ -50,11 +50,14 @@ export function CommandMenu() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-muted-foreground border-border bg-background hover:bg-accent focus:ring-ring inline-flex h-9 w-full max-w-56 items-center gap-2 rounded-md border px-3 text-sm transition-colors focus:ring-2 focus:outline-hidden"
+        aria-label="Search"
+        aria-keyshortcuts="Meta+K Control+K"
+        title="Search (⌘K)"
+        className="text-muted-foreground border-border bg-background hover:bg-accent focus:ring-ring inline-flex h-9 w-full max-w-56 items-center gap-2 rounded-md border px-3 text-sm transition-colors focus:ring-2 focus:outline-hidden md:max-[1440px]:w-9 md:max-[1440px]:justify-center md:max-[1440px]:px-0"
       >
         <SearchIcon className="size-4 shrink-0" />
-        <span className="flex-1 text-left">Search…</span>
-        <Kbd>⌘K</Kbd>
+        <span className="flex-1 text-left md:max-[1440px]:hidden">Search…</span>
+        <Kbd className="md:max-[1440px]:hidden">⌘K</Kbd>
       </button>
 
       <CommandDialog open={open} onOpenChange={setOpen}>
