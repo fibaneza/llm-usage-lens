@@ -3,7 +3,7 @@
 This guide states **general** GitHub and GitHub Actions practice **and how this
 project applies it**. Where it differs from
 [Rule 31 — GitHub Flow](../../.claude/rules/31-github-flow.md) or the
-operational detail in [`.github/README.md`](../../.github/README.md), **those
+operational detail in [`.github/ACTIONS.md`](../../.github/ACTIONS.md), **those
 win** (Rule 00 — specs and rules are the source of truth). Project-specific
 behaviour is called out in **In this project** notes throughout.
 
@@ -71,7 +71,7 @@ Recommended settings:
 
 > **In this project.** The exact required-check names and the squash-merge-only
 > policy live in the branch-protection table in
-> [`.github/README.md`](../../.github/README.md#required-branch-protection-on-main).
+> [`.github/ACTIONS.md`](../../.github/ACTIONS.md#required-branch-protection-on-main).
 > Branch protection is currently **advisory** — classic protection and rulesets
 > both require GitHub Pro or a public repo, which this free private repo does not
 > have. The manual counterparts are Rule 30.5 ("never commit or merge directly
@@ -145,7 +145,7 @@ chore/<slug>                 # maintenance
 > phase (or one Phase 4 sub-phase) per PR — see
 > [Rule 30](../../.claude/rules/30-phase-discipline.md). The GitHub-side
 > lifecycle is documented in
-> [`.github/README.md`](../../.github/README.md#github-flow).
+> [`.github/ACTIONS.md`](../../.github/ACTIONS.md#github-flow).
 
 ---
 
@@ -166,7 +166,7 @@ misc fixes
 Use:
 
 - [Conventional Commits](https://www.conventionalcommits.org/) — enforced by
-  commitlint (commit-msg hook) locally and by `pr-title-lint.yml` on the PR title
+  commitlint (commit-msg hook) locally and by `github-pr-title-lint.yml` on the PR title
 - Small logical changes
 - Squash before merge
 
@@ -184,7 +184,7 @@ Advantages:
 
 > **In this project.** Squash-merge is the **only** permitted merge strategy —
 > merge commits and rebase-merge are disabled. Because the PR title becomes the
-> sole commit message on `main`, PR titles **must** pass `pr-title-lint.yml`
+> sole commit message on `main`, PR titles **must** pass `github-pr-title-lint.yml`
 > (Conventional Commits).
 
 ---
@@ -226,7 +226,7 @@ General minimum: build, unit tests, lint, type check, security scan.
 
 > **In this project.** The status checks tracked on `main` are:
 >
-> - **`PR Title Lint`** (`pr-title-lint.yml`) — Conventional-Commits PR title.
+> - **`PR Title Lint`** (`github-pr-title-lint.yml`) — Conventional-Commits PR title.
 > - **`Claude PR Review`** (`claude-pr-review.yml`) — inline review + security;
 >   HIGH security findings submit a `REQUEST_CHANGES` review and fail the check.
 > - **Phase-1 CI** (added in Phase 1): `prettier --check`, `eslint`,
@@ -234,7 +234,7 @@ General minimum: build, unit tests, lint, type check, security scan.
 >
 > These are *advisory* until branch protection can be enforced (see §2). The
 > full split between PR-time review and the release audit is in
-> [`.github/README.md`](../../.github/README.md#how-the-two-reviewers-split-work).
+> [`.github/ACTIONS.md`](../../.github/ACTIONS.md#how-the-two-reviewers-split-work).
 
 ---
 
@@ -324,7 +324,7 @@ write` should appear **only** on jobs that exchange an OIDC token.
 > **In this project.** Both review workflows declare per-job `permissions:`
 > blocks. The repo also needs Settings → Actions → Workflow permissions set to
 > "Read and write" because the workflows post PR comments and create issues —
-> see [`.github/README.md`](../../.github/README.md#required-repository-configuration).
+> see [`.github/ACTIONS.md`](../../.github/ACTIONS.md#required-repository-configuration).
 
 ---
 
@@ -522,7 +522,7 @@ caching, matrix optimization, and selective testing.
 > **In this project.** The Claude workflows cap cost/time with `--max-turns`,
 > `timeout-minutes: 25`, draft/`paths-ignore` skips, always-incremental
 > `synchronize` reviews, and release-tag-scoped audits — see
-> [Cost characteristics](../../.github/README.md#cost-characteristics).
+> [Cost characteristics](../../.github/ACTIONS.md#cost-characteristics).
 
 ---
 
@@ -621,7 +621,7 @@ Observability + Audit Logs
 - [Rule 31 — GitHub Flow](../../.claude/rules/31-github-flow.md)
 - [Rule 30 — Phase discipline](../../.claude/rules/30-phase-discipline.md)
 - [Rule 50 — Security & secrets](../../.claude/rules/50-security-and-secrets.md)
-- [`.github/README.md`](../../.github/README.md) — workflow internals, branch
+- [`.github/ACTIONS.md`](../../.github/ACTIONS.md) — workflow internals, branch
   protection, cost controls
 - [aws-infrastructure runbook](aws-infrastructure.md) — SAM deploy/undeploy
 - GitHub docs: [Security hardening for GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions),

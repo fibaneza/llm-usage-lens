@@ -11,7 +11,7 @@ This folder holds the project's GitHub-side automation.
 | [`workflows/bedrock-simulator-destroy.yml`](workflows/bedrock-simulator-destroy.yml) | `workflow_dispatch` (confirm = "destroy bedrock-simulator") | Tears down the bedrock-simulator stack (disables MIL, empties bucket, sam delete) |
 | [`workflows/bedrock-simulator-run.yml`](workflows/bedrock-simulator-run.yml) | `workflow_dispatch` (totalCalls, guardrailRatio) | Invokes the deployed simulator Lambda with the full model × service × user matrix |
 | [`workflows/bedrock-simulator-deps.yml`](workflows/bedrock-simulator-deps.yml) | `workflow_dispatch` (on demand) | Full dependency-health report to the run summary: `pnpm outdated` (freshness), `pnpm audit` (vulnerabilities), `pnpm dedupe --check` (duplicate versions). **Advisory — never fails.** For inspection without a build; enforcement is the `bedrock-simulator-build.yml` gate. Touches no AWS |
-| [`workflows/pr-title-lint.yml`](workflows/pr-title-lint.yml) | PR opened / edited / reopened | Validates PR title against Conventional Commits (required — PR title becomes the squash-merge commit on `main`) |
+| [`workflows/github-pr-title-lint.yml`](workflows/github-pr-title-lint.yml) | PR opened / edited / reopened | Validates PR title against Conventional Commits (required — PR title becomes the squash-merge commit on `main`) |
 | [`workflows/labels.yml`](workflows/labels.yml) | Push to `main` touching [`labels.yml`](labels.yml) / the workflow; `workflow_dispatch` | Syncs repository labels from [`.github/labels.yml`](labels.yml) (create/update only — `skip-delete: true` protects labels created by the release audit) |
 | [`workflows/claude-assistant.yml`](workflows/claude-assistant.yml) | `@claude` mention on an **issue** (opened/assigned or issue comment) | On-demand implementation bot: posts an acknowledgement comment immediately, implements the change on a Rule 31–named branch, opens a draft PR, and posts a summary; falls back to a Q&A reply for informational requests. Works on any issue type (bug, feature, task, chore, refactor, docs, etc.) |
 
@@ -129,7 +129,7 @@ main ─────────────────────────
 - `main` is the **only** long-lived branch.
 - All work branches off `main` and returns via pull request.
 - PRs are **squash-merged** — the PR title becomes the sole commit on `main`.
-- PR titles **must** follow Conventional Commits (enforced by `pr-title-lint.yml`).
+- PR titles **must** follow Conventional Commits (enforced by `github-pr-title-lint.yml`).
 - Releases are cut by pushing a version tag from `main` (see [Release process](#release-process)).
 
 See [Rule 31](../.claude/rules/31-github-flow.md) for the full branching

@@ -2,7 +2,7 @@
 
 This document is the single entrypoint for contributors. It points at the
 authoritative rules in [`.claude/rules/`](../.claude/rules/) and the
-workflow walkthrough in [`.github/README.md`](./README.md) rather than
+workflow walkthrough in [`.github/ACTIONS.md`](./ACTIONS.md) rather than
 duplicating them.
 
 ## Project state
@@ -56,7 +56,7 @@ Every commit must follow [Conventional Commits](https://www.conventionalcommits.
 
 Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
 
-The `commit-msg` Husky hook (Phase 1+) and the [`pr-title-lint.yml`](./workflows/pr-title-lint.yml)
+The `commit-msg` Husky hook (Phase 1+) and the [`github-pr-title-lint.yml`](./workflows/github-pr-title-lint.yml)
 workflow both enforce this. Never bypass hooks with `--no-verify` (Rule 50.5).
 
 ## Pull requests
@@ -67,7 +67,7 @@ workflow both enforce this. Never bypass hooks with `--no-verify` (Rule 50.5).
 2. **Fill in the PR template** — Summary, Linked issue, Test plan, Reviewer guidance, Phase. The template pre-fills on every new PR; see [`pull_request_template.md`](./pull_request_template.md).
 3. **PR title must follow Conventional Commits** — the title becomes the
    sole commit message on `main` after squash-merge, and
-   [`pr-title-lint.yml`](./workflows/pr-title-lint.yml) blocks non-CC titles.
+   [`github-pr-title-lint.yml`](./workflows/github-pr-title-lint.yml) blocks non-CC titles.
 4. **Mark ready-for-review** (`gh pr ready`) when the branch is complete. This
    fires the full Claude PR review.
 5. **One phase / one Phase 4 sub-phase per PR** (Rule 30.4). Don't bundle.
@@ -79,7 +79,7 @@ Every PR gets two layers of review:
 - **Automated** — [`claude-pr-review.yml`](./workflows/claude-pr-review.yml)
   posts inline comments with one-click suggestions; HIGH security findings
   trigger a `REQUEST_CHANGES` review that blocks merge. See
-  [`.github/README.md`](./README.md) for the full workflow walkthrough.
+  [`.github/ACTIONS.md`](./ACTIONS.md) for the full workflow walkthrough.
 - **Human** — required by branch protection (1 approval). Reviewers check
   against the rules below.
 
@@ -143,6 +143,6 @@ At triage, issues get an `effort:` label estimating size:
 ## Further reading
 
 - [`CLAUDE.md`](../CLAUDE.md) — project status, reading order, spec index
-- [`.github/README.md`](./README.md) — workflow walkthrough, cost characteristics, troubleshooting
+- [`.github/ACTIONS.md`](./ACTIONS.md) — workflow walkthrough, cost characteristics, troubleshooting
 - [`docs/specs/`](../docs/specs/) — architecture, data model, design system, implementation phases
 - [`docs/guides/`](../docs/guides/) — auth setup, AWS infrastructure, deployment runbooks

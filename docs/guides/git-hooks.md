@@ -10,9 +10,9 @@ The project uses two hook mechanisms at different points in its lifecycle:
 | Phase | Mechanism | Scope |
 |---|---|---|
 | Now (pre-Phase 1) | Shell script in `tools/bedrock-simulator/.hooks/` | Simulator only |
-| Phase 1+ | Husky (`core.hooksPath=.husky`) | Entire repo |
+| Phase 1+ | Husky (`core.hooksPath=.husky/_`) | Entire repo |
 
-When Phase 1 wires up Husky, it sets `core.hooksPath=.husky/`. This bypasses
+When Phase 1 wires up Husky, it sets `core.hooksPath=.husky/_`. This bypasses
 `.git/hooks/` entirely — the simulator's installed hook becomes inactive and
 should be removed with `pnpm hooks:uninstall`.
 
@@ -34,7 +34,7 @@ A push that only touches other paths exits immediately without running anything.
    `pnpm dedupe --check` (duplicate versions). Enforcement lives in CI — the
    `bedrock-simulator build` gate **fails** on any vulnerability, and
    `bedrock-simulator deps` is an on-demand full report (see
-   [`.github/README.md`](../../.github/README.md)). These three steps reach the
+   [`.github/ACTIONS.md`](../../.github/ACTIONS.md)). These three steps reach the
    network; offline they print a warning and the push still proceeds.
 4. Secret scan — gitleaks preferred; grep patterns as fallback.
 
@@ -74,7 +74,7 @@ for range in $RANGES; do
 done
 ```
 
-Phase 1's pre-commit hook will use `gitleaks protect --staged` (scans only
+The pre-commit hook runs `gitleaks protect --staged --no-banner` (scans only
 staged changes, not the full history) for faster feedback on each commit.
 
 ### Grep fallback
@@ -149,18 +149,15 @@ Enforces Conventional Commits on every commit message (Rule 31).
 pnpm exec commitlint --edit "$1"
 ```
 
-`commitlint.config.ts`:
+`commitlint.config.cjs`:
 
-```ts
-import type { UserConfig } from '@commitlint/types'
-
-const config: UserConfig = {
-  extends: ['@commitlint/config-conventional'],
-}
-export default config
+```js
+module.exports = {
+  extends: ["@commitlint/config-conventional"],
+};
 ```
 
-Allowed types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
+Project types (Rule 31): `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`. The hook itself enforces the conventional preset, which also accepts `build`, `revert` and `style`.
 
 #### `.husky/pre-push`
 

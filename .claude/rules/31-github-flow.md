@@ -141,10 +141,10 @@ On the optional PR path:
 `security-summary` block, so the PR-comment / `REQUEST_CHANGES` flow
 only fires on full events (opened, reopened, ready\_for\_review,
 force-push). The release-tag audit is the authoritative safety net for
-anything that slips through. See `.github/README.md` for details.
+anything that slips through. See `.github/ACTIONS.md` for details.
 
 ## Cross-references
 
 - [Rule 30](30-phase-discipline.md) — phase discipline; `feature/phase-<n>-<slug>` naming wins for phase work.
 - [Rule 50](50-security-and-secrets.md) — Rule 50.5: never `--no-verify`.
-- [`.github/README.md`](../../.github/README.md) — detailed walkthrough of the review workflows.
+- [`.github/ACTIONS.md`](../../.github/ACTIONS.md) — detailed walkthrough of the review workflows.

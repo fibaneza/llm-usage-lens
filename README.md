@@ -58,4 +58,4 @@ docker run -d -p 8000:8000 amazon/dynamodb-local:2.5.4 -jar DynamoDBLocal.jar -i
 | `pnpm test` | Both Vitest projects (needs DynamoDB Local running; tests create and clean up their own table) |
 | `pnpm test:e2e` | Headless Playwright E2E |
 
-The pre-push hook runs the unit project only; CI runs everything against a DynamoDB Local service.
+The pre-push hook runs `pnpm typecheck` and the unit Vitest project when dashboard paths change; CI's `test` job runs both Vitest projects against a DynamoDB Local service. Playwright E2E (`pnpm test:e2e`) runs locally only — no hook or CI job runs it.

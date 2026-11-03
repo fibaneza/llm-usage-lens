@@ -73,6 +73,8 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 |---|---|
 | `pnpm dev` | Next.js dev server (`apps/dashboard`) |
 | `pnpm build` | `next build` |
+| `pnpm build:ci` | `pnpm build` with non-secret placeholder auth/env values so env validation still runs (what the CI build job runs) |
+| `pnpm check` | Full local gate, stopping at the first failure: `typecheck`, `lint`, `format:check`, `vitest run` (both projects; DynamoDB Local on `:8000`), `build:ci` — the pre-merge gate in Rule 31 |
 | `pnpm format:check` | Prettier format check (`pnpm format` to write) |
 | `pnpm lint` | ESLint v9 flat config (`eslint.config.ts`) |
 | `pnpm typecheck` | `tsc --noEmit` across every workspace (`pnpm -r --if-present typecheck`) plus `tsc -p tsconfig.scripts.json` for `scripts/` |
@@ -86,7 +88,7 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 
 DynamoDB Local (Phase 3.2): `docker compose up -d dynamodb-local` (inside `.devcontainer`; from the host use `docker compose -f .devcontainer/docker-compose.yml up -d dynamodb-local`), then `pnpm db:create-table` and `pnpm db:seed` (variants `db:seed:empty` / `db:seed:large` / `db:seed:ranking`). The scripts default to `http://localhost:8000` and must never target real AWS. The `/seed` slash command wraps this flow. See the [README](README.md) for the macOS volume workaround.
 
-**Git hooks (Husky).** Pre-commit: gitleaks (or grep fallback) secret scan + `lint-staged` (ESLint fix + Prettier on staged files). Commit-msg: `commitlint` (Conventional Commits). Pre-push: when `apps/`/`packages/`/`scripts/` change, runs `pnpm typecheck` + `pnpm exec vitest run --project unit` (integration tests run in CI and via `pnpm test`); when `tools/bedrock-simulator/` changes, runs that workspace's typecheck + tests; then a gitleaks scan of the pushed range. Never bypass with `--no-verify` (Rule 50.5).
+**Git hooks (Husky).** Pre-commit: gitleaks (or grep fallback) secret scan + `lint-staged` (ESLint fix + Prettier on staged files). Commit-msg: `commitlint` (Conventional Commits). Pre-push: when `apps/`/`packages/`/`scripts/`/`tsconfig.scripts.json` change, runs `pnpm typecheck` + `pnpm exec vitest run --project unit --passWithNoTests` (integration tests run in CI and via `pnpm test`); when `tools/bedrock-simulator/` changes, runs that workspace's typecheck + tests; then a gitleaks scan of the pushed range (skipped with a notice if gitleaks is not installed). Never bypass with `--no-verify` (Rule 50.5).
 
 ## Slash commands
 
@@ -108,14 +110,15 @@ DynamoDB Local (Phase 3.2): `docker compose up -d dynamodb-local` (inside `.devc
 
 ## CI & PR automation
 
-GitHub-side automation lives in `.github/`; [`.github/README.md`](.github/README.md)
+GitHub-side automation lives in `.github/`; [`.github/ACTIONS.md`](.github/ACTIONS.md)
 is the source of truth — read it before touching any workflow.
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
+| `bedrock-dashboard-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (both Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`) |
 | `claude-pr-review.yml` | PR opened / synchronize / ready / reopened | Inline review + security findings; HIGH findings submit a `REQUEST_CHANGES` review |
 | `claude-code-review.yml` | release tag push / `workflow_dispatch` | Release audit scoped to commits since the previous tag; files issues |
-| `pr-title-lint.yml` | PR opened / edited / reopened | Conventional-Commits check on the PR title (the squash-merge commit on `main`) |
+| `github-pr-title-lint.yml` | PR opened / edited / reopened | Conventional-Commits check on the PR title (the squash-merge commit on `main`) |
 | `claude-assistant.yml` | `@claude` mention | On-demand reactive bot |
 
 Reusable logic is factored into composite actions (`.github/actions/`) and
@@ -128,7 +131,7 @@ Two non-obvious constraints:
 - **Branch protection is not enforced** on the current free private repo.
   Work lands as local squash-merges into `main` that the user pushes
   ([Rule 31](.claude/rules/31-github-flow.md)), so PR-only checks run only on
-  the optional PR path; CI runs on every push to `main`.
+  the optional PR path; CI (`bedrock-dashboard-build.yml`) runs on every push to `main` and on every pull request.
 
 ## Local development environment
 

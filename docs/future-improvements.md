@@ -182,7 +182,7 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
   [Rule 50.5](../.claude/rules/50-security-and-secrets.md)) in the meantime.
 - **Adopt when:** The repo moves to GitHub Pro/Team or becomes public.
 - **References:** branch-protection table in
-  [`.github/README.md`](../.github/README.md), [Rule 31](../.claude/rules/31-github-flow.md).
+  [`.github/ACTIONS.md`](../.github/ACTIONS.md), [Rule 31](../.claude/rules/31-github-flow.md).
 
 ### Self-hosted GitHub Actions runners on AWS (instance/task role instead of OIDC)
 
