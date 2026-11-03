@@ -347,14 +347,14 @@ Components are introduced in the sub-phase where they are first needed:
 | Sub-phase | New components introduced |
 |---|---|
 | 4.1 Overview | MetricCard, DeltaBadge, CostTrendChart, ModelBreakdownChart, Skeleton, Suspense boundaries |
-| 4.2 Ranking | UsageTable, RankingList, PercentOfTotalBar, SparklineCell, ModelFilter, SearchInput, ColumnToggle, Pagination, ExportButton, EmptyState |
+| 4.2 Ranking | UsageTable, RankingList, PercentOfTotalBar, SparklineCell, ModelFilter, SearchInput, ColumnToggle, Pagination, ExportButton, EmptyState, CostEstimateIndicator |
 | 4.3 Departments | (reuses MetricCard, EmptyState) |
 | 4.4 Department Detail | PeriodComparison (reuses UsageTable, CostTrendChart) |
 | 4.5 Teams | (reuses UsageTable, ModelFilter) |
 | 4.6 Team Detail | ModelBadge, AccountIdBadge, UserAvatar (reuses UsageTable) |
-| 4.7 Services | (reuses UsageTable) |
-| 4.8 Users | (reuses UsageTable, UserAvatar) |
-| 4.9 Settings | TagCoverageBar, CostEstimateIndicator (CRUD forms, new) |
+| 4.7 Services | (reuses UsageTable, CostEstimateIndicator) |
+| 4.8 Users | (reuses UsageTable, UserAvatar, CostEstimateIndicator) |
+| 4.9 Settings | TagCoverageBar (CRUD forms, new) |
 
 ---
 
@@ -408,6 +408,9 @@ Components are introduced in the sub-phase where they are first needed:
 - [ ] Implement tab switching via nuqs (URL-persisted)
 - [ ] Connect to Route Handlers: ranking data grouped by department/team/service/user
 - [ ] Table columns: Rank, Name, Cost, Input Tokens, Output Tokens, Invocations, % of Total, Trend
+- [ ] Build `CostEstimateIndicator` component (subtle badge on rows with `costEstimated: true` — the Users and Services tabs; Rule 20.3). Moved from Phase 4.9: Ranking is its first consumer (Rule 30.2; decided 2026-11-03)
+- [ ] Users and Services tabs show the "model usage only" note (Data Model spec — *Non-model cost is account-level only*) — open review blocker (2026-11-03)
+- [ ] The full table fits its container at 768–1439px with the sidebar open (Design System — *Responsive Tables*: no horizontal scroll at any viewport); today it scrolls inside its container at 768 and 1024 — open review blocker (2026-11-03)
 - [ ] Tests: component tests for UsageTable (sort, filter, paginate); EmptyState rendering
 - [ ] Verify: all 4 tabs load, sorting works, model filter updates results, CSV exports correctly
 
@@ -559,7 +562,7 @@ Components are introduced in the sub-phase where they are first needed:
   - Show: last run time, status (success/partial/error), accounts processed, duration, errors list
 - [ ] Build `TagCoverageBar` component (progress bar per team)
   - Calculate from byService data: tagged vs `_untagged` percentage
-- [ ] Build `CostEstimateIndicator` component (subtle badge for estimated costs)
+- [ ] Reuse `CostEstimateIndicator` (built in Phase 4.2) wherever Settings shows an estimated cost
 - [ ] Build data retention display (TTL info, read-only)
 - [ ] Tests: CRUD operations against DynamoDB Local; form validation; tag coverage calculation; a non-admin session sees no add/edit/deactivate controls and Server Actions reject it (e2e needs admin and non-admin forged sessions)
 - [ ] Verify: can add/edit/deactivate accounts as `Admin`; a non-admin sees the registry read-only and gets `403` from the write routes; sync status displays correctly, tag coverage renders

@@ -1,4 +1,9 @@
-import type { OverviewResponse, SyncStatusResult } from "@bedrock-usage/shared";
+import type {
+  OverviewResponse,
+  RankingRow,
+  RankingTab,
+  SyncStatusResult,
+} from "@bedrock-usage/shared";
 import { vi } from "vitest";
 
 // Test-only helpers: a stubbed same-origin `fetch` (Rule 60.24 — no real
@@ -33,13 +38,17 @@ export type ApiStub = {
     dateTo: string | null;
   }>;
   syncStatusCalls: () => number;
+  // Every `/api/ranking` request URL (query params included), in call order.
+  rankingRequests: () => URL[];
 };
 
 export function stubApi(handlers: {
   overview?: Handler;
   syncStatus?: Handler;
+  ranking?: Handler;
 }): ApiStub {
   const overviewUrls: URL[] = [];
+  const rankingUrls: URL[] = [];
   let syncCalls = 0;
   const fetchStub = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
@@ -55,6 +64,11 @@ export function stubApi(handlers: {
       }
       return handlers.syncStatus(url);
     }
+    if (url.pathname === "/api/ranking") {
+      rankingUrls.push(url);
+      if (!handlers.ranking) throw new Error("unexpected /api/ranking call");
+      return handlers.ranking(url);
+    }
     throw new Error(`unexpected fetch: ${url.pathname}`);
   });
   vi.stubGlobal("fetch", fetchStub);
@@ -65,6 +79,7 @@ export function stubApi(handlers: {
         dateTo: url.searchParams.get("dateTo"),
       })),
     syncStatusCalls: () => syncCalls,
+    rankingRequests: () => [...rankingUrls],
   };
 }
 
@@ -169,3 +184,20 @@ export function syncedFixture(
 }
 
 export const NEVER_SYNCED: SyncStatusResult = { state: "never-synced" };
+
+export function rankingRowFixture(
+  overrides: Partial<RankingRow> & Pick<RankingRow, "id" | "name">,
+): RankingRow {
+  return {
+    cost: 100,
+    costEstimated: false,
+    inputTokens: 1_000,
+    outputTokens: 500,
+    invocations: 10,
+    ...overrides,
+  };
+}
+
+export function rankingBody(tab: RankingTab, rows: RankingRow[]) {
+  return { data: { tab, rows } };
+}

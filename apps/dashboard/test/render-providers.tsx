@@ -1,6 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, type RenderResult } from "@testing-library/react";
-import { withNuqsTestingAdapter } from "nuqs/adapters/testing";
+import {
+  withNuqsTestingAdapter,
+  type OnUrlUpdateFunction,
+} from "nuqs/adapters/testing";
 import type { ReactElement, ReactNode } from "react";
 
 // Test-only: the providers every dashboard client component needs (TanStack
@@ -9,12 +12,23 @@ import type { ReactElement, ReactNode } from "react";
 // so a failing request surfaces immediately instead of after backoff.
 export function renderWithProviders(
   ui: ReactElement,
-  { searchParams = {} }: { searchParams?: Record<string, string> } = {},
+  {
+    searchParams = {},
+    onUrlUpdate,
+  }: {
+    searchParams?: Record<string, string>;
+    // Spy on URL writes (nuqs) to assert what a control persisted.
+    onUrlUpdate?: OnUrlUpdateFunction;
+  } = {},
 ): RenderResult {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  const Nuqs = withNuqsTestingAdapter({ searchParams, hasMemory: true });
+  const Nuqs = withNuqsTestingAdapter({
+    searchParams,
+    hasMemory: true,
+    onUrlUpdate,
+  });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>

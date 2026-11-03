@@ -366,14 +366,14 @@ independently deliverable — one Phase 4 sub-phase per PR.
 | Sub-phase | New components introduced |
 |---|---|
 | 4.1 Overview | `MetricCard`, `DeltaBadge`, `CostTrendChart`, `ModelBreakdownChart`, `Skeleton`, Suspense boundaries |
-| 4.2 Ranking | `UsageTable`, `RankingList`, `PercentOfTotalBar`, `SparklineCell`, `ModelFilter`, `SearchInput`, `ColumnToggle`, `Pagination`, `ExportButton`, `EmptyState` |
+| 4.2 Ranking | `UsageTable`, `RankingList`, `PercentOfTotalBar`, `SparklineCell`, `ModelFilter`, `SearchInput`, `ColumnToggle`, `Pagination`, `ExportButton`, `EmptyState`, `CostEstimateIndicator` |
 | 4.3 Departments | (reuses `MetricCard`, `EmptyState`) |
 | 4.4 Department Detail | `PeriodComparison` (reuses `UsageTable`, `CostTrendChart`) |
 | 4.5 Teams | (reuses `UsageTable`, `ModelFilter`) |
 | 4.6 Team Detail | `ModelBadge`, `AccountIdBadge`, `UserAvatar` (reuses `UsageTable`) |
-| 4.7 Services | (reuses `UsageTable`) |
-| 4.8 Users | (reuses `UsageTable`, `UserAvatar`) |
-| 4.9 Settings | `TagCoverageBar`, `CostEstimateIndicator` (CRUD forms, new) |
+| 4.7 Services | (reuses `UsageTable`, `CostEstimateIndicator`) |
+| 4.8 Users | (reuses `UsageTable`, `UserAvatar`, `CostEstimateIndicator`) |
+| 4.9 Settings | `TagCoverageBar` (CRUD forms, new) |
 
 ---
 
