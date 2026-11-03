@@ -67,3 +67,35 @@ describe("text token contrast (WCAG AA 4.5:1)", () => {
     ).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+// WCAG 1.4.11 (non-text contrast, 3:1): the DeltaBadge arrow carries the
+// success/destructive colour while its percentage text uses a text token, and
+// chart series must stay distinguishable from the white card. Design System --
+// Chart Colors. The team series palette `--color-team-1..8` backs
+// `CostTrendChart groupBy="team"`; it is separate from the per-model tokens so
+// a model's colour never means a team (Rule 40.2).
+describe("non-text token contrast (WCAG 1.4.11, 3:1)", () => {
+  const teamTokens = Array.from({ length: 8 }, (_, i) => `team-${i + 1}`);
+
+  it.each(["success", "destructive"])("%s arrow on card", (name) => {
+    expect(contrast(token(name), token("card"))).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(teamTokens)("%s series on card", (name) => {
+    expect(contrast(token(name), token("card"))).toBeGreaterThanOrEqual(3);
+  });
+
+  it("team series tokens are distinct from each other and from the model and non-model colours", () => {
+    const reserved = [
+      "model-opus",
+      "model-sonnet",
+      "model-haiku",
+      "model-other",
+      "foreground",
+    ].map((name) => token(name).toLowerCase());
+    const team = teamTokens.map((name) => token(name).toLowerCase());
+
+    expect(new Set(team).size).toBe(team.length);
+    for (const hex of team) expect(reserved).not.toContain(hex);
+  });
+});

@@ -9,6 +9,7 @@ import {
   MAX_RANGE_DAYS,
   parseDay,
   presetForRange,
+  previousRange,
   resolvePreset,
   toLocalDay,
 } from "./date-range";
@@ -174,6 +175,102 @@ describe("toLocalDay / fromLocalDay", () => {
     it("pads single-digit months and days", () => {
       process.env.TZ = tz;
       expect(fromLocalDay(new Date(2026, 0, 5))).toBe("2026-01-05");
+    });
+  });
+});
+
+// Phase 4.1 — DeltaBadge compares a range against the period immediately before
+// it: same inclusive length, ending the day before `dateFrom`. Arithmetic is in
+// UTC calendar days (Rule 20.1), so a host timezone can never shift a boundary.
+describe("previousRange", () => {
+  it("returns the 7 days immediately before a 7-day range", () => {
+    const current = resolvePreset("7d", NOW);
+    expect(current).toEqual({ dateFrom: "2026-06-04", dateTo: "2026-06-10" });
+
+    expect(previousRange(current)).toEqual({
+      dateFrom: "2026-05-28",
+      dateTo: "2026-06-03",
+    });
+  });
+
+  it("keeps the inclusive length for the 7, 30 and 90-day presets", () => {
+    for (const preset of ["7d", "30d", "90d"] as const) {
+      const current = resolvePreset(preset, NOW);
+      expect(inclusiveSpanDays(previousRange(current))).toBe(
+        inclusiveSpanDays(current),
+      );
+    }
+  });
+
+  it("ends the day before the current range starts, with no gap or overlap", () => {
+    for (const preset of ["7d", "30d", "90d"] as const) {
+      const current = resolvePreset(preset, NOW);
+      const previous = previousRange(current);
+      const dayAfterPreviousEnds = new Date(
+        Date.parse(`${previous.dateTo}T00:00:00Z`) + 24 * 60 * 60 * 1000,
+      )
+        .toISOString()
+        .slice(0, 10);
+      expect(dayAfterPreviousEnds).toBe(current.dateFrom);
+    }
+  });
+
+  it("resolves the 30-day and 90-day presets to the exact preceding window", () => {
+    expect(previousRange(resolvePreset("30d", NOW))).toEqual({
+      dateFrom: "2026-04-12",
+      dateTo: "2026-05-11",
+    });
+    expect(previousRange(resolvePreset("90d", NOW))).toEqual({
+      dateFrom: "2025-12-13",
+      dateTo: "2026-03-12",
+    });
+  });
+
+  it("maps a single-day range to the previous single day", () => {
+    expect(
+      previousRange({ dateFrom: "2026-06-10", dateTo: "2026-06-10" }),
+    ).toEqual({ dateFrom: "2026-06-09", dateTo: "2026-06-09" });
+  });
+
+  it("crosses month and year boundaries", () => {
+    expect(
+      previousRange({ dateFrom: "2026-01-01", dateTo: "2026-01-07" }),
+    ).toEqual({ dateFrom: "2025-12-25", dateTo: "2025-12-31" });
+  });
+
+  it("counts a leap day as a calendar day", () => {
+    expect(
+      previousRange({ dateFrom: "2024-03-01", dateTo: "2024-03-07" }),
+    ).toEqual({ dateFrom: "2024-02-23", dateTo: "2024-02-29" });
+  });
+
+  it("does not mutate its argument", () => {
+    const current = { dateFrom: "2026-06-04", dateTo: "2026-06-10" };
+    previousRange(current);
+    expect(current).toEqual({ dateFrom: "2026-06-04", dateTo: "2026-06-10" });
+  });
+
+  describe("is host-timezone independent", () => {
+    const originalTz = process.env.TZ;
+
+    afterEach(() => {
+      if (originalTz === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTz;
+    });
+
+    it.each([
+      "UTC",
+      "America/Los_Angeles",
+      "Pacific/Auckland",
+      "Pacific/Kiritimati",
+    ])("in %s across a DST change", (tz) => {
+      process.env.TZ = tz;
+      expect(
+        previousRange({ dateFrom: "2026-03-09", dateTo: "2026-03-15" }),
+      ).toEqual({ dateFrom: "2026-03-02", dateTo: "2026-03-08" });
+      expect(
+        previousRange({ dateFrom: "2026-11-02", dateTo: "2026-11-08" }),
+      ).toEqual({ dateFrom: "2026-10-26", dateTo: "2026-11-01" });
     });
   });
 });

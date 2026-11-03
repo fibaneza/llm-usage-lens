@@ -282,7 +282,7 @@ Attributes:
   durationMs       number
 ```
 
-`SyncCountdown` in the UI prefers `nextScheduledAt`. If the item is missing (never synced), show a neutral message instead of a countdown.
+`SyncCountdown` in the UI counts down to `nextScheduledAt`. If the item is missing (never synced), show a neutral message instead of a countdown.
 
 ### Access Pattern
 

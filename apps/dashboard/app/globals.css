@@ -73,6 +73,16 @@
   --color-model-other: #d97706;
   --color-cost-non-model: var(--color-foreground);
 
+  /* Per-team chart colors (design-system spec §Chart Colors (Per Team)). */
+  --color-team-1: #0e7490;
+  --color-team-2: #c2410c;
+  --color-team-3: #4d7c0f;
+  --color-team-4: #be185d;
+  --color-team-5: #0369a1;
+  --color-team-6: #a16207;
+  --color-team-7: #a21caf;
+  --color-team-8: #78716c;
+
   /* Typography (design-system spec §Typography); bound in app/layout.tsx. */
   --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;

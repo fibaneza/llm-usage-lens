@@ -152,6 +152,19 @@ export function inclusiveSpanDays(range: DateRange): number {
   return diffUtcDays(requireDay(range.dateFrom), requireDay(range.dateTo)) + 1;
 }
 
+// The period immediately before `range`: the same inclusive length, ending the
+// day before `dateFrom`. Used by the overview DeltaBadge comparison (Phase 4.1).
+export function previousRange(range: DateRange): DateRange {
+  const from = requireDay(range.dateFrom);
+  const length = inclusiveSpanDays(range);
+  const previousTo = addUtcDays(from, -1);
+
+  return {
+    dateFrom: formatDay(addUtcDays(previousTo, -(length - 1))),
+    dateTo: formatDay(previousTo),
+  };
+}
+
 // Clamp a custom range to the 90-day max span and normalize endpoint order.
 // If the span exceeds the cap, `dateFrom` is pulled forward toward `dateTo`.
 export function clampCustomRange(range: DateRange): DateRange {

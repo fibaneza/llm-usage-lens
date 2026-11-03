@@ -370,18 +370,18 @@ Components are introduced in the sub-phase where they are first needed:
 5. Sync status with last update time and countdown
 
 **Tasks:**
-- [ ] Build `MetricCard` component (shadcn Card + icon + value + trend)
-- [ ] Build `DeltaBadge` component ("+12.3%" green / "-5.1%" red)
-- [ ] Build `CostTrendChart` (Recharts stacked area, `next/dynamic` with `ssr: false`, `ResponsiveContainer`; prop `groupBy: 'model' | 'team'` for reuse on department detail; non-model cost as its own series/segment (never merged into `other`) using `--color-cost-non-model` (Data Model spec — *Dashboard impact (v1)*; requires Phase 3.1a))
-- [ ] Build `ModelBreakdownChart` (Recharts donut, `next/dynamic` with `ssr: false`, `ResponsiveContainer`; non-model cost as its own series/segment (never merged into `other`) using `--color-cost-non-model` (Data Model spec — *Dashboard impact (v1)*; requires Phase 3.1a))
-- [ ] Build top departments horizontal bar chart
-- [ ] Show the model vs. non-model cost split on Total Cost, a "recurring" indicator for recurring non-model categories, and the "Bedrock service charges only" scope note (Data Model spec — *Dashboard impact*). Requires Phase 3.1a
-- [ ] Connect `SyncStatusBadge` and `SyncCountdown` to real data (SyncStatus entity)
-- [ ] Build `Skeleton` loading states for all 5 sections
-- [ ] Wrap each section in `<Suspense>` with Skeleton fallback
-- [ ] Connect all components to TanStack Query hooks + DateRangePicker filter
-- [ ] Tests: component tests for MetricCard, DeltaBadge; integration test for overview data loading
-- [ ] Verify: page renders with seed data, skeletons show during load, date filter updates all sections
+- [x] Build `MetricCard` component (shadcn Card + icon + value + trend)
+- [x] Build `DeltaBadge` component ("+12.3%" green / "-5.1%" red)
+- [x] Build `CostTrendChart` (Recharts stacked area, `next/dynamic` with `ssr: false`, `ResponsiveContainer`; prop `groupBy: 'model' | 'team'` for reuse on department detail (team series use `--color-team-1…8` — Design System *Chart Colors (Per Team)*); non-model cost as its own series/segment (never merged into `other`) using `--color-cost-non-model` (Data Model spec — *Dashboard impact (v1)*; requires Phase 3.1a))
+- [x] Build `ModelBreakdownChart` (Recharts donut, `next/dynamic` with `ssr: false`, `ResponsiveContainer`; non-model cost as its own series/segment (never merged into `other`) using `--color-cost-non-model` (Data Model spec — *Dashboard impact (v1)*; requires Phase 3.1a))
+- [x] Build top departments horizontal bar chart
+- [x] Show the model vs. non-model cost split on Total Cost, a "recurring" indicator for recurring non-model categories, and the "Bedrock service charges only" scope note (Data Model spec — *Dashboard impact*). Requires Phase 3.1a
+- [x] Connect `SyncStatusBadge` and `SyncCountdown` to real data (SyncStatus entity)
+- [x] Build `Skeleton` loading states for all 5 sections
+- [x] Wrap each section in `<Suspense>` with Skeleton fallback
+- [x] Connect all components to TanStack Query hooks + DateRangePicker filter
+- [x] Tests: component tests for MetricCard, DeltaBadge; integration test for overview data loading
+- [x] Verify: page renders with seed data, skeletons show during load, date filter updates all sections
 
 ---
 

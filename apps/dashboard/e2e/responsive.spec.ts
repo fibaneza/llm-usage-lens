@@ -519,24 +519,99 @@ test.describe("top bar controls", () => {
   }
 
   // Sync status text labels appear from `lg` (1024px); icon-only at `md`.
+  // The header reads /api/sync-status since Phase 4.1 (implementation-phases —
+  // "Connect SyncStatusBadge and SyncCountdown to real data"), so the response
+  // is fulfilled from fixtures: the labels must not depend on whatever
+  // DynamoDB Local holds (Rule 60.24; same pattern as overview.spec.ts).
+  const SYNC_STATUS_URL = /\/api\/sync-status(\?|$)/;
+  const NEVER_SYNCED_BODY = { data: { state: "never-synced" } };
+
+  function syncedBody(minutesAhead = 42) {
+    // Half a minute of slack so the label reads the same whole-minute value
+    // regardless of how quickly the page loads.
+    const next = new Date(Date.now() + (minutesAhead * 60 + 30) * 1000);
+    return {
+      data: {
+        state: "synced",
+        status: {
+          lastRunAt: new Date(next.getTime() - 3_600_000).toISOString(),
+          nextScheduledAt: next.toISOString(),
+          status: "success",
+          accountsTotal: 5,
+          accountsSuccess: 5,
+          accountsFailed: 0,
+          errors: [],
+          durationMs: 12_000,
+        },
+      },
+    };
+  }
+
+  async function stubSyncStatus(
+    page: import("@playwright/test").Page,
+    body: unknown,
+  ) {
+    await page.route(SYNC_STATUS_URL, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        json: body,
+      }),
+    );
+  }
+
   for (const width of [1024, 1440]) {
-    test(`sync status shows its text labels at ${width}px`, async ({
+    test(`sync status shows its text labels at ${width}px when never synced`, async ({
       page,
     }) => {
+      await stubSyncStatus(page, NEVER_SYNCED_BODY);
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/dashboard");
+      await waitForHydration(page);
       const h = header(page);
       await expect(h.getByText("No sync yet")).toBeVisible();
       await expect(h.getByText("Next sync —")).toBeVisible();
+      await expect(
+        h.getByRole("timer", { name: "Next sync: pending" }),
+      ).toBeVisible();
+    });
+
+    test(`sync status shows its text labels at ${width}px when synced`, async ({
+      page,
+    }) => {
+      await stubSyncStatus(page, syncedBody());
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/dashboard");
+      await waitForHydration(page);
+      const h = header(page);
+      await expect(h.getByText("Success", { exact: true })).toBeVisible();
+      await expect(h.getByText(/^Next sync in \d+ min$/)).toBeVisible();
     });
   }
 
   test("sync status is icon-only at 768px", async ({ page }) => {
+    await stubSyncStatus(page, NEVER_SYNCED_BODY);
     await page.setViewportSize({ width: 768, height: 800 });
     await page.goto("/dashboard");
+    await waitForHydration(page);
     const h = header(page);
-    await expect(h.getByLabel(/^Sync status/)).toBeVisible();
+    // The never-synced view is on screen (its aria-label proves the stub
+    // landed), yet neither visible text label renders below `lg`.
+    await expect(h.getByLabel("Sync status: no sync yet")).toBeVisible();
     await expect(h.getByText("No sync yet")).toBeHidden();
     await expect(h.getByText("Next sync —")).toBeHidden();
+  });
+
+  test("synced sync status is icon-only at 768px", async ({ page }) => {
+    await stubSyncStatus(page, syncedBody());
+    await page.setViewportSize({ width: 768, height: 800 });
+    await page.goto("/dashboard");
+    await waitForHydration(page);
+    const h = header(page);
+    await expect(
+      h.getByLabel(/^Sync status: success, last run .*\d{2}:\d{2} UTC$/),
+    ).toBeVisible();
+    await expect(h.getByText("Success", { exact: true })).toBeHidden();
+    await expect(h.getByText(/^Next sync in \d+ min$/)).toBeHidden();
   });
 });

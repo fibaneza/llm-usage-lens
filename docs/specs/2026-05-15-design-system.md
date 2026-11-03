@@ -116,6 +116,8 @@ Each dashboard section loads independently. A slow chart does not block KPI card
 
 ### Patterns to Follow
 
+- **Section data (Phase 4.1, adopted 2026-11-03):** a section's component reads its TanStack Query through `lib/query/section-data.ts` and draws its own Skeleton while pending; a failed query throws to the section's `SectionBoundary` (Suspense + error boundary), which resets when the date range changes or after any successful Retry. `<Suspense>` remains the fallback for lazy chart chunks. Later pages follow the same pattern.
+
 | Problem | Pattern |
 |---|---|
 | **Rendering huge datasets** | TanStack Table with pagination (default 20 rows) + server-side `limit` param in Zod query schemas |
@@ -177,6 +179,23 @@ Each Bedrock model gets a consistent color across all charts:
 | Other models | Amber | `#D97706` |
 
 **Non-model cost.** Bedrock charges that are not model token usage (Data Model spec — *Non-Model Charges*) use one dedicated semantic token, `--color-cost-non-model`, never a model token and never the `other` amber. Its value is `--color-cost-non-model: var(--color-foreground)` (slate `#0F172A`), chosen in Phase 3.1a: about 17.9:1 against the white card, so it passes WCAG 1.4.11's 3:1 non-text contrast minimum for chart series, and its neutral hue stays distinct from the purple, blue, teal and amber model series. It introduces no new raw hex; components reference the token only (Rule 40.2). Phase 5 may swap in a lighter neutral alias only if that alias still passes 3:1 against the card.
+
+### Chart Colors (Per Team)
+
+`CostTrendChart groupBy="team"` (Department Detail — "Cost over time: stacked area by team") colours each team series from a dedicated categorical palette, `--color-team-1` … `--color-team-8`, assigned in first-seen order and cycling after eight (adopted 2026-11-03). Teams are an open set, so colour alone never identifies a team: the legend, tooltip and the chart's screen-reader data table carry the team name (UX Standards — *Accessible colors*).
+
+| Token | Hex |
+|-------|-----|
+| `--color-team-1` | `#0E7490` |
+| `--color-team-2` | `#C2410C` |
+| `--color-team-3` | `#4D7C0F` |
+| `--color-team-4` | `#BE185D` |
+| `--color-team-5` | `#0369A1` |
+| `--color-team-6` | `#A16207` |
+| `--color-team-7` | `#A21CAF` |
+| `--color-team-8` | `#78716C` |
+
+Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (lowest: `--color-team-8`, 4.80:1). No team token reuses the value of a model token, `--color-cost-non-model`, `--color-primary`, `--color-success` or `--color-destructive`. A team series never uses a model token and a model series never uses a team token (Rule 40.2). Values are defined once in `apps/dashboard/app/globals.css`; components reference the tokens only. `apps/dashboard/app/globals-contrast.test.ts` enforces contrast and distinctness.
 
 ## Typography
 
@@ -422,8 +441,8 @@ Conventions for interactive controls, established with the global
 
 | Component | Source | Purpose |
 |-----------|--------|---------|
-| `SyncStatusBadge` | Custom (shadcn Badge) | Last sync time + status indicator; ARIA `role="status"` (polite live region) |
-| `SyncCountdown` | Custom | "Next sync in 42 min" countdown in top bar; uses `SyncStatus.nextScheduledAt` when present, otherwise `lastRunAt + 1h`. ARIA `role="timer"` (implicit `aria-live="off"`), so ticks are not announced — never a `status` live region (decided 2026-10-29) |
+| `SyncStatusBadge` | Custom (shadcn Badge) | Top-bar sync indicator on `GET /api/sync-status` (live from Phase 4.1). Shows Success / Partial / Error from `SyncStatus.status` (the tone colours the icon only; text stays a text token for 4.5:1), "No sync yet" when the item is missing (Rule 20.9), and neutral "Loading" / "Unavailable" while the request is pending or has failed — never an alert. `aria-label` and `title` carry the status and the last run time in UTC. ARIA `role="status"` (polite live region) |
+| `SyncCountdown` | Custom | "Next sync in 42 min" countdown in top bar to `SyncStatus.nextScheduledAt` (required when the item exists — `SyncStatusSchema`, Rule 20.9); an overdue time reads "0 min", never negative; sync status refetches every 5 minutes (*Caching Strategy*). Neutral "Next sync: pending" while loading, when no sync has run, or when the request fails. ARIA `role="timer"` (implicit `aria-live="off"`), so ticks are not announced — never a `status` live region (decided 2026-10-29) |
 | `CostEstimateIndicator` | Custom (shadcn Badge) | Subtle badge when cost is estimated (not finalized) |
 | `TagCoverageBar` | Custom | Progress bar showing % of tagged usage per team |
 | `EmptyState` | Custom | Reusable empty state with icon, message, and optional CTA |
