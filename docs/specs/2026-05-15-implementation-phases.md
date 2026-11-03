@@ -394,25 +394,25 @@ Components are introduced in the sub-phase where they are first needed:
 2. Sortable data table with ranking
 
 **Tasks:**
-- [ ] Build `UsageTable` component (TanStack Table + shadcn Table)
+- [x] Build `UsageTable` component (TanStack Table + shadcn Table)
   - Sortable columns (click header to sort)
   - `Pagination` (default 20 rows)
   - `SearchInput` (debounced text filter)
   - `ColumnToggle` (show/hide columns via shadcn DropdownMenu)
-- [ ] Build `RankingList` variant with medal icons for top 3
-- [ ] Build `PercentOfTotalBar` component (inline proportion bar)
-- [ ] Build `SparklineCell` component (inline trend sparkline)
-- [ ] Build `ModelFilter` component (shadcn Select)
-- [ ] Build `ExportButton` component (CSV export)
-- [ ] Build `EmptyState` component (icon + message + optional CTA)
-- [ ] Implement tab switching via nuqs (URL-persisted)
-- [ ] Connect to Route Handlers: ranking data grouped by department/team/service/user
-- [ ] Table columns: Rank, Name, Cost, Input Tokens, Output Tokens, Invocations, % of Total, Trend
-- [ ] Build `CostEstimateIndicator` component (subtle badge on rows with `costEstimated: true` — the Users and Services tabs; Rule 20.3). Moved from Phase 4.9: Ranking is its first consumer (Rule 30.2; decided 2026-11-03)
-- [ ] Users and Services tabs show the "model usage only" note (Data Model spec — *Non-model cost is account-level only*) — open review blocker (2026-11-03)
-- [ ] The full table fits its container at 768–1439px with the sidebar open (Design System — *Responsive Tables*: no horizontal scroll at any viewport); today it scrolls inside its container at 768 and 1024 — open review blocker (2026-11-03)
-- [ ] Tests: component tests for UsageTable (sort, filter, paginate); EmptyState rendering
-- [ ] Verify: all 4 tabs load, sorting works, model filter updates results, CSV exports correctly
+- [x] Build `RankingList` variant with medal icons for top 3
+- [x] Build `PercentOfTotalBar` component (inline proportion bar)
+- [x] Build `SparklineCell` component (inline trend sparkline)
+- [x] Build `ModelFilter` component (shadcn Select)
+- [x] Build `ExportButton` component (CSV export)
+- [x] Build `EmptyState` component (icon + message + optional CTA)
+- [x] Implement tab switching via nuqs (URL-persisted)
+- [x] Connect to Route Handlers: ranking data grouped by department/team/service/user
+- [x] Table columns: Rank, Name, Cost, Input Tokens, Output Tokens, Invocations, % of Total, Trend
+- [x] Build `CostEstimateIndicator` component (subtle badge on rows with `costEstimated: true` — the Users and Services tabs; Rule 20.3). Moved from Phase 4.9: Ranking is its first consumer (Rule 30.2; decided 2026-11-03)
+- [x] Users and Services tabs show the "model usage only" note (Data Model spec — *Non-model cost is account-level only*) — review blocker (2026-11-03), closed 2026-11-04 by `ModelUsageNote`
+- [x] The full table fits its container at 768–1439px with the sidebar open (Design System — *Responsive Tables*: no horizontal scroll at any viewport) — review blocker (2026-11-03), closed 2026-11-04: smaller type and padding below `lg`, wrapping headers and names, abbreviated figures
+- [x] Tests: component tests for UsageTable (sort, filter, paginate); EmptyState rendering
+- [x] Verify: all 4 tabs load, sorting works, model filter updates results, CSV exports correctly
 
 ---
 

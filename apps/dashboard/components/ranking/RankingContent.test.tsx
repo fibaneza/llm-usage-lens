@@ -384,16 +384,23 @@ describe("RankingContent — table", () => {
     expect(rowFor(table, "Legal").firstElementChild).toHaveTextContent("4");
   });
 
-  it("formats cost as USD and counts with thousands separators", async () => {
+  // Design System -- Responsive Tables ("all columns", no horizontal scroll from
+  // md up) and UX Standards (abbreviated large numbers, "$12.5K"): the table may
+  // show either the full figure or a compact one, so both are accepted here. The
+  // CSV stays raw (see "CSV export") and the cards keep the full figures.
+  it("formats cost as USD and counts as full or abbreviated figures", async () => {
     stubApi({ ranking: rankingFor() });
     renderWithProviders(<RankingContent />, URL_PARAMS);
     const table = await loadedTable();
 
-    const engineering = rowFor(table, "Engineering");
-    expect(engineering).toHaveTextContent("$600.00");
-    expect(engineering).toHaveTextContent("1,000,000");
-    expect(engineering).toHaveTextContent("500,000");
-    expect(engineering).toHaveTextContent("1,200");
+    const cells = within(rowFor(table, "Engineering"))
+      .getAllByRole("cell")
+      .map((cell) => cell.textContent?.trim() ?? "");
+    const [, , cost, input, output, invocations] = cells;
+    expect(cost).toMatch(/^\$600(\.00)?$/);
+    expect(input).toMatch(/^(1,000,000|1(\.0)?\s?M)$/);
+    expect(output).toMatch(/^(500,000|500(\.0)?\s?K)$/);
+    expect(invocations).toMatch(/^(1,200|1\.2\s?K)$/);
   });
 
   it("computes % of Total as the row's cost over the sum of the returned rows", async () => {
@@ -685,6 +692,58 @@ describe("RankingContent — CSV export", () => {
       "Engineering",
     );
   });
+
+  // Display formatting may abbreviate large numbers; the export never does.
+  it("keeps large cost and token values as raw numbers, never abbreviated", async () => {
+    const blobs: Blob[] = [];
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: (blob: Blob) => {
+        blobs.push(blob);
+        return "blob:ranking-test";
+      },
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: () => {},
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    stubApi({
+      ranking: rankingFor({
+        departments: {
+          current: [
+            row({
+              id: "dept-big",
+              name: "Enterprise Platform Engineering",
+              cost: 123456.78,
+              inputTokens: 98765432,
+              outputTokens: 87654321,
+              invocations: 12345678,
+            }),
+          ],
+          previous: [],
+        },
+      }),
+    });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    await loadedTable();
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Export CSV" }));
+
+    const lines = (await blobs[0]?.text())
+      ?.split(/\r?\n/)
+      .filter((line) => line.length > 0);
+    const columns = (lines?.[0] ?? "").split(",");
+    const first = (lines?.[1] ?? "").split(",");
+    expect(first[columns.indexOf("Cost")]).toBe("123456.78");
+    expect(first[columns.indexOf("Input Tokens")]).toBe("98765432");
+    expect(first[columns.indexOf("Output Tokens")]).toBe("87654321");
+    expect(first[columns.indexOf("Invocations")]).toBe("12345678");
+  });
 });
 
 // The ranking table is the shared UsageTable, with the CSV export supplied
@@ -802,6 +861,174 @@ describe("RankingContent — mobile card layout (viewport below 768px)", () => {
   });
 });
 
+// Data Model spec -- Non-model cost is account-level only: `nonModel` has no
+// byUser / byService breakdown, so the user and service views exclude it and
+// "show a 'model usage only' note so the gap is not mistaken for missing data".
+// Department and team totals use rollup `cost`, which includes nonModel, so
+// those tabs carry no note.
+describe("RankingContent — 'model usage only' note", () => {
+  const NOTE = /model usage only/i;
+  const ATTRIBUTED_TABS = ["users", "services"] as const;
+  const ROLLUP_TABS = ["departments", "teams"] as const;
+
+  const POPULATED = {
+    users: {
+      current: [row({ id: "u1", name: "Alice Nguyen", cost: 10 })],
+      previous: [],
+    },
+    services: {
+      current: [row({ id: "s1", name: "chatbot", cost: 10 })],
+      previous: [],
+    },
+    teams: {
+      current: [row({ id: "t1", name: "Platform", cost: 10 })],
+      previous: [],
+    },
+  };
+
+  // The element that holds the explanation: the nearest ancestor of the note's
+  // headline that also names guardrail and provisioned charges, without having
+  // swallowed the tab strip or the table.
+  function explanation(): HTMLElement {
+    const [headline] = screen.getAllByText(NOTE);
+    let el: HTMLElement | null = headline ?? null;
+    while (
+      el &&
+      !(
+        /guardrail/i.test(el.textContent ?? "") &&
+        /provisioned/i.test(el.textContent ?? "")
+      )
+    ) {
+      el = el.parentElement;
+    }
+    if (!el) throw new Error("no element explains guardrail and provisioned");
+    return el;
+  }
+
+  it.each(ATTRIBUTED_TABS)(
+    "shows a visible 'model usage only' note above the %s table",
+    async (tab) => {
+      stubApi({ ranking: rankingFor({ [tab]: POPULATED[tab] }) });
+      renderWithProviders(<RankingContent />, {
+        searchParams: { ...RANGE, tab },
+      });
+      const table = await loadedTable();
+
+      const [note] = await screen.findAllByText(NOTE);
+      if (!note) throw new Error("no 'model usage only' note");
+      expect(note).toBeVisible();
+      expect(
+        note.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    },
+  );
+
+  it.each(ATTRIBUTED_TABS)(
+    "explains on the %s tab that guardrail and provisioned charges are not attributed to users or services",
+    async (tab) => {
+      stubApi({ ranking: rankingFor({ [tab]: POPULATED[tab] }) });
+      renderWithProviders(<RankingContent />, {
+        searchParams: { ...RANGE, tab },
+      });
+      await loadedTable();
+      await screen.findAllByText(NOTE);
+
+      const region = explanation();
+      expect(region).toBeVisible();
+      expect(region.textContent).toMatch(/guardrail/i);
+      expect(region.textContent).toMatch(/provisioned/i);
+      expect(region.textContent).toMatch(/users?/i);
+      expect(region.textContent).toMatch(/services?/i);
+      expect(within(region).queryByRole("tablist")).not.toBeInTheDocument();
+      expect(within(region).queryByRole("table")).not.toBeInTheDocument();
+    },
+  );
+
+  // Data Model spec -- Non-Model Charges: `nonModel` covers Guardrails,
+  // Provisioned Throughput, model storage, Custom Model Import, Knowledge Bases
+  // and more, so the note names the category rather than listing only two.
+  it.each(ATTRIBUTED_TABS)(
+    "names the broader 'non-model charges' category on the %s tab and still cites guardrail and provisioned",
+    async (tab) => {
+      stubApi({ ranking: rankingFor({ [tab]: POPULATED[tab] }) });
+      renderWithProviders(<RankingContent />, {
+        searchParams: { ...RANGE, tab },
+      });
+      await loadedTable();
+      await screen.findAllByText(NOTE);
+
+      const region = explanation();
+      expect(region.textContent).toMatch(/non-model charges/i);
+      expect(region.textContent).toMatch(/guardrail/i);
+      expect(region.textContent).toMatch(/provisioned/i);
+      expect(region.textContent).toMatch(/account-level/i);
+    },
+  );
+
+  it.each(ROLLUP_TABS)("shows no such note on the %s tab", async (tab) => {
+    stubApi({
+      ranking: rankingFor(tab === "teams" ? { teams: POPULATED.teams } : {}),
+    });
+    renderWithProviders(<RankingContent />, {
+      searchParams: { ...RANGE, tab },
+    });
+    await loadedTable();
+    await flushPromises();
+
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+
+  it.each(ATTRIBUTED_TABS)(
+    "keeps the note visible on the %s tab while the table is in its empty state",
+    async (tab) => {
+      stubApi({ ranking: rankingFor() });
+      renderWithProviders(<RankingContent />, {
+        searchParams: { ...RANGE, tab },
+      });
+
+      expect(
+        await screen.findByText("No usage in this period"),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      const notes = await screen.findAllByText(NOTE);
+      expect(notes[0]).toBeVisible();
+    },
+  );
+
+  it.each(ROLLUP_TABS)(
+    "shows no note on the %s tab in its empty state either",
+    async (tab) => {
+      stubApi({
+        ranking: rankingFor({ [tab]: { current: [], previous: [] } }),
+      });
+      renderWithProviders(<RankingContent />, {
+        searchParams: { ...RANGE, tab },
+      });
+
+      await screen.findByText("No usage in this period");
+      await flushPromises();
+
+      expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+    },
+  );
+
+  it("appears when switching to Users and goes away when switching back to Departments", async () => {
+    stubApi({ ranking: rankingFor({ users: POPULATED.users }) });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    await loadedTable();
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("tab", { name: "Users" }));
+    expect(await screen.findByText("Alice Nguyen")).toBeInTheDocument();
+    expect((await screen.findAllByText(NOTE))[0]).toBeVisible();
+
+    await user.click(screen.getByRole("tab", { name: "Departments" }));
+    expect(await screen.findByText("Engineering")).toBeInTheDocument();
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+});
+
 describe("RankingContent — loading, empty and error states", () => {
   it("shows a skeleton and no table while the ranking is loading", () => {
     stubApi({ ranking: NEVER });
@@ -843,5 +1070,118 @@ describe("RankingContent — loading, empty and error states", () => {
     const table = await loadedTable();
     expect(orderedNames(table)).toEqual(NAMES);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+// Design System -- UX Standards ("abbreviated large numbers, $12.5K") and
+// Responsive Tables: the desktop table abbreviates figures and keeps the full
+// value in `title`; the mobile cards sit outside the compact format and show
+// full figures and the full "Estimated" badge.
+describe("RankingContent -- figure format by layout", () => {
+  const LARGE: RankingRow[] = [
+    row({
+      id: "u-big",
+      name: "Bartholomew Wellington-Smythe",
+      cost: 123_456.78,
+      costEstimated: true,
+      inputTokens: 98_765_432,
+      outputTokens: 87_654_321,
+      invocations: 12_345_678,
+    }),
+    row({
+      id: "u-small",
+      name: "Small Spender",
+      cost: 999.5,
+      costEstimated: true,
+      inputTokens: 900,
+      outputTokens: 800,
+      invocations: 700,
+    }),
+  ];
+  const USERS = { users: { current: LARGE, previous: [] } };
+
+  function titled(root: HTMLElement, title: string): HTMLElement | null {
+    return root.querySelector<HTMLElement>(`[title="${title}"]`);
+  }
+
+  describe("desktop table", () => {
+    it("shows compact figures with the full value in the title for large values", async () => {
+      stubApi({ ranking: rankingFor(USERS) });
+      renderWithProviders(<RankingContent />, {
+        searchParams: { ...RANGE, tab: "users" },
+      });
+      const table = await loadedTable();
+      const big = rowFor(table, "Bartholomew");
+
+      const cost = titled(big, "$123,456.78");
+      expect(cost).toHaveTextContent("$123.5K");
+      const input = titled(big, "98,765,432");
+      expect(input).toHaveTextContent("98.8M");
+      expect(titled(big, "87,654,321")).toHaveTextContent("87.7M");
+      expect(titled(big, "12,345,678")).toHaveTextContent("12.3M");
+      expect(big.textContent).not.toContain("$123,456.78");
+    });
+
+    it("keeps cents and adds no title for a cost under $1,000", async () => {
+      stubApi({ ranking: rankingFor(USERS) });
+      renderWithProviders(<RankingContent />, {
+        searchParams: { ...RANGE, tab: "users" },
+      });
+      const small = rowFor(await loadedTable(), "Small Spender");
+
+      expect(small).toHaveTextContent("$999.50");
+      expect(titled(small, "$999.50")).toBeNull();
+    });
+
+    it("shortens the Estimated badge to a visible 'Est.' that keeps the full name", async () => {
+      stubApi({ ranking: rankingFor(USERS) });
+      renderWithProviders(<RankingContent />, {
+        searchParams: { ...RANGE, tab: "users" },
+      });
+      const big = rowFor(await loadedTable(), "Bartholomew");
+
+      expect(within(big).getByText("Est.")).toBeVisible();
+      expect(within(big).getByText("Estimated")).toBeInTheDocument();
+      expect(estimatedMarkers(big).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("mobile cards (viewport 375px)", () => {
+    const originalWidth = window.innerWidth;
+
+    beforeEach(() => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        writable: true,
+        value: 375,
+      });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        writable: true,
+        value: originalWidth,
+      });
+    });
+
+    it("shows full figures for values of $1,000 and over, and the full Estimated badge", async () => {
+      stubApi({ ranking: rankingFor(USERS) });
+      renderWithProviders(<RankingContent />, {
+        searchParams: { ...RANGE, tab: "users" },
+      });
+      const list = await screen.findByRole("list", { name: "Cost ranking" });
+      const card = within(list)
+        .getAllByRole("listitem")
+        .find((el) => el.textContent?.includes("Bartholomew"));
+      if (!card) throw new Error("no card for Bartholomew");
+
+      expect(card).toHaveTextContent("$123,456.78");
+      expect(card.textContent).not.toContain("$123.5K");
+      expect(card).toHaveTextContent("98,765,432");
+      expect(card.textContent).not.toContain("98.8M");
+      expect(within(card).getByText("Estimated")).toBeVisible();
+      expect(within(card).queryByText("Est.")).not.toBeInTheDocument();
+    });
   });
 });

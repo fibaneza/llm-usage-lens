@@ -1,17 +1,32 @@
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { formatUsd } from "@/components/charts/chart-data";
 import { CostEstimateIndicator } from "@/components/display/CostEstimateIndicator";
 import { DeltaBadge } from "@/components/display/DeltaBadge";
+import {
+  CountFigure,
+  UsdFigure,
+  useFigureFormat,
+} from "@/components/table/figures";
 import { PercentOfTotalBar } from "@/components/table/PercentOfTotalBar";
 import { RankCell } from "@/components/table/RankingList";
 import type { CsvColumn } from "@/lib/csv";
 
 import { changeVsPrevious, type RankingTableRow } from "./ranking-rows";
 
-const countFormatter = new Intl.NumberFormat("en-US");
-
 const NUMERIC = "font-mono tabular-nums";
+
+// The Estimated marker shortens to "Est." beside abbreviated figures, where
+// width is scarce.
+function CostCell({ row }: { row: RankingTableRow }) {
+  const compact = useFigureFormat() === "compact";
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+      <UsdFigure value={row.cost} className={NUMERIC} />
+      {row.costEstimated ? <CostEstimateIndicator compact={compact} /> : null}
+    </span>
+  );
+}
 
 // Design System -- Ranking Page: Rank, Name, Cost, Input Tokens, Output
 // Tokens, Invocations, % of Total, Trend. Headers stay plain strings so the
@@ -22,42 +37,42 @@ export const RANKING_COLUMNS: ColumnDef<RankingTableRow>[] = [
     header: "Rank",
     cell: ({ row }) => <RankCell rank={row.original.rank} />,
   },
-  { accessorKey: "name", header: "Name", enableHiding: false },
+  {
+    accessorKey: "name",
+    header: "Name",
+    enableHiding: false,
+    // Long names wrap rather than widen the table (Design System --
+    // Responsive Tables: no horizontal scroll).
+    cell: ({ row }) => (
+      <span className="[overflow-wrap:anywhere] whitespace-normal">
+        {row.original.name}
+      </span>
+    ),
+  },
   {
     accessorKey: "cost",
     header: "Cost",
-    cell: ({ row }) => (
-      <span className="inline-flex flex-wrap items-center gap-2">
-        <span className={NUMERIC}>{formatUsd(row.original.cost)}</span>
-        {row.original.costEstimated ? <CostEstimateIndicator /> : null}
-      </span>
-    ),
+    cell: ({ row }) => <CostCell row={row.original} />,
   },
   {
     accessorKey: "inputTokens",
     header: "Input Tokens",
     cell: ({ row }) => (
-      <span className={NUMERIC}>
-        {countFormatter.format(row.original.inputTokens)}
-      </span>
+      <CountFigure value={row.original.inputTokens} className={NUMERIC} />
     ),
   },
   {
     accessorKey: "outputTokens",
     header: "Output Tokens",
     cell: ({ row }) => (
-      <span className={NUMERIC}>
-        {countFormatter.format(row.original.outputTokens)}
-      </span>
+      <CountFigure value={row.original.outputTokens} className={NUMERIC} />
     ),
   },
   {
     accessorKey: "invocations",
     header: "Invocations",
     cell: ({ row }) => (
-      <span className={NUMERIC}>
-        {countFormatter.format(row.original.invocations)}
-      </span>
+      <CountFigure value={row.original.invocations} className={NUMERIC} />
     ),
   },
   {

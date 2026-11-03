@@ -9,6 +9,7 @@ import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 import { rankingSearchParams } from "@/lib/ranking-search-params";
 
+import { ModelUsageNote } from "./ModelUsageNote";
 import { RankingBody } from "./RankingBody";
 import { RankingTabs } from "./RankingTabs";
 
@@ -16,7 +17,10 @@ import { RankingTabs } from "./RankingTabs";
 // Phase 4.2): tabs and the model filter live in the URL (nuqs) beside the
 // global date range, and the leaderboard sits in its own boundary so a failed
 // request keeps the tabs usable (Rule 40.4, 60.12). A failed ranking clears
-// when the tab, model or range changes.
+// when the tab, model or range changes. The user and service views exclude
+// non-model charges and say so (Data Model spec -- Non-model cost is
+// account-level only); the note sits outside the boundary so it also shows
+// while the table is loading, empty or failed.
 export function RankingContent() {
   const [{ dateFrom, dateTo }] = useQueryStates(dateRangeSearchParams);
   const [{ tab, model }, setParams] = useQueryStates(rankingSearchParams);
@@ -37,6 +41,7 @@ export function RankingContent() {
           }
         />
       </div>
+      {tab === "users" || tab === "services" ? <ModelUsageNote /> : null}
       <SectionBoundary
         title="the ranking"
         resetKeys={[range.dateFrom, range.dateTo, tab, model]}

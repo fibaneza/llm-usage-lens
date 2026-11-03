@@ -16,7 +16,7 @@ export function PercentOfTotalBar({ value }: PercentOfTotalBarProps) {
   const label = `${percent.toFixed(1)}%`;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <div
         role="meter"
         aria-label="Percent of total"
@@ -24,7 +24,7 @@ export function PercentOfTotalBar({ value }: PercentOfTotalBarProps) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuetext={label}
-        className="bg-muted h-2 w-16 shrink-0 overflow-hidden rounded-full"
+        className="bg-muted h-2 w-10 shrink-0 overflow-hidden rounded-full"
       >
         <div
           className="bg-primary h-full rounded-full"

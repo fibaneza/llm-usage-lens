@@ -15,6 +15,7 @@ import {
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 
 import { EmptyState } from "@/components/display/EmptyState";
+import { FigureFormatProvider } from "@/components/table/figures";
 import { CardSortControl } from "@/components/table/CardSortControl";
 import { columnLabel } from "@/components/table/column-label";
 import { ColumnToggle } from "@/components/table/ColumnToggle";
@@ -70,7 +71,10 @@ function SortIcon({ sorted }: { sorted: SortState }) {
 // `toolbarActions` renders beside ColumnToggle with the filtered and sorted rows
 // (all pages) and visible column ids, e.g. for an export. Below md (768px) the
 // rows collapse into cards driven by the same table state (Design System --
-// Responsive Tables).
+// Responsive Tables). From md up the full table shows every column and fits its
+// container: smaller type and tight cell padding below lg, wrapping headers and
+// abbreviated figures
+// (`FigureFormatProvider`); the cards keep the full figures.
 export function UsageTable<T>({
   data,
   columns,
@@ -158,58 +162,64 @@ export function UsageTable<T>({
           <UsageCardList table={table} caption={caption} />
         ) : null
       ) : (
-        <Table>
-          <TableCaption className="sr-only">{caption}</TableCaption>
-          <TableHeader>
-            {table.getHeaderGroups().map((group) => (
-              <TableRow key={group.id}>
-                {group.headers.map((header) => {
-                  const content = header.isPlaceholder
-                    ? null
-                    : flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      );
-                  const sortable = header.column.getCanSort();
-                  return (
-                    <TableHead
-                      key={header.id}
-                      aria-sort={
-                        sortable
-                          ? ariaSort(header.column.getIsSorted())
-                          : undefined
-                      }
-                    >
-                      {sortable ? (
-                        <button
-                          type="button"
-                          onClick={header.column.getToggleSortingHandler()}
-                          className="focus-visible:ring-ring/50 -mx-1 inline-flex items-center gap-1 rounded px-1 outline-none focus-visible:ring-[3px]"
-                        >
-                          {content}
-                          <SortIcon sorted={header.column.getIsSorted()} />
-                        </button>
-                      ) : (
-                        content
+        <FigureFormatProvider value="compact">
+          <Table className="text-xs lg:text-sm">
+            <TableCaption className="sr-only">{caption}</TableCaption>
+            <TableHeader>
+              {table.getHeaderGroups().map((group) => (
+                <TableRow key={group.id}>
+                  {group.headers.map((header) => {
+                    const content = header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        );
+                    const sortable = header.column.getCanSort();
+                    return (
+                      <TableHead
+                        key={header.id}
+                        className="h-auto px-1 py-2 whitespace-normal lg:px-2"
+                        aria-sort={
+                          sortable
+                            ? ariaSort(header.column.getIsSorted())
+                            : undefined
+                        }
+                      >
+                        {sortable ? (
+                          <button
+                            type="button"
+                            onClick={header.column.getToggleSortingHandler()}
+                            className="focus-visible:ring-ring/50 -mx-1 inline-flex flex-wrap items-center gap-x-1 rounded px-1 text-left outline-none focus-visible:ring-[3px]"
+                          >
+                            {content}
+                            <SortIcon sorted={header.column.getIsSorted()} />
+                          </button>
+                        ) : (
+                          content
+                        )}
+                      </TableHead>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.id}>
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id} className="px-1 py-2 lg:px-2">
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
                       )}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </FigureFormatProvider>
       )}
 
       {rows.length === 0 ? (

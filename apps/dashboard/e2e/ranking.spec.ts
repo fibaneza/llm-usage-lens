@@ -308,6 +308,34 @@ test.describe("ranking page", () => {
     ).toBeAttached();
   });
 
+  // Data Model - Non-model cost is account-level only: the user and service views
+  // exclude Guardrail / Provisioned Throughput charges and say so.
+  test("the Users and Services tabs carry the 'model usage only' note, Departments does not", async ({
+    page,
+  }) => {
+    await mockApi(page);
+    await openRanking(page, "&tab=users");
+
+    const note = main(page)
+      .getByText(/model usage only/i)
+      .first();
+    await expect(note).toBeVisible();
+    await expect(main(page)).toContainText(/guardrail/i);
+    await expect(main(page)).toContainText(/provisioned/i);
+
+    await page.getByRole("tab", { name: "Services" }).click();
+    await expect(page.getByRole("tab", { name: "Services" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect.poll(() => visibleNames(page)).toContain("chatbot");
+    await expect(note).toBeVisible();
+
+    await page.getByRole("tab", { name: "Departments" }).click();
+    await expect.poll(() => visibleNames(page)).toContain("Engineering");
+    await expect(main(page).getByText(/model usage only/i)).toHaveCount(0);
+  });
+
   test("shows the change vs the previous period, with '—' for rows that have none", async ({
     page,
   }) => {
@@ -561,10 +589,7 @@ const MD_BREAKPOINT = 768;
 async function overflowingElements(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const limit = document.documentElement.clientWidth;
-    // The tab strip scrolls inside its own wrapper by design (RankingTabs); the
-    // table/cards content below it must not.
     return [...document.querySelectorAll("main *")]
-      .filter((el) => !el.closest('[role="tablist"]'))
       .filter((el) => el.getBoundingClientRect().right > limit + 1)
       .map((el) => {
         const classes =
@@ -654,6 +679,66 @@ test.describe("ranking page - responsive", () => {
     expect(await overflowingElements(page)).toEqual([]);
   });
 
+  // Design System - Anti-Patterns ("Horizontal scroll on any viewport") and Rule
+  // 40.6: the four-tab strip fits the 375px content column outright rather than
+  // scrolling inside a wrapper. Every tablist and every scroll container above
+  // it must hold its content, and every tab must sit fully inside the viewport
+  // and inside each clipping ancestor.
+  test("at 375px the tab strip fits without scrolling and all four tabs are fully visible", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await mockApi(page);
+    await openRanking(page, "", "cards");
+
+    const tabs = page.getByRole("tab");
+    await expect(tabs).toHaveCount(4);
+    for (const name of ["Departments", "Teams", "Services", "Users"]) {
+      await expect(page.getByRole("tab", { name })).toBeVisible();
+    }
+
+    const report = await page.evaluate(() => {
+      const viewport = document.documentElement.clientWidth;
+      const describe = (el: Element) =>
+        `${el.tagName.toLowerCase()}[${
+          typeof el.className === "string" ? el.className.slice(0, 50) : ""
+        }]`;
+      const scrollers: string[] = [];
+      const clipped: string[] = [];
+      for (const tablist of document.querySelectorAll('[role="tablist"]')) {
+        const containers: Element[] = [tablist];
+        for (let el = tablist.parentElement; el; el = el.parentElement) {
+          if (getComputedStyle(el).overflowX !== "visible") containers.push(el);
+        }
+        for (const el of containers) {
+          if (el.scrollWidth > el.clientWidth + 1) {
+            scrollers.push(
+              `${describe(el)} scrollWidth=${el.scrollWidth} clientWidth=${el.clientWidth}`,
+            );
+          }
+        }
+        for (const tab of tablist.querySelectorAll('[role="tab"]')) {
+          const box = tab.getBoundingClientRect();
+          const label = tab.textContent ?? "";
+          if (box.left < -1 || box.right > viewport + 1) {
+            clipped.push(
+              `${label} outside the viewport (${box.left}-${box.right})`,
+            );
+          }
+          for (const el of containers) {
+            const bounds = el.getBoundingClientRect();
+            if (box.left < bounds.left - 1 || box.right > bounds.right + 1) {
+              clipped.push(`${label} clipped by ${describe(el)}`);
+            }
+          }
+        }
+      }
+      return { scrollers, clipped };
+    });
+    expect(report.scrollers, "the tab strip scrolls horizontally").toEqual([]);
+    expect(report.clipped, "a tab is cut off").toEqual([]);
+  });
+
   test("at 375px search, sort, columns and export stay available on the cards", async ({
     page,
   }) => {
@@ -699,4 +784,134 @@ test.describe("ranking page - responsive", () => {
     expect(lines.join("\n")).toContain("Marketing");
     expect(lines.join("\n")).not.toContain("Legal");
   });
+});
+
+// Design System - Responsive Tables: "≥ md: Full table - all columns" and "No
+// horizontal scroll at any viewport". With the sidebar open the content column
+// is far narrower than the viewport (about 490px at 768px, 746px at 1024px), so
+// the table must fit that column rather than scroll inside it. The fixture uses
+// long names and large figures, and the Users tab adds the Estimated badge to
+// Cost -- the widest realistic content.
+const COLUMN_HEADERS = [
+  "Rank",
+  "Name",
+  "Cost",
+  "Input Tokens",
+  "Output Tokens",
+  "Invocations",
+  "% of Total",
+  "Trend",
+] as const;
+
+function wideRow(
+  id: string,
+  name: string,
+  cost: number,
+  costEstimated: boolean,
+): Row {
+  return {
+    id,
+    name,
+    cost,
+    costEstimated,
+    inputTokens: 98_765_432,
+    outputTokens: 87_654_321,
+    invocations: 12_345_678,
+  };
+}
+
+const WIDE: Record<"departments" | "users", Row[]> = {
+  departments: [
+    wideRow("dept-a", "Enterprise Platform Engineering", 123_456.78, false),
+    wideRow("dept-b", "Corporate Data Science and Analytics", 98_765.43, false),
+    wideRow("dept-c", "Customer Support Operations", 12_345.67, false),
+  ],
+  users: [
+    wideRow("u-a", "Bartholomew Wellington-Smythe", 123_456.78, true),
+    wideRow("u-b", "Alexandria Montgomery-Hargreaves", 98_765.43, true),
+    wideRow("u-c", "Christopher Nowak-Kowalski", 12_345.67, true),
+  ],
+};
+
+// The previous period carries lower costs, so every row renders a real Trend
+// badge instead of "—".
+const WIDE_PREVIOUS: Record<"departments" | "users", Row[]> = {
+  departments: WIDE.departments.map((r) => ({ ...r, cost: r.cost / 2 })),
+  users: WIDE.users.map((r) => ({ ...r, cost: r.cost / 2 })),
+};
+
+async function mockWideApi(page: Page): Promise<void> {
+  await page.route(SYNC_STATUS_URL, (route) =>
+    route.fulfill({ json: { data: { state: "never-synced" } } }),
+  );
+  await page.route(RANKING_URL, async (route) => {
+    const url = new URL(route.request().url());
+    const tab = (url.searchParams.get("tab") ?? "departments") as
+      | "departments"
+      | "users";
+    const isPrevious = url.searchParams.get("dateFrom") === PREVIOUS.dateFrom;
+    await route.fulfill({
+      json: {
+        data: { tab, rows: isPrevious ? WIDE_PREVIOUS[tab] : WIDE[tab] },
+      },
+    });
+  });
+}
+
+const FIT_VIEWPORTS = [
+  { width: 768, height: 1024 },
+  { width: 1024, height: 768 },
+  { width: 1440, height: 900 },
+] as const;
+
+test.describe("ranking page - the full table fits its container from md up", () => {
+  test.beforeEach(async ({ context }) => {
+    await signInAsTestUser(context);
+  });
+
+  for (const viewport of FIT_VIEWPORTS) {
+    for (const tab of ["departments", "users"] as const) {
+      test(`${tab} table with long names and large figures fits without scrolling at ${viewport.width}px`, async ({
+        page,
+      }) => {
+        await page.setViewportSize(viewport);
+        await mockWideApi(page);
+
+        await openRanking(page, `&tab=${tab}`);
+        await expect(table(page).locator("tbody tr")).toHaveCount(
+          WIDE[tab].length,
+        );
+
+        const fit = await main(page)
+          .locator('[data-slot="table-container"]')
+          .evaluate((el) => ({
+            scrollWidth: el.scrollWidth,
+            clientWidth: el.clientWidth,
+          }));
+        expect(
+          fit.scrollWidth,
+          `${tab} table scrolls inside its container at ${viewport.width}px ` +
+            `(table ${fit.scrollWidth}px in a ${fit.clientWidth}px container)`,
+        ).toBeLessThanOrEqual(fit.clientWidth + 1);
+
+        const pageOverflow = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+        }));
+        expect(pageOverflow.scrollWidth).toBeLessThanOrEqual(
+          pageOverflow.clientWidth,
+        );
+
+        // "all columns": nothing is dropped to make the table fit.
+        await expect(table(page).getByRole("columnheader")).toHaveCount(
+          COLUMN_HEADERS.length,
+        );
+        for (const name of COLUMN_HEADERS) {
+          await expect(
+            table(page).getByRole("columnheader", { name }),
+          ).toBeVisible();
+        }
+      });
+    }
+  }
 });

@@ -1,5 +1,6 @@
 import {
   DepartmentsResponseSchema,
+  RankingResponseSchema,
   TeamsResponseSchema,
 } from "@bedrock-usage/shared";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +15,7 @@ import {
 } from "@/test/test-support";
 
 import { GET as getDepartments } from "./departments/route";
+import { GET as getRanking } from "./ranking/route";
 import { GET as getTeams } from "./teams/route";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Historical Snapshots for
@@ -100,4 +102,28 @@ describe("list routes show the latest name in range", () => {
     expect(rows[0]?.departmentId).toBe("dept-new");
     expect(rows[0]?.departmentName).toBe("New Dept");
   });
+
+  it.each([
+    { tab: "departments", id: "dept-x", expected: "New Dept" },
+    { tab: "teams", id: "team-x", expected: "New Team" },
+  ])(
+    "GET /api/ranking?tab=$tab row shows the latest name ($expected)",
+    async ({ tab, id, expected }) => {
+      await loadFixtures({
+        accounts: [makeAccount(1)],
+        rollups: [
+          day("2026-10-01", "dept-x", "Old Dept", "Old Team"),
+          day("2026-10-02", "dept-x", "New Dept", "New Team"),
+        ],
+      });
+      const res = await call(getRanking, `/api/ranking?tab=${tab}&${RANGE}`);
+      expect(res.status).toBe(200);
+      const { data } = await res.json();
+      const rows = RankingResponseSchema.parse(data).rows.filter(
+        (r) => r.id === id,
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.name).toBe(expected);
+    },
+  );
 });

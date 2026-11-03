@@ -23,7 +23,9 @@ type RankingTabsProps = {
 
 // Tabs with automatic activation (WAI-ARIA tabs pattern): arrow keys move focus
 // and selection together, only the selected tab is in the tab order. All tabs
-// control the single panel, whose content swaps with the selection.
+// control the single panel, whose content swaps with the selection. Below md the
+// strip spans the column with tighter padding so all four tabs fit 375px without
+// scrolling (Design System -- Anti-Patterns, Rule 40.6).
 export function RankingTabs({ value, onChange, children }: RankingTabsProps) {
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const index = RANKING_TABS.indexOf(value);
@@ -46,37 +48,35 @@ export function RankingTabs({ value, onChange, children }: RankingTabsProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="max-w-full overflow-x-auto">
-        <div
-          role="tablist"
-          aria-label="Ranking by"
-          onKeyDown={onKeyDown}
-          className="border-border flex w-fit border-b"
-        >
-          {RANKING_TABS.map((tab) => {
-            const selected = tab === value;
-            return (
-              <button
-                key={tab}
-                id={tabId(tab)}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                aria-controls={PANEL_ID}
-                tabIndex={selected ? 0 : -1}
-                onClick={() => onChange(tab)}
-                className={cn(
-                  "focus-visible:ring-ring/50 -mb-px border-b-2 px-4 py-2 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-[3px]",
-                  selected
-                    ? "border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground border-transparent",
-                )}
-              >
-                {TAB_LABELS[tab]}
-              </button>
-            );
-          })}
-        </div>
+      <div
+        role="tablist"
+        aria-label="Ranking by"
+        onKeyDown={onKeyDown}
+        className="border-border flex w-full border-b md:w-fit"
+      >
+        {RANKING_TABS.map((tab) => {
+          const selected = tab === value;
+          return (
+            <button
+              key={tab}
+              id={tabId(tab)}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              aria-controls={PANEL_ID}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => onChange(tab)}
+              className={cn(
+                "focus-visible:ring-ring/50 -mb-px flex-auto border-b-2 px-2 py-2 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-[3px] md:flex-none md:px-4",
+                selected
+                  ? "border-primary text-foreground"
+                  : "text-muted-foreground hover:text-foreground border-transparent",
+              )}
+            >
+              {TAB_LABELS[tab]}
+            </button>
+          );
+        })}
       </div>
       <div
         id={PANEL_ID}

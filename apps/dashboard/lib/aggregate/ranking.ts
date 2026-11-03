@@ -62,9 +62,12 @@ function candidates(
       tab === "departments" ? r.departmentName : r.teamName;
     return [...groupBy(rollups, idOf).entries()]
       .filter(([, list]) => !model || list.some((r) => r.models[model]))
-      .map(([id, list]) =>
-        entityRow(id, list[0] ? nameOf(list[0]) : id, list, model),
-      );
+      .map(([id, list]) => {
+        // Rollups load in ascending day order; the latest carries the current
+        // name (Data Model -- Historical Snapshots for Department/Team Names).
+        const latest = list[list.length - 1];
+        return entityRow(id, latest ? nameOf(latest) : id, list, model);
+      });
   }
   const field = tab === "users" ? "byUser" : "byService";
   return [...mergeAttribution(rollups, field, model).entries()].map(
