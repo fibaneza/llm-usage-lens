@@ -330,7 +330,7 @@ None — data infrastructure only.
   - `POST /api/accounts`, `PATCH`/`DELETE /api/accounts/[id]`: `403 FORBIDDEN` after the session check, before input parsing and any DynamoDB call; `GET` routes unchanged
   - Verify: a session without `Admin` gets `403 { error: { code: "FORBIDDEN" } }` from each write route with no DynamoDB write; an `Admin` session succeeds; reads unaffected; the dev login carries `Admin`; a token whose sign-in time is more than 8 hours old is rejected even while the user stays active
   - Hardening (follow-up, 2026-10-29): a future sign-in time (> 60 s skew) is rejected; a session `update` cannot change roles or the sign-in time; a structural test enumerates every write Route Handler except Auth.js's own `/api/auth/[...nextauth]` handler and requires a `403` for non-admins; the Entra issuer must be tenant-specific (checked by `env.ts` and again at runtime); Verify: the structural test and the issuer, skew and update tests pass
-- [ ] Verify: Route Handlers return validated data, a TanStack Query hook fetches it, `next build` succeeds — unblocks Phase 4.
+- [x] Verify: Route Handlers return validated data, a TanStack Query hook fetches it, `next build` succeeds — unblocks Phase 4.
 
 **Components Built:** None — data infrastructure only.
 
