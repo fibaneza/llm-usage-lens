@@ -424,14 +424,14 @@ Components are introduced in the sub-phase where they are first needed:
 1. Department cards grid
 
 **Tasks:**
-- [ ] Build department cards grid layout (responsive: 1 col mobile, 2 tablet, 3 desktop)
-- [ ] Each card: department name, total cost (with DeltaBadge), total tokens, team count, top model
-- [ ] Reuse `MetricCard` pattern for department cards
-- [ ] Link each card to department detail page
-- [ ] `EmptyState` for no departments
-- [ ] Connect to Route Handler: all accounts grouped by department
-- [ ] Tests: grid renders correct number of cards; empty state when no departments
-- [ ] Verify: cards render with seed data, links navigate to detail pages
+- [x] Build department cards grid layout (responsive: 1 col mobile, 2 tablet, 3 desktop)
+- [x] Each card: department name, total cost (with DeltaBadge), total tokens, team count, top model (`teamCount` and `topModel` on the `/api/departments` row — Data Model spec, *Zod Validation Schemas*; decided 2026-11-04)
+- [x] Reuse `MetricCard` pattern for department cards
+- [x] Link each card to department detail page
+- [x] `EmptyState` for no departments
+- [x] Connect to Route Handler: all accounts grouped by department
+- [x] Tests: grid renders correct number of cards; empty state when no departments
+- [x] Verify: cards render with seed data, links navigate to detail pages
 
 ---
 

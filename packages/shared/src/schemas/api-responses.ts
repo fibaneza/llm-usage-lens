@@ -87,6 +87,8 @@ const DepartmentRowSchema = z.object({
   departmentId: RollupPieces.shape.departmentId,
   departmentName: RollupPieces.shape.departmentName,
   ...TotalsShape,
+  teamCount: z.number().int().nonnegative(),
+  topModel: ModelKeySchema.nullable(),
 });
 
 const TeamRowSchema = z.object({

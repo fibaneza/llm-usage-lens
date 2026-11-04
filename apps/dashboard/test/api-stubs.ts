@@ -1,4 +1,5 @@
 import type {
+  DepartmentRow,
   OverviewResponse,
   RankingRow,
   RankingTab,
@@ -40,15 +41,19 @@ export type ApiStub = {
   syncStatusCalls: () => number;
   // Every `/api/ranking` request URL (query params included), in call order.
   rankingRequests: () => URL[];
+  // Every `/api/departments` request URL (query params included), in call order.
+  departmentsRequests: () => URL[];
 };
 
 export function stubApi(handlers: {
   overview?: Handler;
   syncStatus?: Handler;
   ranking?: Handler;
+  departments?: Handler;
 }): ApiStub {
   const overviewUrls: URL[] = [];
   const rankingUrls: URL[] = [];
+  const departmentsUrls: URL[] = [];
   let syncCalls = 0;
   const fetchStub = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
@@ -69,6 +74,13 @@ export function stubApi(handlers: {
       if (!handlers.ranking) throw new Error("unexpected /api/ranking call");
       return handlers.ranking(url);
     }
+    if (url.pathname === "/api/departments") {
+      departmentsUrls.push(url);
+      if (!handlers.departments) {
+        throw new Error("unexpected /api/departments call");
+      }
+      return handlers.departments(url);
+    }
     throw new Error(`unexpected fetch: ${url.pathname}`);
   });
   vi.stubGlobal("fetch", fetchStub);
@@ -80,6 +92,7 @@ export function stubApi(handlers: {
       })),
     syncStatusCalls: () => syncCalls,
     rankingRequests: () => [...rankingUrls],
+    departmentsRequests: () => [...departmentsUrls],
   };
 }
 
@@ -200,4 +213,28 @@ export function rankingRowFixture(
 
 export function rankingBody(tab: RankingTab, rows: RankingRow[]) {
   return { data: { tab, rows } };
+}
+
+// A `/api/departments` row (Data Model -- Zod Validation Schemas: department rows
+// carry `teamCount` and `topModel`). Defaults describe a small active
+// department; override what a case cares about.
+export function departmentRowFixture(
+  overrides: Partial<DepartmentRow> &
+    Pick<DepartmentRow, "departmentId" | "departmentName">,
+): DepartmentRow {
+  return {
+    cost: 100,
+    modelCost: 100,
+    nonModelCost: 0,
+    inputTokens: 1_000,
+    outputTokens: 500,
+    invocations: 10,
+    teamCount: 1,
+    topModel: "claude-sonnet",
+    ...overrides,
+  };
+}
+
+export function departmentsBody(departments: DepartmentRow[]) {
+  return { data: { departments } };
 }

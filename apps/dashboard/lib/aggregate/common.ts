@@ -96,3 +96,20 @@ export function modelBreakdown(
   }
   return [...rows.values()].sort((a, b) => b.cost - a.cost);
 }
+
+// The model with the most invocations, or null when none has any. A tie keeps
+// the first model in `models` order (strictly greater wins), so Overview and
+// the departments cards agree (Data Model spec -- Zod Validation Schemas).
+export function mostUsedModelOf(
+  models: readonly ModelBreakdown[],
+): ModelKey | null {
+  let mostUsed: ModelKey | null = null;
+  let mostInvocations = 0;
+  for (const m of models) {
+    if (m.invocations > mostInvocations) {
+      mostInvocations = m.invocations;
+      mostUsed = m.model;
+    }
+  }
+  return mostUsed;
+}

@@ -4,7 +4,13 @@ import type {
   DepartmentRow,
 } from "@bedrock-usage/shared";
 
-import { dailyTrend, groupBy, totalsOf } from "./common";
+import {
+  dailyTrend,
+  groupBy,
+  modelBreakdown,
+  mostUsedModelOf,
+  totalsOf,
+} from "./common";
 import { aggregateUsers } from "./users";
 import { splitCosts } from "./non-model";
 import { aggregateTeams } from "./teams";
@@ -17,6 +23,7 @@ export function aggregateDepartments(
       departmentId,
       departmentName: list[list.length - 1]?.departmentName ?? departmentId,
       ...totalsOf(list),
+      ...teamsAndTopModel(list),
     }))
     .sort((a, b) => b.cost - a.cost);
 }
@@ -31,6 +38,7 @@ export function aggregateDepartmentDetail(
     departmentId,
     departmentName: own[own.length - 1]?.departmentName ?? fallbackName,
     ...totalsOf(own),
+    ...teamsAndTopModel(own),
     nonModelByCategory: splitCosts(own).nonModelByCategory,
     teams: aggregateTeams(own),
     dailyTrend: dailyTrend(own),
@@ -40,6 +48,17 @@ export function aggregateDepartmentDetail(
 }
 
 const TOP_USERS_LIMIT = 10;
+
+// A team that moved departments counts under each department its rollups name
+// (Data Model spec -- Historical Snapshots).
+function teamsAndTopModel(
+  rollups: readonly DatedDailyRollup[],
+): Pick<DepartmentRow, "teamCount" | "topModel"> {
+  return {
+    teamCount: new Set(rollups.map((r) => r.teamId)).size,
+    topModel: mostUsedModelOf(modelBreakdown(rollups)),
+  };
+}
 
 // Team cost is the rollup cost, which includes the account's non-model charges.
 function teamTrend(
