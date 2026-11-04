@@ -18,7 +18,7 @@ export function aggregateOverview(
   const topDepartments = [...byDept.entries()]
     .map(([departmentId, list]) => ({
       departmentId,
-      departmentName: list[0]?.departmentName ?? departmentId,
+      departmentName: list[list.length - 1]?.departmentName ?? departmentId,
       cost: totalsOf(list).cost,
     }))
     .sort((a, b) => b.cost - a.cost)

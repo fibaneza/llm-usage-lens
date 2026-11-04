@@ -134,6 +134,57 @@ describe("aggregateOverview", () => {
     ]);
   });
 
+  // Data Model spec — "Historical Snapshots for Department/Team Names": a
+  // renamed id shows the latest name in the requested range.
+  it("shows the latest department name when it was renamed inside the range", () => {
+    const renamed = (date: string, departmentName: string) =>
+      buildRollup({
+        date,
+        accountId: acct(7),
+        departmentId: "dept-renamed",
+        departmentName,
+        teamId: "team-renamed",
+        teamName: "Renamed Team",
+        models: { "claude-sonnet": { cost: 4 } },
+      });
+    const o = aggregateOverview([
+      renamed("2026-10-01", "Old Dept"),
+      renamed("2026-10-02", "Interim Dept"),
+      renamed("2026-10-03", "New Dept"),
+    ]);
+    expect(o.topDepartments).toEqual([
+      { departmentId: "dept-renamed", departmentName: "New Dept", cost: 12 },
+    ]);
+  });
+
+  it("uses each department's own latest name when several are renamed", () => {
+    const day = (
+      date: string,
+      departmentId: string,
+      departmentName: string,
+      cost: number,
+    ) =>
+      buildRollup({
+        date,
+        accountId: acct(8),
+        departmentId,
+        departmentName,
+        teamId: `team-${departmentId}`,
+        teamName: `Team ${departmentId}`,
+        models: { "claude-sonnet": { cost } },
+      });
+    const o = aggregateOverview([
+      day("2026-10-01", "dept-a", "A Old", 10),
+      day("2026-10-01", "dept-b", "B Old", 3),
+      day("2026-10-02", "dept-a", "A New", 10),
+      day("2026-10-02", "dept-b", "B New", 3),
+    ]);
+    expect(o.topDepartments).toEqual([
+      { departmentId: "dept-a", departmentName: "A New", cost: 20 },
+      { departmentId: "dept-b", departmentName: "B New", cost: 6 },
+    ]);
+  });
+
   it("handles no rollups", () => {
     const o = aggregateOverview([]);
     expect(o.totalCost).toBe(0);

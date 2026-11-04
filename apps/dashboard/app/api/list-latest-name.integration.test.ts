@@ -1,5 +1,6 @@
 import {
   DepartmentsResponseSchema,
+  OverviewResponseSchema,
   RankingResponseSchema,
   TeamsResponseSchema,
 } from "@bedrock-usage/shared";
@@ -15,6 +16,7 @@ import {
 } from "@/test/test-support";
 
 import { GET as getDepartments } from "./departments/route";
+import { GET as getOverview } from "./overview/route";
 import { GET as getRanking } from "./ranking/route";
 import { GET as getTeams } from "./teams/route";
 
@@ -64,7 +66,7 @@ beforeEach(async () => {
   await clearTable();
 });
 
-describe("list routes show the latest name in range", () => {
+describe("list and summary routes show the latest name in range", () => {
   it("GET /api/departments row shows the latest department name", async () => {
     await loadFixtures({
       accounts: [makeAccount(1)],
@@ -77,6 +79,24 @@ describe("list routes show the latest name in range", () => {
     expect(res.status).toBe(200);
     const { data } = await res.json();
     const rows = DepartmentsResponseSchema.parse(data).departments.filter(
+      (d) => d.departmentId === "dept-x",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.departmentName).toBe("New Dept");
+  });
+
+  it("GET /api/overview topDepartments shows the latest department name", async () => {
+    await loadFixtures({
+      accounts: [makeAccount(1)],
+      rollups: [
+        day("2026-10-01", "dept-x", "Old Dept", "Old Team"),
+        day("2026-10-02", "dept-x", "New Dept", "New Team"),
+      ],
+    });
+    const res = await call(getOverview, `/api/overview?${RANGE}`);
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    const rows = OverviewResponseSchema.parse(data).topDepartments.filter(
       (d) => d.departmentId === "dept-x",
     );
     expect(rows).toHaveLength(1);
