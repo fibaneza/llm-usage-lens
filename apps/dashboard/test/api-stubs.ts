@@ -1,4 +1,5 @@
 import type {
+  DepartmentDetailResponse,
   DepartmentRow,
   OverviewResponse,
   RankingRow,
@@ -43,6 +44,8 @@ export type ApiStub = {
   rankingRequests: () => URL[];
   // Every `/api/departments` request URL (query params included), in call order.
   departmentsRequests: () => URL[];
+  // Every `/api/departments/<id>` request URL, in call order.
+  departmentDetailRequests: () => URL[];
 };
 
 export function stubApi(handlers: {
@@ -50,10 +53,12 @@ export function stubApi(handlers: {
   syncStatus?: Handler;
   ranking?: Handler;
   departments?: Handler;
+  departmentDetail?: Handler;
 }): ApiStub {
   const overviewUrls: URL[] = [];
   const rankingUrls: URL[] = [];
   const departmentsUrls: URL[] = [];
+  const departmentDetailUrls: URL[] = [];
   let syncCalls = 0;
   const fetchStub = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
@@ -81,6 +86,13 @@ export function stubApi(handlers: {
       }
       return handlers.departments(url);
     }
+    if (url.pathname.startsWith("/api/departments/")) {
+      departmentDetailUrls.push(url);
+      if (!handlers.departmentDetail) {
+        throw new Error("unexpected /api/departments/<id> call");
+      }
+      return handlers.departmentDetail(url);
+    }
     throw new Error(`unexpected fetch: ${url.pathname}`);
   });
   vi.stubGlobal("fetch", fetchStub);
@@ -93,6 +105,7 @@ export function stubApi(handlers: {
     syncStatusCalls: () => syncCalls,
     rankingRequests: () => [...rankingUrls],
     departmentsRequests: () => [...departmentsUrls],
+    departmentDetailRequests: () => [...departmentDetailUrls],
   };
 }
 
@@ -237,4 +250,34 @@ export function departmentRowFixture(
 
 export function departmentsBody(departments: DepartmentRow[]) {
   return { data: { departments } };
+}
+
+// A `/api/departments/<id>` body (Data Model -- Zod Validation Schemas,
+// `DepartmentDetailResponseSchema`): the department row plus teams, trend and
+// top users. Defaults describe an empty-but-valid department.
+export function departmentDetailFixture(
+  overrides: Partial<DepartmentDetailResponse> = {},
+): DepartmentDetailResponse {
+  return {
+    departmentId: "dept-eng",
+    departmentName: "Engineering",
+    cost: 600,
+    modelCost: 550,
+    nonModelCost: 50,
+    inputTokens: 1_000_000,
+    outputTokens: 500_000,
+    invocations: 1_200,
+    teamCount: 2,
+    topModel: "claude-opus",
+    nonModelByCategory: [],
+    teams: [],
+    dailyTrend: [],
+    topUsers: [],
+    teamTrend: [],
+    ...overrides,
+  };
+}
+
+export function departmentDetailBody(detail: DepartmentDetailResponse) {
+  return { data: detail };
 }

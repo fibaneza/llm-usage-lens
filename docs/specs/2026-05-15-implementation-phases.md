@@ -446,14 +446,14 @@ Components are introduced in the sub-phase where they are first needed:
 4. Top users in this department: ranked list
 
 **Tasks:**
-- [ ] Build department header with summary stats
-- [ ] Build `PeriodComparison` component ("vs previous 30 days" side-by-side)
-- [ ] Reuse `UsageTable` for teams breakdown
-- [ ] Reuse `CostTrendChart` (stacked by team instead of model)
-- [ ] Top users ranked list (reuse `RankingList`)
-- [ ] Connect to Route Handlers: department rollups + team breakdown
-- [ ] Tests: header stats calculation
-- [ ] Verify: page loads for each department in seed data, charts and tables render correctly
+- [x] Build department header with summary stats
+- [x] Build `PeriodComparison` component ("vs previous 30 days" side-by-side)
+- [x] Reuse `UsageTable` for teams breakdown
+- [x] Reuse `CostTrendChart` (stacked by team instead of model)
+- [x] Top users ranked list (reuse `RankingList`)
+- [x] Connect to Route Handlers: department rollups + team breakdown
+- [x] Tests: header stats calculation
+- [x] Verify: page loads for each department in seed data, charts and tables render correctly
 
 ---
 

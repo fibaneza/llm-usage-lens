@@ -1,3 +1,8 @@
+import { Suspense } from "react";
+
+import { DepartmentDetailContent } from "@/components/departments/DepartmentDetailContent";
+import { Skeleton } from "@/components/ui/skeleton";
+
 type DepartmentDetailPageProps = {
   params: Promise<{ id: string }>;
 };
@@ -7,9 +12,8 @@ export default async function DepartmentDetailPage({
 }: DepartmentDetailPageProps) {
   const { id } = await params;
   return (
-    <p className="text-muted-foreground text-sm">
-      Placeholder — department detail for{" "}
-      <span className="font-mono">{id}</span> arrives in Phase 4.4.
-    </p>
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <DepartmentDetailContent id={id} />
+    </Suspense>
   );
 }
