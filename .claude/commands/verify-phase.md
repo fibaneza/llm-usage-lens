@@ -25,7 +25,8 @@ Steps:
    (command + brief output).
 4. If anything fails, do **not** mark the phase complete — file the failures
    as the next TODOs.
-5. On a passing checklist, **refresh the "Project Status" section of
-   `CLAUDE.md`** to name the newly completed phase and the next one — the
-   status went stale once (it claimed "pre-implementation" after Phases 1–2
-   had merged); this step keeps it honest.
+5. On a passing checklist, **tick the verified task and Verify checkboxes in
+   `docs/specs/2026-05-15-implementation-phases.md`** — phase state lives only
+   there (`/phase-status` reads it; CLAUDE.md and Rule 30.6 carry no status
+   line). Leave a CI-dependent bullet unticked until CI on `main` is green for
+   a commit that contains the work.
