@@ -483,7 +483,18 @@ test.describe("departments page - responsive grid", () => {
       );
 
       await expect(cards(page)).toHaveCount(CURRENT.length);
-      expect(columnCount(await cardBoxes(page))).toBe(columns);
+      await expect
+        .poll(async () => columnCount(await cardBoxes(page)))
+        .toBe(columns);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              document.documentElement.scrollWidth -
+              document.documentElement.clientWidth,
+          ),
+        )
+        .toBeLessThanOrEqual(0);
       await expectNoHorizontalOverflow(page, `${width}px collapsed`);
     });
   }
