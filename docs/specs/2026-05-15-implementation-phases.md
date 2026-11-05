@@ -440,7 +440,7 @@ Components are introduced in the sub-phase where they are first needed:
 **Goal:** Deep dive into a single department — teams breakdown, cost over time, top users.
 
 **Sections (4):**
-1. Department header (name, total cost, tokens, invocations with DeltaBadge)
+1. Department header (name, total cost, tokens, invocations with DeltaBadge, "Bedrock service charges only" scope note — Data Model spec, *Dashboard impact (v1)*; decided 2026-11-06)
 2. Teams breakdown table (sortable)
 3. Cost over time: stacked area chart by team
 4. Top users in this department: ranked list
@@ -453,6 +453,7 @@ Components are introduced in the sub-phase where they are first needed:
 - [x] Top users ranked list (reuse `RankingList`)
 - [x] Connect to Route Handlers: department rollups + team breakdown
 - [x] Tests: header stats calculation
+- [ ] Add the "Bedrock service charges only" scope note to the department header (Data Model spec, *Dashboard impact (v1)*; decided 2026-11-06)
 - [x] Verify: page loads for each department in seed data, charts and tables render correctly
 
 ---
@@ -481,13 +482,13 @@ Components are introduced in the sub-phase where they are first needed:
 **Goal:** Deep dive into a single team — services, users, model breakdown.
 
 **Sections (4):**
-1. Team header (name, account ID, total cost, tokens)
+1. Team header (name, account ID(s), total cost, tokens, "Bedrock service charges only" scope note)
 2. Services breakdown table
 3. Users breakdown table
 4. Model usage breakdown: bar chart
 
 **Tasks:**
-- [ ] Build team header with `AccountIdBadge` (formatted AWS account ID with copy button)
+- [ ] Build team header with one `AccountIdBadge` per `accounts[]` entry (formatted AWS account ID with copy button) and the scope note (Data Model spec, *Dashboard impact (v1)*; decided 2026-11-06)
 - [ ] Build `ModelBadge` component (model name + assigned color dot)
 - [ ] Build `UserAvatar` component (initials avatar with consistent color)
 - [ ] Reuse `UsageTable` for services breakdown

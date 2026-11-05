@@ -326,19 +326,21 @@ Sortable data table columns:
 
 ### Department Detail Page
 
-- Department header with total cost, tokens, invocations
+- Department header with total cost, tokens, invocations, and the "Bedrock service charges only" scope note
 - Teams breakdown table (sortable)
 - Cost over time: stacked area by team
-- Model usage breakdown: bar chart
 - Top users in this department: ranked list
+
+A per-department model usage chart is not part of v1; the sections match Phase 4.4 (decided 2026-11-06).
 
 ### Team Detail Page
 
-- Team header with account ID, total cost, tokens
+- Team header with the team's account IDs (one `AccountIdBadge` per entry of `accounts[]` — normally one, since each team owns exactly one account (System Architecture — *Organizational Hierarchy*); more appear only when the range spans an account remapping), total cost, tokens, and the "Bedrock service charges only" scope note
 - Services breakdown table
 - Users breakdown table
 - Model usage breakdown: bar chart
-- Cost over time: line chart
+
+A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 (decided 2026-11-06).
 
 ### Settings Page
 
@@ -414,7 +416,7 @@ Conventions for interactive controls, established with the global
 | `MetricCard` | Custom (shadcn Card) | KPI card with value, trend indicator, icon |
 | `DeltaBadge` | Custom | "+12.3%" green arrow or "-5.1%" red arrow for trends |
 | `UsageTable` | Custom (TanStack Table + shadcn Table) | Sortable, filterable data table with pagination; renders as a card list below the `md` breakpoint (see Responsive Tables) |
-| `RankingList` | Custom | Leaderboard with medal icons and % of total bar |
+| `RankingList` | Custom | Ranked list; the rank is rendered by `RankCell` (medal icons for the top three). The % of total bar is `PercentOfTotalBar`, composed in where a page shows shares (the Ranking table, Phase 4.2) — not part of `RankingList` itself (decided 2026-11-06) |
 | `SparklineCell` | Custom | Inline trend sparkline for table cells |
 | `PercentOfTotalBar` | Custom | Inline bar showing proportion visually in ranking tables |
 | `PeriodComparison` | Custom | "vs previous 30 days" side-by-side stat comparison |

@@ -480,7 +480,7 @@ build `PeriodComparison` for "vs previous 30 days".
 
 **Build tasks.**
 
-- [ ] Build the department header (name, total cost, tokens, invocations with `DeltaBadge`)
+- [ ] Build the department header (name, total cost, tokens, invocations with `DeltaBadge`, "Bedrock service charges only" scope note)
 - [ ] Build the `PeriodComparison` component ("vs previous 30 days" side-by-side)
 - [ ] Reuse `UsageTable` for the teams breakdown
 - [ ] Reuse `CostTrendChart` stacked by team
@@ -533,7 +533,7 @@ with consistent color) — and learn that a team maps to exactly one AWS account
 
 **Build tasks.**
 
-- [ ] Build the team header with `AccountIdBadge` (formatted AWS account ID, copy button)
+- [ ] Build the team header with one `AccountIdBadge` per `accounts[]` entry (formatted AWS account ID, copy button) and the "Bedrock service charges only" scope note
 - [ ] Build the `ModelBadge` component (model name + assigned color dot)
 - [ ] Build the `UserAvatar` component (initials avatar, consistent color per user)
 - [ ] Reuse `UsageTable` for the services breakdown
