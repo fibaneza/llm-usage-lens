@@ -24,6 +24,21 @@ export function aggregateTeams(
     .sort(byCostDesc);
 }
 
+// `_untagged` is the absence of a service tag, not a service (Rule 20.10).
+function attributionCounts(list: readonly DatedDailyRollup[]) {
+  const services = new Set<string>();
+  const users = new Set<string>();
+  for (const r of list) {
+    for (const entry of Object.values(r.models)) {
+      for (const service of Object.keys(entry.byService)) {
+        if (service !== "_untagged") services.add(service);
+      }
+      for (const user of Object.keys(entry.byUser)) users.add(user);
+    }
+  }
+  return { serviceCount: services.size, userCount: users.size };
+}
+
 function teamRow(
   teamId: string,
   list: readonly DatedDailyRollup[],
@@ -37,6 +52,7 @@ function teamRow(
     departmentId: latest?.departmentId ?? "",
     departmentName: latest?.departmentName ?? "",
     ...totalsOf(list),
+    ...attributionCounts(list),
   };
 }
 

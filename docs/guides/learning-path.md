@@ -508,7 +508,7 @@ filter (department) alongside the existing filter pattern.
 
 - [ ] Reuse `UsageTable` for the teams list
 - [ ] Add a department filter dropdown (reuse the `ModelFilter` pattern with department data)
-- [ ] Render columns: Team Name, Department, Cost, Tokens, Invocations, Services count, Users count
+- [ ] Render columns: Team Name, Department, Cost, Tokens, Invocations, Services count, Users count (`serviceCount` / `userCount` on the `/api/teams` row — Data Model spec, *Zod Validation Schemas*; decided 2026-11-05)
 - [ ] Link each team name to its team detail page
 - [ ] Add `EmptyState` for no teams / no results
 - [ ] Connect to the Route Handler — all accounts with optional department filter

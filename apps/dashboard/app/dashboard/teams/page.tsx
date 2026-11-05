@@ -1,7 +1,14 @@
+import { Suspense } from "react";
+
+import { TeamsContent } from "@/components/teams/TeamsContent";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Server Component shell (Rule 60.7); TeamsContent reads the URL via nuqs, so
+// it sits under Suspense for static prerender (Rule 60.12).
 export default function TeamsPage() {
   return (
-    <p className="text-muted-foreground text-sm">
-      Placeholder — teams list arrives in Phase 4.5.
-    </p>
+    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+      <TeamsContent />
+    </Suspense>
   );
 }

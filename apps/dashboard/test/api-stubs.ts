@@ -5,6 +5,7 @@ import type {
   RankingRow,
   RankingTab,
   SyncStatusResult,
+  TeamRow,
 } from "@bedrock-usage/shared";
 import { vi } from "vitest";
 
@@ -46,6 +47,8 @@ export type ApiStub = {
   departmentsRequests: () => URL[];
   // Every `/api/departments/<id>` request URL, in call order.
   departmentDetailRequests: () => URL[];
+  // Every `/api/teams` request URL (query params included), in call order.
+  teamsRequests: () => URL[];
 };
 
 export function stubApi(handlers: {
@@ -54,11 +57,13 @@ export function stubApi(handlers: {
   ranking?: Handler;
   departments?: Handler;
   departmentDetail?: Handler;
+  teams?: Handler;
 }): ApiStub {
   const overviewUrls: URL[] = [];
   const rankingUrls: URL[] = [];
   const departmentsUrls: URL[] = [];
   const departmentDetailUrls: URL[] = [];
+  const teamsUrls: URL[] = [];
   let syncCalls = 0;
   const fetchStub = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
@@ -93,6 +98,11 @@ export function stubApi(handlers: {
       }
       return handlers.departmentDetail(url);
     }
+    if (url.pathname === "/api/teams") {
+      teamsUrls.push(url);
+      if (!handlers.teams) throw new Error("unexpected /api/teams call");
+      return handlers.teams(url);
+    }
     throw new Error(`unexpected fetch: ${url.pathname}`);
   });
   vi.stubGlobal("fetch", fetchStub);
@@ -106,6 +116,7 @@ export function stubApi(handlers: {
     rankingRequests: () => [...rankingUrls],
     departmentsRequests: () => [...departmentsUrls],
     departmentDetailRequests: () => [...departmentDetailUrls],
+    teamsRequests: () => [...teamsUrls],
   };
 }
 
@@ -280,4 +291,28 @@ export function departmentDetailFixture(
 
 export function departmentDetailBody(detail: DepartmentDetailResponse) {
   return { data: detail };
+}
+
+// A `/api/teams` row (Data Model -- Zod Validation Schemas: team rows carry
+// `serviceCount` and `userCount`).
+export function teamRowFixture(
+  overrides: Partial<TeamRow> & Pick<TeamRow, "teamId" | "teamName">,
+): TeamRow {
+  return {
+    departmentId: "dept-eng",
+    departmentName: "Engineering",
+    cost: 100,
+    modelCost: 100,
+    nonModelCost: 0,
+    inputTokens: 1_000,
+    outputTokens: 500,
+    invocations: 10,
+    serviceCount: 2,
+    userCount: 3,
+    ...overrides,
+  };
+}
+
+export function teamsBody(teams: TeamRow[]) {
+  return { data: { teams } };
 }

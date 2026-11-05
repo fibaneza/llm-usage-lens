@@ -97,6 +97,8 @@ const TeamRowSchema = z.object({
   departmentId: z.string(),
   departmentName: z.string(),
   ...TotalsShape,
+  serviceCount: z.number().int().nonnegative(),
+  userCount: z.number().int().nonnegative(),
 });
 
 const RankingRowSchema = z.object({

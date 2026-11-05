@@ -483,3 +483,92 @@ describe("aggregateOverview costFinalized (Rule 20.3)", () => {
     expect(aggregateOverview([]).costFinalized).toBe(true);
   });
 });
+
+// Source: docs/specs/2026-05-15-data-model.md -- "Zod Validation Schemas",
+// `TeamsResponseSchema`: `serviceCount` = distinct `byService` keys across every
+// model entry of the team's rollups in the range, excluding `_untagged`;
+// `userCount` = distinct `byUser` keys across every model entry; both 0 with no
+// attributed usage. Rule 20.10; implementation-phases Phase 4.5.
+describe("aggregateTeams serviceCount / userCount", () => {
+  it("counts distinct services and users across models and days, excluding _untagged", () => {
+    const rows = aggregateTeams(rollups);
+    const payments = rows.find((t) => t.teamId === "team-payments");
+    // payments-api on both days (and under _untagged, which is excluded);
+    // a@x.com under two models and two days counts once, plus b@x.com.
+    expect(payments).toMatchObject({ serviceCount: 1, userCount: 2 });
+  });
+
+  it("counts a team's services and users from rollups on different days", () => {
+    const rows = aggregateTeams([
+      buildRollup({
+        date: "2026-10-01",
+        models: {
+          "claude-sonnet": {
+            cost: 1,
+            byUser: { "a@x.com": 1 },
+            byService: { svc1: 1, _untagged: 0 },
+          },
+          "claude-opus": {
+            cost: 1,
+            byUser: { "a@x.com": 1, "b@x.com": 0 },
+            byService: { svc2: 1 },
+          },
+        },
+      }),
+      buildRollup({
+        date: "2026-10-02",
+        accountId: acct(2),
+        models: {
+          "claude-haiku": {
+            cost: 1,
+            byUser: { "c@x.com": 1 },
+            byService: { svc3: 1, svc1: 0 },
+          },
+        },
+      }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ serviceCount: 3, userCount: 3 });
+  });
+
+  it("is 0 for both when a team has only non-model charges", () => {
+    const rows = aggregateTeams(rollups);
+    const ledgerOnly = aggregateTeams(
+      rollups.filter((r) => r.date === "2026-10-03"),
+    );
+    expect(rows.find((t) => t.teamId === "team-ledger")).toMatchObject({
+      serviceCount: 1,
+      userCount: 1,
+    });
+    expect(ledgerOnly[0]).toMatchObject({
+      teamId: "team-ledger",
+      serviceCount: 0,
+      userCount: 0,
+    });
+  });
+
+  it("is 0 when the only service is _untagged", () => {
+    const rows = aggregateTeams([
+      buildRollup({
+        date: "2026-10-01",
+        models: {
+          "claude-sonnet": { cost: 1, byService: { _untagged: 1 } },
+        },
+      }),
+    ]);
+    expect(rows[0]).toMatchObject({ serviceCount: 0, userCount: 0 });
+  });
+
+  it("keeps the departmentId filter and counts only the filtered teams", () => {
+    const only = aggregateTeams(rollups, { departmentId: "dept-finance" });
+    expect(only.map((t) => t.teamId)).toEqual(["team-ledger"]);
+    expect(only[0]).toMatchObject({ serviceCount: 1, userCount: 1 });
+  });
+
+  it("carries the counts into the team detail", () => {
+    expect(aggregateTeamDetail(rollups, "team-ledger")).toMatchObject({
+      serviceCount: 1,
+      userCount: 1,
+    });
+  });
+});

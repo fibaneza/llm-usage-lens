@@ -27,6 +27,8 @@ function team(teamId: string, teamName: string, cost: number) {
     inputTokens: cost * 1_000,
     outputTokens: cost * 500,
     invocations: cost,
+    serviceCount: 2,
+    userCount: 3,
   };
 }
 

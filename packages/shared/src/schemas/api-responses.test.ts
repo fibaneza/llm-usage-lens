@@ -4,6 +4,8 @@ import { MODEL_KEYS } from "../models";
 import {
   DepartmentDetailResponseSchema,
   DepartmentsResponseSchema,
+  TeamDetailResponseSchema,
+  TeamsResponseSchema,
 } from "./api-responses";
 
 // Source: docs/specs/2026-05-15-data-model.md -- "Zod Validation Schemas"
@@ -164,6 +166,83 @@ describe("DepartmentDetailResponseSchema -- carries the department row's fields"
   it("still requires the detail sections", () => {
     expect(
       DepartmentDetailResponseSchema.safeParse(DEPARTMENT_ROW).success,
+    ).toBe(false);
+  });
+});
+
+// Source: docs/specs/2026-05-15-data-model.md -- "Zod Validation Schemas",
+// `TeamsResponseSchema`: team rows carry `serviceCount` and `userCount`
+// (non-negative integers; 0 is a real count); `TeamDetailResponseSchema`
+// inherits both; implementation-phases Phase 4.5; Rule 60.22.
+const TEAM_ROW = {
+  teamId: "team-payments",
+  teamName: "Payments",
+  departmentId: "dept-eng",
+  departmentName: "Engineering",
+  cost: 600,
+  modelCost: 550,
+  nonModelCost: 50,
+  inputTokens: 1_000_000,
+  outputTokens: 500_000,
+  invocations: 1_200,
+  serviceCount: 4,
+  userCount: 7,
+};
+
+describe("TeamsResponseSchema -- serviceCount and userCount", () => {
+  it("accepts a team row with both counts", () => {
+    const parsed = TeamsResponseSchema.parse({ teams: [TEAM_ROW] });
+    expect(parsed.teams[0]).toMatchObject({ serviceCount: 4, userCount: 7 });
+  });
+
+  it("accepts zero for both counts", () => {
+    expect(
+      TeamsResponseSchema.safeParse({
+        teams: [{ ...TEAM_ROW, serviceCount: 0, userCount: 0 }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each(["serviceCount", "userCount"] as const)("requires %s", (key) => {
+    expect(
+      TeamsResponseSchema.safeParse({ teams: [without(TEAM_ROW, key)] })
+        .success,
+    ).toBe(false);
+  });
+
+  it.each(["serviceCount", "userCount"] as const)(
+    "rejects a negative, fractional or non-numeric %s",
+    (key) => {
+      for (const bad of [-1, 1.5, "3", null]) {
+        expect(
+          TeamsResponseSchema.safeParse({
+            teams: [{ ...TEAM_ROW, [key]: bad }],
+          }).success,
+        ).toBe(false);
+      }
+    },
+  );
+});
+
+describe("TeamDetailResponseSchema -- inherits serviceCount and userCount", () => {
+  const TEAM_DETAIL = {
+    ...TEAM_ROW,
+    nonModelByCategory: [],
+    accounts: [],
+    dailyTrend: [],
+    byModel: [],
+    services: [],
+    users: [],
+  };
+
+  it("accepts a detail body carrying both counts", () => {
+    const parsed = TeamDetailResponseSchema.parse(TEAM_DETAIL);
+    expect(parsed).toMatchObject({ serviceCount: 4, userCount: 7 });
+  });
+
+  it.each(["serviceCount", "userCount"] as const)("requires %s", (key) => {
+    expect(
+      TeamDetailResponseSchema.safeParse(without(TEAM_DETAIL, key)).success,
     ).toBe(false);
   });
 });

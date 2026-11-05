@@ -465,14 +465,14 @@ Components are introduced in the sub-phase where they are first needed:
 1. Teams table with department filter
 
 **Tasks:**
-- [ ] Reuse `UsageTable` for teams list
-- [ ] Add department filter dropdown (reuse `ModelFilter` pattern with department data)
-- [ ] Columns: Team Name, Department, Cost, Tokens, Invocations, Services count, Users count
-- [ ] Link team name to team detail page
-- [ ] `EmptyState` for no teams / no results
-- [ ] Connect to Route Handler: all accounts with optional department filter
-- [ ] Tests: department filter works; table sorting and pagination
-- [ ] Verify: all teams from seed data appear, filter narrows results
+- [x] Reuse `UsageTable` for teams list
+- [x] Add department filter dropdown (reuse `ModelFilter` pattern with department data)
+- [x] Columns: Team Name, Department, Cost, Tokens, Invocations, Services count, Users count (headers "Services" and "Users"; `serviceCount` and `userCount` on the `/api/teams` row — Data Model spec, *Zod Validation Schemas*; decided 2026-11-05)
+- [x] Link team name to team detail page
+- [x] `EmptyState` for no teams / no results
+- [x] Connect to Route Handler: all accounts with optional department filter
+- [x] Tests: department filter works; table sorting and pagination
+- [x] Verify: all teams from seed data appear, filter narrows results
 
 ---
 

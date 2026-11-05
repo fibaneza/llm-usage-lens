@@ -48,6 +48,8 @@ const CURRENT: DepartmentDetailResponse = departmentDetailFixture({
       inputTokens: 300_000,
       outputTokens: 100_000,
       invocations: 400,
+      serviceCount: 2,
+      userCount: 3,
     },
     {
       teamId: "team-b",
@@ -60,6 +62,8 @@ const CURRENT: DepartmentDetailResponse = departmentDetailFixture({
       inputTokens: 700_000,
       outputTokens: 400_000,
       invocations: 800,
+      serviceCount: 2,
+      userCount: 3,
     },
   ],
   teamTrend: [
