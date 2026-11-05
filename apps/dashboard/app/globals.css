@@ -88,6 +88,22 @@
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 }
 
+/* `static` keeps these emitted although only referenced from inline styles
+   (Tailwind would otherwise drop the unused theme variables). */
+@theme static {
+  /* Per-user avatar fills (Design System — Avatar Colors (Per User)):
+     a family dedicated to avatars, distinct from the team palette. All eight
+     meet 4.5:1 against white initials. */
+  --color-avatar-1: #b91c1c;
+  --color-avatar-2: #1d4ed8;
+  --color-avatar-3: #047857;
+  --color-avatar-4: #6d28d9;
+  --color-avatar-5: #b45309;
+  --color-avatar-6: #0f766e;
+  --color-avatar-7: #4338ca;
+  --color-avatar-8: #9f1239;
+}
+
 :root {
   color-scheme: light;
 }

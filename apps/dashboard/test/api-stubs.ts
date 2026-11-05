@@ -5,6 +5,7 @@ import type {
   RankingRow,
   RankingTab,
   SyncStatusResult,
+  TeamDetailResponse,
   TeamRow,
 } from "@bedrock-usage/shared";
 import { vi } from "vitest";
@@ -49,6 +50,8 @@ export type ApiStub = {
   departmentDetailRequests: () => URL[];
   // Every `/api/teams` request URL (query params included), in call order.
   teamsRequests: () => URL[];
+  // Every `/api/teams/<id>` request URL, in call order.
+  teamDetailRequests: () => URL[];
 };
 
 export function stubApi(handlers: {
@@ -58,12 +61,14 @@ export function stubApi(handlers: {
   departments?: Handler;
   departmentDetail?: Handler;
   teams?: Handler;
+  teamDetail?: Handler;
 }): ApiStub {
   const overviewUrls: URL[] = [];
   const rankingUrls: URL[] = [];
   const departmentsUrls: URL[] = [];
   const departmentDetailUrls: URL[] = [];
   const teamsUrls: URL[] = [];
+  const teamDetailUrls: URL[] = [];
   let syncCalls = 0;
   const fetchStub = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
@@ -103,6 +108,13 @@ export function stubApi(handlers: {
       if (!handlers.teams) throw new Error("unexpected /api/teams call");
       return handlers.teams(url);
     }
+    if (url.pathname.startsWith("/api/teams/")) {
+      teamDetailUrls.push(url);
+      if (!handlers.teamDetail) {
+        throw new Error("unexpected /api/teams/<id> call");
+      }
+      return handlers.teamDetail(url);
+    }
     throw new Error(`unexpected fetch: ${url.pathname}`);
   });
   vi.stubGlobal("fetch", fetchStub);
@@ -117,6 +129,7 @@ export function stubApi(handlers: {
     departmentsRequests: () => [...departmentsUrls],
     departmentDetailRequests: () => [...departmentDetailUrls],
     teamsRequests: () => [...teamsUrls],
+    teamDetailRequests: () => [...teamDetailUrls],
   };
 }
 
@@ -315,4 +328,37 @@ export function teamRowFixture(
 
 export function teamsBody(teams: TeamRow[]) {
   return { data: { teams } };
+}
+
+// A `/api/teams/<id>` body (Data Model -- Zod Validation Schemas,
+// `TeamDetailResponseSchema`): the team row plus accounts, trend, model
+// breakdown, services and users. Defaults describe an empty-but-valid team.
+export function teamDetailFixture(
+  overrides: Partial<TeamDetailResponse> = {},
+): TeamDetailResponse {
+  return {
+    teamId: "team-a",
+    teamName: "Platform",
+    departmentId: "dept-eng",
+    departmentName: "Engineering",
+    cost: 600,
+    modelCost: 550,
+    nonModelCost: 50,
+    inputTokens: 1_000_000,
+    outputTokens: 500_000,
+    invocations: 1_200,
+    serviceCount: 2,
+    userCount: 2,
+    nonModelByCategory: [],
+    accounts: [],
+    dailyTrend: [],
+    byModel: [],
+    services: [],
+    users: [],
+    ...overrides,
+  };
+}
+
+export function teamDetailBody(detail: TeamDetailResponse) {
+  return { data: detail };
 }

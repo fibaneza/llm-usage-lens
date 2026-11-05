@@ -533,19 +533,19 @@ with consistent color) — and learn that a team maps to exactly one AWS account
 
 **Build tasks.**
 
-- [ ] Build the team header with one `AccountIdBadge` per `accounts[]` entry (formatted AWS account ID, copy button) and the "Bedrock service charges only" scope note
-- [ ] Build the `ModelBadge` component (model name + assigned color dot)
-- [ ] Build the `UserAvatar` component (initials avatar, consistent color per user)
-- [ ] Reuse `UsageTable` for the services breakdown
-- [ ] Reuse `UsageTable` for the users breakdown (with `UserAvatar` in the name column)
-- [ ] Build the model-usage bar chart (Recharts, `next/dynamic`)
-- [ ] Connect to Route Handlers — team rollups with `byService` and `byUser` data
-- [ ] Tests: `AccountIdBadge` copy; `UserAvatar` color consistency
+- [x] Build the team header with one `AccountIdBadge` per `accounts[]` entry (formatted AWS account ID, copy button) and the "Bedrock service charges only" scope note
+- [x] Build the `ModelBadge` component (model name + assigned color dot) and use it as the model usage bar chart's legend
+- [x] Build the `UserAvatar` component (initials avatar, consistent color per user)
+- [x] Reuse `UsageTable` for the services breakdown
+- [x] Reuse `UsageTable` for the users breakdown (with `UserAvatar` in the name column)
+- [x] Build the model-usage bar chart (Recharts, `next/dynamic`)
+- [x] Connect to Route Handlers — team rollups with `byService` and `byUser` data
+- [x] Tests: `AccountIdBadge` copy; `UserAvatar` color consistency
 
 **Verify.**
 
-- [ ] Services and users tables populate from seed data
-- [ ] The model chart renders
+- [x] Services and users tables populate from seed data
+- [x] The model chart renders
 
 **Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
 

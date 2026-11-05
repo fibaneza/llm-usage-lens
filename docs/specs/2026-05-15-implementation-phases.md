@@ -488,15 +488,15 @@ Components are introduced in the sub-phase where they are first needed:
 4. Model usage breakdown: bar chart
 
 **Tasks:**
-- [ ] Build team header with one `AccountIdBadge` per `accounts[]` entry (formatted AWS account ID with copy button) and the scope note (Data Model spec, *Dashboard impact (v1)*; decided 2026-11-06)
-- [ ] Build `ModelBadge` component (model name + assigned color dot)
-- [ ] Build `UserAvatar` component (initials avatar with consistent color)
-- [ ] Reuse `UsageTable` for services breakdown
-- [ ] Reuse `UsageTable` for users breakdown (with `UserAvatar` in name column)
-- [ ] Build model usage bar chart (reuse Recharts, `next/dynamic`)
-- [ ] Connect to Route Handlers: team rollups with byService and byUser data
-- [ ] Tests: AccountIdBadge copy functionality; UserAvatar color consistency
-- [ ] Verify: services and users tables populated from seed data, model chart renders
+- [x] Build team header with one `AccountIdBadge` per `accounts[]` entry (formatted AWS account ID with copy button) and the scope note (Data Model spec, *Dashboard impact (v1)*; decided 2026-11-06)
+- [x] Build `ModelBadge` component (model name + assigned color dot) and use it as the model usage bar chart's legend
+- [x] Build `UserAvatar` component (initials avatar with consistent color)
+- [x] Reuse `UsageTable` for services breakdown
+- [x] Reuse `UsageTable` for users breakdown (with `UserAvatar` in name column)
+- [x] Build model usage bar chart (reuse Recharts, `next/dynamic`)
+- [x] Connect to Route Handlers: team rollups with byService and byUser data
+- [x] Tests: AccountIdBadge copy functionality; UserAvatar color consistency
+- [x] Verify: services and users tables populated from seed data, model chart renders
 
 ---
 

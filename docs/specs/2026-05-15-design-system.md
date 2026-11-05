@@ -197,6 +197,21 @@ Each Bedrock model gets a consistent color across all charts:
 
 Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (lowest: `--color-team-8`, 4.80:1). No team token reuses the value of a model token, `--color-cost-non-model`, `--color-primary`, `--color-success` or `--color-destructive`. A team series never uses a model token and a model series never uses a team token (Rule 40.2). Values are defined once in `apps/dashboard/app/globals.css`; components reference the tokens only. `apps/dashboard/app/globals-contrast.test.ts` enforces contrast and distinctness.
 
+### Avatar Colors (Per User)
+
+`UserAvatar` (Team Detail users table, Phase 4.6; reused on Users, Phase 4.8) fills each initials avatar from a dedicated palette, `--color-avatar-1` … `--color-avatar-8`, chosen by a stable hash of the user id so the same user always gets the same colour (adopted 2026-11-06). The initials are white; every fill meets 4.5:1 against white. Avatars are decorative (`aria-hidden`): the user id is always shown as text beside them, so colour never identifies a user. `apps/dashboard/app/globals-contrast.test.ts` enforces the 4.5:1 contrast and the distinctness from the other families. This family is distinct from the model, team and non-model tokens and never stands in for them (Rule 40.2).
+
+| Token | Hex |
+|-------|-----|
+| `--color-avatar-1` | `#B91C1C` |
+| `--color-avatar-2` | `#1D4ED8` |
+| `--color-avatar-3` | `#047857` |
+| `--color-avatar-4` | `#6D28D9` |
+| `--color-avatar-5` | `#B45309` |
+| `--color-avatar-6` | `#0F766E` |
+| `--color-avatar-7` | `#4338CA` |
+| `--color-avatar-8` | `#9F1239` |
+
 ## Typography
 
 | Role | Font | Weight | Usage |

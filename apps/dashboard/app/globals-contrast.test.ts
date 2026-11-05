@@ -99,3 +99,32 @@ describe("non-text token contrast (WCAG 1.4.11, 3:1)", () => {
     for (const hex of team) expect(reserved).not.toContain(hex);
   });
 });
+
+// Design System -- Avatar Colors (Per User): white initials on a per-user fill,
+// so each `--color-avatar-N` needs 4.5:1 against white, and the family must not
+// reuse any model, team, non-model (aliases --color-foreground) or status colour.
+describe("avatar token contrast (white initials, WCAG AA 4.5:1)", () => {
+  const avatarTokens = Array.from({ length: 8 }, (_, i) => `avatar-${i + 1}`);
+
+  it.each(avatarTokens)("%s against white", (name) => {
+    expect(contrast(token(name), "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("avatar tokens are distinct from each other and from model, team, non-model and status colours", () => {
+    const reserved = [
+      "model-opus",
+      "model-sonnet",
+      "model-haiku",
+      "model-other",
+      "foreground",
+      "primary",
+      "success",
+      "destructive",
+      ...Array.from({ length: 8 }, (_, i) => `team-${i + 1}`),
+    ].map((name) => token(name).toLowerCase());
+    const avatar = avatarTokens.map((name) => token(name).toLowerCase());
+
+    expect(new Set(avatar).size).toBe(avatar.length);
+    for (const hex of avatar) expect(reserved).not.toContain(hex);
+  });
+});

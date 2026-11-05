@@ -39,7 +39,10 @@
 8. **Sanitize input at the system boundary.** Route Handlers validate every
    query and body with Zod; data-access functions trust their typed inputs.
 9. **Never commit a real AWS account ID.** Tracked files (scripts, docs,
-   `*.example`, workflows) use the `000000000000` placeholder. Real account IDs
+   `*.example`, workflows) use the `000000000000` placeholder; tracked files
+   that need distinct example IDs (tests, docs) may also use AWS's
+   documentation example IDs `123456789012` and `111122223333`
+   (allowlisted repo-wide in `.gitleaks.toml`, never real accounts). Real account IDs
    live only in gitignored config — `tools/bedrock-simulator/.bootstrap.env`
    and `samconfig.toml` — never in `bootstrap.sh` defaults, docs, or hook
    scripts (match the pattern, not the value). Enforced by the `aws-account-id`

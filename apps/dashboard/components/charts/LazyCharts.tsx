@@ -24,3 +24,8 @@ export const LazyTopDepartmentsChart = dynamic(
   () => import("./TopDepartmentsChart").then((m) => m.TopDepartmentsChart),
   { ssr: false, loading: ChartSkeleton },
 );
+
+export const LazyModelUsageBarChart = dynamic(
+  () => import("./ModelUsageBarChart").then((m) => m.ModelUsageBarChart),
+  { ssr: false, loading: ChartSkeleton },
+);
