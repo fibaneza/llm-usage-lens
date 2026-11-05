@@ -90,6 +90,7 @@ export function DepartmentDetailBody({ id, range }: DepartmentDetailBodyProps) {
               title="Total cost"
               value={formatUsd(stats.totalCost)}
               icon={Coins}
+              description={<p>Bedrock service charges only</p>}
               trend={
                 <DeltaBadge
                   current={stats.totalCost}

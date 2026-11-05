@@ -208,6 +208,16 @@ describe("DepartmentDetailContent -- header", () => {
     ).toHaveTextContent(/1,200|1\.2K/);
   });
 
+  it("carries the 'Bedrock service charges only' scope note on the Total cost card (Data Model -- Dashboard impact (v1))", async () => {
+    stubApi({ departmentDetail: detailFor() });
+    renderWithProviders(<DepartmentDetailContent id="dept-eng" />, URL_PARAMS);
+    await loaded();
+
+    expect(screen.getByRole("group", { name: "Total cost" })).toHaveTextContent(
+      "Bedrock service charges only",
+    );
+  });
+
   it("shows a DeltaBadge per stat vs the previous period", async () => {
     stubApi({ departmentDetail: detailFor() });
     renderWithProviders(<DepartmentDetailContent id="dept-eng" />, URL_PARAMS);

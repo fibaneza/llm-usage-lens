@@ -453,7 +453,7 @@ Components are introduced in the sub-phase where they are first needed:
 - [x] Top users ranked list (reuse `RankingList`)
 - [x] Connect to Route Handlers: department rollups + team breakdown
 - [x] Tests: header stats calculation
-- [ ] Add the "Bedrock service charges only" scope note to the department header (Data Model spec, *Dashboard impact (v1)*; decided 2026-11-06)
+- [x] Add the "Bedrock service charges only" scope note to the department header (Data Model spec, *Dashboard impact (v1)*; decided 2026-11-06)
 - [x] Verify: page loads for each department in seed data, charts and tables render correctly
 
 ---
