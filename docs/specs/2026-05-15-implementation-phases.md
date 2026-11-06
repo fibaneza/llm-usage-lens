@@ -38,7 +38,7 @@ Components are built where they are first needed and reused in subsequent pages.
   - Color tokens (CSS variables from design system spec)
   - Typography (Space Grotesk + JetBrains Mono; self-hosted via `next/font/local` since 2026-11-06, Design System — *Typography*)
   - Spacing scale (4px/8px grid)
-- [ ] Self-host fonts via `@fontsource-variable/*` + `next/font/local` (decided 2026-11-06; replaces the `next/font/google` loader)
+- [x] Self-host fonts via `@fontsource-variable/*` + `next/font/local` (decided 2026-11-06; replaces the `next/font/google` loader)
 - [x] Initialize shadcn/ui with light theme
 - [x] Configure ESLint v9 (flat config, `eslint.config.ts`)
 - [x] Configure Prettier (paired with ESLint)
