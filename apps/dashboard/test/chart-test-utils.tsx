@@ -1,4 +1,9 @@
-import { act, render, type RenderResult } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  type RenderResult,
+} from "@testing-library/react";
 import type { ReactElement } from "react";
 import { vi } from "vitest";
 
@@ -29,10 +34,20 @@ class SizedResizeObserver {
   disconnect() {}
 }
 
-// Pair with `vi.useFakeTimers()` in beforeEach and
-// `vi.useRealTimers(); vi.unstubAllGlobals();` in afterEach (Rule 60.24).
+// Pair with `vi.useFakeTimers()` in beforeEach and `teardownChartTest()` in
+// afterEach (Rule 60.24).
 export function stubSizedResizeObserver() {
   vi.stubGlobal("ResizeObserver", SizedResizeObserver);
+}
+
+// Recharts' store captured the fake requestAnimationFrame, so unmounting after
+// the fake clock is uninstalled arms a real 100 ms fallback timer that outlives
+// the file. Unmount while the fake clock is still installed so both the frame
+// and the fallback stay fake and are discarded.
+export function teardownChartTest() {
+  cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
 }
 
 // Recharts draws series shapes after its entrance animation; advance the fake

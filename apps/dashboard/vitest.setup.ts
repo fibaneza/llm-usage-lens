@@ -45,7 +45,15 @@ if (!Element.prototype.hasPointerCapture) {
 }
 
 // Unmount React trees between tests so the jsdom document never leaks state
-// across cases (Rule 60.24 — no flaky tests).
-afterEach(() => {
+// across cases (Rule 60.24 -- no flaky tests).
+// Then flush one animation frame: a Recharts store created under real timers
+// arms a 100 ms fallback timer (Redux Toolkit raf batching) that calls
+// cancelAnimationFrame; its own rAF callback must clear it before the file
+// ends. Stores created under fake timers are handled by teardownChartTest.
+afterEach(async () => {
   cleanup();
+  if (vi.isFakeTimers()) return;
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
 });

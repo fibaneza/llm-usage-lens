@@ -10,6 +10,7 @@ import {
   seriesFills,
   srOnlyMatches,
   stubSizedResizeObserver,
+  teardownChartTest,
 } from "@/test/chart-test-utils";
 
 import { CostTrendChart } from "./CostTrendChart";
@@ -44,8 +45,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
+  teardownChartTest();
 });
 
 describe("CostTrendChart", () => {

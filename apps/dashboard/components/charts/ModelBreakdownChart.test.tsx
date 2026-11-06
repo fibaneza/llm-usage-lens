@@ -7,6 +7,7 @@ import {
   seriesFills,
   srOnlyMatches,
   stubSizedResizeObserver,
+  teardownChartTest,
 } from "@/test/chart-test-utils";
 
 import { ModelBreakdownChart } from "./ModelBreakdownChart";
@@ -44,8 +45,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
+  teardownChartTest();
 });
 
 describe("ModelBreakdownChart", () => {
