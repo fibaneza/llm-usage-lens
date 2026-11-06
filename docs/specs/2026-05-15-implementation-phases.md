@@ -508,14 +508,15 @@ Components are introduced in the sub-phase where they are first needed:
 1. Services table
 
 **Tasks:**
-- [ ] Reuse `UsageTable` for services list
-- [ ] Columns: Service Name, Team, Department, Cost, Tokens, Invocations, % of Total
-- [ ] Aggregate byService data across all accounts and date range
-- [ ] Link to parent team detail page
-- [ ] `EmptyState` for no services / all untagged
-- [ ] Connect to Route Handler: aggregated services across all rollups
-- [ ] Tests: cross-account aggregation correctness
-- [ ] Verify: services from all teams appear, sorted by cost
+- [x] Reuse `UsageTable` for services list
+- [x] Columns: Service Name, Team, Department, Cost, Tokens, Invocations, % of Total
+- [x] Aggregate byService data across all accounts and date range, one row per team and service (Data Model — `ServicesResponseSchema`; decided 2026-11-06)
+- [x] Cost values carry `CostEstimateIndicator`; the page shows the "model usage only" note (Data Model — *Non-model cost is account-level only*); `_untagged` rows read "Untagged"; % of Total is the row's share of all rows' cost (0% when that sum is 0)
+- [x] Link to parent team detail page
+- [x] `EmptyState` when there are no rows; when every row is `_untagged`, the table still renders its Untagged rows and a `role="status"` notice above it explains that no usage carries a `service` tag (System Architecture — *Service tagging dependency*)
+- [x] Connect to Route Handler: aggregated services across all rollups
+- [x] Tests: cross-account aggregation correctness; two teams sharing a service name stay two rows; each team's `_untagged` is a separate row
+- [x] Verify: services from all teams appear, sorted by cost
 
 ---
 

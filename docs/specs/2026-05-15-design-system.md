@@ -357,6 +357,10 @@ A per-department model usage chart is not part of v1; the sections match Phase 4
 
 A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 (decided 2026-11-06).
 
+### Services Page
+
+- Services table (`UsageTable`: Service Name, Team, Department, Cost, Tokens, Invocations, % of Total), one row per team and service (Data Model — `ServicesResponseSchema`), with the "model usage only" note. The sections match Phase 4.7 (decided 2026-11-06).
+
 ### Settings Page
 
 - Account registry: add/edit/deactivate accounts, map to dept/team (`Admin` role; read-only for other members)

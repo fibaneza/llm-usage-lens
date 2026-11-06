@@ -12,13 +12,13 @@ import { UserAvatar } from "@/components/display/UserAvatar";
 import { CountFigure, UsdFigure } from "@/components/table/figures";
 import { UsageTable } from "@/components/table/UsageTable";
 import type { DateRange } from "@/lib/date-range";
+import { serviceLabel } from "@/lib/service-label";
 
 type ServiceRow = TeamDetailResponse["services"][number];
 type UserRow = TeamDetailResponse["users"][number];
 type Attribution = ServiceRow | UserRow;
 
 const NUMERIC = "font-mono tabular-nums";
-const UNTAGGED_KEY = "_untagged";
 
 function metricColumns<T extends Attribution>(): ColumnDef<T>[] {
   return [
@@ -56,12 +56,6 @@ function metricColumns<T extends Attribution>(): ColumnDef<T>[] {
       ),
     },
   ];
-}
-
-// `_untagged` is the stored key for usage without a service tag (Rule 20.10);
-// people read "Untagged".
-function serviceLabel(serviceName: string): string {
-  return serviceName === UNTAGGED_KEY ? "Untagged" : serviceName;
 }
 
 const SERVICE_COLUMNS: ColumnDef<ServiceRow>[] = [

@@ -4,6 +4,8 @@ import { MODEL_KEYS } from "../models";
 import {
   DepartmentDetailResponseSchema,
   DepartmentsResponseSchema,
+  ServiceListRowSchema,
+  ServicesResponseSchema,
   TeamDetailResponseSchema,
   TeamsResponseSchema,
 } from "./api-responses";
@@ -244,5 +246,104 @@ describe("TeamDetailResponseSchema -- inherits serviceCount and userCount", () =
     expect(
       TeamDetailResponseSchema.safeParse(without(TEAM_DETAIL, key)).success,
     ).toBe(false);
+  });
+});
+
+// Source: docs/specs/2026-05-15-data-model.md -- "Zod Validation Schemas"
+// (`ServicesResponseSchema`: one row per team and service carrying `teamId`,
+// `teamName`, `departmentId`, `departmentName`; decided 2026-11-06);
+// implementation-phases Phase 4.7; Rules 20.11, 60.22. Team Detail's
+// `services[]` row stays the name-only `ServiceRowSchema`.
+const SERVICE_LIST_ROW = {
+  serviceName: "payments-api",
+  teamId: "team-pay",
+  teamName: "Payments",
+  departmentId: "dept-eng",
+  departmentName: "Engineering",
+  cost: 12.5,
+  costEstimated: true,
+  inputTokens: 1_000,
+  outputTokens: 500,
+  invocations: 10,
+};
+
+describe("ServicesResponseSchema -- per-team service rows", () => {
+  it("accepts a row carrying team and department identity", () => {
+    const parsed = ServicesResponseSchema.parse({
+      services: [SERVICE_LIST_ROW],
+    });
+    expect(parsed.services[0]).toMatchObject({
+      teamId: "team-pay",
+      teamName: "Payments",
+      departmentId: "dept-eng",
+      departmentName: "Engineering",
+    });
+  });
+
+  it("exports ServiceListRowSchema that accepts the same row", () => {
+    expect(ServiceListRowSchema.safeParse(SERVICE_LIST_ROW).success).toBe(true);
+  });
+
+  it("accepts an empty list", () => {
+    expect(ServicesResponseSchema.parse({ services: [] }).services).toEqual([]);
+  });
+
+  it.each(["teamId", "teamName", "departmentId", "departmentName"] as const)(
+    "rejects a row missing %s",
+    (key) => {
+      expect(
+        ServicesResponseSchema.safeParse({
+          services: [without(SERVICE_LIST_ROW, key)],
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it("rejects costEstimated other than true", () => {
+    expect(
+      ServicesResponseSchema.safeParse({
+        services: [{ ...SERVICE_LIST_ROW, costEstimated: false }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a negative cost and a non-integer invocation count", () => {
+    expect(
+      ServicesResponseSchema.safeParse({
+        services: [{ ...SERVICE_LIST_ROW, cost: -1 }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ServicesResponseSchema.safeParse({
+        services: [{ ...SERVICE_LIST_ROW, invocations: 1.5 }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("leaves Team Detail's services[] row name-only (no team fields required)", () => {
+    const { teamId, teamName, departmentId, departmentName, ...nameOnly } =
+      SERVICE_LIST_ROW;
+    void [teamId, teamName, departmentId, departmentName];
+    const detail = TeamDetailResponseSchema.safeParse({
+      teamId: "team-pay",
+      teamName: "Payments",
+      departmentId: "dept-eng",
+      departmentName: "Engineering",
+      cost: 1,
+      modelCost: 1,
+      nonModelCost: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      invocations: 0,
+      serviceCount: 1,
+      userCount: 0,
+      nonModelByCategory: [],
+      accounts: [],
+      dailyTrend: [],
+      byModel: [],
+      services: [nameOnly],
+      users: [],
+    });
+    expect(detail.success).toBe(true);
   });
 });

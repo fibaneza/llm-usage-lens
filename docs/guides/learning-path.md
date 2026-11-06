@@ -553,26 +553,27 @@ with consistent color) — and learn that a team maps to exactly one AWS account
 
 #### Phase 4.7 — Services Page (`/dashboard/services`)
 
-**Lesson.** You learn **cross-account aggregation** — merging `byService` data
-from every account's rollups into one table — and that untagged usage lands in
+**Lesson.** You learn **cross-account aggregation** — merging each team's
+`byService` data across its accounts' rollups into one row per team and service — and that untagged usage lands in
 the `_untagged` bucket.
 
 **Dependencies.** Phase 4.6.
 
 **Build tasks.**
 
-- [ ] Reuse `UsageTable` for the services list
-- [ ] Render columns: Service Name, Team, Department, Cost, Tokens, Invocations, % of Total
-- [ ] Aggregate `byService` data across all accounts and the date range
-- [ ] Link each service to its parent team detail page
-- [ ] Add `EmptyState` for no services / all untagged
-- [ ] Connect to the Route Handler — services aggregated across all rollups
-- [ ] Tests: cross-account aggregation correctness
+- [x] Reuse `UsageTable` for the services list
+- [x] Render columns: Service Name, Team, Department, Cost, Tokens, Invocations, % of Total
+- [x] Aggregate `byService` data across all accounts and the date range, one row per team and service
+- [x] Show `CostEstimateIndicator` on costs and the "model usage only" note; label `_untagged` rows "Untagged"; % of Total is each row's share of all rows' cost (0% when that sum is 0)
+- [x] Link each service to its parent team detail page
+- [x] Add `EmptyState` for no rows; when every row is `_untagged`, keep the Untagged rows and show a `role="status"` notice that no usage carries a `service` tag
+- [x] Connect to the Route Handler — services aggregated across all rollups
+- [x] Tests: cross-account aggregation correctness; two teams sharing a service name stay two rows; each team's `_untagged` is a separate row
 
 **Verify.**
 
-- [ ] Services from all teams appear
-- [ ] Sorted by cost
+- [x] Services from all teams appear
+- [x] Sorted by cost
 
 **Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
 

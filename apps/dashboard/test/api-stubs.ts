@@ -4,6 +4,7 @@ import type {
   OverviewResponse,
   RankingRow,
   RankingTab,
+  ServiceListRow,
   SyncStatusResult,
   TeamDetailResponse,
   TeamRow,
@@ -52,6 +53,8 @@ export type ApiStub = {
   teamsRequests: () => URL[];
   // Every `/api/teams/<id>` request URL, in call order.
   teamDetailRequests: () => URL[];
+  // Every `/api/services` request URL (query params included), in call order.
+  servicesRequests: () => URL[];
 };
 
 export function stubApi(handlers: {
@@ -62,6 +65,7 @@ export function stubApi(handlers: {
   departmentDetail?: Handler;
   teams?: Handler;
   teamDetail?: Handler;
+  services?: Handler;
 }): ApiStub {
   const overviewUrls: URL[] = [];
   const rankingUrls: URL[] = [];
@@ -69,6 +73,7 @@ export function stubApi(handlers: {
   const departmentDetailUrls: URL[] = [];
   const teamsUrls: URL[] = [];
   const teamDetailUrls: URL[] = [];
+  const servicesUrls: URL[] = [];
   let syncCalls = 0;
   const fetchStub = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
@@ -115,6 +120,11 @@ export function stubApi(handlers: {
       }
       return handlers.teamDetail(url);
     }
+    if (url.pathname === "/api/services") {
+      servicesUrls.push(url);
+      if (!handlers.services) throw new Error("unexpected /api/services call");
+      return handlers.services(url);
+    }
     throw new Error(`unexpected fetch: ${url.pathname}`);
   });
   vi.stubGlobal("fetch", fetchStub);
@@ -130,6 +140,7 @@ export function stubApi(handlers: {
     departmentDetailRequests: () => [...departmentDetailUrls],
     teamsRequests: () => [...teamsUrls],
     teamDetailRequests: () => [...teamDetailUrls],
+    servicesRequests: () => [...servicesUrls],
   };
 }
 
@@ -361,4 +372,28 @@ export function teamDetailFixture(
 
 export function teamDetailBody(detail: TeamDetailResponse) {
   return { data: detail };
+}
+
+// A `/api/services` row (Data Model -- Zod Validation Schemas,
+// `ServicesResponseSchema`: one row per team and service, with the team's
+// latest team and department names; decided 2026-11-06).
+export function serviceListRowFixture(
+  overrides: Partial<ServiceListRow> &
+    Pick<ServiceListRow, "serviceName" | "teamId">,
+): ServiceListRow {
+  return {
+    teamName: "Platform",
+    departmentId: "dept-eng",
+    departmentName: "Engineering",
+    cost: 100,
+    costEstimated: true,
+    inputTokens: 1_000,
+    outputTokens: 500,
+    invocations: 10,
+    ...overrides,
+  };
+}
+
+export function servicesBody(services: ServiceListRow[]) {
+  return { data: { services } };
 }
