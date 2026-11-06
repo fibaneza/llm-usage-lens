@@ -33,7 +33,6 @@ export type SeedData = {
 type ProfileConfig = {
   departments: number;
   teamsPerDepartment: readonly number[];
-  accounts: number;
   days: number;
   usersPerTeam: number;
   services: number;
@@ -43,11 +42,11 @@ type ProfileConfig = {
 };
 
 // default: 3 departments / 5 teams (2+2+1) / 10 users (2 per team) / 8 services.
+// One account per team: the account count is the sum of teamsPerDepartment.
 const PROFILES: Record<SeedProfile, ProfileConfig> = {
   default: {
     departments: 3,
     teamsPerDepartment: [2, 2, 1],
-    accounts: 6,
     days: 30,
     usersPerTeam: 2,
     services: 8,
@@ -58,7 +57,6 @@ const PROFILES: Record<SeedProfile, ProfileConfig> = {
   empty: {
     departments: 3,
     teamsPerDepartment: [2, 2, 1],
-    accounts: 6,
     days: 0,
     usersPerTeam: 2,
     services: 8,
@@ -68,8 +66,7 @@ const PROFILES: Record<SeedProfile, ProfileConfig> = {
   },
   large: {
     departments: 5,
-    teamsPerDepartment: [2, 2, 2, 2, 2],
-    accounts: 50,
+    teamsPerDepartment: [10, 10, 10, 10, 10],
     days: 90,
     usersPerTeam: 20,
     services: 15,
@@ -79,8 +76,7 @@ const PROFILES: Record<SeedProfile, ProfileConfig> = {
   },
   ranking: {
     departments: 5,
-    teamsPerDepartment: [4, 4, 4, 4, 4],
-    accounts: 100,
+    teamsPerDepartment: [20, 20, 20, 20, 20],
     days: 30,
     usersPerTeam: 3,
     services: 8,
@@ -307,9 +303,7 @@ type SeedAccount = {
 };
 
 function buildAccounts(config: ProfileConfig, teams: Team[]): SeedAccount[] {
-  return Array.from({ length: config.accounts }, (_, i) => {
-    const team = teams[i % teams.length];
-    if (!team) throw new Error("seed profile has no teams");
+  return teams.map((team, i) => {
     const accountId = String(i + 1).padStart(12, "0");
     const rng = createRng(hashSeed(`scale:${accountId}`));
     return {
@@ -318,7 +312,7 @@ function buildAccounts(config: ProfileConfig, teams: Team[]): SeedAccount[] {
       scale: 0.4 + rng() * 2.2,
       meta: {
         accountId,
-        accountName: `${team.teamId.replace("team-", "")}-${i < teams.length ? "prod" : `env-${i + 1}`}`,
+        accountName: `${team.teamId.replace("team-", "")}-prod`,
         departmentId: team.departmentId,
         departmentName: team.departmentName,
         teamId: team.teamId,

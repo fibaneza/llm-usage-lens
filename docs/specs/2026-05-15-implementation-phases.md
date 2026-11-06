@@ -283,12 +283,12 @@ None — data infrastructure only.
   - Creates `bedrock-usage` table with PK/SK + GSI1 (`ALL` projection)
   - Idempotent (safe to re-run)
 - [x] Create seed scripts
-  - Every profile maps each account to its own team, because a team is one AWS member account (System Architecture — *Organizational Hierarchy*; decided 2026-11-06). The profiles therefore have no multi-account team; Team Detail `accounts[]` > 1 and the "merge across its accounts" rules for Services and Users are covered by dedicated remapping fixtures in integration tests, not by the seeds
+  - Every profile maps each account to its own team, because a team is one AWS member account (System Architecture — *Organizational Hierarchy*; decided 2026-11-06). The profiles therefore have no multi-account team; Team Detail `accounts[]` > 1 and the "merge across its accounts" rules for Services and Users are covered by dedicated multi-account fixtures in unit and integration tests, not by the seeds
   - `scripts/seed.ts` — realistic data: 3 departments, 5 teams (2+2+1) = 5 accounts, 10 users (2 per team), 8 services, 30 days of rollups, multiple models
   - `scripts/seed-empty.ts` — empty state: the default profile's 5 accounts exist but no rollups (tests empty states)
   - `scripts/seed-large.ts` — stress test: 50 accounts = 50 teams across 5 departments (10 each), 90 days, 20 users/team, 15 services
   - `scripts/seed-ranking.ts` (optional) — 100 accounts = 100 teams across 5 departments (20 each) × 30 days to validate ranking performance at v1 upper bound
-- [ ] Remap seed profiles to one account per team (decided 2026-11-06)
+- [x] Remap seed profiles to one account per team (decided 2026-11-06)
 - [x] Build DynamoDB client (`apps/dashboard/lib/dynamodb.ts`)
   - AWS SDK v3 document client
   - Configurable endpoint (DynamoDB Local vs AWS)

@@ -49,7 +49,7 @@ describe("buildSeedData — default profile", () => {
   const rollups = rollupsOf(seed);
 
   it("generates accounts that all satisfy AccountMetaSchema", () => {
-    expect(seed.accounts.length).toBeGreaterThanOrEqual(5);
+    expect(seed.accounts).toHaveLength(5);
     for (const account of seed.accounts) {
       expect(AccountMetaSchema.safeParse(account).success).toBe(true);
     }
@@ -413,5 +413,140 @@ describe("buildSeedData — ranking profile", () => {
     for (const a of seed.accounts) {
       expect(AccountMetaSchema.safeParse(a).success).toBe(true);
     }
+  });
+});
+
+// Source: docs/specs/2026-05-15-implementation-phases.md — Phase 3.2 "Create
+// seed scripts" / "Remap seed profiles to one account per team"; System
+// Architecture — Organizational Hierarchy (Team = 1 AWS member account).
+describe("buildSeedData — one account per team", () => {
+  const TEAM_SLUGS_FIRST_20 = [
+    "payments",
+    "platform",
+    "ml-research",
+    "analytics",
+    "growth",
+    "search",
+    "support",
+    "security",
+    "billing",
+    "mobile",
+    "infra",
+    "fraud",
+    "content",
+    "identity",
+    "reporting",
+    "ads",
+    "logistics",
+    "risk",
+    "insights",
+    "onboarding",
+  ];
+
+  const cases = [
+    { profile: "default", accounts: 5, departments: [2, 2, 1] },
+    { profile: "empty", accounts: 5, departments: [2, 2, 1] },
+    { profile: "large", accounts: 50, departments: [10, 10, 10, 10, 10] },
+    { profile: "ranking", accounts: 100, departments: [20, 20, 20, 20, 20] },
+  ] as const;
+
+  describe.each(cases)(
+    "$profile profile",
+    ({ profile, accounts, departments }) => {
+      const seed = buildSeedData(profile, NOW);
+
+      it(`has ${accounts} accounts and ${accounts} distinct teams`, () => {
+        expect(seed.accounts).toHaveLength(accounts);
+        expect(new Set(seed.accounts.map((a) => a.teamId)).size).toBe(accounts);
+        expect(new Set(seed.accounts.map((a) => a.accountId)).size).toBe(
+          accounts,
+        );
+      });
+
+      it("maps every team to exactly one account", () => {
+        const accountsByTeam = new Map<string, string[]>();
+        for (const a of seed.accounts) {
+          accountsByTeam.set(a.teamId, [
+            ...(accountsByTeam.get(a.teamId) ?? []),
+            a.accountId,
+          ]);
+        }
+        for (const ids of accountsByTeam.values()) expect(ids).toHaveLength(1);
+      });
+
+      it("keeps each team within one department and one team name", () => {
+        const byTeam = new Map<string, Set<string>>();
+        const names = new Map<string, Set<string>>();
+        for (const a of seed.accounts) {
+          byTeam.set(
+            a.teamId,
+            (byTeam.get(a.teamId) ?? new Set()).add(a.departmentId),
+          );
+          names.set(
+            a.teamId,
+            (names.get(a.teamId) ?? new Set()).add(a.teamName),
+          );
+        }
+        for (const set of byTeam.values()) expect(set.size).toBe(1);
+        for (const set of names.values()) expect(set.size).toBe(1);
+        const teamNames = seed.accounts.map((a) => a.teamName);
+        expect(new Set(teamNames).size).toBe(accounts);
+      });
+
+      it(`splits teams across departments as ${departments.join("+")}`, () => {
+        const perDept = new Map<string, number>();
+        for (const a of seed.accounts) {
+          perDept.set(a.departmentId, (perDept.get(a.departmentId) ?? 0) + 1);
+        }
+        expect([...perDept.values()].sort((x, y) => y - x)).toEqual(
+          [...departments].sort((x, y) => y - x),
+        );
+        expect(perDept.size).toBe(departments.length);
+      });
+
+      it("gives the first 20 teams stable slugs from the named list", () => {
+        const ids = seed.accounts.map((a) => a.teamId);
+        // Team index follows department order, so ids appear in TEAM_NAMES order.
+        expect(ids.slice(0, 20)).toEqual(
+          TEAM_SLUGS_FIRST_20.slice(0, Math.min(20, accounts)).map(
+            (slug) => `team-${slug}`,
+          ),
+        );
+      });
+    },
+  );
+
+  it("default profile: 5 teams (2+2+1) with 2 users per team and rollups for every account", () => {
+    const seed = buildSeedData("default", NOW);
+    const usersByTeam = new Map<string, Set<string>>();
+    for (const r of rollupsOf(seed)) {
+      const users = usersByTeam.get(r.teamId) ?? new Set<string>();
+      for (const usage of Object.values(r.models)) {
+        Object.keys(usage.byUser).forEach((u) => users.add(u));
+      }
+      usersByTeam.set(r.teamId, users);
+    }
+    expect(usersByTeam.size).toBe(5);
+    for (const users of usersByTeam.values()) expect(users.size).toBe(2);
+    expect(seed.rollups).toHaveLength(5 * 30);
+    expect(seed.syncStatus?.accountsTotal).toBe(5);
+  });
+
+  it("large and ranking: each rollup's team matches its account's team", () => {
+    for (const profile of ["large", "ranking"] as const) {
+      const seed = buildSeedData(profile, NOW);
+      const teamByAccount = new Map(
+        seed.accounts.map((a) => [a.accountId, a.teamId]),
+      );
+      for (const r of seed.rollups) {
+        expect(r.teamId).toBe(teamByAccount.get(r.accountId));
+      }
+    }
+  });
+
+  it("empty profile mirrors the default profile's accounts", () => {
+    expect(buildSeedData("empty", NOW).accounts).toEqual(
+      buildSeedData("default", NOW).accounts,
+    );
   });
 });
