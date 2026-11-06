@@ -36,8 +36,9 @@ Components are built where they are first needed and reused in subsequent pages.
 - [x] Initialize Next.js project in `apps/dashboard` with TypeScript strict mode, App Router
 - [x] Configure Tailwind CSS v4 with light mode theme
   - Color tokens (CSS variables from design system spec)
-  - Typography (Space Grotesk + JetBrains Mono via Google Fonts)
+  - Typography (Space Grotesk + JetBrains Mono; self-hosted via `next/font/local` since 2026-11-06, Design System — *Typography*)
   - Spacing scale (4px/8px grid)
+- [ ] Self-host fonts via `@fontsource-variable/*` + `next/font/local` (decided 2026-11-06; replaces the `next/font/google` loader)
 - [x] Initialize shadcn/ui with light theme
 - [x] Configure ESLint v9 (flat config, `eslint.config.ts`)
 - [x] Configure Prettier (paired with ESLint)
@@ -282,10 +283,12 @@ None — data infrastructure only.
   - Creates `bedrock-usage` table with PK/SK + GSI1 (`ALL` projection)
   - Idempotent (safe to re-run)
 - [x] Create seed scripts
-  - `scripts/seed.ts` — realistic data: 3 departments, 5 teams, 10 users, 8 services, 30 days of rollups, multiple models
-  - `scripts/seed-empty.ts` — empty state: accounts exist but no rollups (tests empty states)
-  - `scripts/seed-large.ts` — stress test: 50 accounts, 90 days, 20 users/team, 15 services
-  - `scripts/seed-ranking.ts` (optional) — 100 accounts × 30 days to validate ranking performance at v1 upper bound
+  - Every profile maps each account to its own team, because a team is one AWS member account (System Architecture — *Organizational Hierarchy*; decided 2026-11-06). The profiles therefore have no multi-account team; Team Detail `accounts[]` > 1 and the "merge across its accounts" rules for Services and Users are covered by dedicated remapping fixtures in integration tests, not by the seeds
+  - `scripts/seed.ts` — realistic data: 3 departments, 5 teams (2+2+1) = 5 accounts, 10 users (2 per team), 8 services, 30 days of rollups, multiple models
+  - `scripts/seed-empty.ts` — empty state: the default profile's 5 accounts exist but no rollups (tests empty states)
+  - `scripts/seed-large.ts` — stress test: 50 accounts = 50 teams across 5 departments (10 each), 90 days, 20 users/team, 15 services
+  - `scripts/seed-ranking.ts` (optional) — 100 accounts = 100 teams across 5 departments (20 each) × 30 days to validate ranking performance at v1 upper bound
+- [ ] Remap seed profiles to one account per team (decided 2026-11-06)
 - [x] Build DynamoDB client (`apps/dashboard/lib/dynamodb.ts`)
   - AWS SDK v3 document client
   - Configurable endpoint (DynamoDB Local vs AWS)
@@ -429,7 +432,7 @@ Components are introduced in the sub-phase where they are first needed:
 - [x] Reuse `MetricCard` pattern for department cards
 - [x] Link each card to department detail page
 - [x] `EmptyState` for no departments
-- [x] Connect to Route Handler: all accounts grouped by department
+- [x] Connect to Route Handler: rollups for the range grouped by department (AccountMeta not read)
 - [x] Tests: grid renders correct number of cards; empty state when no departments
 - [x] Verify: cards render with seed data, links navigate to detail pages
 
@@ -529,14 +532,14 @@ Components are introduced in the sub-phase where they are first needed:
 
 **Tasks:**
 - [ ] Reuse `UsageTable` for users list (with `UserAvatar`)
-- [ ] Columns: User (avatar + name), Team, Department, Cost, Tokens, Invocations, % of Total
-- [ ] Aggregate byUser data across all accounts and date range
-- [ ] Cost values carry `CostEstimateIndicator` (all per-user costs are proportional estimates)
+- [ ] Columns: User (avatar + user id), Team, Department, Cost, Tokens, Invocations, % of Total
+- [ ] Aggregate byUser data across all accounts and date range, one row per team and user (Data Model — `UsersResponseSchema`; decided 2026-11-06)
+- [ ] Cost values carry `CostEstimateIndicator` (all per-user costs are proportional estimates); the page shows the "model usage only" note (Data Model — *Non-model cost is account-level only*); % of Total is the row's share of all rows' cost (0% when that sum is 0)
 - [ ] Link to parent team detail page
 - [ ] `EmptyState` for no users
 - [ ] Connect to Route Handler: aggregated users across all rollups
-- [ ] Tests: cross-account user aggregation; CostEstimateIndicator appears
-- [ ] Verify: users from all teams appear, estimated cost indicator shown
+- [ ] Tests: cross-account user aggregation; one user in two teams stays two rows; CostEstimateIndicator appears
+- [ ] Verify: users from all teams appear, sorted by cost, estimated cost indicator shown
 
 ---
 
@@ -586,7 +589,7 @@ Components are introduced in the sub-phase where they are first needed:
   - Contrast: 4.5:1 minimum (WCAG AA), target 7:1 (AAA) for key text
   - Keyboard navigation: all interactive elements reachable via Tab
   - aria-labels: icon-only buttons, charts, status indicators
-  - Focus rings: 2-4px, visible on all interactive elements
+  - Focus rings: 2-4px, visible on all interactive elements, at least 3:1 against the adjacent background, and kept in forced-colors mode (`--color-focus-ring`, Design System — *Interaction & States*; `outline-hidden`, not `outline-none`; decided 2026-11-06 from the run 6 audit) — this includes the shadcn primitives under `components/ui/`, patched locally and re-applied after any `shadcn add` (as for `Sidebar`)
   - Screen reader: meaningful alt text, aria-live regions for dynamic updates (except `SyncCountdown`, a `timer` with implicit `aria-live="off"` — Design System *Component Inventory*)
 - [ ] Responsive testing at all breakpoints (375 / 768 / 1024 / 1440)
   > The no-horizontal-scroll check runs continuously before Phase 5

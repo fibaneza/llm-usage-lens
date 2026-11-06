@@ -36,6 +36,7 @@ Source: `docs/specs/2026-05-15-design-system.md`.
    - Local UI state → `useState`
 6. **Breakpoints:** 375 / 768 / 1024 / 1440. Content max-width 1280px,
    centered.
-7. **Typography:** Space Grotesk (UI) + JetBrains Mono (numeric/code), via
-   Google Fonts.
+7. **Typography:** Space Grotesk (UI) + JetBrains Mono (numeric/code),
+   self-hosted from the `@fontsource-variable/*` packages via `next/font/local`
+   (Design System — *Typography*). No build-time Google Fonts fetch.
 8. **Icons:** Lucide React only, consistent stroke width.

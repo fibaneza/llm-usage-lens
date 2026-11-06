@@ -309,9 +309,10 @@ alongside 3.2 ([implementation-phases.md → Phase 3.1a](../specs/2026-05-15-imp
 
 - [ ] Document DynamoDB Local startup (already in the devcontainer — `docker compose up -d dynamodb-local`)
 - [ ] Write `scripts/create-table.ts` — creates `bedrock-usage` (PK/SK + GSI1), idempotent
-- [ ] Write `scripts/seed.ts` — realistic data (3 depts, 5 teams, 10 users, 8 services, 30 days)
-- [ ] Write `scripts/seed-empty.ts` — empty-state data
-- [ ] Write `scripts/seed-large.ts` — stress data (50 accounts, 90 days, 20 users/team, 15 services)
+- [ ] Write `scripts/seed.ts` — realistic data (3 depts, 5 teams = 5 accounts, 10 users, 8 services, 30 days); every profile maps each account to its own team
+- [ ] Write `scripts/seed-empty.ts` — empty-state data (the default profile's 5 accounts, no rollups)
+- [ ] Write `scripts/seed-large.ts` — stress data (50 accounts = 50 teams, 90 days, 20 users/team, 15 services)
+- [ ] Write `scripts/seed-ranking.ts` (optional) — 100 accounts = 100 teams × 30 days
 - [ ] Build the DynamoDB client (`apps/dashboard/lib/dynamodb.ts`) — AWS SDK v3 document client, configurable endpoint
 - [ ] Build data-access functions in `apps/dashboard/lib/data/` (each imports `server-only`): `getAccountMeta`, `getAllAccounts`, `getAccountsByDepartment`, `getDailyRollups`, `getRollupsByDate` (loops on `LastEvaluatedKey`), `getSyncStatus` (returns "never synced" when no item)
 - [ ] Add the Vitest node-env project split; integration-test the data-access functions against DynamoDB Local
@@ -458,7 +459,7 @@ by department.
 - [ ] Render each card: department name, total cost (with `DeltaBadge`), total tokens, team count, top model
 - [ ] Link each card to its department detail page
 - [ ] Add `EmptyState` for no departments
-- [ ] Connect to the Route Handler — all accounts grouped by department
+- [ ] Connect to the Route Handler — rollups for the range grouped by department
 - [ ] Tests: grid renders the correct card count; empty state when no departments
 
 **Verify.**
@@ -590,16 +591,17 @@ cost is split proportionally from token ratios.
 **Build tasks.**
 
 - [ ] Reuse `UsageTable` for the users list (with `UserAvatar`)
-- [ ] Render columns: User (avatar + name), Team, Department, Cost, Tokens, Invocations, % of Total
-- [ ] Attach `CostEstimateIndicator` to all per-user cost values
+- [ ] Render columns: User (avatar + user id), Team, Department, Cost, Tokens, Invocations, % of Total
+- [ ] Aggregate `byUser` data across all accounts and the date range, one row per team and user
+- [ ] Attach `CostEstimateIndicator` to all per-user cost values; show the "model usage only" note; % of Total is each row's share of all rows' cost (0% when that sum is 0)
 - [ ] Link each user to their parent team detail page
 - [ ] Add `EmptyState` for no users
 - [ ] Connect to the Route Handler — users aggregated across all rollups
-- [ ] Tests: cross-account user aggregation; `CostEstimateIndicator` appears
+- [ ] Tests: cross-account user aggregation; one user in two teams stays two rows; `CostEstimateIndicator` appears
 
 **Verify.**
 
-- [ ] Users from all teams appear
+- [ ] Users from all teams appear, sorted by cost
 - [ ] The estimated-cost indicator is shown
 
 **Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
@@ -659,7 +661,7 @@ tests for the critical user journeys.
 - [ ] Accessibility: verify 4.5:1 contrast minimum (target 7:1 on key text)
 - [ ] Accessibility: verify all interactive elements are keyboard-reachable
 - [ ] Accessibility: add aria-labels to icon-only buttons, charts, status indicators
-- [ ] Accessibility: verify 2–4px visible focus rings; meaningful alt text; aria-live regions for dynamic updates (the `SyncCountdown` stays a `timer`, not a live region)
+- [ ] Accessibility: verify 2–4px visible focus rings, at least 3:1 against the adjacent background and kept in forced-colors mode (`outline-hidden`, not `outline-none`); meaningful alt text; aria-live regions for dynamic updates (the `SyncCountdown` stays a `timer`, not a live region)
 - [ ] Responsive: verify all breakpoints (375 / 768 / 1024 / 1440), no horizontal scroll, charts resize, 44×44px touch targets
 - [ ] Verify empty states on all pages with `seed-empty.ts`
 - [ ] Performance-test with `seed-large.ts` (pagination at scale, chart render, no memory issues)

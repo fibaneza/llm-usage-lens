@@ -161,7 +161,8 @@ Selected for enterprise SaaS analytics dashboards — clean, high-contrast, prin
 | Border | `#E2E8F0` | `--color-border` | Card borders, dividers |
 | Destructive | `#E11D48` | `--color-destructive` | Error states, high cost alerts |
 | Success | `#059669` | `--color-success` | Positive trends, low cost indicators |
-| Ring | `rgba(79,70,229,0.35)` | `--color-ring` | Focus rings |
+| Ring | `rgba(79,70,229,0.35)` | `--color-ring` | Input focus glow (decorative; not the keyboard focus indicator) |
+| Focus ring | `#4F46E5` | `--color-focus-ring` | Keyboard focus indicator: 6.29:1 on `#FFFFFF`, 5.88:1 on `#F5F7FF`, 5.10:1 on `#E2E8F0` (Interaction & States; decided 2026-11-06); `apps/dashboard/app/globals-contrast.test.ts` enforces it once the token lands (Phase 5) |
 
 **Muted foreground (changed 2026-10-29).** Raised from `#94A3B8` (2.0–2.6:1) to `#566880` so muted text meets WCAG AA 4.5:1 on card, background, muted, accent and sidebar surfaces (lowest: 4.62:1 on Muted `#E2E8F0`). `apps/dashboard/app/globals-contrast.test.ts` enforces it. The vendored `docs/design-system/` previews still show the old value; this table wins.
 
@@ -220,10 +221,7 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
 | Body | Space Grotesk | 300-500 | Paragraphs, labels, descriptions |
 | Data/Numbers | JetBrains Mono | 400-600 | Table cells, chart labels, token counts, costs, KPI values |
 
-**Google Fonts import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-```
+**Self-hosted fonts (decided 2026-11-06):** both families ship as npm packages (`@fontsource-variable/space-grotesk`, `@fontsource-variable/jetbrains-mono`, SIL Open Font License) and load through `next/font/local` in `apps/dashboard/app/layout.tsx`, exposed as the existing `--font-space-grotesk` / `--font-jetbrains-mono` CSS variables. Load the `latin` `wght`-axis woff2 file of each package (the variable weight axis covers the weights above), with `display: "swap"`, matching the previous `next/font/google` subset. The build makes no network request for fonts; a build-time Google Fonts fetch made CI's `build` job fail intermittently.
 
 - **Type scale:** 12 / 14 / 16 / 18 / 24 / 32 / 48
 - **Base:** 16px body
@@ -361,6 +359,10 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 
 - Services table (`UsageTable`: Service Name, Team, Department, Cost, Tokens, Invocations, % of Total), one row per team and service (Data Model — `ServicesResponseSchema`), with the "model usage only" note. The sections match Phase 4.7 (decided 2026-11-06).
 
+### Users Page
+
+- Users table (`UsageTable`: User (`UserAvatar` + user id), Team, Department, Cost, Tokens, Invocations, % of Total), one row per team and user (Data Model — `UsersResponseSchema`), with the "model usage only" note. The sections match Phase 4.8 (decided 2026-11-06).
+
 ### Settings Page
 
 - Account registry: add/edit/deactivate accounts, map to dept/team (`Admin` role; read-only for other members)
@@ -415,8 +417,14 @@ Conventions for interactive controls, established with the global
 - **Selection & ranges:** the selected item is `bg-primary`; a range band uses
   `accent`; "today"/current markers are a subtle `accent/60` chip, never a
   competing fill.
-- **Focus:** keep the visible focus ring (`ring-ring/50`) on every interactive
-  element (Rule 60.30); never remove it to tidy a layout.
+- **Focus:** keep a visible focus indicator on every interactive element
+  (Rule 60.30) at 2-4px and at least 3:1 against the adjacent background
+  (WCAG 1.4.11). Its colour is the dedicated opaque `--color-focus-ring` token,
+  not the translucent `--color-ring` / `ring-ring/50` (about 1.3:1 on white). A
+  box-shadow ring is hidden in forced-colors mode, so pair it with
+  `outline-hidden` (Tailwind v4: a transparent outline that forced colors
+  repaint), never `outline-none`. On `bg-primary` controls the ring sits outside the element (ring offset or outer edge against the surface), since `--color-focus-ring` equals `--color-primary`. Never remove it to tidy a layout (decided
+  2026-11-06; applied in the Phase 5 accessibility audit).
 
 ## Component Inventory
 
@@ -482,7 +490,7 @@ Conventions for interactive controls, established with the global
 
 ### Critical (Must Have)
 
-- **Accessibility**: Contrast 4.5:1 minimum, alt text, keyboard navigation, aria-labels, focus rings (2-4px)
+- **Accessibility**: Contrast 4.5:1 minimum, alt text, keyboard navigation, aria-labels, focus rings (2-4px, at least 3:1, kept in forced-colors mode — Interaction & States)
 - **Touch targets**: Minimum 44x44px, 8px spacing between targets
 - **Loading states**: Skeleton screens for >300ms loads, spinner on async buttons
 - **Error feedback**: Clear messages near the problem field, recovery path included

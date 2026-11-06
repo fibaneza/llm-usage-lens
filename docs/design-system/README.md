@@ -64,7 +64,7 @@ Light analytics aesthetic: soft blue-gray canvas, white card surfaces, generous 
   - Claude Sonnet: `#3B82F6` (blue)
   - Claude Haiku: `#14B8A6` (teal)
   - Other: `#D97706` (amber)
-- **Typography.** **Space Grotesk for headings and all UI copy** (page titles, section headers, labels, buttons). **JetBrains Mono for all numeric/data content and code**. Both from Google Fonts.
+- **Typography.** **Space Grotesk for headings and all UI copy** (page titles, section headers, labels, buttons). **JetBrains Mono for all numeric/data content and code**. Both from Google Fonts. (The app self-hosts both families — Design System spec, *Typography*; this vendored reference still shows the Google Fonts import.)
   - Type scale: 12 / 14 / 16 / 18 / 24 / 32 / 48px.
   - Base body: 14px in dense UI contexts.
   - All numbers in JetBrains Mono with `font-feature-settings: 'tnum' 1, 'zero' 1`.
