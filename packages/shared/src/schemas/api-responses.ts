@@ -90,6 +90,13 @@ export const ServiceListRowSchema = ServiceRowSchema.extend({
   departmentName: z.string(),
 });
 
+export const UserListRowSchema = UserRowSchema.extend({
+  teamId: RollupPieces.shape.teamId,
+  teamName: RollupPieces.shape.teamName,
+  departmentId: z.string(),
+  departmentName: z.string(),
+});
+
 const DepartmentRowSchema = z.object({
   departmentId: RollupPieces.shape.departmentId,
   departmentName: RollupPieces.shape.departmentName,
@@ -179,7 +186,9 @@ export const ServicesResponseSchema = z.object({
   services: z.array(ServiceListRowSchema),
 });
 
-export const UsersResponseSchema = z.object({ users: z.array(UserRowSchema) });
+export const UsersResponseSchema = z.object({
+  users: z.array(UserListRowSchema),
+});
 
 export type Totals = z.infer<z.ZodObject<typeof TotalsShape>>;
 export type NonModelCategoryTotal = z.infer<typeof NonModelCategoryTotalSchema>;
@@ -187,6 +196,7 @@ export type DailyTrendPoint = z.infer<typeof DailyTrendPointSchema>;
 export type ModelBreakdown = z.infer<typeof ModelBreakdownSchema>;
 export type AttributionRow = z.infer<z.ZodObject<typeof AttributionShape>>;
 export type UserRow = z.infer<typeof UserRowSchema>;
+export type UserListRow = z.infer<typeof UserListRowSchema>;
 export type ServiceRow = z.infer<typeof ServiceRowSchema>;
 export type ServiceListRow = z.infer<typeof ServiceListRowSchema>;
 export type DepartmentRow = z.infer<typeof DepartmentRowSchema>;

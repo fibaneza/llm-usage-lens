@@ -531,15 +531,15 @@ Components are introduced in the sub-phase where they are first needed:
 1. Users table
 
 **Tasks:**
-- [ ] Reuse `UsageTable` for users list (with `UserAvatar`)
-- [ ] Columns: User (avatar + user id), Team, Department, Cost, Tokens, Invocations, % of Total
-- [ ] Aggregate byUser data across all accounts and date range, one row per team and user (Data Model — `UsersResponseSchema`; decided 2026-11-06)
-- [ ] Cost values carry `CostEstimateIndicator` (all per-user costs are proportional estimates); the page shows the "model usage only" note (Data Model — *Non-model cost is account-level only*); % of Total is the row's share of all rows' cost (0% when that sum is 0)
-- [ ] Link to parent team detail page
-- [ ] `EmptyState` for no users
-- [ ] Connect to Route Handler: aggregated users across all rollups
-- [ ] Tests: cross-account user aggregation; one user in two teams stays two rows; CostEstimateIndicator appears
-- [ ] Verify: users from all teams appear, sorted by cost, estimated cost indicator shown
+- [x] Reuse `UsageTable` for users list (with `UserAvatar`)
+- [x] Columns: User (avatar + user id), Team, Department, Cost, Tokens, Invocations, % of Total
+- [x] Aggregate byUser data across all accounts and date range, one row per team and user (Data Model — `UsersResponseSchema`; decided 2026-11-06)
+- [x] Cost values carry `CostEstimateIndicator` (all per-user costs are proportional estimates); the page shows the "model usage only" note (Data Model — *Non-model cost is account-level only*); % of Total is the row's share of all rows' cost (0% when that sum is 0)
+- [x] Link to parent team detail page
+- [x] `EmptyState` for no users
+- [x] Connect to Route Handler: aggregated users across all rollups
+- [x] Tests: cross-account user aggregation; one user in two teams stays two rows; CostEstimateIndicator appears
+- [x] Verify: users from all teams appear, sorted by cost, estimated cost indicator shown
 
 ---
 

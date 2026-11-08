@@ -7,7 +7,7 @@ import type {
 import { dailyTrend, groupBy, modelBreakdown, totalsOf } from "./common";
 import { splitCosts } from "./non-model";
 import { aggregateServiceRows } from "./services";
-import { aggregateUsers } from "./users";
+import { aggregateUserRows } from "./users";
 
 const byCostDesc = (a: { cost: number }, b: { cost: number }) =>
   b.cost - a.cost;
@@ -71,6 +71,6 @@ export function aggregateTeamDetail(
     dailyTrend: dailyTrend(own),
     byModel: modelBreakdown(own),
     services: aggregateServiceRows(own),
-    users: aggregateUsers(own),
+    users: aggregateUserRows(own),
   };
 }

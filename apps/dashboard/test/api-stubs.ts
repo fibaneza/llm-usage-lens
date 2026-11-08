@@ -8,6 +8,7 @@ import type {
   SyncStatusResult,
   TeamDetailResponse,
   TeamRow,
+  UserListRow,
 } from "@bedrock-usage/shared";
 import { vi } from "vitest";
 
@@ -55,6 +56,8 @@ export type ApiStub = {
   teamDetailRequests: () => URL[];
   // Every `/api/services` request URL (query params included), in call order.
   servicesRequests: () => URL[];
+  // Every `/api/users` request URL (query params included), in call order.
+  usersRequests: () => URL[];
 };
 
 export function stubApi(handlers: {
@@ -66,6 +69,7 @@ export function stubApi(handlers: {
   teams?: Handler;
   teamDetail?: Handler;
   services?: Handler;
+  users?: Handler;
 }): ApiStub {
   const overviewUrls: URL[] = [];
   const rankingUrls: URL[] = [];
@@ -74,6 +78,7 @@ export function stubApi(handlers: {
   const teamsUrls: URL[] = [];
   const teamDetailUrls: URL[] = [];
   const servicesUrls: URL[] = [];
+  const usersUrls: URL[] = [];
   let syncCalls = 0;
   const fetchStub = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
@@ -125,6 +130,11 @@ export function stubApi(handlers: {
       if (!handlers.services) throw new Error("unexpected /api/services call");
       return handlers.services(url);
     }
+    if (url.pathname === "/api/users") {
+      usersUrls.push(url);
+      if (!handlers.users) throw new Error("unexpected /api/users call");
+      return handlers.users(url);
+    }
     throw new Error(`unexpected fetch: ${url.pathname}`);
   });
   vi.stubGlobal("fetch", fetchStub);
@@ -141,6 +151,7 @@ export function stubApi(handlers: {
     teamsRequests: () => [...teamsUrls],
     teamDetailRequests: () => [...teamDetailUrls],
     servicesRequests: () => [...servicesUrls],
+    usersRequests: () => [...usersUrls],
   };
 }
 
@@ -396,4 +407,27 @@ export function serviceListRowFixture(
 
 export function servicesBody(services: ServiceListRow[]) {
   return { data: { services } };
+}
+
+// A `/api/users` row (Data Model -- Zod Validation Schemas,
+// `UsersResponseSchema`: one row per team and user, with the team's latest
+// team and department names; decided 2026-11-06).
+export function userListRowFixture(
+  overrides: Partial<UserListRow> & Pick<UserListRow, "userId" | "teamId">,
+): UserListRow {
+  return {
+    teamName: "Platform",
+    departmentId: "dept-eng",
+    departmentName: "Engineering",
+    cost: 100,
+    costEstimated: true,
+    inputTokens: 1_000,
+    outputTokens: 500,
+    invocations: 10,
+    ...overrides,
+  };
+}
+
+export function usersBody(users: UserListRow[]) {
+  return { data: { users } };
 }

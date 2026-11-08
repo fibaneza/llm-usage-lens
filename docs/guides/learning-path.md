@@ -590,19 +590,19 @@ cost is split proportionally from token ratios.
 
 **Build tasks.**
 
-- [ ] Reuse `UsageTable` for the users list (with `UserAvatar`)
-- [ ] Render columns: User (avatar + user id), Team, Department, Cost, Tokens, Invocations, % of Total
-- [ ] Aggregate `byUser` data across all accounts and the date range, one row per team and user
-- [ ] Attach `CostEstimateIndicator` to all per-user cost values; show the "model usage only" note; % of Total is each row's share of all rows' cost (0% when that sum is 0)
-- [ ] Link each user to their parent team detail page
-- [ ] Add `EmptyState` for no users
-- [ ] Connect to the Route Handler — users aggregated across all rollups
-- [ ] Tests: cross-account user aggregation; one user in two teams stays two rows; `CostEstimateIndicator` appears
+- [x] Reuse `UsageTable` for the users list (with `UserAvatar`)
+- [x] Render columns: User (avatar + user id), Team, Department, Cost, Tokens, Invocations, % of Total
+- [x] Aggregate `byUser` data across all accounts and the date range, one row per team and user
+- [x] Attach `CostEstimateIndicator` to all per-user cost values; show the "model usage only" note; % of Total is each row's share of all rows' cost (0% when that sum is 0)
+- [x] Link each user to their parent team detail page
+- [x] Add `EmptyState` for no users
+- [x] Connect to the Route Handler — users aggregated across all rollups
+- [x] Tests: cross-account user aggregation; one user in two teams stays two rows; `CostEstimateIndicator` appears
 
 **Verify.**
 
-- [ ] Users from all teams appear, sorted by cost
-- [ ] The estimated-cost indicator is shown
+- [x] Users from all teams appear, sorted by cost
+- [x] The estimated-cost indicator is shown
 
 **Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
 

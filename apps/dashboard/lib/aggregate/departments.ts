@@ -11,7 +11,7 @@ import {
   mostUsedModelOf,
   totalsOf,
 } from "./common";
-import { aggregateUsers } from "./users";
+import { aggregateUserRows } from "./users";
 import { splitCosts } from "./non-model";
 import { aggregateTeams } from "./teams";
 
@@ -42,7 +42,7 @@ export function aggregateDepartmentDetail(
     nonModelByCategory: splitCosts(own).nonModelByCategory,
     teams: aggregateTeams(own),
     dailyTrend: dailyTrend(own),
-    topUsers: aggregateUsers(own).slice(0, TOP_USERS_LIMIT),
+    topUsers: aggregateUserRows(own).slice(0, TOP_USERS_LIMIT),
     teamTrend: teamTrend(own),
   };
 }

@@ -8,6 +8,8 @@ import {
   ServicesResponseSchema,
   TeamDetailResponseSchema,
   TeamsResponseSchema,
+  UserListRowSchema,
+  UsersResponseSchema,
 } from "./api-responses";
 
 // Source: docs/specs/2026-05-15-data-model.md -- "Zod Validation Schemas"
@@ -345,5 +347,109 @@ describe("ServicesResponseSchema -- per-team service rows", () => {
       users: [],
     });
     expect(detail.success).toBe(true);
+  });
+});
+
+// Source: docs/specs/2026-05-15-data-model.md -- "Zod Validation Schemas"
+// (`UsersResponseSchema`: one row per team and user carrying the team's latest
+// team and department names, decided 2026-11-06); implementation-phases
+// Phase 4.8; Rules 20.11, 60.22. Team Detail `users[]` and Department Detail
+// `topUsers[]` stay the name-only `UserRowSchema`.
+const USER_LIST_ROW = {
+  userId: "alice@example.com",
+  teamId: "team-pay",
+  teamName: "Payments",
+  departmentId: "dept-eng",
+  departmentName: "Engineering",
+  cost: 12.5,
+  costEstimated: true,
+  inputTokens: 1_000,
+  outputTokens: 500,
+  invocations: 10,
+};
+
+describe("UsersResponseSchema -- per-team user rows", () => {
+  it("accepts a row carrying team and department identity", () => {
+    const parsed = UsersResponseSchema.parse({ users: [USER_LIST_ROW] });
+    expect(parsed.users[0]).toMatchObject({
+      teamId: "team-pay",
+      teamName: "Payments",
+      departmentId: "dept-eng",
+      departmentName: "Engineering",
+    });
+  });
+
+  it("exports UserListRowSchema that accepts the same row", () => {
+    expect(UserListRowSchema.safeParse(USER_LIST_ROW).success).toBe(true);
+  });
+
+  it("accepts an empty list", () => {
+    expect(UsersResponseSchema.parse({ users: [] }).users).toEqual([]);
+  });
+
+  it.each(["teamId", "teamName", "departmentId", "departmentName"] as const)(
+    "rejects a row missing %s",
+    (key) => {
+      expect(
+        UsersResponseSchema.safeParse({
+          users: [without(USER_LIST_ROW, key)],
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it("rejects costEstimated other than true", () => {
+    expect(
+      UsersResponseSchema.safeParse({
+        users: [{ ...USER_LIST_ROW, costEstimated: false }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a negative cost and a non-integer invocation count", () => {
+    expect(
+      UsersResponseSchema.safeParse({
+        users: [{ ...USER_LIST_ROW, cost: -1 }],
+      }).success,
+    ).toBe(false);
+    expect(
+      UsersResponseSchema.safeParse({
+        users: [{ ...USER_LIST_ROW, invocations: 1.5 }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("leaves Team Detail users[] and Department Detail topUsers[] name-only", () => {
+    const { teamId, teamName, departmentId, departmentName, ...nameOnly } =
+      USER_LIST_ROW;
+    void [teamId, teamName, departmentId, departmentName];
+    expect(
+      TeamDetailResponseSchema.safeParse({
+        teamId: "team-pay",
+        teamName: "Payments",
+        departmentId: "dept-eng",
+        departmentName: "Engineering",
+        cost: 1,
+        modelCost: 1,
+        nonModelCost: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        invocations: 0,
+        serviceCount: 0,
+        userCount: 1,
+        nonModelByCategory: [],
+        accounts: [],
+        dailyTrend: [],
+        byModel: [],
+        services: [],
+        users: [nameOnly],
+      }).success,
+    ).toBe(true);
+    expect(
+      DepartmentDetailResponseSchema.safeParse({
+        ...DETAIL,
+        topUsers: [nameOnly],
+      }).success,
+    ).toBe(true);
   });
 });
