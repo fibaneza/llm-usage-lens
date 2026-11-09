@@ -179,3 +179,6 @@ playwright/.cache/
 # pushed. Curated reference material is promoted into docs/ instead (e.g. the
 # Strata design system lives at docs/design-system/).
 /temp/
+
+# CDK synth output
+cdk.out/

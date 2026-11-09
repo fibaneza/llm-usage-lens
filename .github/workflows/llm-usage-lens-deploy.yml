@@ -1,0 +1,96 @@
+name: "llm-usage-lens: deploy - dashboard"
+
+# Builds the dashboard image, pushes it to ECR and deploys the AppStack only.
+# The InfraStack is deployed once by the user, never from CI.
+# Running this workflow is a user action (workflow_dispatch).
+# Source: docs/specs/2026-11-10-platform.md - IaC layout.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, prod]
+        required: true
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # OIDC token for role assumption; no static AWS keys (Rule 50.1)
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: ${{ inputs.environment }}
+    env:
+      APP_ENV: ${{ inputs.environment }}
+      AWS_REGION: ap-southeast-2
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/node-setup
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ap-southeast-2
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          # The CI role cannot read SSM, so the repository name is a variable.
+          ECR_REPOSITORY_NAME: ${{ vars.ECR_REPOSITORY_NAME }}
+        run: |
+          set -euo pipefail
+          IMAGE="${REGISTRY}/${ECR_REPOSITORY_NAME}:${GITHUB_SHA}"
+          docker build -f apps/dashboard/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+      - name: Deploy AppStack
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          VPC_ID: ${{ vars.VPC_ID }}
+          AVAILABILITY_ZONES: ${{ vars.AVAILABILITY_ZONES }}
+          PRIVATE_SUBNET_IDS: ${{ vars.PRIVATE_SUBNET_IDS }}
+          CERTIFICATE_ARN: ${{ vars.CERTIFICATE_ARN }}
+          DASHBOARD_HOSTNAME: ${{ vars.DASHBOARD_HOSTNAME }}
+          ALARM_TOPIC_ARN: ${{ vars.ALARM_TOPIC_ARN }}
+          ENTRA_CLIENT_ID: ${{ vars.ENTRA_CLIENT_ID }}
+          ENTRA_ISSUER: ${{ vars.ENTRA_ISSUER }}
+          GITHUB_REPOSITORY_NAME: ${{ github.repository }}
+          LISTENER_ARN: ${{ vars.LISTENER_ARN }}
+          LISTENER_RULE_PRIORITY: ${{ vars.LISTENER_RULE_PRIORITY }}
+          ALB_SECURITY_GROUP_ID: ${{ vars.ALB_SECURITY_GROUP_ID }}
+          COMPANY_CIDRS: ${{ vars.COMPANY_CIDRS }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LISTENER_ARN}" ]; then
+            LB_ARGS=(-c "listenerArn=${LISTENER_ARN}" -c "listenerRulePriority=${LISTENER_RULE_PRIORITY}" -c "albSecurityGroupId=${ALB_SECURITY_GROUP_ID}")
+          else
+            LB_ARGS=(-c "companyCidrs=${COMPANY_CIDRS}")
+          fi
+          pnpm --filter @llm-usage-lens/infra exec cdk deploy \
+            "LlmUsageLens-${APP_ENV}-App" \
+            --exclusively \
+            --require-approval never \
+            -c "env=${APP_ENV}" \
+            -c "account=${AWS_ACCOUNT_ID}" \
+            -c "vpcId=${VPC_ID}" \
+            -c "availabilityZones=${AVAILABILITY_ZONES}" \
+            -c "privateSubnetIds=${PRIVATE_SUBNET_IDS}" \
+            -c "certificateArn=${CERTIFICATE_ARN}" \
+            -c "dashboardHostname=${DASHBOARD_HOSTNAME}" \
+            -c "alarmTopicArn=${ALARM_TOPIC_ARN}" \
+            -c "entraClientId=${ENTRA_CLIENT_ID}" \
+            -c "entraIssuer=${ENTRA_ISSUER}" \
+            -c "githubRepository=${GITHUB_REPOSITORY_NAME}" \
+            -c "imageTag=${GITHUB_SHA}" \
+            "${LB_ARGS[@]}"

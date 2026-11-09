@@ -597,10 +597,10 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ### Phase 4R.P — Platform (`feature/phase-4r-p-platform`)
 
-- [ ] `infra/` CDK app: InfraStack (table, CMK, cluster, ECR, SSM parameters) and AppStack (task definition, Fargate service, execution role, task role with Reads and `ACCT#*` writes, security group, target group, listener rule, audit log group, alarms, CI deploy role); both ALB modes
-- [ ] `/api/health` with dependency checks; the structural test allows exactly this unauthenticated route
-- [ ] AppStack deploy job in CI (`workflow_dispatch`, GitHub OIDC deploy role; run by the user)
-- [ ] Verify: `cdk synth` and assertions for both ALB modes, the execution role, the task-role shell and every "not created" resource; nothing deployed
+- [x] `infra/` CDK app: InfraStack (table, CMK, cluster, ECR, SSM parameters) and AppStack (task definition, Fargate service, execution role, task role with Reads and `ACCT#*` writes, security group, target group, listener rule, audit log group, alarms, CI deploy role); both ALB modes
+- [x] `/api/health` with dependency checks; the structural test allows exactly this unauthenticated route
+- [x] AppStack deploy job in CI (`workflow_dispatch`, GitHub OIDC deploy role; run by the user)
+- [x] Verify: `cdk synth` and assertions for both ALB modes, the execution role, the task-role shell and every "not created" resource; nothing deployed
 
 ### Phase 4R.1 — Identity, roles and sign-in (`feature/phase-4r-1-rbac-identity`)
 
@@ -872,7 +872,7 @@ jobs:
       - sam deploy --no-confirm-changeset (bedrock-cost-collector stack)
 ```
 
-The `deploy-collector` job is added in Phase 6 — Phases 1–5 ship the `quality`/`test`/`build` jobs only. Dashboard hosting is AWS ECS Fargate (decided 2026-11-09; Platform spec): Phase 4R.P adds a `deploy-dashboard` job (`workflow_dispatch`, GitHub OIDC deploy role) that builds and pushes the image to ECR and deploys the AppStack; deploying is the user's action.
+The `deploy-collector` job is added in Phase 6 — Phases 1–5 ship the `quality`/`test`/`build` jobs only. Dashboard hosting is AWS ECS Fargate (decided 2026-11-09; Platform spec): Phase 4R.P adds the `llm-usage-lens-deploy.yml` workflow (job `deploy`; `workflow_dispatch`, GitHub OIDC deploy role) that builds and pushes the image to ECR and deploys the AppStack; deploying is the user's action.
 
 ## Conventions
 

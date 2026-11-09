@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import type { NextConfig } from "next";
 
 // Disable Next.js anonymous telemetry — must be set before the config is
@@ -5,6 +7,11 @@ import type { NextConfig } from "next";
 process.env.NEXT_TELEMETRY_DISABLED = "1";
 
 const nextConfig: NextConfig = {
+  // Self-contained server bundle for the ECS container image; the tracing root
+  // is the monorepo root so the workspace package is traced.
+  // See docs/specs/2026-11-10-platform.md — Runtime.
+  output: "standalone",
+  outputFileTracingRoot: fileURLToPath(new URL("../..", import.meta.url)),
   // Compile the workspace package from its TypeScript source (it ships .ts,
   // not a build artifact). See docs/specs/2026-05-15-system-architecture.md —
   // "Shared code layout".

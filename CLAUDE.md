@@ -26,7 +26,8 @@ The `docs/specs/` directory is the source of truth:
 - `docs/specs/2026-11-10-platform.md` — AWS ECS Fargate hosting and the CDK stacks (Phase 4R.P)
 - `docs/guides/auth-setup.md` — Auth.js + Microsoft Entra ID and AWS credential setup
 - `docs/guides/aws-infrastructure.md` — operational runbook: collector design, SAM deploy/undeploy CLI
-- `docs/guides/dashboard-deployment.md` — operational runbook: Next.js dashboard on Netlify (superseded by the Platform spec; rewritten in Phase 4R.P)
+- `docs/guides/dashboard-deployment.md` — operational runbook: building and deploying the dashboard on ECS Fargate (CDK inputs, `cdk synth`, user-run deploy, DNS)
+- `docs/guides/operations.md` — operations runbook: alarms, redeploy, secret rotation, deploy/undeploy order
 - `docs/guides/dynamic-workflows.md` — where Opus 4.8 dynamic workflows fit (and don't fit) the phase plan; not adopted in v1
 - `docs/guides/github-best-practices.md` — general GitHub/Actions practice reconciled to this project's GitHub Flow, SAM, and pnpm conventions
 - `docs/guides/git-hooks.md` — local git-hook strategy: the current simulator pre-push hook and the Phase 1 Husky suite that supersedes it
@@ -47,10 +48,12 @@ Project-specific Claude Code customization lives under `.claude/`:
 
 ## What This Project Is
 
-Two deliverables in a **pnpm monorepo**, sharing `packages/shared` (Zod schemas, model normalization, price table):
+Two deliverables (plus the platform IaC) in a **pnpm monorepo**, sharing `packages/shared` (Zod schemas, model normalization, price table):
 
 1. **Next.js dashboard** (`apps/dashboard`) — reads aggregated Bedrock cost/usage from DynamoDB, displays 9 pages. Built first (Phases 1–5), developed against **DynamoDB Local**.
 2. **AWS Lambda collector** (`apps/collector`, `bedrock-cost-collector`) — serverless hourly pipeline that collects real Bedrock data and writes to DynamoDB. Built last (Phase 6).
+
+The dashboard's AWS platform (ECS Fargate, InfraStack + AppStack) is a CDK app in `infra/` (`@llm-usage-lens/infra`; [Platform spec](docs/specs/2026-11-10-platform.md)). Deploying is always a user action.
 
 ## Cost posture
 
@@ -86,6 +89,7 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 | `pnpm db:create-table` | Create the `bedrock-usage` table in DynamoDB Local (idempotent) |
 | `pnpm db:seed` / `db:seed:empty` / `db:seed:large` / `db:seed:ranking` | Load seed data (`seed:empty` resets the table first) |
 | `pnpm exec vitest run path/to/file.test.ts` | Run a single test file |
+| `pnpm --filter @llm-usage-lens/infra synth` | `cdk synth` the platform stacks (needs the CDK context; see the deployment guide; never deploys) |
 | `pnpm test:e2e` | Headless Playwright E2E in `apps/dashboard/e2e/` (smoke specs accrue with UI work; full journeys Phase 5) |
 
 DynamoDB Local (Phase 3.2): `docker compose up -d dynamodb-local` (inside `.devcontainer`; from the host use `docker compose -f .devcontainer/docker-compose.yml up -d dynamodb-local`), then `pnpm db:create-table` and `pnpm db:seed` (variants `db:seed:empty` / `db:seed:large` / `db:seed:ranking`). The scripts default to `http://localhost:8000` and must never target real AWS. The `/seed` slash command wraps this flow. See the [README](README.md) for the macOS volume workaround.
@@ -118,6 +122,7 @@ is the source of truth — read it before touching any workflow.
 | Workflow | Trigger | Purpose |
 |---|---|---|
 | `llm-usage-lens-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (both Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`) |
+| `llm-usage-lens-deploy.yml` | `workflow_dispatch` (user action) | Builds the dashboard image, pushes it to ECR via OIDC and deploys the AppStack only |
 | `claude-pr-review.yml` | PR opened / synchronize / ready / reopened | Inline review + security findings; HIGH findings submit a `REQUEST_CHANGES` review |
 | `claude-code-review.yml` | release tag push / `workflow_dispatch` | Release audit scoped to commits since the previous tag; files issues |
 | `github-pr-title-lint.yml` | PR opened / edited / reopened | Conventional-Commits check on the PR title (the squash-merge commit on `main`) |

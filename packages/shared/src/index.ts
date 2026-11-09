@@ -101,6 +101,9 @@ export type {
   UserRow,
 } from "./schemas/api-responses";
 
+export { HealthResponseSchema } from "./schemas/health";
+export type { HealthResponse } from "./schemas/health";
+
 export {
   SYNC_STATUSES,
   SyncErrorSchema,

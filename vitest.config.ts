@@ -36,6 +36,7 @@ export default defineConfig({
             "apps/**/*.{test,spec}.{ts,tsx}",
             "packages/**/*.{test,spec}.{ts,tsx}",
             "scripts/**/*.test.ts",
+            "infra/**/*.test.ts",
           ],
           // e2e/ holds Playwright specs — same .spec.ts suffix, but they run
           // under `playwright test`, never under Vitest.
@@ -43,6 +44,7 @@ export default defineConfig({
             "**/*.integration.test.ts",
             "**/node_modules/**",
             "**/.next/**",
+            "**/cdk.out/**",
             "**/e2e/**",
             "tools/**",
           ],

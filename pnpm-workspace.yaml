@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "infra"
 
 # Native build scripts explicitly allowed:
 #   esbuild       — native binary used by tsx (scripts/*.ts)

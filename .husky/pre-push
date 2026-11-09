@@ -13,9 +13,9 @@ done
 
 [ -z "$RANGES" ] && exit 0
 
-# Dashboard workspace: type-check + test suite when apps/, packages/ or scripts/ change.
+# Dashboard workspace: type-check + test suite when apps/, packages/, scripts/ or infra/ change.
 # shellcheck disable=SC2086
-if git diff --name-only $RANGES 2>/dev/null | grep -qE "^apps/|^packages/|^scripts/|^tsconfig.scripts.json$"; then
+if git diff --name-only $RANGES 2>/dev/null | grep -qE "^apps/|^packages/|^scripts/|^infra/|^tsconfig.scripts.json$"; then
   echo "→ dashboard: typecheck"
   (cd "$REPO_ROOT" && pnpm typecheck)
   # Unit project only: integration tests need DynamoDB Local, so they run in CI
