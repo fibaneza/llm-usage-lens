@@ -134,7 +134,7 @@ aws bedrock-runtime converse \
 # With inference config
 aws bedrock-runtime converse \
     --profile <aws-profile> \
-    --model-id arn:aws:bedrock:us-east-1:469515554732:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0 \
+    --model-id arn:aws:bedrock:us-east-1:000000000000:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0 \
     --messages '[{"role":"user","content":[{"text":"hi"}]}]' \
     --inference-config '{"maxTokens":32000,"stopSequences":[],"temperature":1}' \
     --additional-model-request-fields '{"top_k":250}' \
