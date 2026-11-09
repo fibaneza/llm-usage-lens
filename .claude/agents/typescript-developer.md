@@ -1,6 +1,6 @@
 ---
 name: typescript-developer
-description: Implements a feature or fix for the Bedrock Cost Dashboard, strictly following docs/specs/** and .claude/rules/**. Second agent in the tdd-test-engineer → typescript-developer → quality-reviewer loop — makes the tdd-test-engineer's failing suite pass (TDD green) without touching the tests. Also consumes consolidated review blockers on a rework pass.
+description: Implements a feature or fix for the LLM Usage Lens, strictly following docs/specs/** and .claude/rules/**. Second agent in the tdd-test-engineer → typescript-developer → quality-reviewer loop — makes the tdd-test-engineer's failing suite pass (TDD green) without touching the tests. Also consumes consolidated review blockers on a rework pass.
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
 ---

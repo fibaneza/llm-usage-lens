@@ -1,7 +1,7 @@
 import {
   RankingQuerySchema,
   RankingResponseSchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import { loadRangeRollups } from "@/lib/api/load-range-rollups";
 import { jsonData, parseSearchParams, withRoute } from "@/lib/api/respond";

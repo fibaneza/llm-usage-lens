@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { join, sep } from "node:path";
 
-import { ApiErrorBodySchema, ApiErrorCodeSchema } from "@bedrock-usage/shared";
+import { ApiErrorBodySchema, ApiErrorCodeSchema } from "@llm-usage-lens/shared";
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 

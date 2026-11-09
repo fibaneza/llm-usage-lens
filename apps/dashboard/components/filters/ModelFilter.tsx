@@ -5,7 +5,7 @@ import {
   MODEL_META,
   type ModelKey,
   ModelKeySchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import {
   Select,

@@ -1,4 +1,4 @@
-import { MODEL_META, type DepartmentRow } from "@bedrock-usage/shared";
+import { MODEL_META, type DepartmentRow } from "@llm-usage-lens/shared";
 import { Building2 } from "lucide-react";
 import Link from "next/link";
 

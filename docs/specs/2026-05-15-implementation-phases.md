@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Date:** 2026-05-15
-**Scope:** Phased implementation plan for the Bedrock Cost Dashboard, designed for small-batch delivery
+**Scope:** Phased implementation plan for the LLM Usage Lens, designed for small-batch delivery
 
 ---
 
@@ -660,7 +660,7 @@ Phase 4 (all sub-phases complete).
 
 ### Tasks
 
-- [ ] Create Lambda project in `apps/collector` (Node.js 22.x, TypeScript), depends on `@bedrock-usage/shared`
+- [ ] Create Lambda project in `apps/collector` (Node.js 22.x, TypeScript), depends on `@llm-usage-lens/shared`
 - [ ] Implement Lambda handler (`bedrock-cost-collector`)
   - Read account registry from DynamoDB (all active accounts)
   - Assume `CostExplorerReadRole` in the management account, query Cost Explorer
@@ -668,7 +668,7 @@ Phase 4 (all sub-phases complete).
     - Filtered to `AmazonBedrock` service (placeholder until the `SERVICE` ground-truth check — System Architecture spec — *Proposed collector amendments (audit A2)* item 4)
     - Grouped by `LINKED_ACCOUNT` and `USAGE_TYPE`, requesting `UnblendedCost` + `UsageQuantity`
     - Request usage records only: Cost Explorer can return negative amounts (credits, refunds), and the v1 `nonModel` schema is nonnegative. Exact `RECORD_TYPE` filter handling is unverified; confirm it here (Data Model spec — *Schema decisions*)
-    - Classify each usage type with `classifyUsageType` (`@bedrock-usage/shared`): model → `models[<key>]`, charge category → `nonModel[<category>]`, unknown → `nonModel.unclassified` (System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*)
+    - Classify each usage type with `classifyUsageType` (`@llm-usage-lens/shared`): model → `models[<key>]`, charge category → `nonModel[<category>]`, unknown → `nonModel.unclassified` (System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*)
   - Query CloudTrail Lake locally (org event data store)
     - `StartQuery`, then poll `GetQueryResults` until complete (async SQL)
     - Bedrock InvokeModel/InvokeModelWithResponseStream calls grouped by account, SSO username, inference profile (→ service), model ID
@@ -676,7 +676,7 @@ Phase 4 (all sub-phases complete).
   - Query CloudWatch via cross-account observability
     - `GetMetricData` with account-scoped queries for all source accounts — no role assumption
     - Per ModelId: InputTokenCount, OutputTokenCount, Invocations, InvocationLatency
-  - Normalize raw Bedrock model IDs to canonical keys (`@bedrock-usage/shared`)
+  - Normalize raw Bedrock model IDs to canonical keys (`@llm-usage-lens/shared`)
   - Apply today's cost fallback when Cost Explorer returns zero (shared price table + token counts)
   - Write `nextScheduledAt` on SyncStatus (next UTC hour boundary)
   - Merge all three data sources per account per day (System Architecture spec — Three-source merge rules)
@@ -706,7 +706,7 @@ Phase 4 (all sub-phases complete).
   - `BedrockCollectorLambdaRole` execution policy: `cloudwatch:GetMetricData`/`ListMetrics`, `cloudtrail:StartQuery`/`GetQueryResults`, `sts:AssumeRole` on `CostExplorerReadRole`, `dynamodb:PutItem`/`BatchWriteItem`/`GetItem`/`Query`/`Scan` on the `bedrock-usage` table, CloudWatch Logs
   - `AWS::DynamoDB::Table` `bedrock-usage` (PK/SK + GSI1, TTL on `DailyRollup`) — production table owned by this stack; `scripts/create-table.ts` stays DynamoDB-Local-only
   - `AWS::CloudWatch::Alarm` on EventBridge/Lambda invocation failures
-- [ ] Configure SAM `BuildMethod: esbuild` to bundle the `@bedrock-usage/shared` workspace dependency into the artifact; verify the built bundle contains the shared code
+- [ ] Configure SAM `BuildMethod: esbuild` to bundle the `@llm-usage-lens/shared` workspace dependency into the artifact; verify the built bundle contains the shared code
 - [ ] Error handling: partial failures (some accounts fail, others succeed → SyncStatus = "partial")
 - [ ] Tests: unit tests for model normalization, usage-type classification (against captured real usage types), the `cost` invariant, data merging, cost estimation formula
 - [ ] Deploy to the observability account via `sam build && sam deploy` (CD `deploy` job, OIDC-assumed role)
@@ -769,7 +769,7 @@ DYNAMODB_ENDPOINT=                    # http://localhost:8000 for DynamoDB Local
 
 # OpenTelemetry
 OTEL_EXPORTER_OTLP_ENDPOINT=          # http://localhost:4318 for the devcontainer Collector
-OTEL_SERVICE_NAME=bedrock-cost-dashboard
+OTEL_SERVICE_NAME=llm-usage-lens
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -824,7 +824,7 @@ jobs:
       - Checkout
       - Setup pnpm + Node 22
       - Configure AWS credentials (OIDC role assumption — observability account)
-      - sam build (apps/collector — bundles @bedrock-usage/shared via esbuild)
+      - sam build (apps/collector — bundles @llm-usage-lens/shared via esbuild)
       - sam deploy --no-confirm-changeset (bedrock-cost-collector stack)
 ```
 

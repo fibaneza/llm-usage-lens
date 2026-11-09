@@ -1,7 +1,7 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 
-import { COLLECTOR_REGION } from "@bedrock-usage/shared";
+import { COLLECTOR_REGION } from "@llm-usage-lens/shared";
 
 import {
   AuthConfigError,
@@ -35,7 +35,7 @@ export const env = createEnv({
     DYNAMODB_TABLE_NAME: z.string().default("bedrock-usage"),
     DYNAMODB_ENDPOINT: z.url().optional(),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
-    OTEL_SERVICE_NAME: z.string().default("bedrock-cost-dashboard"),
+    OTEL_SERVICE_NAME: z.string().default("llm-usage-lens"),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),

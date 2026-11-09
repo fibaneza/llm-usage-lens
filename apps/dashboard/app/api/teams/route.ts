@@ -1,4 +1,4 @@
-import { TeamsQuerySchema, TeamsResponseSchema } from "@bedrock-usage/shared";
+import { TeamsQuerySchema, TeamsResponseSchema } from "@llm-usage-lens/shared";
 
 import { aggregateTeams } from "@/lib/aggregate/teams";
 import { loadRangeRollups } from "@/lib/api/load-range-rollups";

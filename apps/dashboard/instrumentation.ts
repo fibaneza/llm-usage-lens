@@ -5,7 +5,7 @@ import { registerOTel } from "@vercel/otel";
 // name come from OTEL_* env vars. See implementation-phases spec §Phase 1.
 export function register() {
   registerOTel({
-    serviceName: process.env.OTEL_SERVICE_NAME ?? "bedrock-cost-dashboard",
+    serviceName: process.env.OTEL_SERVICE_NAME ?? "llm-usage-lens",
   });
 }
 

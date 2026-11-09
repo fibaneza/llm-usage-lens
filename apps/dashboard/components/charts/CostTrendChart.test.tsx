@@ -1,7 +1,7 @@
 import type {
   DailyTrendPoint,
   DepartmentDetailResponse,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import { screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

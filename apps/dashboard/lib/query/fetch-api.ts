@@ -1,4 +1,4 @@
-import { ApiErrorBodySchema } from "@bedrock-usage/shared";
+import { ApiErrorBodySchema } from "@llm-usage-lens/shared";
 import { z } from "zod";
 
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes"; Rule 20.11

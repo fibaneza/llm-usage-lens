@@ -1,4 +1,4 @@
-import { MODEL_META, type ModelKey } from "@bedrock-usage/shared";
+import { MODEL_META, type ModelKey } from "@llm-usage-lens/shared";
 
 // Design System -- Component Inventory, `ModelBadge`: the model's display name
 // with its chart color dot (names and tokens from packages/shared, Rule 20.5).

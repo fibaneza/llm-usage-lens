@@ -8,7 +8,7 @@ import {
   waitUntilTableExists,
 } from "@aws-sdk/client-dynamodb";
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { GSI1_NAME } from "@bedrock-usage/shared";
+import { GSI1_NAME } from "@llm-usage-lens/shared";
 
 import { createScriptClient, log, resolveTarget } from "./lib/dynamodb-local";
 

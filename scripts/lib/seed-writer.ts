@@ -10,7 +10,7 @@ import {
   datePk,
   deptPk,
   runBounded,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import type { SeedData } from "./seed-data";
 

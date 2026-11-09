@@ -1,7 +1,7 @@
 import {
   DateRangeQuerySchema,
   OverviewResponseSchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import { aggregateOverview } from "@/lib/aggregate/overview";
 import { loadRangeRollups } from "@/lib/api/load-range-rollups";

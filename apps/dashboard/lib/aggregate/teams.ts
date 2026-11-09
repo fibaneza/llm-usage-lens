@@ -2,7 +2,7 @@ import type {
   DatedDailyRollup,
   TeamDetailResponse,
   TeamRow,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import { dailyTrend, groupBy, modelBreakdown, totalsOf } from "./common";
 import { splitCosts } from "./non-model";

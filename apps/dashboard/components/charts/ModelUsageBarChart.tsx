@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { MODEL_META, type ModelKey } from "@bedrock-usage/shared";
+import { MODEL_META, type ModelKey } from "@llm-usage-lens/shared";
 
 import { ModelBadge } from "@/components/display/ModelBadge";
 

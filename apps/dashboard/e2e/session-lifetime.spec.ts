@@ -41,7 +41,7 @@ test.describe("session lifetime", () => {
 
     await expect(page).toHaveURL(/\/sign-in/);
     await expect(
-      page.getByRole("heading", { name: "Bedrock Cost Dashboard" }),
+      page.getByRole("heading", { name: "LLM Usage Lens" }),
     ).toBeVisible();
   });
 

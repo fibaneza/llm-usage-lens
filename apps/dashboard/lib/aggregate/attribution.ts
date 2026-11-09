@@ -2,7 +2,7 @@ import type {
   AttributionEntry,
   AttributionRow,
   DatedDailyRollup,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 // Per-user / per-service views use per-model attribution only (Rule 20.3,
 // 20.12): cost is a proportional estimate and non-model cost never appears.

@@ -4,7 +4,7 @@ import {
   GetCommand,
   ScanCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { DailyRollupItemSchema } from "@bedrock-usage/shared";
+import { DailyRollupItemSchema } from "@llm-usage-lens/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createTable } from "../create-table";

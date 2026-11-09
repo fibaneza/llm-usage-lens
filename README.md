@@ -1,6 +1,6 @@
-# Bedrock Cost Tracker
+# LLM Usage Lens
 
-[![bedrock-dashboard: ci - build](https://github.com/fibaneza/aws-bedrock-cost-tracker/actions/workflows/bedrock-dashboard-build.yml/badge.svg?branch=main)](https://github.com/fibaneza/aws-bedrock-cost-tracker/actions/workflows/bedrock-dashboard-build.yml)
+[![llm-usage-lens: ci - build](https://github.com/fibaneza/llm-usage-lens/actions/workflows/llm-usage-lens-build.yml/badge.svg?branch=main)](https://github.com/fibaneza/llm-usage-lens/actions/workflows/llm-usage-lens-build.yml)
 
 Dashboard and serverless collector for Amazon Bedrock cost and usage, built as a pnpm monorepo. See [CLAUDE.md](CLAUDE.md) for project conventions, [ONBOARDING.md](ONBOARDING.md) for contributor setup, and [docs/specs/](docs/specs/) for the source-of-truth specs.
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ModelKey, RankingTab } from "@bedrock-usage/shared";
+import type { ModelKey, RankingTab } from "@llm-usage-lens/shared";
 
 import { EmptyState } from "@/components/display/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";

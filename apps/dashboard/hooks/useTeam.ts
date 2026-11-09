@@ -1,6 +1,6 @@
 "use client";
 
-import { TeamDetailResponseSchema } from "@bedrock-usage/shared";
+import { TeamDetailResponseSchema } from "@llm-usage-lens/shared";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchApi } from "@/lib/query/fetch-api";

@@ -1,4 +1,4 @@
-# Shared Contracts — RBAC + LiteLLM (Bedrock Cost Dashboard)
+# Shared Contracts — RBAC + LiteLLM (LLM Usage Lens)
 
 The single source for everything that `rbac_prompt.md` and
 `litellm_prompt.md` both depend on.
@@ -19,7 +19,7 @@ The single source for everything that `rbac_prompt.md` and
 | `prod` | **Enterprise**, with SSO through Entra ID | The `user_id` LiteLLM assigns at SSO sign-in, looked up by email | Production app registration |
 
 - **Only these two environments exist.** No staging.
-- `<env>` appears in SSM parameter names (`/bedrock-dashboard/<env>/…`), CDK
+- `<env>` appears in SSM parameter names (`/llm-usage-lens/<env>/…`), CDK
   stack names and the CI deploy jobs.
 - **The `edition` flag defaults by environment** (`oss` in `dev`,
   `enterprise` in `prod`). An Admin can see it but not change it away from
@@ -98,7 +98,7 @@ the dashboard use the same one; Rule 20.5's "no duplicate tables" applies):
 - **Storage.**
   - DynamoDB is the queryable copy: append-only, `PutItem` only.
   - Each record is **also** written as one structured JSON line to a
-    dedicated CloudWatch Logs group, `/bedrock-dashboard/<env>/audit`, in
+    dedicated CloudWatch Logs group, `/llm-usage-lens/<env>/audit`, in
     the AppStack. Retention is at least 1 year (R0 confirms), with KMS
     encryption.
   - The security team can subscribe their SIEM to that log group. No SIEM
@@ -195,7 +195,7 @@ these changes jointly as spec amendments.
   security group. It adds only:
   - its own target group
   - one **host-based** listener rule, for example
-    `bedrock-dashboard.<company-domain>`, with a **unique priority** agreed
+    `llm-usage-lens.<company-domain>`, with a **unique priority** agreed
     with the ALB's owner, so it never shadows existing rules
   - the certificate as an additional (SNI) certificate, only if the
     listener's certificate does not already cover the host
@@ -264,7 +264,7 @@ session and returns only `{ data: { status: "ok" } }`.
 is deployable on its own and has a deploy and undeploy runbook.
 - **Stacks share values through SSM parameters,** never through secrets.
   The InfraStack writes non-secret identifiers (table name, cluster ARN,
-  repository URI) to parameters under `/bedrock-dashboard/<env>/infra/*`.
+  repository URI) to parameters under `/llm-usage-lens/<env>/infra/*`.
   Imported ids (VPC, subnets, certificate, optional listener) are supplied
   as CDK context or SSM parameter names.
 - **Not CloudFormation exports.** An export locks the producer: it cannot

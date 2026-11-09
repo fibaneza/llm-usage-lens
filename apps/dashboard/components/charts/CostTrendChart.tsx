@@ -3,7 +3,7 @@
 import type {
   DailyTrendPoint,
   DepartmentDetailResponse,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import {
   Area,
   AreaChart,

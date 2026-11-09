@@ -1,4 +1,4 @@
-# Goal Prompt: Role-Based Access from Entra ID — Bedrock Cost Dashboard
+# Goal Prompt: Role-Based Access from Entra ID — LLM Usage Lens
 
 Companion to `master_prompt.md`. All three prompts live in `prompts/`. It reuses that prompt's run discipline
 (timing, usage guard, progress monitoring, orchestration, git guardrails,
@@ -76,7 +76,7 @@ and every decision is **enforced on the server and audited**.
 
 ### 1.2 Identity source: Entra ID groups mapped to app roles
 
-- Create Entra **security groups**, for example `bedrock-dashboard-viewers`,
+- Create Entra **security groups**, for example `llm-usage-lens-viewers`,
   `-leads` and `-admins`. Assign them to the app roles on the enterprise
   application.
   - The ID token's `roles` claim then carries the values. App roles are used,

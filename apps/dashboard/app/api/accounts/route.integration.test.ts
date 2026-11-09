@@ -1,4 +1,4 @@
-import { AccountListSchema, apiResponseSchema } from "@bedrock-usage/shared";
+import { AccountListSchema, apiResponseSchema } from "@llm-usage-lens/shared";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.fn();

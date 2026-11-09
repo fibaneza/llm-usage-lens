@@ -61,7 +61,7 @@ Never bypass the commit-msg hook (`--no-verify`) — Rule 50.5.
    commit per branch; resolve conflicts in favour of what is already on
    `main` plus the branch's new lines, then re-run the gates on `main`.
 5. **Never push `main`.** Pushing `main` is the user's action; CI
-   (`bedrock-dashboard-build.yml` on `push: main`) runs then. The only push
+   (`llm-usage-lens-build.yml` on `push: main`) runs then. The only push
    Claude makes is deleting merged remote topic branches (step 7). Never
    `git push --force`, never rewrite `main`'s history.
 6. **Clean up after the merge** — `git worktree remove .claude/worktrees/<slug>`,

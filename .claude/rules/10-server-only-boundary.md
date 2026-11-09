@@ -11,7 +11,7 @@ credentials must never reach the browser.
 | DynamoDB client | `apps/dashboard/lib/dynamodb.ts` | Server only |
 | Route Handlers (the only HTTP backend) | `apps/dashboard/app/api/**` | Check the Auth.js session (and the `Admin` role on account writes), validate input with Zod, query DynamoDB, return the standard shape |
 | Table setup + seeds | repo-root `scripts/` | Run via `pnpm db:create-table` / `pnpm db:seed` (`:empty` / `:large` / `:ranking`) |
-| Shared schemas + model normalization (+ pure, dependency-free utilities used by ≥2 workspaces) | `packages/shared` (`@bedrock-usage/shared`) | Imported by both `apps/dashboard` and `apps/collector` |
+| Shared schemas + model normalization (+ pure, dependency-free utilities used by ≥2 workspaces) | `packages/shared` (`@llm-usage-lens/shared`) | Imported by both `apps/dashboard` and `apps/collector` |
 
 ## Rules
 

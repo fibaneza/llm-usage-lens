@@ -1,7 +1,7 @@
 import {
   DepartmentDetailResponseSchema,
   DepartmentsResponseSchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import { describe, expect, it } from "vitest";
 
 import { buildRollup } from "@/test/rollup-builder";

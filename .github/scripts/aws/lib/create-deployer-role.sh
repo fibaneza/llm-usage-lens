@@ -20,9 +20,9 @@
 # Example (provision the bedrock-simulator pipeline deployer role):
 #   .github/scripts/aws/lib/create-deployer-role.sh \
 #     --role-name bedrock-simulator-deployer \
-#     --owner my-org --repo aws-bedrock-cost-tracker \
+#     --owner my-org --repo llm-usage-lens \
 #     --env bedrock-simulator-sandbox \
-#     --workflow my-org/aws-bedrock-cost-tracker/.github/workflows/bedrock-simulator-deploy.yml@refs/heads/main \
+#     --workflow my-org/llm-usage-lens/.github/workflows/bedrock-simulator-deploy.yml@refs/heads/main \
 #     --policy cfn-and-artifacts=.github/scripts/aws/iam/deployer-cfn-and-artifacts.json \
 #     --policy stack-resources=.github/scripts/aws/iam/deployer-stack-resources.json
 #   # …or just run the ready-made wrapper that fills all of the above in:

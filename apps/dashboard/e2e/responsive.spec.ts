@@ -71,7 +71,7 @@ test.describe("responsive breakpoints - sign-in", () => {
       });
       await page.goto("/sign-in");
       await expect(
-        page.getByRole("heading", { name: "Bedrock Cost Dashboard" }),
+        page.getByRole("heading", { name: "LLM Usage Lens" }),
       ).toBeVisible();
 
       const overflow = await page.evaluate(() => ({

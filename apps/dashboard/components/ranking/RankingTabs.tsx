@@ -1,6 +1,6 @@
 "use client";
 
-import { RANKING_TABS, type RankingTab } from "@bedrock-usage/shared";
+import { RANKING_TABS, type RankingTab } from "@llm-usage-lens/shared";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";

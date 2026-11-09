@@ -1,4 +1,4 @@
-import type { TeamDetailResponse } from "@bedrock-usage/shared";
+import type { TeamDetailResponse } from "@llm-usage-lens/shared";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";

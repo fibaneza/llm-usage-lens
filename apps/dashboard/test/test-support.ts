@@ -12,7 +12,7 @@ import type {
   AccountMeta,
   DailyRollup,
   DatedDailyRollupSchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import type { z } from "zod";
 
 import { createTable } from "../../../scripts/create-table";

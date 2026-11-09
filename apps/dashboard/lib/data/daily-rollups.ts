@@ -7,8 +7,8 @@ import {
   accountPk,
   dailySk,
   datePk,
-} from "@bedrock-usage/shared";
-import type { DatedDailyRollup } from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
+import type { DatedDailyRollup } from "@llm-usage-lens/shared";
 
 import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 

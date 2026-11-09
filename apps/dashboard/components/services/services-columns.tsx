@@ -1,4 +1,4 @@
-import type { ServiceListRow } from "@bedrock-usage/shared";
+import type { ServiceListRow } from "@llm-usage-lens/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 

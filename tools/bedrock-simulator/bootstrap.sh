@@ -25,7 +25,7 @@
 #   --profile    <name>   AWS SSO profile to use (default: bedrock-simulator-sandbox)
 #   --account    <id>     Sandbox AWS account ID (required; or set in .bootstrap.env)
 #   --owner      <name>   GitHub owner / username (required; or set in .bootstrap.env)
-#   --repo       <name>   GitHub repository name (default: aws-bedrock-cost-tracker)
+#   --repo       <name>   GitHub repository name (default: llm-usage-lens)
 #   --email      <addr>   Email for the AWS Budget alarm (prompted if omitted)
 #   --kms                 Enable KMS encryption for invocation logs (~$1/month extra)
 #   --skip-build          Skip pnpm install + pnpm build (use existing .aws-sam/)
@@ -43,7 +43,7 @@ cd "$SCRIPT_DIR"
 PROFILE="${AWS_PROFILE:-bedrock-simulator-sandbox}"
 ACCOUNT_ID=""
 GITHUB_OWNER=""
-GITHUB_REPO="aws-bedrock-cost-tracker"
+GITHUB_REPO="llm-usage-lens"
 GITHUB_ENV="bedrock-simulator-sandbox"
 BUDGET_EMAIL=""
 KMS_ENCRYPTION="false"
@@ -167,7 +167,7 @@ else
     -e "s/stack_name = .*/stack_name = \"$STACK_NAME\"/" \
     -e "s/SandboxAccountId=000000000000/SandboxAccountId=$ACCOUNT_ID/" \
     -e "s/GitHubOwner=REPLACE_ME/GitHubOwner=$GITHUB_OWNER/" \
-    -e "s/GitHubRepo=aws-bedrock-cost-tracker/GitHubRepo=$GITHUB_REPO/" \
+    -e "s/GitHubRepo=llm-usage-lens/GitHubRepo=$GITHUB_REPO/" \
     -e "s/GitHubEnvironment=bedrock-simulator-sandbox/GitHubEnvironment=$GITHUB_ENV/" \
     -e "s/BudgetAlertEmail=REPLACE_ME/BudgetAlertEmail=$BUDGET_EMAIL/" \
     -e "s/UseKmsEncryption=false/UseKmsEncryption=$KMS_ENCRYPTION/" \

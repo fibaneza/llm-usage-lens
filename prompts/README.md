@@ -1,6 +1,6 @@
 # Prompts — guarded improvement runs
 
-The Bedrock Cost Dashboard is built through **guarded 60-minute runs**. Each
+The LLM Usage Lens is built through **guarded 60-minute runs**. Each
 run delivers **one unit**: it writes the failing tests, makes them pass, gets
 the Rule 70 reviews, gates, squash-merges into local `main`, and writes a
 report in `temp/`. You push.
@@ -87,7 +87,7 @@ front:
 - **LiteLLM:**
   - confirmation that it is at least 1.104.0
   - the service user and **service key** with `allowed_routes` from the L0
-    table, stored by hand in SSM under `/bedrock-dashboard/<env>/litellm/service-key`
+    table, stored by hand in SSM under `/llm-usage-lens/<env>/litellm/service-key`
   - the internal hostname
   - the **gateway principals** LiteLLM uses to call Bedrock
 - **Governance:** the works-council or data-protection approval, before

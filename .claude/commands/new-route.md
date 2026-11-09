@@ -19,7 +19,7 @@ The handler **must**:
    the `Admin` role, before parsing input — wrap it in
    `withRoute(handler, { requireAdmin: true })` (`lib/api/respond.ts`), which
    enforces that order; never hand-write the check.
-4. Parse query params with a Zod schema from `@bedrock-usage/shared`
+4. Parse query params with a Zod schema from `@llm-usage-lens/shared`
    (re-use existing `DateRangeQuerySchema` / `RankingQuerySchema` /
    `TeamsQuerySchema` when applicable). Return `400` on parse failure.
 5. Enforce the **90-day cap** on custom date ranges.

@@ -4,7 +4,7 @@ import {
   type DailyTrendPoint,
   type DepartmentDetailResponse,
   type ModelBreakdown,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import { describe, expect, it } from "vitest";
 
 import {

@@ -1,7 +1,7 @@
 import {
   ServicesResponseSchema,
   apiSuccessSchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { auth } from "@/auth";

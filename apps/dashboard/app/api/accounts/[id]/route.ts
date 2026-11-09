@@ -2,7 +2,7 @@ import {
   AccountIdSchema,
   AccountMetaSchema,
   UpdateAccountPatchSchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import {
   NotFoundError,

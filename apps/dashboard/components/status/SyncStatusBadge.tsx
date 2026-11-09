@@ -1,6 +1,6 @@
 "use client";
 
-import type { SyncStatus, SyncStatusResult } from "@bedrock-usage/shared";
+import type { SyncStatus, SyncStatusResult } from "@llm-usage-lens/shared";
 import {
   CheckCircle2,
   CircleDashed,

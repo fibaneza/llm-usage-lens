@@ -1,7 +1,7 @@
 import "server-only";
 
-import { runBounded } from "@bedrock-usage/shared";
-import type { DatedDailyRollup } from "@bedrock-usage/shared";
+import { runBounded } from "@llm-usage-lens/shared";
+import type { DatedDailyRollup } from "@llm-usage-lens/shared";
 import { unstable_cache } from "next/cache";
 
 import { getRollupsByDate } from "@/lib/data/daily-rollups";

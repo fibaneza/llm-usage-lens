@@ -9,7 +9,7 @@ import type {
   TeamDetailResponse,
   TeamRow,
   UserListRow,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import { vi } from "vitest";
 
 // Test-only helpers: a stubbed same-origin `fetch` (Rule 60.24 — no real

@@ -17,7 +17,7 @@ Steps:
      `apps/dashboard/lib/dynamodb.ts`, `apps/dashboard/lib/data/` →
      Phase 3.2 started?
    - `apps/dashboard/app/dashboard/**/page.tsx` → which Phase 4 sub-phases?
-   - The CI `test` job in `.github/workflows/bedrock-dashboard-build.yml` and
+   - The CI `test` job in `.github/workflows/llm-usage-lens-build.yml` and
      recent `git log` for merged sub-phase PRs — check both before declaring
      status.
 3. For each phase, list status: **not started / in progress / complete**.

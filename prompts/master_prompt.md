@@ -1,8 +1,8 @@
-# Master Prompt: Guarded 60-Minute Improvement Run — Bedrock Cost Dashboard
+# Master Prompt: Guarded 60-Minute Improvement Run — LLM Usage Lens
 
 ## 0. Read first — precedence
 
-You are running inside the `aws-bedrock-cost-tracker` repository. This is an
+You are running inside the `llm-usage-lens` repository. This is an
 existing, phase-gated project, not a greenfield build.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` → this
@@ -519,7 +519,7 @@ From Rules 10, 20 and 50 and the data-model spec:
 - **Sync status.** A missing `SYSTEM` / `SYNC#LATEST` item is the "never
   synced" state, not an error.
 - **Validation.** Returned shapes are validated with the
-  `@bedrock-usage/shared` Zod schemas. Types come from `z.infer`. Route
+  `@llm-usage-lens/shared` Zod schemas. Types come from `z.infer`. Route
   Handlers return `{ data }` / `{ error: { code, message } }`, with 401 and
   400 covered (Rule 10, 60.23).
 - **Server-only boundary.** No `@aws-sdk/*` import may appear outside
@@ -592,7 +592,7 @@ Use this skeleton. Fill every section from evidence in `temp/run/` and from
 the repository's actual final state.
 
 ```markdown
-# Bedrock Cost Dashboard — Execution Report
+# LLM Usage Lens — Execution Report
 
 **Date:** YYYY-MM-DD · **T+00 (UTC):** … · **Freeze:** T+55 (or usage freeze at T+…) · **Report written at:** T+… (on time | late) · **Final status:** Completed | Partially completed | Blocked
 

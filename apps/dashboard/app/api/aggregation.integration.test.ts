@@ -9,7 +9,7 @@ import {
   UsersResponseSchema,
   apiSuccessSchema,
   ApiErrorBodySchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import type { z } from "zod";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 

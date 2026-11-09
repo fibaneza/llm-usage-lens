@@ -8,7 +8,7 @@ import {
   vi,
 } from "vitest";
 
-import type { CreateAccountInput } from "@bedrock-usage/shared";
+import type { CreateAccountInput } from "@llm-usage-lens/shared";
 
 import {
   createAccount,

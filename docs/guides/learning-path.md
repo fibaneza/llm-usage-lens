@@ -714,12 +714,12 @@ dashboard (Phases 1–5) is finished first; Phase 6 is the last build.
 
 **Build tasks — Lambda implementation.**
 
-- [ ] Create the Lambda project in `apps/collector` (Node.js 22.x, TypeScript), depending on `@bedrock-usage/shared`
+- [ ] Create the Lambda project in `apps/collector` (Node.js 22.x, TypeScript), depending on `@llm-usage-lens/shared`
 - [ ] Read the account registry from DynamoDB (all active `AccountMeta` items)
 - [ ] Query Cost Explorer (assume `CostExplorerReadRole`): `GetCostAndUsage` for yesterday + today, filtered to `AmazonBedrock` (placeholder until the Phase 6 `SERVICE` ground-truth check), grouped by `LINKED_ACCOUNT` and `USAGE_TYPE`
 - [ ] Query CloudTrail Lake locally: `StartQuery` then poll `GetQueryResults`; Bedrock invocations grouped by account, SSO username, inference profile, model
 - [ ] Query CloudWatch via cross-account observability: `GetMetricData` per `ModelId` (InputTokenCount, OutputTokenCount, Invocations, InvocationLatency)
-- [ ] Normalize raw Bedrock model IDs to canonical keys via `@bedrock-usage/shared`
+- [ ] Normalize raw Bedrock model IDs to canonical keys via `@llm-usage-lens/shared`
 - [ ] Implement the today's-cost fallback (static price table × token counts when Cost Explorer returns zero)
 - [ ] Merge all three sources per account per day, applying the three-source merge precedence rules
 - [ ] Resolve inference profile `service=<name>` tags (CloudTrail event → `ListTagsForResource` → name convention → `_untagged`)
@@ -727,7 +727,7 @@ dashboard (Phases 1–5) is finished first; Phase 6 is the last build.
 - [ ] Implement the two-day refresh (yesterday `costFinalized: true`, today `false`)
 - [ ] Write/overwrite `DailyRollup` items via `BatchWriteItem` (25/batch); update the `SyncStatus` item with `nextScheduledAt`
 - [ ] Author the SAM template (`apps/collector/template.yaml`): `bedrock-cost-collector` function, `BedrockCollectorLambdaRole`, EventBridge hourly cron, the `bedrock-usage` table (PK/SK + GSI1, TTL), a failure alarm
-- [ ] Configure SAM `BuildMethod: esbuild` to bundle `@bedrock-usage/shared`; verify the built bundle contains shared code
+- [ ] Configure SAM `BuildMethod: esbuild` to bundle `@llm-usage-lens/shared`; verify the built bundle contains shared code
 - [ ] Handle partial failures (some accounts fail → `SyncStatus` status `"partial"`)
 - [ ] Tests: unit tests for model normalization, data merging, the cost-estimation formula
 - [ ] Deploy to the observability account via `sam build && sam deploy` (OIDC-assumed role)

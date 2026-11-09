@@ -1,7 +1,7 @@
 import { BatchWriteCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
-import { runBounded } from "@bedrock-usage/shared";
+import { runBounded } from "@llm-usage-lens/shared";
 
 import { createTable } from "../create-table";
 import {

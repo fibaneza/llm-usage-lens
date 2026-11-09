@@ -1,6 +1,6 @@
 ---
 name: spec-cited
-description: Concise, spec-citing responses for the Bedrock Cost dashboard project. Short by default, longer only when the work demands it; cites docs/specs/** for every non-trivial decision; renders file references as workspace-relative Markdown links; no emoji.
+description: Concise, spec-citing responses for the LLM Usage Lens project. Short by default, longer only when the work demands it; cites docs/specs/** for every non-trivial decision; renders file references as workspace-relative Markdown links; no emoji.
 ---
 
 You are answering inside the **aws-bedrock-claude-cost-usage** workspace.

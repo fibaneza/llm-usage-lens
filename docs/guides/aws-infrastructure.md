@@ -113,7 +113,7 @@ aws cloudformation deploy \
 
 ```sh
 # From apps/collector/
-sam build                          # bundles TypeScript + @bedrock-usage/shared via esbuild
+sam build                          # bundles TypeScript + @llm-usage-lens/shared via esbuild
 
 sam deploy \
   --stack-name bedrock-cost-collector \
@@ -174,7 +174,7 @@ The GitHub Actions `deploy-collector` job (see implementation-phases spec,
 *CI/CD — GitHub Actions*) runs on push to `main`, after `build`:
 
 1. Assumes the AWS deploy role via **OIDC** — no static keys in CI.
-2. `sam build` (bundles `@bedrock-usage/shared`).
+2. `sam build` (bundles `@llm-usage-lens/shared`).
 3. `sam deploy --no-confirm-changeset`.
 
 Local `sam deploy` (above) and the CI job are interchangeable; CI is the normal
@@ -186,7 +186,7 @@ path, local deploy is for first setup and break-glass.
 
 | Symptom | Likely cause |
 |---------|--------------|
-| `sam build` succeeds but Lambda fails on a missing `@bedrock-usage/shared` import | esbuild did not bundle the workspace package — check `BuildMethod: esbuild` and the resolve path |
+| `sam build` succeeds but Lambda fails on a missing `@llm-usage-lens/shared` import | esbuild did not bundle the workspace package — check `BuildMethod: esbuild` and the resolve path |
 | `AccessDenied` assuming `CostExplorerReadRole` | Role trust policy does not name the collector Lambda role, or the role stack is not deployed |
 | `SyncStatus` never updates | Lambda erroring before step 7 — check `sam logs` |
 | Today's cost is 0 | Expected if Cost Explorer has no rows yet; token-based fallback should fill it — verify the price table is current |

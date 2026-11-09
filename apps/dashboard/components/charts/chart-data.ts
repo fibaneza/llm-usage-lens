@@ -6,7 +6,7 @@ import {
   type ModelBreakdown,
   type ModelKey,
   type OverviewResponse,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 // Non-model charges (Guardrails, Provisioned Throughput, ...) are their own
 // series/segment, never merged into `other` and never a model token

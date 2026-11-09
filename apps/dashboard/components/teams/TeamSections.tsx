@@ -1,6 +1,6 @@
 "use client";
 
-import type { TeamDetailResponse } from "@bedrock-usage/shared";
+import type { TeamDetailResponse } from "@llm-usage-lens/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useId, type ReactNode } from "react";
 

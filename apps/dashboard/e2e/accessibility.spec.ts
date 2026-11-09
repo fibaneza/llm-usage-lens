@@ -52,7 +52,7 @@ test.describe("accessibility (axe) - public pages", () => {
   }) => {
     await page.goto("/sign-in");
     await expect(
-      page.getByRole("heading", { name: "Bedrock Cost Dashboard" }),
+      page.getByRole("heading", { name: "LLM Usage Lens" }),
     ).toBeVisible();
 
     const results = await new AxeBuilder({ page })

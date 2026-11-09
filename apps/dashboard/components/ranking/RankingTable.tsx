@@ -1,6 +1,6 @@
 "use client";
 
-import type { RankingRow } from "@bedrock-usage/shared";
+import type { RankingRow } from "@llm-usage-lens/shared";
 import { useMemo } from "react";
 
 import { ExportButton } from "@/components/table/ExportButton";

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
-import type { ModelKey } from "@bedrock-usage/shared";
+import type { ModelKey } from "@llm-usage-lens/shared";
 
 import { collectConsoleErrors } from "./support/console-errors";
 import { waitForHydration } from "./support/hydration";

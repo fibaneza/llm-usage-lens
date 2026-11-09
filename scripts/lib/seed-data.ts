@@ -1,4 +1,4 @@
-import { COLLECTOR_REGION, MODEL_KEYS } from "@bedrock-usage/shared";
+import { COLLECTOR_REGION, MODEL_KEYS } from "@llm-usage-lens/shared";
 import type {
   AccountMeta,
   AttributionEntry,
@@ -8,7 +8,7 @@ import type {
   NonModelCategory,
   NonModelCharge,
   SyncStatus,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 // Source: docs/specs/2026-05-15-implementation-phases.md — Phase 3.2 seed
 // scripts; docs/specs/2026-05-15-data-model.md — DailyRollup; Rule 20.

@@ -17,7 +17,7 @@ runs Next.js Server Components and Route Handlers as serverless functions; the
 collector and DynamoDB stay in AWS (see [docs/guides/aws-infrastructure.md](aws-infrastructure.md)).
 
 The repo is a **pnpm monorepo** — the dashboard is one workspace under
-`apps/dashboard` and depends on `@bedrock-usage/shared`. Netlify must build from
+`apps/dashboard` and depends on `@llm-usage-lens/shared`. Netlify must build from
 the repo root so pnpm can resolve the workspace, with the base directory
 pointed at the app.
 
@@ -134,7 +134,7 @@ netlify login                       # opens a browser to authenticate
 ```sh
 # From the repo root
 netlify link                        # connect this repo to a Netlify site
-# or: netlify sites:create --name bedrock-cost-dashboard
+# or: netlify sites:create --name llm-usage-lens
 ```
 
 ### Deploy to production
@@ -173,7 +173,7 @@ netlify rollback
 
 # Stop auto-deploys but keep the site — unlink from the repo in the UI,
 # or take the site down entirely:
-netlify sites:delete --name bedrock-cost-dashboard
+netlify sites:delete --name llm-usage-lens
 ```
 
 `netlify sites:delete` is irreversible — it removes the site, its deploys, and
@@ -192,7 +192,7 @@ aws iam update-access-key --user-name <dashboard-reader-user> \
 | Symptom | Likely cause |
 |---------|--------------|
 | Build fails: `AUTH_MICROSOFT_ENTRA_ID_ISSUER must be https://login.microsoftonline.com/<tenant GUID, lowercase>/v2.0` | The issuer uses `common`/`organizations`/`consumers`, a domain name, an uppercase GUID or a trailing slash. Copy the Directory (tenant) ID from the app registration |
-| Build fails resolving `@bedrock-usage/shared` | Base directory not the repo root, or pnpm not enabled — check §3 |
+| Build fails resolving `@llm-usage-lens/shared` | Base directory not the repo root, or pnpm not enabled — check §3 |
 | Build fails with a missing-env-var error | `@t3-oss/env-nextjs` validation — set the variable in Netlify (see §4) |
 | Sign-in redirect loop or `redirect_uri_mismatch` | Entra ID app registration missing the Netlify callback URL, or `AUTH_URL` wrong |
 | Data pages error with an AWS credentials / `AccessDenied` message | Scoped IAM key missing, inactive, or its policy too narrow |

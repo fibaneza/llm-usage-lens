@@ -115,7 +115,7 @@ is the source of truth — read it before touching any workflow.
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| `bedrock-dashboard-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (both Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`) |
+| `llm-usage-lens-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (both Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`) |
 | `claude-pr-review.yml` | PR opened / synchronize / ready / reopened | Inline review + security findings; HIGH findings submit a `REQUEST_CHANGES` review |
 | `claude-code-review.yml` | release tag push / `workflow_dispatch` | Release audit scoped to commits since the previous tag; files issues |
 | `github-pr-title-lint.yml` | PR opened / edited / reopened | Conventional-Commits check on the PR title (the squash-merge commit on `main`) |
@@ -131,7 +131,7 @@ Two non-obvious constraints:
 - **Branch protection is not enforced** on the current free private repo.
   Work lands as local squash-merges into `main` that the user pushes
   ([Rule 31](.claude/rules/31-github-flow.md)), so PR-only checks run only on
-  the optional PR path; CI (`bedrock-dashboard-build.yml`) runs on every push to `main` and on every pull request.
+  the optional PR path; CI (`llm-usage-lens-build.yml`) runs on every push to `main` and on every pull request.
 
 ## Local development environment
 

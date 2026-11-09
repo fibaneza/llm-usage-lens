@@ -1,4 +1,4 @@
-import { MODEL_KEYS, MODEL_META } from "@bedrock-usage/shared";
+import { MODEL_KEYS, MODEL_META } from "@llm-usage-lens/shared";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

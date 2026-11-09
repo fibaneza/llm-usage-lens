@@ -1,4 +1,4 @@
-import type { ServiceListRow } from "@bedrock-usage/shared";
+import type { ServiceListRow } from "@llm-usage-lens/shared";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";

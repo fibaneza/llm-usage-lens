@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Date:** 2026-05-15
-**Scope:** Visual design system, UI/UX standards, and technology stack for the Bedrock Cost Dashboard
+**Scope:** Visual design system, UI/UX standards, and technology stack for the LLM Usage Lens
 
 ---
 

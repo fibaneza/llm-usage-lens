@@ -1,4 +1,4 @@
-import type { NonModelCategory } from "@bedrock-usage/shared";
+import type { NonModelCategory } from "@llm-usage-lens/shared";
 import { Repeat } from "lucide-react";
 
 type RecurringIndicatorProps = {

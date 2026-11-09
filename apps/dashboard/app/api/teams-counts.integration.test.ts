@@ -1,4 +1,4 @@
-import { TeamsResponseSchema, apiSuccessSchema } from "@bedrock-usage/shared";
+import { TeamsResponseSchema, apiSuccessSchema } from "@llm-usage-lens/shared";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { auth } from "@/auth";

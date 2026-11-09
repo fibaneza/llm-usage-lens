@@ -19,7 +19,7 @@ A maintainer is automatically notified and only repository administrators
 can read the report.
 
 [gh-pvr]: https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability
-[sec-tab]: https://github.com/fibaneza/aws-bedrock-cost-tracker/security
+[sec-tab]: https://github.com/fibaneza/llm-usage-lens/security
 
 ## What to include
 

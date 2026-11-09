@@ -1,4 +1,4 @@
-# gitleaks configuration for aws-bedrock-cost-tracker.
+# gitleaks configuration for llm-usage-lens.
 #
 # Extends gitleaks' built-in ruleset (AWS keys, private keys, generic secrets)
 # and adds one project-specific rule: a real 12-digit AWS account ID must never
@@ -9,7 +9,7 @@
 # Used by the simulator pre-push hook (tools/bedrock-simulator/.hooks/pre-push)
 # and by any `gitleaks detect` run from the repo root.
 
-title = "aws-bedrock-cost-tracker"
+title = "llm-usage-lens"
 
 [extend]
 useDefault = true

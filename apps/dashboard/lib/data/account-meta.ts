@@ -15,12 +15,12 @@ import {
   UpdateAccountPatchSchema,
   accountPk,
   deptPk,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import type {
   AccountMeta,
   CreateAccountInput,
   UpdateAccountPatch,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 

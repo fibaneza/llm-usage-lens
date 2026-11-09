@@ -3,7 +3,7 @@
 ## Introduction
 
 This dev container gives you a one-command development environment for the
-Bedrock Cost Dashboard. Alongside the Next.js app it bundles a full
+LLM Usage Lens. Alongside the Next.js app it bundles a full
 observability pipeline so that **Claude Code telemetry** — sessions, tokens,
 cost, tool use, and API events — is captured automatically while you work.
 
@@ -95,7 +95,7 @@ only when you need to seed or query data.
 > that Claude Code sets *internally* — the Prometheus exporter renames it to
 > `exported_job` because Prometheus's own scrape job is `otel-collector`.
 > This is independent of `OTEL_SERVICE_NAME` (which is set to
-> `bedrock-cost-dashboard` for the app's own telemetry).
+> `llm-usage-lens` for the app's own telemetry).
 
 ## Configuration files
 
@@ -116,7 +116,7 @@ services:
       - ..:/workspace:cached
     command: sleep infinity
     environment:
-      OTEL_SERVICE_NAME: bedrock-cost-dashboard
+      OTEL_SERVICE_NAME: llm-usage-lens
 
       # Claude Code telemetry — exports metrics + events when `claude` runs
       CLAUDE_CODE_ENABLE_TELEMETRY: "1"
@@ -447,7 +447,7 @@ Set on the `app` service in `docker-compose.yml` — they apply to every
 | Variable | Value | Purpose |
 |---|---|---|
 | `CLAUDE_CODE_ENABLE_TELEMETRY` | `1` | Enables OTLP export |
-| `OTEL_SERVICE_NAME` | `bedrock-cost-dashboard` | Service name for the app's own telemetry |
+| `OTEL_SERVICE_NAME` | `llm-usage-lens` | Service name for the app's own telemetry |
 | `OTEL_METRICS_EXPORTER` | `otlp` | Exports metrics via OTLP |
 | `OTEL_LOGS_EXPORTER` | `otlp` | Exports logs/events via OTLP |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | Uses gRPC (port 4317) |

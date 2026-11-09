@@ -1,4 +1,7 @@
-import type { DatedDailyRollup, OverviewResponse } from "@bedrock-usage/shared";
+import type {
+  DatedDailyRollup,
+  OverviewResponse,
+} from "@llm-usage-lens/shared";
 
 import {
   dailyTrend,

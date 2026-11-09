@@ -182,7 +182,7 @@ Normalization rules:
 - Region-prefixed IDs (e.g. `us.anthropic.claude-...`) strip the region prefix before matching.
 - Unrecognized model IDs fall into the `other` canonical key. The raw IDs are preserved in a `rawModelIds` list inside that entry so new models can be identified and added to the mapping.
 
-The mapping table lives in `@bedrock-usage/shared` (`packages/shared`) used by both `apps/collector` and `apps/dashboard`, so the two never drift.
+The mapping table lives in `@llm-usage-lens/shared` (`packages/shared`) used by both `apps/collector` and `apps/dashboard`, so the two never drift.
 
 > **Proposal (audit A2, 2026-10-23; not yet adopted).** ARN-form model IDs currently fall through to `other`. These include application inference profile ARNs, which carry the v1 `byService` mechanism, and provisioned-model ARNs. Proposed rule: `normalizeModelId` accepts only foundation-model IDs. The **collector** first resolves an inference-profile ARN (via `bedrock:GetInferenceProfile`) or a provisioned-model ARN (via `bedrock:GetProvisionedModelThroughput`) to its underlying foundation model ID, caches the result per run, and only then normalizes. An ARN that cannot be resolved stays `other`, with the ARN in `rawModelIds`. See System Architecture spec — *Proposed collector amendments (audit A2)*.
 

@@ -6,7 +6,7 @@ import {
   UpdateAccountPatchSchema,
   type AccountMeta,
   type UpdateAccountPatch,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import {
   AccountForm,

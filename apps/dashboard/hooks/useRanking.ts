@@ -1,6 +1,6 @@
 "use client";
 
-import { RankingResponseSchema } from "@bedrock-usage/shared";
+import { RankingResponseSchema } from "@llm-usage-lens/shared";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchApi } from "@/lib/query/fetch-api";

@@ -6,7 +6,7 @@
 // helpers) so a non-UTC host can't shift a day boundary and, e.g., let a custom
 // range exceed the 90-day cap.
 
-import { MAX_RANGE_DAYS } from "@bedrock-usage/shared";
+import { MAX_RANGE_DAYS } from "@llm-usage-lens/shared";
 
 export const DATE_RANGE_PRESETS = ["7d", "30d", "90d", "custom"] as const;
 

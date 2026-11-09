@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MODEL_KEYS, MODEL_META, type ModelKey } from "@bedrock-usage/shared";
+import { MODEL_KEYS, MODEL_META, type ModelKey } from "@llm-usage-lens/shared";
 import { describe, expect, it, vi } from "vitest";
 
 import { ModelFilter } from "./ModelFilter";

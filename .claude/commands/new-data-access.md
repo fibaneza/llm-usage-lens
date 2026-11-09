@@ -16,7 +16,7 @@ and `.claude/rules/20-data-model-conventions.md`):
    constructs a fresh client.
 3. Inputs are typed (no `any`); date inputs are `YYYY-MM-DD` UTC strings.
 4. Output is typed and validated against a Zod schema from
-   `@bedrock-usage/shared` before returning.
+   `@llm-usage-lens/shared` before returning.
 5. **Any GSI1 query loops on `LastEvaluatedKey`** until the page key is
    absent. Do not assume a single page.
 6. A missing item is represented as `null` (or a defined "never synced"

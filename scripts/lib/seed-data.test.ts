@@ -5,7 +5,7 @@ import {
   MODEL_KEYS,
   NON_MODEL_CATEGORIES,
   SyncStatusSchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import { describe, expect, it } from "vitest";
 
 import { buildSeedData } from "./seed-data";

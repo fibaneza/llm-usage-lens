@@ -77,7 +77,7 @@ Look up `ComponentName` in the Component Inventory of
 2. Use a **named export** — no default export (Rule 60.5).
 3. Use semantic Tailwind tokens / CSS variables — **no raw hex**
    (Rule 40.2, 60.30).
-4. Order imports external → `@bedrock-usage/shared` → `@/…` → relative
+4. Order imports external → `@llm-usage-lens/shared` → `@/…` → relative
    (Rule 60.27).
 5. Give every icon-only control an `aria-label`; keep focus rings visible
    (Rule 60.30).
@@ -96,7 +96,7 @@ Look up `ComponentName` in the Component Inventory of
 - **chart** — a Recharts chart. Export, as the public named export, the
   `next/dynamic(() => import(...), { ssr: false })` wrapper that consumers
   import (Rule 40.3, 60.11). Wrap the chart in `ResponsiveContainer`. Series
-  colors come from the model CSS tokens in `@bedrock-usage/shared`
+  colors come from the model CSS tokens in `@llm-usage-lens/shared`
   (Rule 20.5) — never raw hex. Refuse a donut/pie chart for more than 5
   categories (design-system Anti-Patterns). Test is a shallow smoke render
   of the dynamic wrapper.

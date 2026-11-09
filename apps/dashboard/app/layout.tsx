@@ -24,7 +24,7 @@ const jetbrainsMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Bedrock Cost Dashboard",
+  title: "LLM Usage Lens",
   description: "AWS Bedrock usage and cost tracking across the organization.",
 };
 

@@ -1,5 +1,5 @@
-import type { AccountMeta } from "@bedrock-usage/shared";
-import { CreateAccountInputSchema } from "@bedrock-usage/shared";
+import type { AccountMeta } from "@llm-usage-lens/shared";
+import { CreateAccountInputSchema } from "@llm-usage-lens/shared";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { SpanStatusCode, trace } from "@opentelemetry/api";
-import type { ApiErrorCode } from "@bedrock-usage/shared";
+import type { ApiErrorCode } from "@llm-usage-lens/shared";
 import { ZodError } from "zod";
 import type { ZodType, z } from "zod";
 

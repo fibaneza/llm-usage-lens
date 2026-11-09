@@ -73,7 +73,7 @@ Look up `ComponentName` in the design-system spec
 - Named export only; no default export (Rule 60.5).
 - File name = component name, `PascalCase`, one component per file (60.26).
 - Semantic Tailwind tokens / CSS variables — no raw hex (40.2, 60.30).
-- Import order: external → `@bedrock-usage/shared` → `@/…` → relative (60.27).
+- Import order: external → `@llm-usage-lens/shared` → `@/…` → relative (60.27).
 - `aria-label` on any icon-only control; visible focus ring (60.30).
 - Co-located Vitest + React Testing Library `.test.tsx` stub asserting
   rendered output, not internals (60.21, 60.23).
@@ -91,7 +91,7 @@ TanStack Query. Test exercises one interaction.
 public named export, the **`next/dynamic(() => import(...), { ssr: false })`**
 wrapper that consumers import (Rule 40.3, 60.11). The chart is wrapped in
 `ResponsiveContainer`. Series colors come from the model CSS tokens in
-`@bedrock-usage/shared` (Rule 20.5) — never raw hex. A donut/pie chart for
+`@llm-usage-lens/shared` (Rule 20.5) — never raw hex. A donut/pie chart for
 more than 5 categories is refused (design-system Anti-Patterns). Test is a
 shallow smoke render asserting the dynamic wrapper renders (Recharts internals
 are `ssr:false` and not asserted).

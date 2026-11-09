@@ -443,7 +443,7 @@ fork-originating PRs.
 3. Promote the same artifact across environments — never rebuild per environment.
 
 > **In this project.** SAM bundles the Lambda with `BuildMethod: esbuild`,
-> inlining `@bedrock-usage/shared`; the built bundle is what deploys.
+> inlining `@llm-usage-lens/shared`; the built bundle is what deploys.
 
 ---
 

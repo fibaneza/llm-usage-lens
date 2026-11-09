@@ -96,7 +96,7 @@ patterns) and current Next.js App Router guidance.
     `SCREAMING_SNAKE_CASE`.
 26. **One component per file**, named to match the file.
 27. **Imports ordered:** external packages → workspace packages
-    (`@bedrock-usage/shared`) → local aliases (`@/...`) → relative. Prettier
+    (`@llm-usage-lens/shared`) → local aliases (`@/...`) → relative. Prettier
     + ESLint enforce; do not fight the formatter.
 28. **No barrel `index.ts` files** that re-export a directory — they defeat
     tree-shaking and obscure the dependency graph.

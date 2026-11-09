@@ -1,8 +1,8 @@
 import "server-only";
 
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
-import { SYNC_SK, SYSTEM_PK, SyncStatusSchema } from "@bedrock-usage/shared";
-import type { SyncStatus } from "@bedrock-usage/shared";
+import { SYNC_SK, SYSTEM_PK, SyncStatusSchema } from "@llm-usage-lens/shared";
+import type { SyncStatus } from "@llm-usage-lens/shared";
 
 import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 

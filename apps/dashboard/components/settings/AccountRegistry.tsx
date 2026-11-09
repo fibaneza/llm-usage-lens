@@ -1,6 +1,6 @@
 "use client";
 
-import type { AccountMeta } from "@bedrock-usage/shared";
+import type { AccountMeta } from "@llm-usage-lens/shared";
 import { Building2, Pencil, Plus, UserX } from "lucide-react";
 import { useState } from "react";
 

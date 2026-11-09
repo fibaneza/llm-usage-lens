@@ -295,7 +295,7 @@ Two IaC artifacts, both deployed through the CloudFormation control plane to dif
 
 **DynamoDB table ownership.** The production `bedrock-usage` table is defined in the SAM template (`AWS::DynamoDB::Table`) and owned by the collector stack — PK/SK + GSI1, TTL on `DailyRollup`. `scripts/create-table.ts` is **DynamoDB-Local-only** and never touches AWS. The SAM template is the source of truth for the production schema; the two must be kept in sync by hand.
 
-**Monorepo bundling.** The collector imports `@bedrock-usage/shared` as a `workspace:*` dependency, which cannot be resolved at Lambda runtime. SAM's `BuildMethod: esbuild` must inline the shared package into the artifact — configure `esbuild` with the shared package source on its resolve path, or run `pnpm --filter collector deploy` to produce a flattened `node_modules` before `sam build`. Verify the built bundle contains the shared code in Phase 6.
+**Monorepo bundling.** The collector imports `@llm-usage-lens/shared` as a `workspace:*` dependency, which cannot be resolved at Lambda runtime. SAM's `BuildMethod: esbuild` must inline the shared package into the artifact — configure `esbuild` with the shared package source on its resolve path, or run `pnpm --filter collector deploy` to produce a flattened `node_modules` before `sam build`. Verify the built bundle contains the shared code in Phase 6.
 
 **Credentials.** Both stacks deploy from GitHub Actions using an OIDC-assumed IAM role — no static AWS keys in CI, consistent with the AWS SDK default credential chain rule. The deploy role itself is created once during one-time setup.
 
@@ -463,4 +463,4 @@ The Next.js app and Lambda collector share schemas and model normalization witho
 
 Besides schemas and model normalization, `packages/shared` may hold small pure, dependency-free utilities used by two or more of the dashboard, the collector and `scripts/` (e.g. `runBounded`, bounded-concurrency mapping — decided 2026-10-29). Nothing with I/O or AWS SDK imports.
 
-Both apps depend on `@bedrock-usage/shared` (workspace package). Phase 1 scaffolds the workspace; Phase 3 implements schemas in `packages/shared`; Phase 6 imports the same package in the collector bundle.
+Both apps depend on `@llm-usage-lens/shared` (workspace package). Phase 1 scaffolds the workspace; Phase 3 implements schemas in `packages/shared`; Phase 6 imports the same package in the collector bundle.

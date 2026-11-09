@@ -1,4 +1,4 @@
-import { SyncStatusResultSchema } from "@bedrock-usage/shared";
+import { SyncStatusResultSchema } from "@llm-usage-lens/shared";
 
 import { getSyncStatusCached } from "@/lib/api/cached-reads";
 import { jsonData, withRoute } from "@/lib/api/respond";

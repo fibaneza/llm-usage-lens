@@ -1,4 +1,4 @@
-import type { DepartmentRow } from "@bedrock-usage/shared";
+import type { DepartmentRow } from "@llm-usage-lens/shared";
 
 type HeaderInput = Pick<
   DepartmentRow,

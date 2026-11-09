@@ -1,4 +1,4 @@
-// Public entry for @bedrock-usage/shared — the package.json "exports" map
+// Public entry for @llm-usage-lens/shared — the package.json "exports" map
 // points here. Explicit named re-exports of the public API, not a directory
 // barrel (Rule 60.28). Imported by both apps/dashboard and apps/collector.
 // See docs/specs/2026-05-15-system-architecture.md — "Shared code layout".

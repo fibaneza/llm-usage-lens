@@ -1,7 +1,7 @@
 import {
   SyncStatusResultSchema,
   apiResponseSchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.fn();

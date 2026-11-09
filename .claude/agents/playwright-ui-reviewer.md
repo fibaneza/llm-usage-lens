@@ -25,7 +25,7 @@ once with `pnpm --dir apps/dashboard exec playwright install --with-deps chromiu
 ## What you do
 
 1. **Run the suite:** `pnpm test:e2e` (root) — equivalent to
-   `pnpm --filter @bedrock-usage/dashboard exec playwright test`. The config
+   `pnpm --filter @llm-usage-lens/dashboard exec playwright test`. The config
    boots its own dev server on port 3211 with a test `AUTH_SECRET`; specs
    authenticate via the forged-session helper (`e2e/support/session.ts`) —
    real Auth.js verification, no production bypass.

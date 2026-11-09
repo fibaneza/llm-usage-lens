@@ -4,7 +4,7 @@ import type {
   ModelBreakdown,
   ModelKey,
   Totals,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import { modelCostOf, nonModelCostOf, splitCosts } from "./non-model";
 

@@ -1,4 +1,4 @@
-import type { RankingRow, RankingTab } from "@bedrock-usage/shared";
+import type { RankingRow, RankingTab } from "@llm-usage-lens/shared";
 import {
   act,
   fireEvent,

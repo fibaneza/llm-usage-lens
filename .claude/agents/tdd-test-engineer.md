@@ -1,6 +1,6 @@
 ---
 name: tdd-test-engineer
-description: TDD test agent for the Bedrock Cost Dashboard. First agent in the tdd-test-engineer → typescript-developer → quality-reviewer loop — writes the failing test suite from the specs before any production code exists, and rules on disputed tests during rework. Edits tests only.
+description: TDD test agent for the LLM Usage Lens. First agent in the tdd-test-engineer → typescript-developer → quality-reviewer loop — writes the failing test suite from the specs before any production code exists, and rules on disputed tests during rework. Edits tests only.
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
 ---

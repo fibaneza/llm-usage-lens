@@ -1,11 +1,11 @@
 # Bedrock simulator — specification
 
 > **Out-of-scope tooling — not part of the dashboard build phases.**
-> This spec describes a standalone test harness in `tools/bedrock-simulator/`. It is independent of the Bedrock Cost Dashboard project: it does not participate in `.claude/rules/30-phase-discipline.md`, is not in the pnpm workspace, and can be built/deployed/destroyed without touching `apps/dashboard` or `apps/collector`.
+> This spec describes a standalone test harness in `tools/bedrock-simulator/`. It is independent of the LLM Usage Lens project: it does not participate in `.claude/rules/30-phase-discipline.md`, is not in the pnpm workspace, and can be built/deployed/destroyed without touching `apps/dashboard` or `apps/collector`.
 
 ## Scope
 
-The Bedrock Cost Dashboard collector (Phase 6) ingests data from CloudWatch, CloudTrail Lake, and Cost Explorer. Until someone is invoking Bedrock in the target AWS organisation, the dashboard has nothing to display and the collector has nothing to read — making end-to-end testing impossible.
+The LLM Usage Lens collector (Phase 6) ingests data from CloudWatch, CloudTrail Lake, and Cost Explorer. Until someone is invoking Bedrock in the target AWS organisation, the dashboard has nothing to display and the collector has nothing to read — making end-to-end testing impossible.
 
 The simulator solves this by:
 

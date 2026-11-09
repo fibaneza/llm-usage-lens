@@ -2,7 +2,7 @@ import type {
   DatedDailyRollup,
   NonModelCategory,
   NonModelCategoryTotal,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Non-Model Charges / Dashboard
 // impact (v1)"; Rule 20.12. Non-model cost is account-level only: it is summed

@@ -3,7 +3,7 @@ import {
   AccountListSchema,
   AccountMetaSchema,
   CreateAccountInputSchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import { revalidateAccounts } from "@/lib/api/revalidate-accounts";
 import {

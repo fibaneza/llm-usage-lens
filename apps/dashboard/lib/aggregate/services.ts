@@ -2,7 +2,7 @@ import type {
   DatedDailyRollup,
   ServiceListRow,
   ServiceRow,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import { mergeAttribution } from "./attribution";
 import { groupBy } from "./common";

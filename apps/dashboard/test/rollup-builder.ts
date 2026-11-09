@@ -5,7 +5,7 @@ import type {
   DatedDailyRollup,
   ModelKey,
   NonModelCategory,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 const acct = (n: number) => String(n).padStart(12, "0");
 

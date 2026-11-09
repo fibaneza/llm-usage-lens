@@ -1,4 +1,4 @@
-import type { TeamRow } from "@bedrock-usage/shared";
+import type { TeamRow } from "@llm-usage-lens/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 

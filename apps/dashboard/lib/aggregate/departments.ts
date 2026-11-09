@@ -2,7 +2,7 @@ import type {
   DatedDailyRollup,
   DepartmentDetailResponse,
   DepartmentRow,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import {
   dailyTrend,

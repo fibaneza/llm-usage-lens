@@ -1,4 +1,4 @@
-import { MODEL_KEYS, RANKING_TABS } from "@bedrock-usage/shared";
+import { MODEL_KEYS, RANKING_TABS } from "@llm-usage-lens/shared";
 import { parseAsStringLiteral } from "nuqs";
 
 // nuqs parsers for the ranking page's URL state (Rule 40.5). The URL is

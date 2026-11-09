@@ -1,4 +1,4 @@
-import type { RankingRow } from "@bedrock-usage/shared";
+import type { RankingRow } from "@llm-usage-lens/shared";
 
 export type RankingTableRow = RankingRow & {
   // 1-based position by cost, highest first.

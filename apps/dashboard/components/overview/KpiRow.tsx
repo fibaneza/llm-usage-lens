@@ -1,6 +1,6 @@
 "use client";
 
-import { MODEL_META } from "@bedrock-usage/shared";
+import { MODEL_META } from "@llm-usage-lens/shared";
 import { Activity, Building2, Coins, DollarSign, Sparkles } from "lucide-react";
 
 import { formatUsd } from "@/components/charts/chart-data";

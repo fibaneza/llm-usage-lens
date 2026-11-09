@@ -32,7 +32,7 @@ ENV_FILE="$REPO_ROOT/.github/scripts/aws/.env"
 
 # ── the bedrock-simulator-specific inputs (what you'd customise per app) ───────
 ROLE_NAME="bedrock-simulator-deployer"
-GITHUB_REPO="aws-bedrock-cost-tracker"
+GITHUB_REPO="llm-usage-lens"
 GITHUB_ENV="bedrock-simulator-sandbox"
 # The three AWS-touching workflow files the role is allowed to run from, pinned
 # to main. bedrock-simulator-build.yml is excluded on purpose (it touches no AWS).

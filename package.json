@@ -1,5 +1,5 @@
 {
-  "name": "bedrock-cost-tracker",
+  "name": "llm-usage-lens",
   "version": "0.0.0",
   "private": true,
   "packageManager": "pnpm@11.5.2",
@@ -8,13 +8,13 @@
   },
   "scripts": {
     "dev": "pnpm --dir apps/dashboard exec next dev",
-    "build": "pnpm --filter @bedrock-usage/dashboard build",
+    "build": "pnpm --filter @llm-usage-lens/dashboard build",
     "lint": "eslint .",
     "typecheck": "pnpm -r --if-present typecheck && tsc -p tsconfig.scripts.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:e2e": "pnpm --filter @bedrock-usage/dashboard test:e2e",
+    "test:e2e": "pnpm --filter @llm-usage-lens/dashboard test:e2e",
     "build:ci": "NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_APP_URL=http://localhost:3000 AUTH_SECRET=ci-build-placeholder AUTH_MICROSOFT_ENTRA_ID_ID=ci-build-placeholder AUTH_MICROSOFT_ENTRA_ID_SECRET=ci-build-placeholder AUTH_MICROSOFT_ENTRA_ID_ISSUER=https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0 pnpm build",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && vitest run && pnpm build:ci",
     "prepare": "husky",
@@ -46,7 +46,7 @@
   "devDependencies": {
     "@aws-sdk/client-dynamodb": "^3.1155.0",
     "@aws-sdk/lib-dynamodb": "^3.1155.0",
-    "@bedrock-usage/shared": "workspace:*",
+    "@llm-usage-lens/shared": "workspace:*",
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
     "@eslint/js": "^9.39.4",

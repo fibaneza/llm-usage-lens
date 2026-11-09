@@ -1,4 +1,4 @@
-import { MAX_RANGE_DAYS as SHARED_MAX_RANGE_DAYS } from "@bedrock-usage/shared";
+import { MAX_RANGE_DAYS as SHARED_MAX_RANGE_DAYS } from "@llm-usage-lens/shared";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {

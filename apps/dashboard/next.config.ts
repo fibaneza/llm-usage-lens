@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   // Compile the workspace package from its TypeScript source (it ships .ts,
   // not a build artifact). See docs/specs/2026-05-15-system-architecture.md —
   // "Shared code layout".
-  transpilePackages: ["@bedrock-usage/shared"],
+  transpilePackages: ["@llm-usage-lens/shared"],
   // The headless Playwright harness loads the dev server via 127.0.0.1; without
   // this Next blocks the dev resources and the page never hydrates (Rule 70.11).
   allowedDevOrigins: ["127.0.0.1"],

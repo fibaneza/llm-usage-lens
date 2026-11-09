@@ -21,7 +21,7 @@ services:
     command: sleep infinity
     environment:
       PROJECT_FOLDER_NAME: ${COMPOSE_PROJECT_NAME}
-      OTEL_SERVICE_NAME: bedrock-cost-dashboard
+      OTEL_SERVICE_NAME: llm-usage-lens
 
       # Git config
       GIT_USER_NAME: ${GIT_USER_NAME:-"Dev User"}

@@ -1,6 +1,6 @@
 "use client";
 
-import type { OverviewResponse } from "@bedrock-usage/shared";
+import type { OverviewResponse } from "@llm-usage-lens/shared";
 import type { ReactNode } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";

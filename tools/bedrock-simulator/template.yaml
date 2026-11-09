@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: |
-  Bedrock simulator — standalone test harness that invokes real Amazon Bedrock models from a dedicated sandbox account so the Bedrock Cost Dashboard collector (Phase 6) has CloudWatch metrics, CloudTrail events, Cost Explorer line items, Guardrail evaluations, and model-invocation-log payloads to ingest. Out of scope for the dashboard's build phases. See docs/specs/2026-05-24-bedrock-simulator.md.
+  Bedrock simulator — standalone test harness that invokes real Amazon Bedrock models from a dedicated sandbox account so the LLM Usage Lens collector (Phase 6) has CloudWatch metrics, CloudTrail events, Cost Explorer line items, Guardrail evaluations, and model-invocation-log payloads to ingest. Out of scope for the dashboard's build phases. See docs/specs/2026-05-24-bedrock-simulator.md.
 
 Parameters:
   SandboxAccountId:

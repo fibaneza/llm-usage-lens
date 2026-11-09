@@ -43,7 +43,7 @@ describe("table key builders", () => {
     expect(SYNC_SK).toBe("SYNC#LATEST");
   });
 
-  it("is re-exported from the @bedrock-usage/shared entry point", () => {
+  it("is re-exported from the @llm-usage-lens/shared entry point", () => {
     expect(shared.accountPk("000000000001")).toBe("ACCT#000000000001");
     expect(shared.dailySk("2026-01-02")).toBe("DAILY#2026-01-02");
     expect(shared.TABLE_NAME_DEFAULT).toBe("bedrock-usage");

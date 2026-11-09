@@ -1,7 +1,7 @@
 import {
   DateRangeQuerySchema,
   TeamDetailResponseSchema,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 
 import { aggregateTeamDetail } from "@/lib/aggregate/teams";
 import { loadRangeRollups } from "@/lib/api/load-range-rollups";

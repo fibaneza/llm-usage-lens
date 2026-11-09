@@ -1,4 +1,4 @@
-# Welcome to AWS Bedrock Cost Tracker
+# Welcome to LLM Usage Lens
 
 ## How We Use Claude
 
@@ -20,7 +20,7 @@ Top MCP Servers:
 ## Your Setup Checklist
 
 ### Codebases
-- [ ] aws-bedrock-cost-tracker — https://github.com/fibaneza/aws-bedrock-cost-tracker
+- [ ] llm-usage-lens — https://github.com/fibaneza/llm-usage-lens
 - [ ] aws-bedrock-cost-tracker-simulator — (sibling repo, standalone test harness)
 
 ### MCP Servers to Activate

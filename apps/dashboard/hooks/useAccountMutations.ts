@@ -4,7 +4,7 @@ import {
   AccountMetaSchema,
   type CreateAccountInput,
   type UpdateAccountPatch,
-} from "@bedrock-usage/shared";
+} from "@llm-usage-lens/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { mutateApi } from "@/lib/query/fetch-api";

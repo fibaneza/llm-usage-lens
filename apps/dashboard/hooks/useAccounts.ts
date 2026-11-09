@@ -1,6 +1,6 @@
 "use client";
 
-import { AccountListSchema } from "@bedrock-usage/shared";
+import { AccountListSchema } from "@llm-usage-lens/shared";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchApi } from "@/lib/query/fetch-api";

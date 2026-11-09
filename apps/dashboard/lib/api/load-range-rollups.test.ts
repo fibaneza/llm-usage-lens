@@ -1,4 +1,4 @@
-import type { DatedDailyRollup } from "@bedrock-usage/shared";
+import type { DatedDailyRollup } from "@llm-usage-lens/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));

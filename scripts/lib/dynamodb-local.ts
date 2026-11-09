@@ -1,6 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { TABLE_NAME_DEFAULT } from "@bedrock-usage/shared";
+import { TABLE_NAME_DEFAULT } from "@llm-usage-lens/shared";
 
 // Dev tooling that runs outside Next.js, so it reads process.env directly —
 // the documented exception to Rule 50.2 (the dashboard uses @t3-oss/env-nextjs).

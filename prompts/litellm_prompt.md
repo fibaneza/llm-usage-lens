@@ -1,4 +1,4 @@
-# Goal Prompt: LiteLLM Team & User Administration — Bedrock Cost Dashboard
+# Goal Prompt: LiteLLM Team & User Administration — LLM Usage Lens
 
 Companion to `master_prompt.md` (run discipline) and `rbac_prompt.md` (roles,
 scopes, membership, audit). It adds one feature: **administration of a
@@ -127,7 +127,7 @@ the read-only model list or info endpoint as confirmed in L0.
    - **Creating the key** (an operator action, documented in
      `docs/guides/litellm-admin.md`; never automated by the dashboard):
      - The operator, using the master key, creates a dedicated LiteLLM user
-       for the dashboard (for example `svc-bedrock-dashboard`, with the role
+       for the dashboard (for example `svc-llm-usage-lens`, with the role
        L0 confirms) and a key owned by it.
      - The key has `allowed_routes` set to the allowlisted paths (exact
        paths; L0 confirms from the snapshot and the company's LiteLLM whether patterns are accepted), a
@@ -137,7 +137,7 @@ the read-only model list or info endpoint as confirmed in L0.
        operators.
    - **Storage and loading.** The service key lives in an AWS SSM Parameter
      Store `SecureString`, for example
-     `/bedrock-dashboard/<env>/litellm/service-key`.
+     `/llm-usage-lens/<env>/litellm/service-key`.
      - It is created and updated **by hand**. No CDK, script or app code
        writes it; CDK only references its name and ARN.
      - Encryption uses `aws/ssm` or the project CMK; L0 records which.
