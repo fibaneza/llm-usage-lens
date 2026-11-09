@@ -20,6 +20,7 @@ Components are built where they are first needed and reused in subsequent pages.
 | 2 | Layout Shell | Responsive sidebar, top bar, global filters, navigation |
 | 3 | Data Layer (3.1, 3.1a, 3.2, 3.3) | DynamoDB Local, Zod schemas, Route Handlers, TanStack Query |
 | 4 | Pages (4.1–4.9) | All 9 dashboard pages, one sub-phase each |
+| 4R | Access & Platform (RP, R1–R5) | AWS CDK platform, role-based access from Entra ID, scoped data, management UI |
 | 5 | Polish & Accessibility | Error boundaries, accessibility audit, responsive testing |
 | 6 | AWS Lambda Collector | Serverless pipeline (`apps/collector`), shared `packages/shared` |
 
@@ -586,6 +587,49 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ---
 
+## Phase 4R — Access & Platform (decided 2026-11-10)
+
+**Goal:** role-based, scope-limited access from Entra ID and AWS hosting, per the [Access Control spec](2026-11-10-access-control.md) and the [Platform spec](2026-11-10-platform.md). Sub-phases run in order RP → R1 → R2 → R3 → R4 → R5, one branch and squash commit each (Rule 30.4), after 4.9 and before the LiteLLM units and Phase 5. Each runs the Rule 70 loop; R1–R4 add `ecc:security-reviewer` when installed, and R3–R4 add a dedicated policy-breaking review briefed with the threat model.
+
+`APP_ENV` (`dev` | `prod`) is added to *Environment Configuration* by 4R.1 (Access Control — *Environment*).
+
+**LiteLLM units (L0–L8)** follow Phase 4R and precede Phase 5; they are specced by unit L0 (a LiteLLM spec) and entered here when L0 lands.
+
+### Phase 4R.P — Platform (`feature/phase-4r-p-platform`)
+
+- [ ] `infra/` CDK app: InfraStack (table, CMK, cluster, ECR, SSM parameters) and AppStack (task definition, Fargate service, execution role, task role with Reads and `ACCT#*` writes, security group, target group, listener rule, audit log group, alarms, CI deploy role); both ALB modes
+- [ ] `/api/health` with dependency checks; the structural test allows exactly this unauthenticated route
+- [ ] AppStack deploy job in CI (`workflow_dispatch`, GitHub OIDC deploy role; run by the user)
+- [ ] Verify: `cdk synth` and assertions for both ALB modes, the execution role, the task-role shell and every "not created" resource; nothing deployed
+
+### Phase 4R.1 — Identity, roles and sign-in (`feature/phase-4r-1-rbac-identity`)
+
+- [ ] `lib/auth` role model (global + scoped, union, `internal-viewer` default, legacy `Admin` alias, fail-closed parsing of `roles`/`groups`/`oid`/`tid`); identity record; session caps 8 h / 4 h / 1 h
+- [ ] `APP_ENV` in `env.ts` with placeholders in `build:ci` and `.env.example`; master user (Argon2id, TOTP, lockout, audit); local users; "no access" page; `AUTH_ACCESS_MODE`; dev login and e2e helper for every role
+- [ ] Verify: threat-model tests T1, T4, T7, T20, T21 pass
+
+### Phase 4R.2 — Authorization data (`feature/phase-4r-2-rbac-data`)
+
+- [ ] Entities and `server-only` data access (affiliation, admin scopes, role grants, pending items, group mappings, visibility, local users, identity links, audit); canonical usage identity in `packages/shared`; sign-in resolution and bind; atomic move; versioned writes with the audit item in the same transaction; the task-role DynamoDB policy added to the AppStack and asserted (T19); seeds per role
+- [ ] Verify: T2, T8, T17, T18, T19 pass; integration tests against DynamoDB Local
+
+### Phase 4R.3 — Server-side scoping (`feature/phase-4r-3-rbac-scope`)
+
+- [ ] `resolveScope`/`can` with the evaluation order and inheritance caps; every read route and Server Component filtered; aggregates after filtering; `404` parity; `Cache-Control: private, no-store`; scoped CSV, search and command menu; `/api/me` and `/api/me/usage`
+- [ ] Verify: role × route matrix and leak tests (T5, T6, T12–T16) pass; seeded probe per role recorded in the run report
+
+### Phase 4R.4 — Management UI and writes (`feature/phase-4r-4-rbac-settings`)
+
+- [ ] Settings access sections (Design System — *Settings Page*); write routes with permission, origin, re-auth and `409`; structural write-route test updated
+- [ ] Verify: write matrix and T3, T9–T11, T16 pass; axe clean; seeded probe per role
+
+### Phase 4R.5 — UI gating and copy (`feature/phase-4r-5-rbac-ui`)
+
+- [ ] *My usage* page (`/dashboard/me`) and *My teams* landing; scoped labels, "not visible" / "no team" / "no access" states, role-aware landing, no dead links
+- [ ] Verify: e2e per role; seeded probe per role
+
+---
+
 ## Phase 5 — Polish & Accessibility
 
 **Goal:** Production-quality error handling, accessibility compliance, and responsive verification across all pages.
@@ -828,7 +872,7 @@ jobs:
       - sam deploy --no-confirm-changeset (bedrock-cost-collector stack)
 ```
 
-The `deploy-collector` job is added in Phase 6 — Phases 1–5 ship the `quality`/`test`/`build` jobs only. Dashboard hosting is a future decision and has no deploy job in v1.
+The `deploy-collector` job is added in Phase 6 — Phases 1–5 ship the `quality`/`test`/`build` jobs only. Dashboard hosting is AWS ECS Fargate (decided 2026-11-09; Platform spec): Phase 4R.P adds a `deploy-dashboard` job (`workflow_dispatch`, GitHub OIDC deploy role) that builds and pushes the image to ECR and deploys the AppStack; deploying is the user's action.
 
 ## Conventions
 

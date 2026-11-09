@@ -45,3 +45,8 @@ Source: `docs/specs/2026-05-15-data-model.md`.
 13. **Rollups carry their UTC `date`** (`YYYY-MM-DD`), written by the collector
     and seeds and derived from `SK` on read when absent. A stored `date` that
     disagrees with `SK` fails the read (the item is corrupt).
+14. **`byUser` keys are canonical usage identities** — the lower-cased email
+    after the CloudTrail SSO prefix, from the one function in
+    `packages/shared` (Access Control spec — *Canonical usage identity*).
+    The dashboard canonicalises on read until Phase 6; non-email session
+    names stay raw with `kind: "non-person"`.

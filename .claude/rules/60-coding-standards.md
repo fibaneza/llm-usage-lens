@@ -39,6 +39,10 @@ patterns) and current Next.js App Router guidance.
     each entry small (rollups are cached per UTC day — Next's data cache caps
     an entry at 2 MB). The Auth.js session check stays outside the cache, and
     a Route Handler that writes calls `revalidateTag` for the tags it affects.
+    **Authorization data is never cached** — roles, grants, affiliations,
+    admin scopes, group mappings, visibility, identity links and the per-user
+    approval are read per request, and filtering by scope happens after the
+    cache read (Access Control spec — *Enforcement*).
     `export const revalidate = 3600` stays as the declarative default.
 11. **Charts and other browser-only libraries** load via
     `next/dynamic(() => import(...), { ssr: false })`. Recharts is always

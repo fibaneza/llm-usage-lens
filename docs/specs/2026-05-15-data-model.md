@@ -33,6 +33,8 @@ All data is stored in a single DynamoDB table (`bedrock-usage`) with one GSI. Th
 | DailyRollup | `ACCT#{accountId}` | `DAILY#{YYYY-MM-DD}` | `DATE#{YYYY-MM-DD}` | `ACCT#{accountId}` |
 | SyncStatus | `SYSTEM` | `SYNC#LATEST` | — | — |
 
+Access-control entities (identity, member affiliation, admin scopes, role grants, group mappings, visibility, local users, audit records, the per-user approval) share this table under new key prefixes — see [Access Control spec](2026-11-10-access-control.md) — *Data model additions* (decided 2026-11-10). `byUser` keys are canonical usage identities (the lower-cased email after the SSO prefix; same spec — *Canonical usage identity*), canonicalised on read until the Phase 6 collector writes them.
+
 ## Entity: AccountMeta
 
 Maps an AWS account to the organizational hierarchy. Managed via the Settings page.
@@ -325,7 +327,7 @@ All data written to DynamoDB and returned from Next.js Route Handlers is validat
 
 All routes live under `apps/dashboard/app/api/`, require an Auth.js session, validate query/body with Zod, and return `{ data: T }` or `{ error: { code, message } }`. Date params use `YYYY-MM-DD` (UTC).
 
-**HTTP status codes:** `200` success · `400` request parsing or validation error (malformed JSON body, or a failed Zod parse of query, path or body; also `POST /api/accounts` for an account that already exists) · `401` no session · `403` signed in without the `Admin` role on a write route (`POST`/`PUT`/`PATCH`/`DELETE` under `/api` except Auth.js's `/api/auth/[...nextauth]`; today `POST /api/accounts`, `PATCH`/`DELETE /api/accounts/[id]`), checked after the session and before input parsing, so a non-admin gets `403`, never `400`/`404` (System Architecture — *Authentication & Access*) · `404` account/department/team not found — for department and team detail, "found" means present in `AccountMeta` **or** in any rollup in the requested range (historical departments/teams keep their snapshot names; see *Historical Snapshots for Department/Team Names*), so a historical id queried for a range with no rollups is `404` · `500` unexpected server error, including a stored item or a response that fails its Zod schema (a server-side defect, not bad input).
+**HTTP status codes (amended 2026-11-10):** reads are scope-filtered and an out-of-scope detail returns the same `404` body as a missing one; every write route checks its permission (not only `Admin`) before parsing; `409` (`CONFLICT`, `MANAGED_BY_SSO`, `ALREADY_AFFILIATED`) is a stale `version` or a uniqueness/ownership conflict; `403 REAUTH_REQUIRED` guards global-role grants; `/api/health` is the one unauthenticated route; every `/api/*` response sets `Cache-Control: private, no-store` (Access Control spec — *Enforcement*, *API routes*, *Error-code registry*). Original text: `200` success · `400` request parsing or validation error (malformed JSON body, or a failed Zod parse of query, path or body; also `POST /api/accounts` for an account that already exists) · `401` no session · `403` signed in without the `Admin` role on a write route (`POST`/`PUT`/`PATCH`/`DELETE` under `/api` except Auth.js's `/api/auth/[...nextauth]`; today `POST /api/accounts`, `PATCH`/`DELETE /api/accounts/[id]`), checked after the session and before input parsing, so a non-admin gets `403`, never `400`/`404` (System Architecture — *Authentication & Access*) · `404` account/department/team not found — for department and team detail, "found" means present in `AccountMeta` **or** in any rollup in the requested range (historical departments/teams keep their snapshot names; see *Historical Snapshots for Department/Team Names*), so a historical id queried for a range with no rollups is `404` · `500` unexpected server error, including a stored item or a response that fails its Zod schema (a server-side defect, not bad input).
 
 | Route | Method | Schema / params | Data access |
 |-------|--------|-----------------|-------------|
@@ -342,6 +344,8 @@ All routes live under `apps/dashboard/app/api/`, require an Auth.js session, val
 | `/api/accounts` | POST | `CreateAccountInputSchema` | Settings CRUD (`Admin`) |
 | `/api/accounts/[id]` | PATCH | `UpdateAccountPatchSchema` | Settings CRUD (`Admin`) |
 | `/api/accounts/[id]` | DELETE | — | Soft-deactivate (`active: false`; `Admin`) |
+
+The access-control routes (`/api/health`, `/api/me`, members, admins, moves, role grants, group mappings, visibility, identities, local users, the per-user approval, audit, access review) and their permissions are listed in [Access Control spec](2026-11-10-access-control.md) — *API routes*. `Admin` above reads `internal-admin` from Phase 4R.
 
 ## Design Decisions
 

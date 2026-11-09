@@ -10,6 +10,8 @@ Source: `docs/specs/2026-05-15-design-system.md`.
 - nuqs (URL state), date-fns (dates), Zod v4 (validation)
 - Auth.js v5 (Microsoft Entra ID), `@t3-oss/env-nextjs`, `next-safe-action`
 - OpenTelemetry (`@vercel/otel`)
+- AWS CDK (TypeScript) for the dashboard platform in `infra/` (Platform spec);
+  AWS SAM stays for the collector until its Phase 6 amendment
 - ESLint v9 flat config (`eslint.config.ts`), Prettier, Husky + lint-staged,
   gitleaks, commitlint
 - Tests: **Vitest** (not Jest) + React Testing Library; Playwright for E2E

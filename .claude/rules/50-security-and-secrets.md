@@ -4,7 +4,7 @@
 
 | Concern | Mechanism | Where it lives |
 |---|---|---|
-| Dashboard login (who the user is) | Auth.js v5 + Microsoft Entra ID (dev-only local login outside production, fail closed) | `apps/dashboard/auth.ts` |
+| Dashboard login (who the user is) | Auth.js v5 + Microsoft Entra ID; the break-glass master user (Argon2id hash in SSM, TOTP in `prod`); dev-only local login outside production and only without Entra; fail closed | `apps/dashboard/auth.ts` |
 | AWS access (how the server reads DynamoDB / collector reads AWS) | AWS SDK default credential chain | Process environment (SSO + `AWS_PROFILE`) |
 
 ## Rules
@@ -27,8 +27,12 @@
    names and the role check live in `apps/dashboard/lib/auth/` — never as
    string literals in routes or components.
 4. **All Route Handlers must check the Auth.js session** and return `401`
-   when unauthenticated, and every write route returns `403` without
-   the `Admin` role, before any DynamoDB call.
+   when unauthenticated (except `GET /api/health`), and every write route
+   returns `403` without its required permission (the `Admin` role today;
+   the Access Control spec's permission matrix from Phase 4R), before any
+   DynamoDB call. Global roles are never granted by group mappings; only an
+   `internal-admin` grants `internal-admin` or `internal-org-admin` in the
+   app. The master user's password exists only as an Argon2id hash in SSM.
 5. **Never bypass git hooks.** Do not run `git commit --no-verify` or
    `git push --no-verify`. Gitleaks runs in pre-commit and must pass.
 6. **Never log or echo secrets.** Don't print env values, OAuth client

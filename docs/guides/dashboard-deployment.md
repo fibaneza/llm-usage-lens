@@ -1,5 +1,7 @@
 # Dashboard Deployment Guide — Next.js on Netlify
 
+> **Superseded (decided 2026-11-09):** the dashboard moves to AWS ECS Fargate defined in CDK — see the [Platform spec](../specs/2026-11-10-platform.md). Phase 4R.P rewrites this guide for ECS; the Netlify runbook below stays only until then and is not used for `prod`.
+
 Operational runbook for the Next.js dashboard (`apps/dashboard`): how it is
 built and hosted, the environment it needs, and the CLI commands to deploy and
 undeploy it on **Netlify**.

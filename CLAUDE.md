@@ -22,9 +22,11 @@ The `docs/specs/` directory is the source of truth:
 - `docs/specs/2026-05-15-data-model.md` — DynamoDB single-table design, entities, access patterns, model ID normalization
 - `docs/specs/2026-05-15-design-system.md` — tech stack, visual design, component inventory, performance patterns
 - `docs/specs/2026-05-15-implementation-phases.md` — 6-phase build plan; each phase independently testable
+- `docs/specs/2026-11-10-access-control.md` — roles from Entra ID, scopes, membership, visibility, audit log, threat model (Phase 4R)
+- `docs/specs/2026-11-10-platform.md` — AWS ECS Fargate hosting and the CDK stacks (Phase 4R.P)
 - `docs/guides/auth-setup.md` — Auth.js + Microsoft Entra ID and AWS credential setup
 - `docs/guides/aws-infrastructure.md` — operational runbook: collector design, SAM deploy/undeploy CLI
-- `docs/guides/dashboard-deployment.md` — operational runbook: Next.js dashboard on Netlify, deploy/undeploy CLI
+- `docs/guides/dashboard-deployment.md` — operational runbook: Next.js dashboard on Netlify (superseded by the Platform spec; rewritten in Phase 4R.P)
 - `docs/guides/dynamic-workflows.md` — where Opus 4.8 dynamic workflows fit (and don't fit) the phase plan; not adopted in v1
 - `docs/guides/github-best-practices.md` — general GitHub/Actions practice reconciled to this project's GitHub Flow, SAM, and pnpm conventions
 - `docs/guides/git-hooks.md` — local git-hook strategy: the current simulator pre-push hook and the Phase 1 Husky suite that supersedes it

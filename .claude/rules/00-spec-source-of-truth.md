@@ -14,7 +14,9 @@ cite it in your response.
 | 6-phase build plan with verification checklists | `docs/specs/2026-05-15-implementation-phases.md` | **Always**, to confirm the work belongs to the current phase |
 | Auth.js + Microsoft Entra ID + AWS credential setup | `docs/guides/auth-setup.md` | Anything touching sign-in or AWS credentials |
 | Collector operational runbook, SAM deploy/undeploy | `docs/guides/aws-infrastructure.md` | Phase 6 collector work |
-| Dashboard deployment runbook (Netlify) | `docs/guides/dashboard-deployment.md` | Deployment work |
+| Roles, scopes, membership, visibility, audit, threat model | `docs/specs/2026-11-10-access-control.md` | Anything touching sign-in, roles, authorization, Settings access sections or the audit log |
+| AWS hosting, CDK stacks, task-role policy | `docs/specs/2026-11-10-platform.md` | Anything under `infra/`, deployment or AWS permissions for the dashboard |
+| Dashboard deployment runbook (Netlify; superseded by the Platform spec) | `docs/guides/dashboard-deployment.md` | Deployment work until Phase 4R.P rewrites it |
 | Bedrock simulator (standalone test harness) | `docs/specs/2026-05-24-bedrock-simulator.md`, `docs/guides/bedrock-simulator.md` | Anything under `tools/bedrock-simulator/` |
 | Dynamic workflows (not adopted in v1) | `docs/guides/dynamic-workflows.md` | Proposing multi-agent workflow orchestration |
 | GitHub / Actions practice | `docs/guides/github-best-practices.md` | Workflow, branching, or PR changes |

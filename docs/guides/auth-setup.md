@@ -137,10 +137,53 @@ AUTH_DEV_LOGIN=true
 ```
 
 - `auth.ts` then registers an Auth.js Credentials provider that signs in a local identity without a password (JWT session). It is registered only when `NODE_ENV !== "production"` **and** `AUTH_DEV_LOGIN=true`.
-- The local identity carries the `Admin` role, so the Settings account actions work locally.
+- The default local identity is an administrator, so Settings works locally: today it carries `Admin`; from Phase 4R it carries `internal-admin`. From Phase 4R an `internal-admin` can add local users and set their roles while Entra is not configured (see *Role-based access* below).
 - The sign-in page lists only the configured providers: the Microsoft button appears only when Entra is configured, the local button only when the dev login is enabled.
 - **Fail closed.** With no provider configured, env validation fails in every environment. In production it also fails when Entra is not configured or `AUTH_DEV_LOGIN` has any non-empty value, and a configured issuer that is not tenant-specific fails in every environment; `auth.ts` repeats these checks at runtime even when `SKIP_ENV_VALIDATION` is set, so every sign-in and session request fails (500) rather than opening access. The check is skipped only inside `next build`, where it cannot enable the dev login.
-- A production password login is not available; it would need an amendment to the System Architecture spec first. Email magic links are not adopted.
+- The only production password login is the break-glass **master user** (see *Master user and break-glass* below; System Architecture — *Sign-in providers*, amended 2026-11-10). Email magic links are not adopted.
+- From Phase 4R the dev-only login is rejected when Entra is configured.
+
+---
+
+## Role-based access (Phase 4R)
+
+Decided 2026-11-10 — [Access Control spec](../specs/2026-11-10-access-control.md). Real tenant, group and object IDs are never committed; use placeholders.
+
+### Entra portal steps (user action)
+
+1. **App roles** on each app registration (dev and prod): `internal-admin`, `internal-org-admin`, `internal-auditor`, `internal-viewer` (allowed member type: users/groups). Keep the legacy `Admin` value until enforcement, then remove it.
+2. **Groups claim:** Token configuration → add groups claim → **Groups assigned to the application**, emitted as object IDs in the ID token.
+3. **Security groups** (placeholders): `llm-usage-lens-admins`, `-org-admins`, `-auditors`, `-users`, plus one group per team or department that should map automatically. Membership must be **direct** (nested groups are not honoured).
+4. **Enterprise application:** assign the groups to their app roles (needs Entra ID **P1/P2**; without it assign users directly); set **"Assignment required?" = Yes**; assign the team groups (Default Access) so they appear in the `groups` claim.
+5. **Conditional Access:** require MFA or a compliant device for both app registrations.
+6. **Group mappings:** as `internal-admin`, map each team/department group object ID to its team or department and to `member` or `internal-team-admin` in Settings.
+
+### Master user and break-glass
+
+- Generate an Argon2id hash of a long random password and a TOTP secret; store both, with the username, as SSM SecureStrings under `/llm-usage-lens/<env>/auth/*`; the task definition injects them (Platform spec).
+- **Custody:** seal the password and TOTP seed with two-person control; rotate after every use and at least yearly; test a sign-in quarterly and record it.
+- Keep **at least two** named `internal-admin` holders in Entra besides the master user, and follow the tenant's own break-glass procedure for Entra outages.
+
+### Rollout runbook
+
+1. In `dev` (`APP_ENV=dev`), set `AUTH_ACCESS_MODE=open`, deploy, create the groups and app roles, and add the group mappings.
+2. Sign in with one test user per role and scope case and run the acceptance checklist.
+3. Set `AUTH_ACCESS_MODE=enforce` in `dev` and repeat the checklist. **Before the first `prod` deploy**, create the `internal-*` app roles on the prod app registration and assign the prod groups to them — with `APP_ENV=prod` the legacy `Admin` alias is not accepted, so prod admins would otherwise lose access. Then deploy `prod` (`APP_ENV=prod`, where `enforce` is the only accepted value).
+4. Record the works-council / data-protection approval in Settings before enabling per-user views in `prod`.
+5. Remove the legacy `Admin` app role.
+
+### Acceptance checklist (one test user per case)
+
+- [ ] No mapped group → *My usage* and "Ask your team lead for access"; no team data
+- [ ] Member of one team → that team only, per visibility
+- [ ] Two member-mapped groups → no team, flagged as ambiguous
+- [ ] `internal-team-admin` on two teams → both teams, nothing else; can promote within them, not on themselves
+- [ ] Department-scope `internal-team-admin` → the department's teams; can move members between them
+- [ ] `internal-org-admin` → every team; no configuration; cannot grant global roles
+- [ ] `internal-auditor` → everything read-only; every write `403`; audit view itself audited
+- [ ] `internal-admin` → grant `internal-org-admin` (re-auth and reason required; audited; alarm fires)
+- [ ] Master user → TOTP required; 5 failures lock out; session ends after 1 hour
+- [ ] Removing a member takes effect on their next request
 
 ---
 

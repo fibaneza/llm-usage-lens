@@ -8,8 +8,10 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
 1 Foundation → 2 Layout Shell (2.1 → 2.3, in order)
   → 3 Data Layer (3.1 → 3.3, in order)
     → 4 Pages (4.1 → 4.9, in order)
-      → 5 Polish & Accessibility
-        → 6 AWS Lambda Collector
+      → 4R Access & Platform (RP → R1 → R5, in order)
+        → LiteLLM units (L0–L8)
+          → 5 Polish & Accessibility
+            → 6 AWS Lambda Collector
 ```
 
 Phase 4.9b (tag coverage) is deferred and does not block Phase 5; it starts

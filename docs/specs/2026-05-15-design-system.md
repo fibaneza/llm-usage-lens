@@ -61,12 +61,12 @@ Decisions on technologies evaluated and excluded, with rationale:
 
 - **Library:** Auth.js (NextAuth v5) — the provider abstraction. Switching identity providers is a config change in `apps/dashboard/auth.ts` (plus its variables in `env.ts`); pages, proxy, and route guards use Auth.js session APIs and never change.
 - **Identity provider:** Microsoft Entra ID in production. Recommended start: a free Entra tenant, developing against the real provider from day one; without a tenant, a dev-only local login is available outside production (System Architecture spec — *Authentication & Access*, decided 2026-10-29).
-- **Access model:** Open read access — every authenticated member sees all data; account mutations require the `Admin` role (see *Roles*).
+- **Access model:** role-based and scope-limited from Phase 4R ([Access Control spec](2026-11-10-access-control.md) — *Roles*, *Enforcement*); until then every authenticated member reads all data and account mutations require `Admin`.
 - **Session:** Auth.js encrypted JWT session cookie; it ends 8 hours after sign-in regardless of activity (System Architecture — *Authentication & Access*).
-- **Proxy:** Auth.js in the Next.js proxy (`proxy.ts`) protects all `/dashboard/*` and `/api/*` routes.
+- **Proxy:** Auth.js in the Next.js proxy (`proxy.ts`) protects all `/dashboard/*` and `/api/*` routes except `/api/health` (Platform spec).
 - **Sign-in page:** One action per configured provider — "Sign in with Microsoft" when Entra ID is configured, a local dev sign-in only when the dev login is enabled outside production. No sign-up — identities are managed in Entra ID.
 - **User menu:** Custom user menu in the top bar (avatar, name, sign out) backed by the Auth.js session.
-- **Roles:** One app role, `Admin`, gates account mutations (System Architecture — *Authentication & Access*, decided 2026-10-29). Every signed-in member reads all pages; Settings hides add/edit/deactivate controls from non-admins, and the write routes return `403` regardless of the UI.
+- **Roles:** global `internal-admin`, `internal-org-admin`, `internal-auditor`, `internal-viewer` and scoped `internal-team-admin` ([Access Control spec](2026-11-10-access-control.md) — *Roles*; replaces the single `Admin` role from Phase 4R). The UI hides what the caller cannot use; the server enforces it regardless of the UI.
 
 ## Data Access Boundary
 
@@ -74,7 +74,7 @@ DynamoDB and the AWS SDK are **server-only**. Client Components never access the
 
 - Data-access functions live in `apps/dashboard/lib/data/` and import `server-only` — imported only by Route Handlers and Server Components. A client-side import is a build error.
 - **Client Components** get data two ways: as props from a Server Component, or via TanStack Query calling a same-origin Route Handler over HTTP. They never import `apps/dashboard/lib/data/` or the AWS SDK.
-- **Route Handlers** (`apps/dashboard/app/api/*`) are the only HTTP-reachable backend: check the Auth.js session (and the `Admin` role on every write route), validate input with Zod, query DynamoDB, return the standardized `{ data }` / `{ error }` shape.
+- **Route Handlers** (`apps/dashboard/app/api/*`) are the only HTTP-reachable backend: check the Auth.js session and the caller's permission through the policy module (Access Control spec — *Enforcement*), validate input with Zod, query DynamoDB, return the standardized `{ data }` / `{ error }` shape.
 - AWS credentials and the AWS SDK never ship to the browser.
 
 ## Caching Strategy
@@ -369,6 +369,15 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 - Sync status: last run time, success/error count, next scheduled run
 - Tag coverage (Phase 4.9b, deferred): per-team percentage of tagged vs untagged usage
 - Data retention: TTL configuration display
+- Access (Phase 4R; [Access Control spec](2026-11-10-access-control.md)): **Members** (add by email/UPN, remove, move, pending and stale lists), **Team admins** (team and department scopes), **Visibility** (team settings, department settings and cap, "limited by department" hints), and `internal-admin`-only **Group mappings**, **Role grants** (re-authentication prompt and reason field), **Identity links**, **Local users** (local-login mode only), **Per-user approval**; **Audit log** and **Access review** export for `internal-admin` and `internal-auditor`. Sections a caller cannot use are not rendered; SSO-managed rows show a read-only "Managed in Entra" badge. Forms meet the Phase 5 floor (axe clean, keyboard, visible focus).
+
+### Access states and scoped labels
+
+- **No access** (session the policy cannot resolve): a full-page `EmptyState` — "You don't have access to LLM Usage Lens. Contact your administrator."
+- **No team** (`internal-viewer` without a member team or admin scope): *My usage* plus "Ask your team lead for access".
+- **Not visible** (a team or department hidden by visibility): a neutral inline notice, never a zero.
+- **Scoped labels:** callers below `internal-org-admin` see "your teams" on organisation-wide KPIs, rankings and charts; no organisation total includes out-of-scope cost.
+- **Role-aware landing:** `internal-viewer` and members → *My usage*; `internal-team-admin` → *My teams*; `internal-org-admin`, `internal-admin`, `internal-auditor` → Overview.
 
 ## Responsive Tables
 

@@ -20,7 +20,14 @@ credentials must never reach the browser.
    from same-origin Route Handlers.
 2. **Every data-access file starts with `import "server-only";`.**
 3. **Route Handlers are the only HTTP-reachable backend.** They must:
-   - Check the Auth.js session and return `401` if unauthenticated.
+   - Check the Auth.js session and return `401` if unauthenticated. The
+     one exception is `GET /api/health` (no session, no data; Platform spec).
+   - From Phase 4R, call the policy module (`resolveScope`/`can` in
+     `lib/auth/`) after the session check: reads return only in-scope rows,
+     an out-of-scope detail returns the same `404` body as a missing one,
+     and each write route checks its own permission (Access Control spec —
+     *Permission matrix*) and returns `403` before input parsing. Every
+     `/api/*` response sets `Cache-Control: private, no-store`.
    - Every write Route Handler (`POST`/`PUT`/`PATCH`/`DELETE`) under
      `app/api/`, except Auth.js's `auth/[...nextauth]` handler — today
      `POST /api/accounts` and `PATCH`/`DELETE /api/accounts/[id]` — returns
