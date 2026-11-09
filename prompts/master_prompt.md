@@ -679,6 +679,26 @@ A run is **Completed** when all of these hold:
 2. Every blocker raised by reviewers is resolved or recorded with a reason.
 3. The report exists by T+60, is marked on time, and lists every user action.
 
+**Scope of "every in-scope task".** It means the tasks of **this run's single
+Track B target** (§1): the first sub-phase not done when the run starts.
+- Later sub-phases are **out of scope for that run** (§1 *Out of scope*;
+  Rules 30.4, 70.10). Their open tasks never count against completion, and
+  the next run takes them as its target.
+- Track A applies to what changed since the last report. Tracks C and D may
+  be "nothing to do", with evidence.
+
+**Legitimate early endings.** A run also ends legitimately, recorded as
+**Partially completed** or **Blocked**, not as a failure of these criteria,
+when any of these happens:
+- **A usage freeze (§2).** Consolidate and write the report immediately; the
+  freeze rules forbid further work.
+- **The T+60 deadline.** After T+55, only the report may be written.
+- **A missing dependency or user decision.** The run records it as a user
+  action and stops.
+
+In each of these cases, the run is finished once the report exists and lists
+the reason.
+
 **User-only actions do not count against completion.** Record them in §8 of
 the report as user actions:
 - `git push`
@@ -690,10 +710,15 @@ the report as user actions:
 
 A run never performs them and never marks them done.
 
-If you track this prompt with `/goal`, state the condition as "§12
-completion criteria met and the report written". Do not use "all items
-resolved": that condition can never be met without the user, and it makes
-the goal check loop.
+If you track this prompt with `/goal`, use this exact condition (not the bare
+file path):
+**"prompts/master_prompt.md §12 completion criteria met for this run's
+target, and the report written — or the run ended by a usage freeze, the T+60
+deadline, or a missing dependency, with the report written."**
+Do not use the bare file path (`/goal @prompts/master_prompt.md`), and do not
+use "all items resolved". Neither can be met in one run without the user,
+and both make the goal check loop: run 10 on 2026-11-08 was rejected
+repeatedly for open Phase 4.9 tasks and an early finish.
 
 Success means the greatest defensible, verified improvement to this project,
 within its rules, and an honest report. It does not mean the most agents, the
