@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { COLLECTOR_REGION } from "../region";
 import { AccountIdSchema, Iso8601Schema } from "./primitives";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Entity: AccountMeta".
@@ -10,7 +11,7 @@ export const AccountMetaSchema = z.object({
   departmentName: z.string().min(1),
   teamId: z.string().min(1),
   teamName: z.string().min(1),
-  region: z.string().min(1),
+  region: z.literal(COLLECTOR_REGION),
   active: z.boolean(),
   createdAt: Iso8601Schema,
   updatedAt: Iso8601Schema,

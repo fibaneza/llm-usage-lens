@@ -40,7 +40,7 @@ services:
 
       # SSO profile — set AWS_PROFILE in .devcontainer/.env; used by aws/sam CLI inside the container.
       AWS_PROFILE: ${AWS_PROFILE}
-      AWS_REGION: us-east-1
+      AWS_REGION: ap-southeast-2
 
       # DynamoDB Local endpoint — the app overrides the SDK endpoint with this value.
       # Dummy keys are NOT set here: AWS_ACCESS_KEY_ID/SECRET in the container env would

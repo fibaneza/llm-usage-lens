@@ -15,11 +15,10 @@ export class ApiRequestError extends Error {
   }
 }
 
-export async function fetchApi<S extends z.ZodType>(
-  path: string,
+async function parseApiResponse<S extends z.ZodType>(
+  res: Response,
   dataSchema: S,
 ): Promise<z.output<S>> {
-  const res = await fetch(path);
   const body: unknown = await res.json();
   const errorBody = ApiErrorBodySchema.safeParse(body);
   if (errorBody.success) {
@@ -33,4 +32,29 @@ export async function fetchApi<S extends z.ZodType>(
     data: z.output<S>;
   };
   return success.data;
+}
+
+export async function fetchApi<S extends z.ZodType>(
+  path: string,
+  dataSchema: S,
+): Promise<z.output<S>> {
+  return parseApiResponse(await fetch(path), dataSchema);
+}
+
+export async function mutateApi<S extends z.ZodType>(
+  path: string,
+  method: "POST" | "PATCH" | "DELETE",
+  body: unknown,
+  dataSchema: S,
+): Promise<z.output<S>> {
+  const res = await fetch(path, {
+    method,
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+  });
+  return parseApiResponse(res, dataSchema);
 }

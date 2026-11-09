@@ -96,7 +96,7 @@ Names mirror `.env.example`.
 | `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Entra ID app client secret |
 | `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Tenant-specific issuer `https://login.microsoftonline.com/<Directory (tenant) ID>/v2.0`: lowercase GUID, no trailing slash; `common`, `organizations` and `consumers` fail the build (System Architecture spec — *Authentication & Access*) |
 | `AUTH_DEV_LOGIN` | **Must be unset** in production — any non-empty value fails startup (dev-only local login) |
-| `AWS_REGION` | `us-east-1` |
+| `AWS_REGION` | `ap-southeast-2` (the DynamoDB table's Region) |
 | `AWS_ACCESS_KEY_ID` | Scoped read-only IAM user key (see §2) |
 | `AWS_SECRET_ACCESS_KEY` | Scoped read-only IAM user secret (see §2) |
 | `DYNAMODB_TABLE_NAME` | `bedrock-usage` |

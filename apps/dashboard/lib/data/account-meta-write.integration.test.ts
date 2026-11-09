@@ -8,6 +8,8 @@ import {
   vi,
 } from "vitest";
 
+import type { CreateAccountInput } from "@bedrock-usage/shared";
+
 import {
   createAccount,
   deactivateAccount,
@@ -29,14 +31,14 @@ const acct = (n: number) => String(n).padStart(12, "0");
 // (GSI1 keyed by department), "API Routes" (Settings CRUD), Rule 60.17.
 const NOW = new Date("2026-10-29T10:00:00.000Z");
 const existing = makeAccount(1);
-const input = {
+const input: CreateAccountInput = {
   accountId: acct(42),
   accountName: "new-account",
   departmentId: "dept-finance",
   departmentName: "Finance",
   teamId: "team-ledger",
   teamName: "Ledger",
-  region: "us-east-1",
+  region: "ap-southeast-2",
 };
 
 beforeAll(ensureTestTable);

@@ -109,7 +109,7 @@ export function makeAccount(
     departmentName: "Engineering",
     teamId: "team-payments",
     teamName: "Payments",
-    region: "us-east-1",
+    region: "ap-southeast-2",
     active: true,
     createdAt: "2026-05-15T08:00:00.000Z",
     updatedAt: "2026-05-15T08:00:00.000Z",

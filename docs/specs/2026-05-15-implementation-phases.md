@@ -357,7 +357,8 @@ Components are introduced in the sub-phase where they are first needed:
 | 4.6 Team Detail | ModelBadge, AccountIdBadge, UserAvatar (reuses UsageTable) |
 | 4.7 Services | (reuses UsageTable, CostEstimateIndicator) |
 | 4.8 Users | (reuses UsageTable, UserAvatar, CostEstimateIndicator) |
-| 4.9 Settings | TagCoverageBar (CRUD forms, new) |
+| 4.9 Settings | (CRUD forms, new; reuses SyncStatusBadge, SyncCountdown) |
+| 4.9b Tag Coverage (deferred) | TagCoverageBar |
 
 ---
 
@@ -545,32 +546,43 @@ Components are introduced in the sub-phase where they are first needed:
 
 ### Phase 4.9 — Settings Page (`/dashboard/settings`)
 
-**Goal:** Admin page for managing account registry, viewing sync status, and monitoring tag coverage. Only page with write operations (CRUD).
+**Goal:** Admin page for managing account registry, viewing sync status and data retention. Only page with write operations (CRUD). Tag coverage moved to Phase 4.9b (decided 2026-11-10).
 
-**Sections (4):**
+**Sections (3):**
 1. Account registry (add / edit / deactivate accounts, map to department/team)
 2. Sync status (last run time, success/error count, next scheduled run)
-3. Tag coverage per team (% of tagged vs untagged usage)
-4. Data retention (TTL configuration display)
+3. Data retention (TTL configuration display)
+
+Tag coverage per team is Phase 4.9b (deferred).
 
 **Tasks:**
-- [ ] Build account registry table with add/edit/deactivate actions
-  - Add account form (shadcn Dialog): account ID, name, department, team, region
+- [x] Build account registry table with add/edit/deactivate actions
+  - Add account form (shadcn Dialog): account ID, name, department ID/name, team ID/name. `region` is not an input: it is fixed to `COLLECTOR_REGION` (`ap-southeast-2`) and `AccountMetaSchema` rejects any other value (System Architecture — *Region*; decided 2026-11-10)
   - Edit account form (shadcn Sheet)
   - Deactivate with confirmation dialog
   - Zod validation on all form inputs
-  - `next-safe-action` for all Server Actions
+  - No Server Actions in v1: Settings CRUD uses the `/api/accounts` Route Handlers through TanStack Query mutations (Rule 60.15). A Server Action added later goes through `next-safe-action` (decided 2026-11-10)
   - The `/api/accounts` Route Handlers (Phase 3.3) are the Settings CRUD HTTP contract; a Server Action, if used, calls the same `lib/data/account-meta.ts` functions rather than a second write path (decided 2026-10-29)
   - **Account-mutation role (decided 2026-10-29):** only the `Admin` app role may create, edit and deactivate accounts (System Architecture — *Authentication & Access*). The `/api/accounts` write routes return `403 FORBIDDEN` without it (Phase 3.3 amendment); the Settings page hides the add/edit/deactivate controls from non-admins, and any Server Action checks the same role.
-- [ ] Build sync status display
+- [x] Build sync status display
   - Connect `SyncStatusBadge` and `SyncCountdown` to SyncStatus entity
   - Show: last run time, status (success/partial/error), accounts processed, duration, errors list
-- [ ] Build `TagCoverageBar` component (progress bar per team)
-  - Calculate from byService data: tagged vs `_untagged` percentage
-- [ ] Reuse `CostEstimateIndicator` (built in Phase 4.2) wherever Settings shows an estimated cost
-- [ ] Build data retention display (TTL info, read-only)
-- [ ] Tests: CRUD operations against DynamoDB Local; form validation; tag coverage calculation; a non-admin session sees no add/edit/deactivate controls and Server Actions reject it (e2e needs admin and non-admin forged sessions)
-- [ ] Verify: can add/edit/deactivate accounts as `Admin`; a non-admin sees the registry read-only and gets `403` from the write routes; sync status displays correctly, tag coverage renders
+- [x] Reuse `CostEstimateIndicator` (built in Phase 4.2) wherever Settings shows an estimated cost — none in v1: Settings shows no estimated cost (decided 2026-11-10)
+- [x] Build data retention display (TTL info, read-only)
+- [x] Tests: CRUD operations against DynamoDB Local; form validation; a non-admin session sees no add/edit/deactivate controls, and the write routes return `403` for it (e2e needs admin and non-admin forged sessions)
+- [x] Verify: can add/edit/deactivate accounts as `Admin`; a non-admin sees the registry read-only and gets `403` from the write routes; sync status displays correctly
+
+### Phase 4.9b — Tag Coverage (deferred; decided 2026-11-10)
+
+**Goal:** Settings section "Tag coverage per team" — the percentage of tagged vs `_untagged` usage (Data Model — *`_untagged` Bucket*).
+
+**Why deferred:** the metric is `1 − (untagged tokens / total tokens)` per team over a date range, but no route in Data Model — *API Routes* supplies those numbers, and Settings has no date-range control. 4.9 shipped without it. **Does not block Phase 5.**
+
+**Tasks:**
+- [ ] Spec the data path first (Rule 00): either (a) `taggedTokens` / `totalTokens` on `TeamsResponseSchema` rows, reusing `/api/teams`, or (b) a new `GET /api/tag-coverage`; and the date range the Settings section uses
+- [ ] Build `TagCoverageBar` component (progress bar per team) — tagged vs `_untagged` percentage from `byService`
+- [ ] Tests: tag coverage calculation (including a team with no usage — no data, not 0%; Rule 20.12 spirit)
+- [ ] Verify: tag coverage renders
 
 ---
 
@@ -750,7 +762,7 @@ AUTH_MICROSOFT_ENTRA_ID_ISSUER=               # https://login.microsoftonline.co
 AUTH_DEV_LOGIN=                       # "true" enables the dev-only local login; rejected in production
 
 # AWS / DynamoDB
-AWS_REGION=us-east-1
+AWS_REGION=ap-southeast-2
 AWS_PROFILE=                          # AWS SSO profile; run `aws sso login` first. Omit when using DynamoDB Local.
 DYNAMODB_TABLE_NAME=bedrock-usage
 DYNAMODB_ENDPOINT=                    # http://localhost:8000 for DynamoDB Local

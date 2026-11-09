@@ -62,7 +62,7 @@ const ACCOUNT = {
   departmentName: "Engineering",
   teamId: "team-payments",
   teamName: "Payments",
-  region: "us-east-1",
+  region: "ap-southeast-2",
   active: true,
   createdAt: "2026-05-15T08:00:00.000Z",
   updatedAt: "2026-05-15T08:00:00.000Z",
@@ -74,7 +74,7 @@ const CREATE_BODY = {
   departmentName: "Finance",
   teamId: "team-ledger",
   teamName: "Ledger",
-  region: "us-east-1",
+  region: "ap-southeast-2",
 };
 const SESSION = { user: { name: "t", email: "t@company.com" } };
 // Account writes need the Admin role (System Architecture — Authentication &

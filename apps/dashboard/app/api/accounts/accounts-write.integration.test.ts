@@ -40,7 +40,7 @@ const body = {
   departmentName: "Finance",
   teamId: "team-ledger",
   teamName: "Ledger",
-  region: "us-east-1",
+  region: "ap-southeast-2",
 };
 
 function setSession(session: unknown) {
@@ -107,6 +107,17 @@ describe("POST /api/accounts", () => {
     expect(ApiErrorBodySchema.parse(await res.json()).error.code).toBe(
       "BAD_REQUEST",
     );
+  });
+
+  it("400 for a region other than ap-southeast-2 and writes nothing", async () => {
+    for (const region of ["us-east-1", ""]) {
+      const res = await POST(json("POST", { ...body, region }));
+      expect(res.status).toBe(400);
+      expect(ApiErrorBodySchema.parse(await res.json()).error.code).toBe(
+        "BAD_REQUEST",
+      );
+    }
+    expect(await getAccountMeta(body.accountId)).toBeNull();
   });
 
   it("400 for a body that is not JSON", async () => {

@@ -385,7 +385,7 @@ Add security/compliance scanning of templates. The `deploy-on-aws:awsiac` MCP
 tooling available in this repo wraps `cfn-lint`, cfn-guard compliance checks, and
 pre-deploy change-set validation.
 
-> **In this project.** The collector targets `us-east-1` only (Rule 50.7);
+> **In this project.** The collector targets `ap-southeast-2` only (Rule 50.7);
 > destructive infra commands (`sam delete`, `aws cloudformation delete-stack`,
 > `aws … delete-*`) are hard-blocked by the `.claude/settings.json` deny-list.
 

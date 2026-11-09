@@ -93,8 +93,8 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 ### Multi-region collection
 
 - **Status:** Deferred (documented future enhancement).
-- **What:** Collect Bedrock cost/usage from regions beyond `us-east-1`.
-- **Why deferred:** The collector targets `us-east-1` only by design
+- **What:** Collect Bedrock cost/usage from regions beyond `ap-southeast-2`.
+- **Why deferred:** The collector targets `ap-southeast-2` only by design
   ([Rule 50.7](../.claude/rules/50-security-and-secrets.md)); broadening scope
   silently is forbidden. v1 keeps the cross-account surface minimal.
 - **Adopt when:** Bedrock usage in other regions becomes material to the cost

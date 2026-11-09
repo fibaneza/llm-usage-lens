@@ -11,6 +11,8 @@ export {
 } from "./models";
 export type { ModelKey, ModelMeta } from "./models";
 
+export { COLLECTOR_REGION } from "./region";
+
 export { runBounded } from "./run-bounded";
 
 export {

@@ -1,5 +1,6 @@
 import {
   AccountMetaSchema,
+  COLLECTOR_REGION,
   DailyRollupSchema,
   MODEL_KEYS,
   NON_MODEL_CATEGORIES,
@@ -461,6 +462,13 @@ describe("buildSeedData — one account per team", () => {
         expect(new Set(seed.accounts.map((a) => a.accountId)).size).toBe(
           accounts,
         );
+      });
+
+      it("puts every account in COLLECTOR_REGION (ap-southeast-2)", () => {
+        for (const a of seed.accounts) {
+          expect(a.region).toBe(COLLECTOR_REGION);
+          expect(a.region).toBe("ap-southeast-2");
+        }
       });
 
       it("maps every team to exactly one account", () => {

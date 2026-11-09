@@ -12,6 +12,9 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
         → 6 AWS Lambda Collector
 ```
 
+Phase 4.9b (tag coverage) is deferred and does not block Phase 5; it starts
+once its data path is specced (implementation-phases — *Phase 4.9b*).
+
 ## Rules
 
 1. **Do not start a phase whose dependencies are unmet.** Run `/phase-status`

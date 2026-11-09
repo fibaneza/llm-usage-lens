@@ -23,7 +23,7 @@ type BadgeView = {
   tone?: string;
 };
 
-const RUN_VIEWS: Record<SyncStatus["status"], BadgeView> = {
+export const RUN_VIEWS: Record<SyncStatus["status"], BadgeView> = {
   success: {
     label: "Sync status: success",
     text: "Success",

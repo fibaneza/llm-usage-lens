@@ -50,7 +50,7 @@ patterns) and current Next.js App Router guidance.
     dependency arrays.
 15. **Settings CRUD's HTTP contract is the `/api/accounts` Route Handlers**
     (Data Model spec — *API Routes*; implementation-phases Phase 4.9). A
-    Server Action, if Phase 4.9 adds one, goes through `next-safe-action` with
+    Server Action, if one is added later (v1 has none), goes through `next-safe-action` with
     a Zod input schema, an Auth.js session check and the `Admin` role check
     (`lib/auth/`; System Architecture — *Authentication & Access*), and calls
     the same `lib/data/account-meta.ts` functions.

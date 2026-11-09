@@ -34,8 +34,13 @@
 6. **Never log or echo secrets.** Don't print env values, OAuth client
    secrets, `AUTH_SECRET`, or AWS keys to the terminal or to telemetry
    (OpenTelemetry spans, logs, or attributes).
-7. **The collector targets `us-east-1` only.** Multi-region is a documented
-   future enhancement; do not silently broaden the scope.
+7. **The collector targets `ap-southeast-2` (Sydney) only** (decided 2026-11-10;
+   previously `us-east-1`). The single source is `COLLECTOR_REGION` in
+   `packages/shared/src/region.ts`; `AccountMeta.region` must equal it. The
+   one exception is the Cost Explorer API, which AWS serves only from
+   `us-east-1` — its client uses that endpoint (System Architecture —
+   *Region*). Multi-region is a documented future enhancement; do not
+   silently broaden the scope.
 8. **Sanitize input at the system boundary.** Route Handlers validate every
    query and body with Zod; data-access functions trust their typed inputs.
 9. **Never commit a real AWS account ID.** Tracked files (scripts, docs,

@@ -1,6 +1,8 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 
+import { COLLECTOR_REGION } from "@bedrock-usage/shared";
+
 import {
   AuthConfigError,
   ENTRA_TENANT_ISSUER_MESSAGE,
@@ -28,7 +30,7 @@ export const env = createEnv({
     AUTH_DEV_LOGIN: z.string().optional(),
     NODE_ENV: z.enum(["development", "test", "production"]).optional(),
     NEXT_PHASE: z.string().optional(),
-    AWS_REGION: z.string().default("us-east-1"),
+    AWS_REGION: z.string().default(COLLECTOR_REGION),
     AWS_PROFILE: z.string().optional(),
     DYNAMODB_TABLE_NAME: z.string().default("bedrock-usage"),
     DYNAMODB_ENDPOINT: z.url().optional(),

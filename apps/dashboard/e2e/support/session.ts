@@ -17,6 +17,9 @@ export type TestUserOptions = {
   // claim, which the dev server's jwt callback must reject (a token without a
   // sign-in time fails closed; System Architecture — Account-mutation role).
   signedInAt?: number | null;
+  // Role claims carried in the forged token (`token.roles`, mapped to
+  // `session.user.roles` by auth.ts). Defaults to none, i.e. a non-admin.
+  roles?: string[];
 };
 
 // Signs a real Auth.js session JWT with the dev server's AUTH_SECRET and
@@ -27,12 +30,13 @@ export type TestUserOptions = {
 // regardless of activity and a token without it is rejected.
 export async function signInAsTestUser(
   context: BrowserContext,
-  { signedInAt = Math.floor(Date.now() / 1000) }: TestUserOptions = {},
+  { signedInAt = Math.floor(Date.now() / 1000), roles }: TestUserOptions = {},
 ): Promise<void> {
   const sessionToken = await encode({
     token: {
       ...E2E_USER,
       sub: "e2e-user",
+      ...(roles ? { roles } : {}),
       ...(signedInAt === null ? {} : { signedInAt }),
     },
     secret: E2E_AUTH_SECRET,

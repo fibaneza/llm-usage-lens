@@ -50,7 +50,7 @@ Attributes:
   departmentName   string           "Engineering"
   teamId           string           "team-payments"
   teamName         string           "Payments"
-  region           string           "us-east-1"
+  region           string           "ap-southeast-2"   -- must equal COLLECTOR_REGION (System Architecture — Region; decided 2026-11-10)
   active           boolean          true
   createdAt        string           ISO8601
   updatedAt        string           ISO8601
@@ -138,7 +138,7 @@ Attributes:
 
   -- Metadata --
   lastUpdatedAt    string           ISO8601
-  ttl              number           Unix epoch + 365 days
+  ttl              number           epoch seconds = lastUpdatedAt + 365 days (decided 2026-11-10)
 ```
 
 > **`date` attribute (audit A2; adopted 2026-10-28).** Without it, the day exists only in `SK` (`DAILY#…`) and `gsi1pk` (`DATE#…`). Those key attributes are not in `DailyRollupSchema`, so a Zod parse strips them, and range or trend consumers lose the day. Add `date` (`YYYY-MM-DD`, UTC, Rule 20.1) as a plain attribute that the collector and seed scripts write. It is **optional** in `DailyRollupSchema`, so items written before it existed still parse. The check that `date` matches `SK` (`DAILY#…`) and `gsi1pk` (`DATE#…`) belongs in a **write-side item schema**, `DailyRollupItemSchema` in `packages/shared/src/schemas/` (the full DynamoDB item including key attributes, used by the collector and seed scripts), not in `DailyRollupSchema`, which never sees the key attributes. Data-access functions return `date` on every rollup, deriving it from `SK` for items written without it, so no backfill is needed. When an item has a stored `date` that disagrees with the day in its `SK`, the read **fails** (Rule 60.17): the item is corrupt, because every writer validates with `DailyRollupItemSchema`. The read never silently picks one of the two days (decided 2026-10-28). Lands in Phase 3.1a.
@@ -387,7 +387,7 @@ Department totals are computed on-the-fly from account DailyRollups grouped by d
 
 ### TTL and Data Retention
 
-DailyRollup items expire after 365 days via DynamoDB TTL. This is configurable per deployment. For longer retention, items can be archived to S3 before expiry.
+DailyRollup items expire 365 days after they were last updated (`ttl = lastUpdatedAt + 365 days`; decided 2026-11-10) via DynamoDB TTL. This is configurable per deployment. For longer retention, items can be archived to S3 before expiry.
 
 ### Service Attribution (`byService`)
 
@@ -397,4 +397,4 @@ DailyRollup items expire after 365 days via DynamoDB TTL. This is configurable p
 
 ### `_untagged` Bucket
 
-Calls with no identifiable inference profile (or no `service` tag on the profile) are stored under `_untagged` in `byService`. **Direct `InvokeModel` calls** (model ID only, no inference profile) always count as `_untagged` for service; user attribution from CloudTrail still applies. The Settings page **tag coverage** metric is `1 − (untagged tokens / total tokens)` per team over the selected date range — it measures inference-profile discipline, not Cost Explorer tag activation.
+Calls with no identifiable inference profile (or no `service` tag on the profile) are stored under `_untagged` in `byService`. **Direct `InvokeModel` calls** (model ID only, no inference profile) always count as `_untagged` for service; user attribution from CloudTrail still applies. The Settings page **tag coverage** metric (Phase 4.9b, deferred) is `1 − (untagged tokens / total tokens)` per team over the selected date range — it measures inference-profile discipline, not Cost Explorer tag activation.

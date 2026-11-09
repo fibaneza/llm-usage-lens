@@ -374,7 +374,8 @@ independently deliverable — one Phase 4 sub-phase per PR.
 | 4.6 Team Detail | `ModelBadge`, `AccountIdBadge`, `UserAvatar` (reuses `UsageTable`) |
 | 4.7 Services | (reuses `UsageTable`, `CostEstimateIndicator`) |
 | 4.8 Users | (reuses `UsageTable`, `UserAvatar`, `CostEstimateIndicator`) |
-| 4.9 Settings | `TagCoverageBar` (CRUD forms, new) |
+| 4.9 Settings | (CRUD forms, new) |
+| 4.9b Tag Coverage (deferred) | `TagCoverageBar` |
 
 ---
 
@@ -611,9 +612,10 @@ cost is split proportionally from token ratios.
 #### Phase 4.9 — Settings Page (`/dashboard/settings`)
 
 **Lesson.** The only page with **write operations**. The `/api/accounts`
-Route Handlers stay the HTTP contract; if the page adds **Server Actions**,
-they go through `next-safe-action` — a Zod input schema, an Auth.js session
-check and the `Admin` role check — and call the same data-access functions.
+Route Handlers stay the HTTP contract and v1 uses no **Server Actions**; one
+added later goes through `next-safe-action` — a Zod input schema, an Auth.js
+session check and the `Admin` role check — and calls the same data-access
+functions.
 Only `Admin` members see the write controls. You also learn that a missing
 `SyncStatus` item is a valid "never synced" state, not an error.
 
@@ -621,22 +623,22 @@ Only `Admin` members see the write controls. You also learn that a missing
 
 **Build tasks.**
 
-- [ ] Build the account registry table with add / edit / deactivate actions
-- [ ] Build the add-account form (shadcn Dialog): account ID, name, department, team, region
-- [ ] Build the edit-account form (shadcn Sheet)
-- [ ] Build deactivate with a confirmation dialog
-- [ ] Zod-validate all form inputs; route every Server Action through `next-safe-action`
-- [ ] Build the sync status display (last run, status, accounts processed, duration, errors) and connect `SyncStatusBadge` / `SyncCountdown` to the `SyncStatus` entity
-- [ ] Build the `TagCoverageBar` component (tagged vs `_untagged` percentage per team)
-- [ ] Build the `CostEstimateIndicator` component (subtle badge for estimated cost)
-- [ ] Build the data-retention display (TTL info, read-only)
-- [ ] Tests: CRUD against DynamoDB Local; form validation; tag-coverage calculation; a non-admin sees no write controls and Server Actions reject it
+- [x] Build the account registry table with add / edit / deactivate actions
+- [x] Build the add-account form (shadcn Dialog): account ID, name, department, team (region is fixed to `ap-southeast-2`, not an input)
+- [x] Build the edit-account form (shadcn Sheet)
+- [x] Build deactivate with a confirmation dialog
+- [x] Zod-validate all form inputs; write through the `/api/accounts` Route Handlers (no Server Actions in v1)
+- [x] Build the sync status display (last run, status, accounts processed, duration, errors) and connect `SyncStatusBadge` / `SyncCountdown` to the `SyncStatus` entity
+- [x] Build the `CostEstimateIndicator` component (subtle badge for estimated cost)
+- [x] Build the data-retention display (TTL info, read-only)
+- [x] Tests: CRUD against DynamoDB Local; form validation; a non-admin sees no write controls and the write routes return `403`
 
 **Verify.**
 
-- [ ] Can add / edit / deactivate accounts as `Admin`; non-admins see the registry read-only and get `403`
-- [ ] Sync status displays correctly
-- [ ] Tag coverage renders
+- [x] Can add / edit / deactivate accounts as `Admin`; non-admins see the registry read-only and get `403`
+- [x] Sync status displays correctly
+
+Tag coverage (`TagCoverageBar`) moved to the deferred Phase 4.9b; it does not block Phase 5.
 
 **Gate:**  `[ ] Works   [ ] Tested   [ ] Reviewed`
 

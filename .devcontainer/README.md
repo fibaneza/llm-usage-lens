@@ -128,11 +128,12 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
       OTEL_METRIC_EXPORT_INTERVAL: "10000"
 
-      # DynamoDB Local — placeholder values only.
+      AWS_PROFILE: ${AWS_PROFILE}
+      AWS_REGION: ap-southeast-2
+
+      # DynamoDB Local endpoint. No dummy keys here: they would override SSO
+      # credentials for every aws CLI call in the container.
       DYNAMODB_ENDPOINT: http://dynamodb-local:8000
-      AWS_ACCESS_KEY_ID: local
-      AWS_SECRET_ACCESS_KEY: local
-      AWS_REGION: us-east-1
     depends_on:
       - otel-collector
     healthcheck:

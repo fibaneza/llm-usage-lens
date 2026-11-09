@@ -302,7 +302,7 @@ rail label and a descriptive page title shown in the top bar.
 | — | Team Detail | Team breakdown | `/dashboard/teams/[id]` | Services + users breakdown (drill-down, no rail item) |
 | Attribution | Services | Service breakdown | `/dashboard/services` | All services across all accounts |
 | Attribution | Users | User breakdown | `/dashboard/users` | All users across all accounts |
-| Footer | Settings | Settings | `/dashboard/settings` | Account registry, sync status, tag coverage |
+| Footer | Settings | Settings | `/dashboard/settings` | Account registry, sync status, data retention (tag coverage: Phase 4.9b) |
 
 ### Overview Page
 
@@ -367,7 +367,7 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 
 - Account registry: add/edit/deactivate accounts, map to dept/team (`Admin` role; read-only for other members)
 - Sync status: last run time, success/error count, next scheduled run
-- Tag coverage: per-team percentage of tagged vs untagged usage
+- Tag coverage (Phase 4.9b, deferred): per-team percentage of tagged vs untagged usage
 - Data retention: TTL configuration display
 
 ## Responsive Tables
@@ -473,7 +473,7 @@ Conventions for interactive controls, established with the global
 | `SyncStatusBadge` | Custom (shadcn Badge) | Top-bar sync indicator on `GET /api/sync-status` (live from Phase 4.1). Shows Success / Partial / Error from `SyncStatus.status` (the tone colours the icon only; text stays a text token for 4.5:1), "No sync yet" when the item is missing (Rule 20.9), and neutral "Loading" / "Unavailable" while the request is pending or has failed — never an alert. `aria-label` and `title` carry the status and the last run time in UTC. ARIA `role="status"` (polite live region) |
 | `SyncCountdown` | Custom | "Next sync in 42 min" countdown in top bar to `SyncStatus.nextScheduledAt` (required when the item exists — `SyncStatusSchema`, Rule 20.9); an overdue time reads "0 min", never negative; sync status refetches every 5 minutes (*Caching Strategy*). Neutral "Next sync: pending" while loading, when no sync has run, or when the request fails. ARIA `role="timer"` (implicit `aria-live="off"`), so ticks are not announced — never a `status` live region (decided 2026-10-29) |
 | `CostEstimateIndicator` | Custom (shadcn Badge) | Subtle outline "Estimated" badge beside a cost whose row has `costEstimated: true` — per-user and per-service proportional estimates (Rule 20.3); built in Phase 4.2. It does not mark `costFinalized: false` |
-| `TagCoverageBar` | Custom | Progress bar showing % of tagged usage per team |
+| `TagCoverageBar` | Custom | Progress bar showing % of tagged usage per team (Phase 4.9b, deferred) |
 | `EmptyState` | Custom | Reusable empty state with icon, message, and optional CTA |
 | `ErrorBoundary` | Custom | Per-section error boundary — one chart failing doesn't crash the page |
 | `Skeleton` | shadcn/ui | Loading placeholder for sections taking >300ms |

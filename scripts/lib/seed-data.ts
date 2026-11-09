@@ -1,4 +1,4 @@
-import { MODEL_KEYS } from "@bedrock-usage/shared";
+import { COLLECTOR_REGION, MODEL_KEYS } from "@bedrock-usage/shared";
 import type {
   AccountMeta,
   AttributionEntry,
@@ -317,7 +317,7 @@ function buildAccounts(config: ProfileConfig, teams: Team[]): SeedAccount[] {
         departmentName: team.departmentName,
         teamId: team.teamId,
         teamName: team.teamName,
-        region: "us-east-1",
+        region: COLLECTOR_REGION,
         active: true,
         createdAt: CREATED_AT,
         updatedAt: CREATED_AT,

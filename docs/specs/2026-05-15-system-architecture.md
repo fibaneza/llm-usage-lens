@@ -46,7 +46,7 @@ Organization (all authenticated users see all data)
 
 ## Region
 
-The collector operates in **`us-east-1` only**. Bedrock usage outside `us-east-1` is not collected. Multi-region collection is a documented future enhancement (the account registry's `region` field would become a list and the CloudWatch query would loop regions).
+The collector operates in **`ap-southeast-2` (Sydney) only** (decided 2026-11-10; previously `us-east-1`). The collector stack, DynamoDB table, CloudWatch queries and the CloudTrail Lake event data store all live in `ap-southeast-2`, and Bedrock usage outside it is not collected. Sydney traffic that uses `apac.` / `au.` cross-Region inference profiles is still recorded against the source Region, and model normalization strips the profile prefix (`packages/shared/src/models.ts`). **Exception:** the Cost Explorer API is served only from `us-east-1`, so the Cost Explorer client is configured with `us-east-1` while it reads organization-wide billing; that is an endpoint detail, not a second collection Region. The value lives in one place, `COLLECTOR_REGION` (`packages/shared/src/region.ts`), and `AccountMeta.region` must equal it. Multi-region collection is a documented future enhancement (the account registry's `region` field would become a list and the CloudWatch query would loop regions).
 
 ## Data Sources
 
@@ -301,7 +301,7 @@ Two IaC artifacts, both deployed through the CloudFormation control plane to dif
 
 ## Known Limitations
 
-1. **Single region**: Only `us-east-1` Bedrock usage is collected. Usage in other regions is not captured.
+1. **Single region**: Only `ap-southeast-2` (Sydney) Bedrock usage is collected. Usage in other regions is not captured.
 2. **Cost Explorer lag**: Cost data is 8-24h behind. Today's cost is estimated from token counts and model pricing. Yesterday's cost is finalized.
 3. **Per-user/per-service cost is approximate**: Calculated proportionally from token usage ratio. Only account-level and model-level cost from Cost Explorer is exact.
 4. **Service tagging dependency**: `byService` data quality depends on teams routing calls through tagged **application inference profiles** (`service=<name>`). Usage not routed through a tagged profile falls into the `_untagged` bucket. Billing cost allocation tags in the AWS console do not populate `byService` in v1.

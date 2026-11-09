@@ -106,7 +106,7 @@ aws cloudformation deploy \
   --stack-name cost-explorer-read-role \
   --capabilities CAPABILITY_NAMED_IAM \
   --profile <management-profile> \
-  --region us-east-1
+  --region ap-southeast-2
 ```
 
 ### 5b. Collector stack (observability account)
@@ -119,7 +119,7 @@ sam deploy \
   --stack-name bedrock-cost-collector \
   --capabilities CAPABILITY_IAM \
   --profile <observability-profile> \
-  --region us-east-1 \
+  --region ap-southeast-2 \
   --no-confirm-changeset
 ```
 
@@ -155,11 +155,11 @@ A healthy run writes `DailyRollup` items and updates `SyncStatus` in DynamoDB.
 ```sh
 # Collector stack (observability account)
 sam delete --stack-name bedrock-cost-collector \
-  --profile <observability-profile> --region us-east-1
+  --profile <observability-profile> --region ap-southeast-2
 
 # CostExplorerReadRole (management account) — only if fully decommissioning
 aws cloudformation delete-stack --stack-name cost-explorer-read-role \
-  --profile <management-profile> --region us-east-1
+  --profile <management-profile> --region ap-southeast-2
 ```
 
 Org-level setup (CloudWatch observability links, org CloudTrail) is shared
