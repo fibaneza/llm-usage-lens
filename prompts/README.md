@@ -9,7 +9,7 @@ report in `temp/`. You push.
 |---|---|
 | `master_prompt.md` | Run discipline (timing, usage guard, agents, git rules, report) and the core phase plan (Phases 4.9 and 5) |
 | `shared-contracts.md` | Defined once and used by both feature prompts: environments, roles, identity and usage-key format, audit log, combined Bedrock + LiteLLM totals, governance, platform (ECS, CDK), operations, the finance statement |
-| `rbac_prompt.md` | Role-based access from Entra ID (`Viewer`, `Auditor`, `Lead`, `Admin`), scopes, memberships, visibility, plus the platform unit |
+| `rbac_prompt.md` | Role-based access from Entra ID (global `internal-admin`, `internal-org-admin`, `internal-auditor`, `internal-viewer`; scoped `internal-team-admin`), SSO group mapping, single-team affiliation, visibility and inheritance, the master user, plus the platform unit |
 | `litellm_prompt.md` | LiteLLM team and user administration, budgets, rate limits, keys, combined usage, self-service keys, the monthly statement |
 
 ## Run order
@@ -74,7 +74,7 @@ Then tell Claude to follow `prompts/rbac_prompt.md`. Mention it with
 
 The units ask for these as they need them, but they can be gathered up
 front:
-- **Entra:** app roles (`Viewer`, `Auditor`, `Lead`, `Admin`) on both app
+- **Entra:** app roles (`internal-admin`, `internal-org-admin`, `internal-auditor`, `internal-viewer`) and the assigned-groups `groups` claim on both app
   registrations (dev and prod); security groups assigned to them;
   "Assignment required" on; Conditional Access (MFA or compliant device).
 - **AWS:**

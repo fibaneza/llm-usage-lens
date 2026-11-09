@@ -44,15 +44,26 @@ the report and never resolve it silently (Rule 00.2).
 ## 1. Mission
 
 Add a **LiteLLM** area to the dashboard, as a page and Settings panels. There,
-using the dashboard's own roles (`Viewer`, `Lead`, `Admin` — see
-`rbac_prompt.md`):
+using the dashboard's own roles (`rbac_prompt.md` §1.1 and shared-contracts §2).
+
+**Role words in this file.** Plain words below stand for these role values:
+- **Viewer:** `internal-viewer`, and members (users affiliated to a team
+  without an admin role).
+- **Lead:** `internal-team-admin`, within its team or department scope.
+  `internal-org-admin` has Lead rights on **every** team, but no
+  configuration.
+- **Auditor:** `internal-auditor`.
+- **Admin:** `internal-admin`.
+
+Configuration-level actions here are `internal-admin` only: linking teams,
+creating LiteLLM teams, the gateway configuration and the edition.
 
 | Role | Can see | Can do |
 |---|---|---|
-| **Viewer** | Through their `litellmUserId` link (an empty state if unlinked): their own LiteLLM spend, budget and limits (max budget, budget duration and reset time, rate limits); their own keys' metadata (alias, models, budget, spend, expiry, blocked state), **never key values** | Nothing |
-| **Lead** (within their teams or departments only) | Team spend and budget; per-member spend, budgets and limits; members; keys' metadata; the team's model access | Add and remove **LiteLLM** team members (only people who are already dashboard members of the team); set and reset member budgets and spend; generate, block, unblock and delete keys for team members; enable and disable members; choose which **existing** proxy models the team may use; lower (never raise) the team budget; set rate limits (`rpm_limit`, `tpm_limit`, `max_parallel_requests`) on member keys and members, and lower team limits, never above the team's limits |
-| **Auditor** | Every LiteLLM read view, organisation-wide, read-only (shared-contracts §2). **Never** key values | Nothing. Every LiteLLM write route returns `403` |
-| **Admin** (the "Bedrock admin") | Everything above, for every team | Everything Leads can do, on every team. Also: link dashboard teams to LiteLLM teams; create LiteLLM teams; set team budgets and team rate limits (team `rpm_limit`, `tpm_limit`, per-model `model_rpm_limit` and `model_tpm_limit`, and the default member `team_member_rpm_limit` and `team_member_tpm_limit`); configure the connection (URL within the allowed hosts, and the edition) and see the service-key status (a scoped LiteLLM key loaded at task start from SSM; the master key is never used, §1.2 item 5); **choose which allowlisted operations are enabled** |
+| **Viewer** (`internal-viewer` / member) | Through their `litellmUserId` link (an empty state if unlinked): their own LiteLLM spend, budget and limits (max budget, budget duration and reset time, rate limits); their own keys' metadata (alias, models, budget, spend, expiry, blocked state), **never key values** | Nothing |
+| **Lead** (`internal-team-admin` within its scope; `internal-org-admin` on every team) | Team spend and budget; per-member spend, budgets and limits; members; keys' metadata; the team's model access | Add and remove **LiteLLM** team members (only people who are already dashboard members of the team); set and reset member budgets and spend; generate, block, unblock and delete keys for team members; enable and disable members; choose which **existing** proxy models the team may use; lower (never raise) the team budget; set rate limits (`rpm_limit`, `tpm_limit`, `max_parallel_requests`) on member keys and members, and lower team limits, never above the team's limits |
+| **Auditor** (`internal-auditor`) | Every LiteLLM read view, organisation-wide, read-only (shared-contracts §2). **Never** key values | Nothing. Every LiteLLM write route returns `403` |
+| **Admin** (`internal-admin`, the "Bedrock admin") | Everything above, for every team | Everything Leads can do, on every team. Also: link dashboard teams to LiteLLM teams; create LiteLLM teams; set team budgets and team rate limits (team `rpm_limit`, `tpm_limit`, per-model `model_rpm_limit` and `model_tpm_limit`, and the default member `team_member_rpm_limit` and `team_member_tpm_limit`); configure the connection (URL within the allowed hosts, and the edition) and see the service-key status (a scoped LiteLLM key loaded at task start from SSM; the master key is never used, §1.2 item 5); **choose which allowlisted operations are enabled** |
 
 ### 1.1 Hard limits (never built, for any role)
 

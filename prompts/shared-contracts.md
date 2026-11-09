@@ -27,17 +27,54 @@ The single source for everything that `rbac_prompt.md` and
 
 ## 2. Roles
 
-| Role (Entra app role value) | Reads | Writes |
-|---|---|---|
-| `Viewer` | What visibility allows for their memberships (`rbac_prompt.md` §1.4–1.5); their own usage (§5) | Nothing |
-| `Auditor` | **Everything**, read-only, organisation-wide: all pages, the audit log, the access-review export, LiteLLM read views. **Never** key values or secrets | Nothing. Every write route returns `403` |
-| `Lead` | Everything inside their scopes (teams or departments) | Visibility, membership and LiteLLM team administration inside their scopes |
-| `Admin` | Everything | Everything allowed by the two prompts |
+**Revised 2026-11-10** (`rbac_prompt.md` §1.1–§1.5). There are two kinds of role,
+modelled on LiteLLM's proxy and team roles, and every app role value carries
+the `internal-` prefix.
 
-- **Deny by default.** No recognised role means no access. Several roles
+| Role | Kind and source | Reads | Writes |
+|---|---|---|---|
+| `internal-admin` | Global; a small selected group. Entra app role, an in-app grant by an `internal-admin`, or the username/password **master user** (`Admin` accepted as a legacy alias until `enforce`) | Everything | Everything: any team, any user and all configuration. **The only role that can grant or revoke `internal-admin` and `internal-org-admin`** |
+| `internal-org-admin` | Global; Entra app role, or an in-app grant by an `internal-admin` | Every team and department | department-scope `internal-team-admin`, `internal-team-admin` and member assignments, members, moves and visibility in any team. **No configuration**, and no global-role grants |
+| `internal-auditor` | Global; Entra app role only | **Everything**, read-only, organisation-wide: all pages, the audit log, the access-review export, LiteLLM read views. **Never** key values or secrets | Nothing. Every write route returns `403` |
+| `internal-viewer` | Global; Entra app role, **or the default** for a signed-in user with no recognised role | Their own usage (§5); their affiliation's data, as visibility allows | Nothing |
+| `internal-team-admin` | Scoped to **one or more** teams and/or departments (each a separate admin scope); set in the UI or by SSO group mapping | Everything in its scope | Members, promotions and visibility in its scope; with department scope, also moves within the department and the department cap; LiteLLM team administration for its teams |
+| member (no role value) | A plain affiliation to one team; UI or SSO group mapping | The team, as visibility allows | Nothing |
+
+- **Membership versus admin scopes.**
+  - A user is a **member of at most one team**.
+  - A lead may hold `internal-team-admin` on **one or more** teams and/or
+    departments.
+  - A move needs authority over both teams, is atomic and audited, and
+    removes only the team-scope admin on the source team.
+- **SSO mapping:** Admin-managed `groupId → team/department + scoped role`.
+  Precedence is SSO > UI > none. With unmapped or empty groups, no team is
+  set and the user is `internal-viewer`. Admin-scope mappings may yield several scopes. Several distinct member targets are
+  ambiguous, so no SSO affiliation is applied. A UI change to an
+  SSO-managed affiliation returns `409 MANAGED_BY_SSO`.
+- **Inheritance:** a child narrows its parent. The effective setting is the
+  minimum of the organisation cap, the department cap and the team setting.
+- **Global-role grants:** only an `internal-admin` can grant or revoke
+  `internal-admin` or `internal-org-admin` in the app. Each grant needs a
+  re-authentication within 15 minutes and a reason, and is audited and
+  alarmed. Group mappings never target a global role. The last
+  `internal-admin` and the master user cannot be removed.
+- **Master user:** one username/password break-glass login, always
+  `internal-admin`. It is the only password login in production: an
+  Argon2id hash in an SSM SecureString, TOTP in `prod`, a 5-attempt
+  lockout, a 1-hour session, and every sign-in audited
+  (`rbac_prompt.md` §1.3).
+- **Storage:** the existing DynamoDB table. Aurora Serverless v2 was
+  considered and deferred; see `rbac_prompt.md` §1.5 *Storage*.
+
+- **Viewer by default for SSO users (decided 2026-11-10).** A missing or
+  empty `roles` claim, or only unknown roles, means `internal-viewer`. Data stays
+  deny by default through affiliation, and a malformed claim fails closed.
+- **Without SSO (local login, Entra not configured; decided 2026-11-10):**
+  the default sign-in is `internal-admin`. Admins may add local users and set their
+  roles. This is disabled once Entra is configured. Several roles
   combine as a union.
-- **Granted in Entra only.** `Admin` and `Auditor` come only from Entra
-  group assignment. The app can never grant either.
+- **`internal-auditor`** comes only from Entra group assignment; the app
+  never grants it.
 - **Auditor read access is itself audited:** audit-log views and exports
   record actor and time.
 
@@ -149,7 +186,7 @@ to call Bedrock, and optionally the **gateway account id** or ids.
 ## 6. Governance
 
 - **Access review export** (Admin and Auditor): a CSV of every identity with
-  `lastSeenRoles`, lead scopes, memberships, aliases, `lastSignInAt` and the
+  `lastSeenRoles`, global roles and their source, the affiliation and its source, aliases, `lastSignInAt` and the
   LiteLLM link. The export itself is audited. It supports quarterly reviews;
   Entra ID Governance reviews the groups.
 - **Conditional Access.** Both Entra app registrations require the
