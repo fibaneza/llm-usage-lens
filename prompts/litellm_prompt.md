@@ -9,8 +9,8 @@ file wins for this feature only.
 
 LiteLLM references:
 - **The API contract:** <https://docs.litellm.ai/openapi.json>, the
-  authoritative description. At 2026-11-09 it is OpenAPI 3.1, `info.version`
-  1.108.3, with 717 paths.
+  authoritative description. The committed snapshot (fetched 2026-11-10) is
+  OpenAPI 3.1, `info.version` 1.108.3, with 717 paths.
 - **Guides:** <https://docs.litellm.ai/api-reference/>,
   <https://docs.litellm.ai/docs/simple_proxy>, and the proxy pages on
   virtual keys, users, access control, cost tracking, rate limits and model
@@ -39,7 +39,10 @@ the report and never resolve it silently (Rule 00.2).
   <https://docs.litellm.ai/openapi.json>, as a snapshot committed in L0.
   It is the authority for endpoint names, methods and fields; the prose docs
   are only a guide. The user confirmed that this contract matches the
-  company's LiteLLM.
+  company's LiteLLM, which runs the latest release (confirmed 2026-11-10;
+  LiteLLM spec LD1). **L0 is done** (`1733671`, `e9e8fa4`): read
+  `docs/specs/2026-11-10-litellm.md` and `docs/litellm/` instead of
+  re-deriving them.
 
 ## 1. Mission
 
@@ -133,8 +136,10 @@ the read-only model list or info endpoint as confirmed in L0.
        SSM parameters. It stays with the LiteLLM operators.
    - **Version floor.** CVE-2026-47101: before LiteLLM 1.83.14,
      `allowed_routes` could be abused to escalate to `proxy_admin`. The pinned
-     version must be at least 1.104.0 (§2, L0), which includes the fix. L0
-     re-checks open advisories for the pin.
+     version must be at least 1.104.0, which includes the fix; the company runs
+     the latest release (LiteLLM spec LD1). Re-checking the advisories is a
+     routine operator step at each LiteLLM upgrade, recorded in the runbook,
+     and not a blocker for L1.
    - **Creating the key** (an operator action, documented in
      `docs/guides/litellm-admin.md`; never automated by the dashboard):
      - The operator, using the master key, creates a dedicated LiteLLM user
@@ -212,11 +217,13 @@ the read-only model list or info endpoint as confirmed in L0.
     - **ECS task execution role.** It injects the secret at task start:
       - `ssm:GetParameters` on the exact parameter ARN only
       - `kms:Decrypt` on its key, with the condition
-        `kms:ViaService = ssm.us-east-1.amazonaws.com`
+        `kms:ViaService = ssm.ap-southeast-2.amazonaws.com` (the stacks' region, Rule 50.7)
       - plus the standard ECR pull and log permissions
     - **ECS task role (app runtime).** No SSM or KMS access at all. It has
       only the DynamoDB access that `rbac_prompt.md` §1.6 item 9a defines; one
-      shared definition.
+      shared definition. R2 adds the access-control leading keys and the
+      `PutItem`-only audit statement, and L2 adds the `LITELLM#*` leading
+      key.
     - **CI deploy role (GitHub OIDC).** It deploys the AppStack. It cannot
       read the parameter.
     - **No `ssm:PutParameter` anywhere,** because the parameter is managed by
@@ -284,10 +291,13 @@ the read-only model list or info endpoint as confirmed in L0.
     `user_email` both set to the email.
   - **Enterprise, SSO with Entra ID:** LiteLLM creates users at SSO sign-in.
     The link must point at **the `user_id` LiteLLM assigned through SSO**,
-    which may be the Entra object id rather than the email; L0 confirms against
-    the company's Enterprise deployment, a user-assisted check.
+    which is the **email** on the company's Enterprise deployment (confirmed
+    by the user 2026-11-10; LiteLLM spec LD13).
     - The dashboard looks the user up by email, then stores the link.
-    - It never creates a duplicate user that SSO would later shadow.
+    - It never creates a user on Enterprise, so it cannot create a duplicate
+      that SSO would later shadow. A person not yet signed in to LiteLLM gets
+      "sign in to LiteLLM once, then retry" (`409 CONFLICT`).
+    - It stores the `user_id` LiteLLM returns, never a value it composes.
   - **Changing edition** re-resolves the links. The migration is a runbook
     step, audited.
   - Adding a member creates the LiteLLM user if missing, with the
@@ -319,7 +329,7 @@ the read-only model list or info endpoint as confirmed in L0.
     budgets are enforced, and the key owner's personal budget does not apply.
     Show this in the UI so people do not misread it.
 - **Rate limits.** These are LiteLLM fields, set through LiteLLM's API;
-  field names were confirmed in the 2026-11-09 OpenAPI snapshot.
+  field names were confirmed in the committed OpenAPI snapshot.
   - **Team level** (`POST /team/update`): `rpm_limit`, `tpm_limit`,
     `model_rpm_limit` and `model_tpm_limit` (per model, only for models the
     team already has), and `team_member_rpm_limit` and
@@ -361,7 +371,7 @@ the read-only model list or info endpoint as confirmed in L0.
 
 ### 1.4 Cost visualisation
 
-- **Sources (confirmed in the 2026-11-09 OpenAPI snapshot):**
+- **Sources (confirmed in the committed OpenAPI snapshot):**
   - team spend from `/team/info` and `/team/daily/activity/aggregated`
   - user spend from `/user/info` and `/user/daily/activity`
   - per-request detail from `/spend/logs/v2`, filtered by `team_id` or
@@ -431,7 +441,8 @@ the read-only model list or info endpoint as confirmed in L0.
 Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
 (see `README.md`).
 
-- L0, the spec unit, may run earlier, in parallel with RBAC R0.
+- L0, the spec unit, is **done**. RBAC R0, RP and R1 are done; the next
+  unit overall is RBAC R2 (`README.md`).
 - L1 and later need RBAC R1–R4 on `main`. R4 provides the Settings sections
   the L1 panel extends, on top of the Phase 4.9 Settings shell.
 
@@ -466,7 +477,8 @@ Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
 - **Pin and verify the version.**
   - Download <https://docs.litellm.ai/openapi.json> and commit it as
     `docs/litellm/openapi.json`, recording the fetch date, the
-    `info.version` (1.108.3 on 2026-11-09) and a SHA-256.
+    `info.version` (1.108.3, fetched 2026-11-10) and a SHA-256. Done in
+    L0; a refresh is a deliberate change.
   - **Version floor:** the company's LiteLLM must be at least 1.104.0 (member
     budget reset; also past the CVE-2026-47101 fix in 1.83.14). The user
     confirms this. No container or instance is needed to obtain the
@@ -641,11 +653,14 @@ Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
   - the LiteLLM network path from the VPC
   - setting `LITELLM_ALLOWED_HOSTS`
   - configuring the production URL and edition in Settings
-  - confirming the company's LiteLLM is at least 1.104.0
+  - supplying the exact deployed LiteLLM version string for the runbook,
+    and re-checking its security advisories at each LiteLLM upgrade (the
+    version is already confirmed as the latest release, above the 1.104.0
+    floor)
   - identifying LiteLLM's Bedrock gateway principals (IAM role names) and
     gateway account ids, for the combined totals (shared-contracts §5)
-  - the Enterprise SSO identity check (L0's `user_id` confirmation against
-    the real tenant)
+  - verifying Enterprise SSO behaviour against the real tenant (the
+    `user_id` is already confirmed as the email)
 
 ## 5. Timing, usage, orchestration, git, report
 

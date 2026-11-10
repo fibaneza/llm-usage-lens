@@ -85,10 +85,13 @@ dependency order across the tracks below. Track B is the main deliverable.
   prior reports show is not done. This includes a sub-phase that is
   "done locally, pending CI": in that case, finish only what a run may do
   and list the user-only steps (§12).
-- **State on 2026-10-23.** Phase 3.2 is implemented and reviewed on local
-  `feature/phase-3.2-data-access`, but it is unpushed, so CI has not run.
-  Phase 3.1a (non-model cost schema) is partial on
-  `feature/bedrock-cost-coverage`. Phase 3.3 has not started.
+- **Scope of this prompt.** It drives Phase 4.9 and Phase 5. The Phase 4R
+  units (RP, R0–R5) are driven by `rbac_prompt.md` and the LiteLLM units
+  (L0–L8) by `litellm_prompt.md`; the global order is in `README.md`.
+  Phase 3 and Phase 4.1–4.9 have shipped. Phase 4.9b (tag coverage) is
+  deferred and does not block Phase 5.
+- **State.** Never take repo state from this prompt. `/phase-status`, the
+  `implementation-phases.md` checkboxes and `git log` are the record.
 - **Spec gate.** Read the target's task list and Verify bullets. Every task
   must trace to them. If a task depends on an unadopted spec proposal (for
   example the optional rollup `date` attribute), do not implement around
@@ -98,10 +101,10 @@ dependency order across the tracks below. Track B is the main deliverable.
 
 ### Track C — Cost coverage: Guardrails and recurring Bedrock charges
 
-**Status:** a spec amendment exists on local branch
-`docs/bedrock-cost-coverage`, and the Phase 3.1a schema sits partially on
-`feature/bedrock-cost-coverage`. On later runs, continue from those
-branches. Do not draft again.
+**Status:** the spec amendment and the Phase 3.1a schema have shipped on
+`main` (Phase 3.1a is ticked in `implementation-phases.md`). A run continues
+only what that Verify list, the prior reports and any surviving local branch
+(`git branch -vv`) leave open. Do not draft again.
 
 **Gap it addresses:** the original specs modelled Bedrock cost as per-model
 token usage only. Charges that are not token usage were either misfiled
@@ -141,8 +144,9 @@ invent one.
 
 ### Track D — Improve the Claude Code configuration (`.claude/**`)
 
-**Status:** the 2026-10-23 improvements are on local
-`chore/claude-config-improvements`:
+**Status:** the 2026-10-23 improvements were made on
+`chore/claude-config-improvements` (check `git branch -vv` and `main` for
+whether they have landed):
 - explicit agent models
 - the `ecc` fallback
 - `/seed` and `/phase-status` paths
@@ -159,14 +163,48 @@ On later runs, extend that branch rather than redoing it.
 - Fix any other inconsistency that can be verified in under 2 minutes. Report
   the rest as recommendations.
 
+### Phase 5 scope additions (user direction 2026-11-11)
+
+Two workstreams the user started on 2026-11-11 belong to Phase 5, after the
+Phase 4R and LiteLLM units, unless the user directs an earlier run. **Each
+starts with a spec amendment** (Rule 00): no code until the amendment is
+reviewed by `spec-guardian`. Neither is listed in `implementation-phases.md`
+yet, so the amendment adds it there. The 2026-11-11 run drafted the layout
+amendment on `feature/ui-fluid-workspace` and ran the first security audit;
+its findings and the UI review are in `temp/report_261111.md`.
+
+1. **UI refresh: fluid workspace layout.**
+   - Modern full-width layout that uses all the available space instead of
+     the 1280px centred column. This needs a **Design System spec amendment
+     and an amendment of Rule 40.6** (content max-width 1280px, centred)
+     first.
+   - A denser, Grafana-style panel grid.
+   - A LiteLLM-style grouped sidebar.
+   - The signed-in user's role, identity and sign-in method (Entra ID,
+     master user or local login) surfaced in the user menu.
+   - Light mode stays the default and primary theme (Rule 40.1). The
+     breakpoints (375 / 768 / 1024 / 1440), the focus-ring token and the
+     axe and responsive e2e floors still hold.
+2. **Security and best-practices review.**
+   - A periodic, **read-only** audit. It changes nothing; it files findings.
+   - Areas: authentication and session handling; Route Handlers (session,
+     role and scope checks, Zod validation, `Cache-Control: private,
+     no-store`); HTTP security headers and CSP; IaC least privilege
+     (`infra/`); CI/CD (action pinning and workflow permissions);
+     dependencies; Rule 60 hygiene.
+   - **HIGH findings become blockers for the next unit.** MEDIUM and LOW are
+     recorded in the report. Which unit runs the review, and how often, is
+     decided in the spec amendment.
+
 ### Out of scope
 
 Do not do any of the following:
 
 - Any sub-phase beyond the Track B target. No speculative components (Rule 30.2).
 - Phase 6 (collector) or `tools/bedrock-simulator/`.
-- Any call against a real AWS account, any deploy (SAM or Netlify), any new
-  paid resource, any permission expansion.
+- Any call against a real AWS account, any deploy (SAM, CDK or Netlify; the
+  dashboard now deploys to ECS Fargate, and deploying is always a user
+  action), any new paid resource, any permission expansion.
 - New data sources such as CUR, Data Exports or Athena. The architecture is
   settled: Cost Explorer gives exact account and model cost, CloudWatch gives
   tokens, CloudTrail Lake gives estimated per-user and per-service usage, and
