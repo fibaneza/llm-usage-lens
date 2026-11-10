@@ -36,6 +36,17 @@ Organization (access is role-based and scope-limited — Access Control spec)
 - **AWS account users**: AWS access (including Bedrock) is via IAM Identity Center — existing, unchanged, and separate from dashboard login. Bedrock access is **permission-gated** — a user can invoke Bedrock only if their permission set grants Bedrock permissions. Not every team member has access by default. Consequently the dashboard shows only users who have actually invoked Bedrock; CloudTrail records real invocations, so users with no usage never appear.
 - **Lambda collector**: Dedicated IAM service role in the observability account, completely separate from SSO user roles.
 
+## LiteLLM Integration
+
+*Added 2026-11-10 (unit L0); the [LiteLLM spec](2026-11-10-litellm.md) is authoritative.*
+
+- **What:** the dashboard administers an **existing** LiteLLM proxy (teams, team members, users, keys, budgets, rate limits) and reads LiteLLM-reported spend. LiteLLM is never deployed, configured globally or hosted here (Platform spec — *Assumed to exist*).
+- **Boundary:** only `apps/dashboard/lib/litellm/**` (`server-only`) and Route Handlers call LiteLLM, through a deny-by-default allowlist of typed operations with Zod-built bodies; the browser never talks to LiteLLM (Rule 10).
+- **Credential:** a scoped **service key** (a key owned by a dedicated service user, limited by `allowed_routes` to exactly the allowlist), never the master key. It lives in the hand-managed SSM `SecureString` `/llm-usage-lens/<env>/litellm/service-key` (project CMK) and reaches the container only through the task definition's `secrets` at task start (the execution role reads it); application code never calls SSM, and the value never appears in responses, logs, telemetry, DynamoDB or the audit log. Rotation: [LiteLLM runbook](../guides/litellm-admin.md).
+- **Connection:** an Admin-set `https` base URL that must match the deploy-time `LITELLM_ALLOWED_HOSTS` (prevents SSRF and key exfiltration); reached over the existing internal network.
+- **Edition:** `oss` in `dev`, `enterprise` in `prod`, derived from `APP_ENV`; Enterprise-only operations are gated.
+- **Cost provenance:** LiteLLM spend is LiteLLM's own price calculation, labelled "LiteLLM-reported" and never presented as Cost Explorer cost; combined totals exclude the gateway principals' Bedrock usage so LiteLLM-to-Bedrock traffic counts once.
+
 ## Account Layout
 
 | Account | Role |

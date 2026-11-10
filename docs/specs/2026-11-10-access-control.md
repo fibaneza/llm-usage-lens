@@ -394,8 +394,12 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 
 **Error-code registry:** `UNAUTHORIZED` (401), `FORBIDDEN` (403),
 `REAUTH_REQUIRED` (403), `BAD_REQUEST` (400), `NOT_FOUND` (404), `CONFLICT`,
-`MANAGED_BY_SSO`, `ALREADY_AFFILIATED` (409), `INTERNAL` (500). The LiteLLM
-spec extends this list; a new code is added here first.
+`MANAGED_BY_SSO`, `ALREADY_AFFILIATED` (409), `INTERNAL` (500), and from the
+[LiteLLM spec](2026-11-10-litellm.md): `OPERATION_DISABLED` (403, operation
+toggle off), `OPERATION_UNAVAILABLE` (403, Enterprise-only on OSS, or any
+LiteLLM route in `open` mode), `LITELLM_UNAVAILABLE` (503, not configured,
+unreachable or rejected upstream), `PRIVILEGED_TARGET` (409, target LiteLLM
+user holds a proxy role). A new code is added here first.
 
 ## Decisions
 

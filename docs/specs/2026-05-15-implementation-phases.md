@@ -593,7 +593,7 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 `APP_ENV` (`dev` | `prod`) is added to *Environment Configuration* by 4R.1 (Access Control — *Environment*).
 
-**LiteLLM units (L0–L8)** follow Phase 4R and precede Phase 5; they are specced by unit L0 (a LiteLLM spec) and entered here when L0 lands.
+**LiteLLM units (L0–L8)** follow Phase 4R and precede Phase 5; they are specced in the [LiteLLM spec](2026-11-10-litellm.md) and listed under *LiteLLM units* below.
 
 ### Phase 4R.P — Platform (`feature/phase-4r-p-platform`)
 
@@ -627,6 +627,60 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 - [ ] *My usage* page (`/dashboard/me`) and *My teams* landing; scoped labels, "not visible" / "no team" / "no access" states, role-aware landing, no dead links
 - [ ] Verify: e2e per role; seeded probe per role
+
+## LiteLLM units (L0–L8; decided 2026-11-10)
+
+**Goal:** team and user administration of the existing LiteLLM proxy and LiteLLM-reported cost, per the [LiteLLM spec](2026-11-10-litellm.md). One branch and squash commit per unit (Rule 30.4), in order. L0 has no dependency; L1 and later need 4R.1–4R.4 on `main`. Each code unit runs the Rule 70 loop; L1, L2 and L4 add a dedicated security review against the spec's threat model (LT1–LT18). The fake LiteLLM (in-process HTTP or MSW, both editions) implements the allowlisted operations exactly per `docs/litellm/openapi.json`; no test reaches the internet (Rule 60.24).
+
+### L0 — Spec, version pin, contract (`docs/litellm-admin`)
+
+- [x] Contract snapshot `docs/litellm/openapi.json` (1.108.3, fetched 2026-11-10, SHA-256 recorded); endpoints and fields confirmed; allowlist table with toggle defaults; service-key `allowed_routes`; threat model; decisions LD1–LD12
+- [x] Amendments: System Architecture (*LiteLLM Integration*), Data Model, Access Control error codes, Design System (*LiteLLM Page*), Platform, Rule 10; runbook `docs/guides/litellm-admin.md`
+- [x] Verify: `spec-guardian` APPROVE
+
+### L1 — Secrets, connection and permissions (`feature/phase-l1-litellm-connection`)
+
+- [ ] `env.ts`: `LITELLM_SERVICE_KEY` (server-only, optional; missing → "not configured") and `LITELLM_ALLOWED_HOSTS`, with placeholders in `build:ci` and `.env.example` (no real values); `edition` derived from `APP_ENV`
+- [ ] `lib/litellm/client.ts` (`server-only`): base URL from `LiteLLMConnection`, host allowlist, `https` in prod, no userinfo/query/fragment, 10 s timeout, GET retries ≤ 2, writes never retried, sanitised error mapping (`LITELLM_UNAVAILABLE`); every LiteLLM route `403` in `open` mode
+- [ ] `/api/litellm/connection` (GET/PUT, test-before-save, versioned, audited) and `/api/litellm/connection/test`; Settings → LiteLLM panel (status, URL, edition, test; no key entry)
+- [ ] AppStack: `LITELLM_SERVICE_KEY` in the task definition's `secrets` (`valueFrom` the parameter ARN); execution role `ssm:GetParameters` on that ARN and `kms:Decrypt` on the CMK with `kms:ViaService`; nothing added to the task role; optional `litellmEgressCidrs` egress rule; synthesised and asserted, never deployed
+- [ ] Verify: LT1 (bundle and static-output grep, response/log/span scans), LT2, LT6, LT11, LT12 pass; CDK assertions (execution role only, one ARN, no `ssm:PutParameter`, secret never in `environment`); `401` → "rotate and redeploy", no retry
+
+### L2 — Gateway and toggles (`feature/phase-l2-litellm-gateway`)
+
+- [ ] `lib/litellm/` one typed function per allowlisted operation (fixed method and path, strict Zod builders, Zod-parsed responses); edition gate; `OperationToggles` (versioned, audited, defaults per the spec); `TeamLink` + `TeamLinkClaim`; `/api/litellm/toggles`, `/api/litellm/team-links`; task role gains `LITELLM#*` write leading keys (asserted)
+- [ ] Fake LiteLLM for both editions; contract test of every call against the snapshot
+- [ ] Verify: structural allowlist test; `allowed_routes` list = runbook = gateway paths; LT3, LT4, LT7, LT14, LT15, LT17; disabled operation → `403 OPERATION_DISABLED` with no call
+
+### L3 — Read views (`feature/phase-l3-litellm-views`)
+
+- [ ] Scoped read routes (`/api/litellm/me`, `/teams/[teamId]`, members, keys metadata, spend logs, models); `/dashboard/litellm` with *My usage*, *Team spend & budgets*, *Members*, *Keys*, *Model access* (read), each in its own Suspense + ErrorBoundary; "LiteLLM-reported" labels; outage and "not connected" states; nav item
+- [ ] Verify: role × read matrix (unauthenticated, no role, Viewer own/other, Lead own/other/department incl. moved team, Auditor, Admin) with `404` parity; LT8 labels; outage leaves other pages working; e2e probe (fake unless a non-production LiteLLM is provided)
+
+### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)
+
+- [ ] Write routes for every allowlisted write (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list
+- [ ] Verify: write matrix; LT5, LT9, LT10, LT13, LT16, LT18 (privileged member → `409`, no key or membership write); one audit record per success/failure and none on rejection; structural write-route test includes every LiteLLM write route; e2e probe
+
+### L5 — Polish and verification (`feature/phase-l5-litellm-polish`)
+
+- [ ] Accessibility (Phase 5 floor), responsive layout, runbook completed, full role × operation matrix against the fake (and a non-production LiteLLM when provided)
+- [ ] Verify: axe clean; matrix green; e2e probe
+
+### L6 — Combined usage and *My usage* (`feature/phase-l6-litellm-combined`)
+
+- [ ] `GatewayConfig` (`/api/litellm/gateway`, audited); combined totals on Overview, Teams, Team Detail and Users per shared contract §5 (parts shown, gateway slice, reconciliation, unconfigured warning); *My usage* LiteLLM part; R5 landings extended
+- [ ] Verify: counted-once fixture (gateway traffic not doubled); hidden combined totals without a gateway for Viewers and Leads; warning for Admins and Auditors
+
+### L7 — Self-service key requests (`feature/phase-l7-litellm-key-requests`)
+
+- [ ] `KeyRequest` entity and routes; request (models ⊆ team, limits ≤ member, required expiry ≤ ceiling), Lead approve/reject, requester-only "Create and reveal once"; 7-day expiry; ≤ 3 open per person; toggle off by default
+- [ ] Verify: Lead never receives the value; rejected/expired requests cannot be revealed; LT18 at reveal (privileged requester → `409`); audit per step
+
+### L8 — Monthly statement (`feature/phase-l8-finance-statement`)
+
+- [ ] `/api/finance/statement` CSV per shared contract §9 (department, team, Bedrock exact finalised, LiteLLM-reported, combined, reconciliation, provisional flag) for Admin, Auditor and Leads in scope; downloads audited
+- [ ] Verify: totals equal the combined rules; scope filtering; provisional flag for unfinalised months
 
 ---
 

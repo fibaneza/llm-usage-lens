@@ -24,10 +24,12 @@ The `docs/specs/` directory is the source of truth:
 - `docs/specs/2026-05-15-implementation-phases.md` — 6-phase build plan; each phase independently testable
 - `docs/specs/2026-11-10-access-control.md` — roles from Entra ID, scopes, membership, visibility, audit log, threat model (Phase 4R)
 - `docs/specs/2026-11-10-platform.md` — AWS ECS Fargate hosting and the CDK stacks (Phase 4R.P)
+- `docs/specs/2026-11-10-litellm.md` — LiteLLM team/user administration, the gateway allowlist, service key, LiteLLM-reported cost (LiteLLM units L0–L8); contract snapshot in `docs/litellm/`
 - `docs/guides/auth-setup.md` — Auth.js + Microsoft Entra ID and AWS credential setup
 - `docs/guides/aws-infrastructure.md` — operational runbook: collector design, SAM deploy/undeploy CLI
 - `docs/guides/dashboard-deployment.md` — operational runbook: building and deploying the dashboard on ECS Fargate (CDK inputs, `cdk synth`, user-run deploy, DNS)
 - `docs/guides/operations.md` — operations runbook: alarms, redeploy, secret rotation, deploy/undeploy order
+- `docs/guides/litellm-admin.md` — LiteLLM runbook: service user and key, `allowed_routes`, SSM, connection, rotation
 - `docs/guides/dynamic-workflows.md` — where Opus 4.8 dynamic workflows fit (and don't fit) the phase plan; not adopted in v1
 - `docs/guides/github-best-practices.md` — general GitHub/Actions practice reconciled to this project's GitHub Flow, SAM, and pnpm conventions
 - `docs/guides/git-hooks.md` — local git-hook strategy: the current simulator pre-push hook and the Phase 1 Husky suite that supersedes it

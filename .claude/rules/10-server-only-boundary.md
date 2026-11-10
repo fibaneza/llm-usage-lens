@@ -9,6 +9,7 @@ credentials must never reach the browser.
 |---|---|---|
 | Data access functions | `apps/dashboard/lib/data/**` | Must `import "server-only"` at the top |
 | DynamoDB client | `apps/dashboard/lib/dynamodb.ts` | Server only |
+| LiteLLM gateway (from LiteLLM unit L1) | `apps/dashboard/lib/litellm/**` | Must `import "server-only"`; the only code that calls LiteLLM — one typed function per allowlisted operation (LiteLLM spec — *Allowlist*) |
 | Route Handlers (the only HTTP backend) | `apps/dashboard/app/api/**` | Check the Auth.js session (and the `Admin` role on account writes), validate input with Zod, query DynamoDB, return the standard shape |
 | Table setup + seeds | repo-root `scripts/` | Run via `pnpm db:create-table` / `pnpm db:seed` (`:empty` / `:large` / `:ranking`) |
 | Shared schemas + model normalization (+ pure, dependency-free utilities used by ≥2 workspaces) | `packages/shared` (`@llm-usage-lens/shared`) | Imported by both `apps/dashboard` and `apps/collector` |
@@ -18,7 +19,10 @@ credentials must never reach the browser.
 1. **Client Components never import `apps/dashboard/lib/data/**` or
    `@aws-sdk/*`.** They receive data as props from Server Components or fetch
    from same-origin Route Handlers.
-2. **Every data-access file starts with `import "server-only";`.**
+2. **Every data-access file starts with `import "server-only";`** — and so
+   does every file under `apps/dashboard/lib/litellm/**`. Client Components
+   never import `lib/litellm/**`, and the browser never calls LiteLLM; the
+   LiteLLM service key is read only there (Rule 50.6).
 3. **Route Handlers are the only HTTP-reachable backend.** They must:
    - Check the Auth.js session and return `401` if unauthenticated. The
      one exception is `GET /api/health` (no session, no data; Platform spec).

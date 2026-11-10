@@ -302,6 +302,7 @@ rail label and a descriptive page title shown in the top bar.
 | — | Team Detail | Team breakdown | `/dashboard/teams/[id]` | Services + users breakdown (drill-down, no rail item) |
 | Attribution | Services | Service breakdown | `/dashboard/services` | All services across all accounts |
 | Attribution | Users | User breakdown | `/dashboard/users` | All users across all accounts |
+| Gateway | LiteLLM | LiteLLM usage & administration | `/dashboard/litellm` | LiteLLM-reported spend, members, keys, model access (LiteLLM units L3+; [LiteLLM spec](2026-11-10-litellm.md)) |
 | Footer | Settings | Settings | `/dashboard/settings` | Account registry, sync status, data retention (tag coverage: Phase 4.9b) |
 
 ### Overview Page
@@ -370,6 +371,18 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 - Tag coverage (Phase 4.9b, deferred): per-team percentage of tagged vs untagged usage
 - Data retention: TTL configuration display
 - Access (Phase 4R; [Access Control spec](2026-11-10-access-control.md)): **Members** (add by email/UPN, remove, move, pending and stale lists), **Team admins** (team and department scopes), **Visibility** (team settings, department settings and cap, "limited by department" hints), and `internal-admin`-only **Group mappings**, **Role grants** (re-authentication prompt and reason field), **Identity links**, **Local users** (local-login mode only), **Per-user approval**; **Audit log** and **Access review** export for `internal-admin` and `internal-auditor`. Sections a caller cannot use are not rendered; SSO-managed rows show a read-only "Managed in Entra" badge. Forms meet the Phase 5 floor (axe clean, keyboard, visible focus).
+
+### LiteLLM Page
+
+*Added 2026-11-10 (unit L0); built from L3. [LiteLLM spec](2026-11-10-litellm.md).*
+
+- **Sections** (each in its own `<Suspense>` + `ErrorBoundary`, Rule 40.4): *My usage* (all roles: own LiteLLM spend, budget with reset time, effective limits, own keys' metadata), *Team spend & budgets* (Lead, Admin, Auditor: `MetricCard`s for spend against `max_budget` and `soft_budget`, daily spend chart), *Members* (`UsageTable` with `UserAvatar`, member spend, budget and limits; Lead/Admin actions per enabled operation), *Keys* (alias, masked `key_name`, models, budget, spend, expiry, blocked state — never a value), *Model access* (the team's models from the proxy list).
+- **Provenance label:** every LiteLLM-only figure carries a "LiteLLM-reported" badge (Status & Feedback — reuse the existing badge style) with the tooltip "Calculated by LiteLLM from its price map; not billed cost." Combined figures (L6) show their parts on hover or expansion.
+- **States:** "not connected to LiteLLM" for an unlinked team, "LiteLLM unavailable" (inline, section-level) on an outage, "LiteLLM not configured" when the service key or URL is missing; an unlinked Viewer gets an `EmptyState`.
+- **Shown-once key dialog:** after generate or rotate, a dialog shows the value once with a copy action and the warning "This key will not be shown again"; closing it discards the value.
+- **Team-key budget note:** "Only the team and team-member budgets are enforced on team keys; the owner's personal budget does not apply."
+- **Controls** for disabled or Enterprise-only operations are not rendered; destructive actions (remove member, reset spend, delete key) confirm in a dialog, never a browser `confirm()`.
+- **Settings → LiteLLM** (`internal-admin`; read-only for `internal-auditor`): connection URL, edition (read-only), service-key status ("configured: yes/no" — no entry, reveal or rotate), connection test result, operation toggles, team links, orphaned LiteLLM members.
 
 ### Access states and scoped labels
 

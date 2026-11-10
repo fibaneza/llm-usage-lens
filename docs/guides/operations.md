@@ -40,8 +40,11 @@ Tasks read secrets only at start, so rotate then force a new deployment.
 - **Entra client secret:** create the new secret in the Entra app
   registration, overwrite `/llm-usage-lens/<env>/app/entra-client-secret`,
   force a new deployment, verify sign-in, then delete the old secret in Entra.
-- **LiteLLM service key:** placeholder until LiteLLM unit L1 defines the
-  parameter and procedure.
+- **LiteLLM service key:** parameter `/llm-usage-lens/<env>/litellm/service-key`
+  (hand-managed `SecureString`, project CMK); rotation is in
+  [litellm-admin.md](litellm-admin.md) §6 (new key → update SSM → force a new
+  deployment → connection test → block and delete the old key). The task
+  definition wiring lands in LiteLLM unit L1.
 - **Master-user custody:** placeholder until Phase 4R.1 (R1) defines the
   Argon2id hash and TOTP parameters, who holds the break-glass credential and
   how it is rotated.

@@ -26,3 +26,12 @@ secretGroup = 1
 [rules.allowlist]
 description = "Allow the all-zeros placeholder used in docs and *.example files, plus the two AWS documentation example IDs used as distinct test fixtures"
 regexes = ['''^0{12}$''', '''^123456789012$''', '''^111122223333$''']
+
+# The vendored LiteLLM OpenAPI contract (docs/litellm/openapi.json, LiteLLM
+# spec — Contract snapshot) repeats one example key hash and the placeholder
+# `your_api_key_here` from LiteLLM's public docs. Allow those exact, anchored
+# values only, never the whole file, so a real secret pasted into the snapshot
+# is still caught.
+[allowlist]
+description = "LiteLLM public OpenAPI example token hash and placeholder"
+regexes = ['''^d5345c0ecc68ae6295c69f91926b2bd379e25481a40c34b5884d157a9f65d8fa$''', '''^your_api_key_here$''']
