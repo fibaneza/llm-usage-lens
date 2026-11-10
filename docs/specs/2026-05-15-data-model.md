@@ -64,7 +64,7 @@ Attributes:
 |---------|---------------|
 | Get one account | `PK = ACCT#{id}`, `SK = META` |
 | All accounts in a department | `GSI1: gsi1pk = DEPT#{deptId}` |
-| All accounts (settings page) | Table scan with `SK = META` filter (v1 expects ≤100 active accounts; design headroom to ~500) |
+| All accounts (settings page) | Table scan with a `begins_with(PK, "ACCT#") AND SK = META` filter — other entities also use `SK = META` (Access Control spec — *Data model additions*) (v1 expects ≤100 active accounts; design headroom to ~500) |
 
 ## Entity: DailyRollup
 

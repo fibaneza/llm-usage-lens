@@ -132,6 +132,18 @@ const NON_ADMIN_SESSIONS: [string, unknown][] = [
   ["the role in the wrong case", { user: { name: "M", roles: ["admin"] } }],
   ["a role that merely contains Admin", { user: { roles: ["SuperAdmin"] } }],
   ["roles that is a string, not a list", { user: { roles: "Admin" } }],
+  // Phase 4R.1: only effective internal-admin may write (Access Control
+  // spec — Permission matrix; contract R1 decision 10).
+  ["internal-auditor", { user: { name: "M", roles: ["internal-auditor"] } }],
+  [
+    "internal-org-admin",
+    { user: { name: "M", roles: ["internal-org-admin"] } },
+  ],
+  ["internal-viewer", { user: { name: "M", roles: ["internal-viewer"] } }],
+  [
+    "internal-auditor and internal-org-admin together",
+    { user: { roles: ["internal-auditor", "internal-org-admin"] } },
+  ],
 ];
 
 // Bodies an ungated handler would reject with 400 (or accept): the gate must

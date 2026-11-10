@@ -47,7 +47,7 @@ function setSession(session: unknown) {
   (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(session);
 }
 
-const adminSession = (roles: string[] = ["Admin"]) => ({
+const adminSession = (roles: string[] = ["internal-admin"]) => ({
   user: { name: "Test", email: "t@company.com", roles },
 });
 
@@ -397,7 +397,9 @@ describe("account write routes require the Admin role", () => {
   });
 
   describe("an Admin among several roles can still write", () => {
-    beforeEach(() => setSession(adminSession(["Reader", "Admin"])));
+    beforeEach(() =>
+      setSession(adminSession(["internal-viewer", "internal-admin"])),
+    );
 
     it("POST creates the account", async () => {
       const res = await POST(json("POST", body));

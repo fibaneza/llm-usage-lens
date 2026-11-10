@@ -28,7 +28,7 @@
    string literals in routes or components.
 4. **All Route Handlers must check the Auth.js session** and return `401`
    when unauthenticated (except `GET /api/health`), and every write route
-   returns `403` without its required permission (the `Admin` role today;
+   returns `403` without its required permission (the `internal-admin` role today;
    the Access Control spec's permission matrix from Phase 4R), before any
    DynamoDB call. Global roles are never granted by group mappings; only an
    `internal-admin` grants `internal-admin` or `internal-org-admin` in the

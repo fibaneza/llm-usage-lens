@@ -80,7 +80,7 @@ const SESSION = { user: { name: "t", email: "t@company.com" } };
 // Account writes need the Admin role (System Architecture — Authentication &
 // Access, Account-mutation role; Data Model — HTTP status codes: 403 for a
 // signed-in non-admin). Reads and the cache tests keep the role-less SESSION.
-const ADMIN_SESSION = { user: { ...SESSION.user, roles: ["Admin"] } };
+const ADMIN_SESSION = { user: { ...SESSION.user, roles: ["internal-admin"] } };
 const ctx = (id = acct(1)) => ({ params: Promise.resolve({ id }) });
 const get = (url: string) => new Request(`http://localhost${url}`);
 const write = (method: string, body: unknown) =>

@@ -54,6 +54,7 @@ export default defineConfig({
       SKIP_ENV_VALIDATION: "1",
       // Dev-only local login (auth guide); no Entra vars are set in E2E.
       AUTH_DEV_LOGIN: "true",
+      APP_ENV: "dev",
       // The session-forging helper signs JWTs with this same value — the
       // Auth.js proxy and authorized() callback run unchanged (no bypass).
       AUTH_SECRET: E2E_AUTH_SECRET,

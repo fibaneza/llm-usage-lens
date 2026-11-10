@@ -8,10 +8,23 @@ import {
   DEV_LOGIN_PROVIDER_ID,
   resolveSignInProviders,
 } from "@/lib/auth/auth-config";
-import { ADMIN_ROLE, parseRoles, rolesFromProfile } from "@/lib/auth/roles";
+import { parseEntraProfile } from "@/lib/auth/entra-profile";
+import {
+  MASTER_USER_PROVIDER_ID,
+  authorizeMasterUser,
+  type SignedInIdentity,
+} from "@/lib/auth/master-user";
+import { recordSecurityEvent } from "@/lib/auth/security-events";
+import {
+  INTERNAL_ADMIN_ROLE,
+  isGlobalRole,
+  parseRoles,
+  resolveGlobalRoles,
+} from "@/lib/auth/roles";
 import {
   SESSION_MAX_AGE_SECONDS,
   isWithinSessionLifetime,
+  sessionCapSeconds,
 } from "@/lib/auth/session-lifetime";
 
 // `next build` runs with NODE_ENV=production and may lack runtime secrets, so
@@ -23,32 +36,129 @@ const isBuildPhase = env.NEXT_PHASE === "phase-production-build";
 export const enabledSignInProviders = isBuildPhase
   ? {
       entra: !!env.AUTH_MICROSOFT_ENTRA_ID_ID,
-      devLogin: env.NODE_ENV !== "production" && env.AUTH_DEV_LOGIN === "true",
+      devLogin:
+        env.NODE_ENV !== "production" &&
+        env.AUTH_DEV_LOGIN === "true" &&
+        !env.AUTH_MICROSOFT_ENTRA_ID_ID,
+      master: !!env.AUTH_MASTER_USERNAME,
     }
   : resolveSignInProviders({
       nodeEnv: env.NODE_ENV,
+      appEnv: env.APP_ENV,
       entraId: env.AUTH_MICROSOFT_ENTRA_ID_ID,
       entraSecret: env.AUTH_MICROSOFT_ENTRA_ID_SECRET,
       entraIssuer: env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
       devLogin: env.AUTH_DEV_LOGIN,
+      masterUsername: env.AUTH_MASTER_USERNAME,
+      masterPasswordHash: env.AUTH_MASTER_PASSWORD_HASH,
+      masterTotpSecret: env.AUTH_MASTER_TOTP_SECRET,
     });
+
+// Fail closed: anything but an explicit dev keeps the legacy Admin alias off.
+const appEnv = env.APP_ENV === "dev" ? "dev" : "prod";
+const tenantId =
+  /\/([0-9a-f-]{36})\/v2\.0$/.exec(
+    env.AUTH_MICROSOFT_ENTRA_ID_ISSUER ?? "",
+  )?.[1] ?? "";
+
+const LOCAL_DEFAULT_EMAIL = "dev@localhost";
+
+function isAuthMethod(value: unknown): value is SignedInIdentity["authMethod"] {
+  return value === "entra" || value === "master" || value === "local";
+}
+
+function entraIdentity(profile: unknown): SignedInIdentity | null {
+  const parsed = parseEntraProfile(profile, tenantId);
+  if (!parsed) return null;
+  const roles = resolveGlobalRoles(parsed.roles, appEnv);
+  if (!roles) return null;
+  return {
+    oid: parsed.oid,
+    tid: parsed.tid,
+    ...(parsed.email ? { email: parsed.email } : {}),
+    ...(parsed.upn ? { upn: parsed.upn } : {}),
+    ...(parsed.displayName ? { displayName: parsed.displayName } : {}),
+    roles,
+    authMethod: "entra",
+  };
+}
+
+// Credentials providers carry their identity on the `authorize()` user.
+function credentialsIdentity(user: unknown): SignedInIdentity | null {
+  if (typeof user !== "object" || user === null) return null;
+  const u = user as Record<string, unknown>;
+  if (typeof u.oid !== "string" || typeof u.tid !== "string") return null;
+  if (!isAuthMethod(u.authMethod)) return null;
+  const roles = parseRoles(u.roles).filter(isGlobalRole);
+  return {
+    oid: u.oid,
+    tid: u.tid,
+    ...(typeof u.email === "string" ? { email: u.email } : {}),
+    ...(typeof u.name === "string" ? { displayName: u.name } : {}),
+    roles,
+    authMethod: u.authMethod,
+  };
+}
+
+function identityFor(
+  provider: string,
+  profile: unknown,
+  user: unknown,
+): SignedInIdentity | null {
+  return provider === DEV_LOGIN_PROVIDER_ID ||
+    provider === MASTER_USER_PROVIDER_ID
+    ? credentialsIdentity(user)
+    : entraIdentity(profile);
+}
 
 const providers: Provider[] = [];
 if (enabledSignInProviders.entra) {
   providers.push(MicrosoftEntraID);
 }
 if (enabledSignInProviders.devLogin) {
-  // Local development only: no credentials, fixed identity.
+  // Local development only: fixed identity, role chosen on the sign-in page.
   providers.push(
     Credentials({
       id: DEV_LOGIN_PROVIDER_ID,
       name: "Local developer",
-      credentials: {},
-      authorize: async () => ({
-        id: "local-developer",
-        name: "Local Developer",
-        email: "dev@localhost",
-      }),
+      credentials: { role: {} },
+      authorize: async (credentials) => {
+        const role = credentials?.role ?? INTERNAL_ADMIN_ROLE;
+        if (!isGlobalRole(role)) return null;
+        return {
+          id: `local:${LOCAL_DEFAULT_EMAIL}`,
+          name: "Local Developer",
+          email: LOCAL_DEFAULT_EMAIL,
+          oid: `local:${LOCAL_DEFAULT_EMAIL}`,
+          tid: "local",
+          roles: [role],
+          authMethod: "local",
+        };
+      },
+    }),
+  );
+}
+if (
+  enabledSignInProviders.master &&
+  env.AUTH_MASTER_USERNAME &&
+  env.AUTH_MASTER_PASSWORD_HASH
+) {
+  const config = {
+    username: env.AUTH_MASTER_USERNAME,
+    passwordHash: env.AUTH_MASTER_PASSWORD_HASH,
+    ...(env.AUTH_MASTER_TOTP_SECRET
+      ? { totpSecret: env.AUTH_MASTER_TOTP_SECRET }
+      : {}),
+  };
+  providers.push(
+    Credentials({
+      id: MASTER_USER_PROVIDER_ID,
+      name: "Master user",
+      credentials: { username: {}, password: {}, totp: {} },
+      authorize: async (credentials) => {
+        const identity = await authorizeMasterUser(credentials, config);
+        return identity ? { id: identity.oid, ...identity } : null;
+      },
     }),
   );
 }
@@ -65,35 +175,71 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_SECONDS },
   pages: {
     signIn: "/sign-in",
+    error: "/no-access",
   },
   callbacks: {
     // Gates the routes matched by proxy.ts.
     authorized: ({ auth }) => !!auth,
+    // Fail closed (Access Control spec — Threat model T1): a malformed token
+    // or a failed identity upsert yields no session.
+    signIn: async ({ user, account, profile }) => {
+      const identity = identityFor(account?.provider ?? "", profile, user);
+      if (!identity) return false;
+      try {
+        // Loaded on demand: the data layer is server-only and pulls the AWS SDK.
+        const { upsertIdentity } = await import("@/lib/data/identity");
+        await upsertIdentity(identity, new Date());
+      } catch {
+        recordSecurityEvent({
+          action: "auth.signin.error",
+          result: "failed",
+          oid: identity.oid,
+          at: new Date().toISOString(),
+        });
+        return false;
+      }
+      return true;
+    },
     // `account` is set only on the sign-in call, which starts a new session
     // (even over an expired token). Later calls keep the token while it is
-    // within the lifetime; a token with no valid sign-in time, or one dated
-    // more than the clock-skew allowance ahead, is rejected, and returning null
-    // makes Auth.js clear the session. The `session` payload of an `update` is
-    // never merged, so roles and the sign-in time change only at sign-in.
-    // iat/exp/jti are re-issued per request, so they are never used as the
-    // sign-in time.
-    jwt: ({ token, account, profile }) => {
+    // within its role-dependent cap; a token with no valid sign-in time, or
+    // one dated more than the clock-skew allowance ahead, is rejected, and
+    // returning null makes Auth.js clear the session. The `session` payload of
+    // an `update` is never merged, so identity and roles change only at
+    // sign-in. iat/exp/jti are re-issued per request, so they are never used
+    // as the sign-in time.
+    jwt: ({ token, account, profile, user }) => {
       const nowSeconds = Math.floor(Date.now() / 1000);
       if (account) {
-        token.roles =
-          account.provider === DEV_LOGIN_PROVIDER_ID
-            ? [ADMIN_ROLE]
-            : rolesFromProfile(profile);
+        const identity = identityFor(account.provider, profile, user);
+        if (!identity) return null;
+        token.oid = identity.oid;
+        token.tid = identity.tid;
+        token.roles = identity.roles;
+        token.authMethod = identity.authMethod;
         token.signedInAt = nowSeconds;
         return token;
       }
-      return isWithinSessionLifetime(token.signedInAt, nowSeconds)
+      const cap = sessionCapSeconds({
+        roles: parseRoles(token.roles),
+        authMethod:
+          typeof token.authMethod === "string" ? token.authMethod : "",
+      });
+      return isWithinSessionLifetime(token.signedInAt, nowSeconds, cap)
         ? token
         : null;
     },
     session: ({ session, token }) => ({
       ...session,
-      user: { ...session.user, roles: parseRoles(token.roles) },
+      user: {
+        ...session.user,
+        oid: typeof token.oid === "string" ? token.oid : "",
+        tid: typeof token.tid === "string" ? token.tid : "",
+        roles: parseRoles(token.roles),
+        ...(isAuthMethod(token.authMethod)
+          ? { authMethod: token.authMethod }
+          : {}),
+      },
     }),
   },
 });
@@ -103,7 +249,21 @@ export async function signInWithEntra() {
   await signIn("microsoft-entra-id", { redirectTo: "/dashboard" });
 }
 
-export async function signInWithDevLogin() {
+export async function signInWithDevLogin(formData: FormData) {
   "use server";
-  await signIn(DEV_LOGIN_PROVIDER_ID, { redirectTo: "/dashboard" });
+  const role = formData.get("role");
+  await signIn(DEV_LOGIN_PROVIDER_ID, {
+    ...(typeof role === "string" ? { role } : {}),
+    redirectTo: "/dashboard",
+  });
+}
+
+export async function signInWithMasterUser(formData: FormData) {
+  "use server";
+  await signIn(MASTER_USER_PROVIDER_ID, {
+    username: formData.get("username"),
+    password: formData.get("password"),
+    totp: formData.get("totp"),
+    redirectTo: "/dashboard",
+  });
 }

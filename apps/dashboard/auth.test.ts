@@ -38,6 +38,7 @@ function stubBase(overrides: Record<string, string>) {
     AUTH_SECRET: "test-secret",
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     NEXT_PHASE: "",
+    APP_ENV: "dev",
     AUTH_DEV_LOGIN: "",
     AUTH_MICROSOFT_ENTRA_ID_ID: "",
     AUTH_MICROSOFT_ENTRA_ID_SECRET: "",
@@ -123,7 +124,11 @@ type Authorize = (credentials: Json, request: Request) => Promise<Json | null>;
 type CapturedConfig = {
   providers: { type?: string; options?: { authorize?: Authorize } }[];
   session?: { strategy?: string; maxAge?: number };
-  callbacks?: { jwt?: RawCallback; session?: RawCallback };
+  callbacks?: {
+    jwt?: RawCallback;
+    session?: RawCallback;
+    signIn?: RawCallback;
+  };
 };
 
 async function loadWithConfig(overrides: Record<string, string>) {
@@ -134,7 +139,7 @@ async function loadWithConfig(overrides: Record<string, string>) {
 
 function rawCallbackOf(
   config: CapturedConfig,
-  name: "jwt" | "session",
+  name: "jwt" | "session" | "signIn",
 ): RawCallback {
   const callback = config.callbacks?.[name];
   if (typeof callback !== "function") {
@@ -177,14 +182,32 @@ const ENTRA_USER = {
 // What Auth.js hands the jwt callback on an Entra sign-in: `user` is the
 // provider's default profile mapping (no roles), `profile` is the decoded ID
 // token claims.
+// Contract R1 decision 3: a valid profile carries `oid` and the configured
+// `tid`; plain-object profiles get both unless the test overrides them.
+const ENTRA_TID = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
 function entraSignIn(profile: unknown, token: Json = { sub: "entra-user-1" }) {
+  const full =
+    typeof profile === "object" && profile !== null && !Array.isArray(profile)
+      ? { oid: "oid-1", tid: ENTRA_TID, ...profile }
+      : profile;
   return {
     token,
     user: ENTRA_USER,
     account: ENTRA_ACCOUNT,
-    profile,
+    profile: full,
     trigger: "signIn",
   };
+}
+
+async function entraSignInAllowed(config: CapturedConfig, profile: unknown) {
+  const params = { ...entraSignIn(profile), token: undefined };
+  const outcome = await Promise.resolve(
+    rawCallbackOf(
+      config as CapturedConfig & { callbacks: { signIn: RawCallback } },
+      "signIn" as never,
+    )(params),
+  ).catch(() => false);
+  return outcome === true;
 }
 
 describe("auth.ts jwt callback (Entra roles claim)", () => {
@@ -194,7 +217,7 @@ describe("auth.ts jwt callback (Entra roles claim)", () => {
     vi.unstubAllGlobals();
   });
 
-  it("copies the roles claim of the Entra ID token into token.roles on sign-in", async () => {
+  it("resolves the roles claim via resolveGlobalRoles on sign-in (legacy Admin -> internal-admin in dev)", async () => {
     const config = await loadWithConfig({
       NODE_ENV: "development",
       ...ENTRA,
@@ -203,7 +226,7 @@ describe("auth.ts jwt callback (Entra roles claim)", () => {
       config,
       "jwt",
     )(entraSignIn({ sub: "entra-user-1", roles: ["Admin", "Reader"] }));
-    expect(token.roles).toEqual(["Admin", "Reader"]);
+    expect(token.roles).toEqual(["internal-admin"]);
   });
 
   it("keeps the identity fields of the token when it adds roles", async () => {
@@ -227,7 +250,7 @@ describe("auth.ts jwt callback (Entra roles claim)", () => {
     });
   });
 
-  it("stores an empty list when the ID token has no roles claim", async () => {
+  it("defaults to internal-viewer when the ID token has no roles claim", async () => {
     const config = await loadWithConfig({
       NODE_ENV: "development",
       ...ENTRA,
@@ -236,7 +259,7 @@ describe("auth.ts jwt callback (Entra roles claim)", () => {
       config,
       "jwt",
     )(entraSignIn({ sub: "entra-user-1", name: "Ada" }));
-    expect(token.roles).toEqual([]);
+    expect(token.roles).toEqual(["internal-viewer"]);
   });
 
   it.each([
@@ -246,31 +269,53 @@ describe("auth.ts jwt callback (Entra roles claim)", () => {
     ["a boolean", true],
     ["an object", { 0: "Admin" }],
     ["null", null],
-    ["an array holding only non-strings", [1, null, {}, ["Admin"]]],
-  ])("stores an empty list when the roles claim is %s", async (_n, roles) => {
+  ])(
+    "gives no session when the roles claim is %s (fail closed)",
+    async (_n, roles) => {
+      const config = await loadWithConfig({
+        NODE_ENV: "development",
+        ...ENTRA,
+      });
+      expect(await entraSignInAllowed(config, { roles })).toBe(false);
+    },
+  );
+
+  it("defaults to internal-viewer for an array holding only non-strings", async () => {
     const config = await loadWithConfig({
       NODE_ENV: "development",
       ...ENTRA,
     });
-    const token = await callbackOf(config, "jwt")(entraSignIn({ roles }));
-    expect(token.roles).toEqual([]);
+    const token = await callbackOf(
+      config,
+      "jwt",
+    )(entraSignIn({ roles: [1, null, {}, ["Admin"]] }));
+    expect(token.roles).toEqual(["internal-viewer"]);
   });
 
   it.each([
     ["no profile", undefined],
     ["a null profile", null],
     ["a profile that is not an object", "roles"],
-  ])(
-    "stores an empty list and does not throw when an Entra sign-in has %s",
-    async (_n, profile) => {
-      const config = await loadWithConfig({
-        NODE_ENV: "development",
-        ...ENTRA,
-      });
-      const token = await callbackOf(config, "jwt")(entraSignIn(profile));
-      expect(token.roles).toEqual([]);
-    },
-  );
+  ])("gives no session when an Entra sign-in has %s", async (_n, profile) => {
+    const config = await loadWithConfig({
+      NODE_ENV: "development",
+      ...ENTRA,
+    });
+    expect(await entraSignInAllowed(config, profile)).toBe(false);
+  });
+
+  it("resolves roles with APP_ENV=prod: the legacy Admin alias is off", async () => {
+    const config = await loadWithConfig({
+      NODE_ENV: "production",
+      APP_ENV: "prod",
+      ...ENTRA,
+    });
+    const token = await callbackOf(
+      config,
+      "jwt",
+    )(entraSignIn({ roles: ["Admin", "Reader"] }));
+    expect(token.roles).toEqual(["internal-viewer"]);
+  });
 
   it("drops non-string entries of the roles claim instead of rejecting the claim", async () => {
     const config = await loadWithConfig({
@@ -280,8 +325,12 @@ describe("auth.ts jwt callback (Entra roles claim)", () => {
     const token = await callbackOf(
       config,
       "jwt",
-    )(entraSignIn({ roles: [{ name: "Admin" }, ["Admin"], "Admin", 0] }));
-    expect(token.roles).toEqual(["Admin"]);
+    )(
+      entraSignIn({
+        roles: [{ name: "Admin" }, ["Admin"], "internal-auditor", 0],
+      }),
+    );
+    expect(token.roles).toEqual(["internal-auditor"]);
   });
 
   it("keeps only the string entries of the roles claim", async () => {
@@ -292,21 +341,20 @@ describe("auth.ts jwt callback (Entra roles claim)", () => {
     const token = await callbackOf(
       config,
       "jwt",
-    )(entraSignIn({ roles: ["Reader", 7, null, "Admin"] }));
-    expect(token.roles).toEqual(["Reader", "Admin"]);
+    )(entraSignIn({ roles: ["Reader", 7, null, "internal-auditor"] }));
+    expect(token.roles).toEqual(["internal-auditor"]);
   });
 
-  it("never grants Admin to an Entra sign-in whose token carries no Admin role", async () => {
+  it("never grants internal-admin to an Entra sign-in whose token carries no admin role", async () => {
     const config = await loadWithConfig({
       NODE_ENV: "development",
-      AUTH_DEV_LOGIN: "true",
       ...ENTRA,
     });
     const token = await callbackOf(
       config,
       "jwt",
     )(entraSignIn({ roles: ["Reader"] }));
-    expect(token.roles).toEqual(["Reader"]);
+    expect(token.roles).toEqual(["internal-viewer"]);
   });
 
   // A token that went through a real sign-in carries its sign-in time (System
@@ -318,12 +366,12 @@ describe("auth.ts jwt callback (Entra roles claim)", () => {
       ...ENTRA,
     });
     const jwt = callbackOf(config, "jwt");
-    const adminToken = await jwt(entraSignIn({ roles: ["Admin"] }));
+    const adminToken = await jwt(entraSignIn({ roles: ["internal-admin"] }));
     const admin = await jwt({ token: adminToken });
-    expect(admin.roles).toEqual(["Admin"]);
+    expect(admin.roles).toEqual(["internal-admin"]);
     const memberToken = await jwt(entraSignIn({ roles: ["Reader"] }));
     const member = await jwt({ token: memberToken });
-    expect(member.roles).toEqual(["Reader"]);
+    expect(member.roles).toEqual(["internal-viewer"]);
   });
 
   it("replaces stale roles on a new sign-in (a revoked Admin does not stay Admin)", async () => {
@@ -337,10 +385,10 @@ describe("auth.ts jwt callback (Entra roles claim)", () => {
     )(
       entraSignIn(
         { sub: "entra-user-1" },
-        { sub: "entra-user-1", roles: ["Admin"] },
+        { sub: "entra-user-1", roles: ["internal-admin"] },
       ),
     );
-    expect(token.roles).toEqual([]);
+    expect(token.roles).toEqual(["internal-viewer"]);
   });
 });
 
@@ -366,9 +414,12 @@ describe("auth.ts session callback", () => {
       "session",
     )({
       session: baseSession(),
-      token: { sub: "entra-user-1", roles: ["Admin", "Reader"] },
+      token: {
+        sub: "entra-user-1",
+        roles: ["internal-admin", "internal-auditor"],
+      },
     });
-    expect(rolesOf(session)).toEqual(["Admin", "Reader"]);
+    expect(rolesOf(session)).toEqual(["internal-admin", "internal-auditor"]);
   });
 
   it("keeps the rest of the session intact", async () => {
@@ -381,7 +432,7 @@ describe("auth.ts session callback", () => {
       "session",
     )({
       session: baseSession(),
-      token: { sub: "entra-user-1", roles: ["Admin"] },
+      token: { sub: "entra-user-1", roles: ["internal-admin"] },
     });
     expect(session).toMatchObject({
       user: { name: "Ada", email: "ada@company.com" },
@@ -389,7 +440,7 @@ describe("auth.ts session callback", () => {
     });
   });
 
-  it("exposes an empty list (never undefined) for a token that predates roles", async () => {
+  it("exposes an empty list (never undefined) for a token that predates roles; no admin", async () => {
     const config = await loadWithConfig({
       NODE_ENV: "development",
       ...ENTRA,
@@ -431,7 +482,7 @@ describe("auth.ts session callback", () => {
     const token = await callbackOf(
       config,
       "jwt",
-    )(entraSignIn({ roles: ["Admin"] }));
+    )(entraSignIn({ roles: ["internal-admin"] }));
     const session = await callbackOf(
       config,
       "session",
@@ -439,7 +490,7 @@ describe("auth.ts session callback", () => {
       session: baseSession(),
       token,
     });
-    expect(rolesOf(session)).toEqual(["Admin"]);
+    expect(rolesOf(session)).toEqual(["internal-admin"]);
   });
 
   it("an Entra sign-in without the Admin app role yields a session without the Admin role", async () => {
@@ -458,8 +509,8 @@ describe("auth.ts session callback", () => {
       session: baseSession(),
       token,
     });
-    expect(rolesOf(session)).toEqual(["Reader"]);
-    expect(rolesOf(session)).not.toContain("Admin");
+    expect(rolesOf(session)).toEqual(["internal-viewer"]);
+    expect(rolesOf(session)).not.toContain("internal-admin");
   });
 });
 
@@ -516,15 +567,29 @@ describe("auth.ts dev-only local login signs in with Admin", () => {
   it("keeps the fixed local identity", async () => {
     const { user } = await devLoginAuthorize();
     expect(user).toMatchObject({
-      id: "local-developer",
       name: "Local Developer",
       email: "dev@localhost",
+      oid: "local:dev@localhost",
+      tid: "local",
+      authMethod: "local",
     });
   });
 
-  it('yields a session whose roles are exactly ["Admin"]', async () => {
+  it('yields a session whose roles are exactly ["internal-admin"] by default', async () => {
     const { session } = await devLoginSession();
-    expect(rolesOf(session)).toEqual(["Admin"]);
+    expect(rolesOf(session)).toEqual(["internal-admin"]);
+  });
+
+  it("signs in with the chosen role", async () => {
+    const config = await loadWithConfig({
+      NODE_ENV: "development",
+      AUTH_DEV_LOGIN: "true",
+    });
+    const user = await authorizeOf(config)(
+      { role: "internal-viewer" },
+      new Request("http://localhost/api/auth/callback/dev-login"),
+    );
+    expect(user).toMatchObject({ roles: ["internal-viewer"] });
   });
 
   it("registers no dev-login provider in production, so the dev Admin cannot exist there", async () => {
@@ -604,7 +669,7 @@ describe("auth.ts ends a session 8 hours after sign-in, regardless of activity",
   }
 
   const signIn = async (jwt: RawCallback, token?: Json) =>
-    present(await jwt(entraSignIn({ roles: ["Admin"] }, token)));
+    present(await jwt(entraSignIn({ roles: ["internal-viewer"] }, token)));
 
   const refresh = async (jwt: RawCallback, token: Json) =>
     present(await jwt({ token }));
@@ -621,7 +686,7 @@ describe("auth.ts ends a session 8 hours after sign-in, regardless of activity",
     setNow(7 * HOUR + 59 * MINUTE);
     expect(await jwt({ token })).toMatchObject({
       sub: "entra-user-1",
-      roles: ["Admin"],
+      roles: ["internal-viewer"],
     });
   });
 
@@ -654,21 +719,29 @@ describe("auth.ts ends a session 8 hours after sign-in, regardless of activity",
     const { jwt } = await startClock();
     const stored = (agoMs: number) => ({
       sub: "entra-user-1",
-      roles: ["Admin"],
+      roles: ["internal-viewer"],
       signedInAt: SIGN_IN_AT_SECONDS - agoMs / 1000,
     });
     expect(await jwt({ token: stored(7 * HOUR + 59 * MINUTE) })).toMatchObject({
-      roles: ["Admin"],
+      roles: ["internal-viewer"],
     });
     expect(await jwt({ token: stored(8 * HOUR + SECOND) })).toBeNull();
   });
 
   it.each([
     ["an empty token", {}],
-    ["identity and roles only", { sub: "entra-user-1", roles: ["Admin"] }],
+    [
+      "identity and roles only",
+      { sub: "entra-user-1", roles: ["internal-viewer"] },
+    ],
     [
       "a token whose roles say Admin but that predates the sign-in time",
-      { sub: "entra-user-1", name: "Ada", email: "a@x.test", roles: ["Admin"] },
+      {
+        sub: "entra-user-1",
+        name: "Ada",
+        email: "a@x.test",
+        roles: ["internal-viewer"],
+      },
     ],
   ])(
     "returns null for %s (no sign-in time: fail closed)",
@@ -684,7 +757,7 @@ describe("auth.ts ends a session 8 hours after sign-in, regardless of activity",
       await jwt({
         token: {
           sub: "entra-user-1",
-          roles: ["Admin"],
+          roles: ["internal-viewer"],
           iat: SIGN_IN_AT_SECONDS,
           exp: SIGN_IN_AT_SECONDS + 8 * 60 * 60,
           jti: "per-request-id",
@@ -707,7 +780,11 @@ describe("auth.ts ends a session 8 hours after sign-in, regardless of activity",
       const { jwt } = await startClock();
       expect(
         await jwt({
-          token: { sub: "entra-user-1", roles: ["Admin"], signedInAt },
+          token: {
+            sub: "entra-user-1",
+            roles: ["internal-viewer"],
+            signedInAt,
+          },
         }),
       ).toBeNull();
     },
@@ -763,9 +840,10 @@ describe("auth.ts ends a session 8 hours after sign-in, regardless of activity",
     );
     expect(token.signedInAt).toBe(SIGN_IN_AT_SECONDS);
 
-    setNow(7 * HOUR + 59 * MINUTE);
+    // Default local role is internal-admin, whose cap is 4 hours.
+    setNow(3 * HOUR + 59 * MINUTE);
     expect(await jwt({ token })).not.toBeNull();
-    setNow(8 * HOUR + SECOND);
+    setNow(4 * HOUR + SECOND);
     expect(await jwt({ token })).toBeNull();
   });
 });
@@ -802,7 +880,7 @@ describe("auth.ts rejects a sign-in time in the future", () => {
 
   const tokenSignedInAt = (signedInAt: number): Json => ({
     sub: "entra-user-1",
-    roles: ["Admin"],
+    roles: ["internal-viewer"],
     signedInAt,
   });
 
@@ -846,12 +924,12 @@ describe("auth.ts rejects a sign-in time in the future", () => {
     const jwt = await startClock();
     const token = await jwt(
       entraSignIn(
-        { roles: ["Reader"] },
+        { roles: ["internal-viewer"] },
         { sub: "entra-user-1", signedInAt: YEAR_2100_SECONDS },
       ),
     );
     expect(token).toMatchObject({
-      roles: ["Reader"],
+      roles: ["internal-viewer"],
       signedInAt: NOW_SECONDS,
     });
   });
@@ -881,14 +959,14 @@ describe("auth.ts session update cannot change roles or the sign-in time", () =>
   const CLIENT_PAYLOADS: [string, unknown][] = [
     [
       "user.roles and a fresh sign-in time",
-      { user: { roles: ["Admin"] }, signedInAt: NOW_SECONDS },
+      { user: { roles: ["internal-viewer"] }, signedInAt: NOW_SECONDS },
     ],
-    ["top-level roles", { roles: ["Admin"] }],
-    ["user.roles only", { user: { name: "Ada", roles: ["Admin"] } }],
+    ["top-level roles", { roles: ["internal-viewer"] }],
+    ["user.roles only", { user: { name: "Ada", roles: ["internal-viewer"] } }],
     ["a fresh sign-in time only", { signedInAt: NOW_SECONDS }],
     [
       "a nested token override",
-      { token: { roles: ["Admin"], signedInAt: NOW_SECONDS } },
+      { token: { roles: ["internal-viewer"], signedInAt: NOW_SECONDS } },
     ],
     ["an empty object", {}],
     ["null", null],
@@ -898,7 +976,7 @@ describe("auth.ts session update cannot change roles or the sign-in time", () =>
     sub: "entra-user-1",
     name: "Ada",
     email: "ada@company.com",
-    roles: ["Reader"],
+    roles: ["internal-viewer"],
     signedInAt: NOW_SECONDS - HOUR_SECONDS,
   });
 
@@ -916,7 +994,7 @@ describe("auth.ts session update cannot change roles or the sign-in time", () =>
       const { jwt } = await startClock();
       const result = await jwt(update(memberToken(), session));
       expect(result).not.toBeNull();
-      expect(result?.roles).toEqual(["Reader"]);
+      expect(result?.roles).toEqual(["internal-viewer"]);
     },
   );
 
@@ -931,9 +1009,9 @@ describe("auth.ts session update cannot change roles or the sign-in time", () =>
 
   it("does not strip roles from an Admin token when the client sends an empty list", async () => {
     const { jwt } = await startClock();
-    const admin = { ...memberToken(), roles: ["Admin"] };
+    const admin = { ...memberToken(), roles: ["internal-admin"] };
     const result = await jwt(update(admin, { user: { roles: [] }, roles: [] }));
-    expect(result?.roles).toEqual(["Admin"]);
+    expect(result?.roles).toEqual(["internal-admin"]);
   });
 
   it("keeps the rest of the token on an update", async () => {
@@ -974,7 +1052,7 @@ describe("auth.ts session update cannot change roles or the sign-in time", () =>
 
   it("does not extend the session: an update cannot push the 8-hour cap out", async () => {
     const { jwt } = await startClock();
-    const signedIn = await jwt(entraSignIn({ roles: ["Reader"] }));
+    const signedIn = await jwt(entraSignIn({ roles: ["internal-viewer"] }));
     if (signedIn === null) throw new Error("jwt callback returned null");
 
     vi.setSystemTime(new Date(NOW.getTime() + 7 * HOUR_SECONDS * 1000));
@@ -999,11 +1077,11 @@ describe("auth.ts session update cannot change roles or the sign-in time", () =>
         user: { name: "Ada", email: "ada@company.com" },
         expires: "2099-01-01T00:00:00.000Z",
       },
-      token: { sub: "entra-user-1", roles: ["Reader"] },
-      newSession: { user: { roles: ["Admin"] }, roles: ["Admin"] },
+      token: { sub: "entra-user-1", roles: ["internal-viewer"] },
+      newSession: { user: { roles: ["internal-admin"] }, roles: ["Admin"] },
       trigger: "update",
     });
-    expect(rolesOf(session)).toEqual(["Reader"]);
+    expect(rolesOf(session)).toEqual(["internal-viewer"]);
   });
 });
 
@@ -1065,4 +1143,58 @@ describe("auth.ts runtime Entra issuer check (env validation skipped)", () => {
     );
     await expectAuthConfigError();
   });
+});
+
+// Per-session caps (Access Control spec - session lifetime; contract R1
+// decision 4): master 1 h, internal-admin / internal-org-admin 4 h, others 8 h.
+describe("auth.ts per-session lifetime caps", () => {
+  const NOW = new Date("2026-11-10T00:00:00.000Z");
+  const NOW_S = Math.floor(NOW.getTime() / 1000);
+  const H = 3600;
+  beforeEach(() => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  const tokenOf = (
+    roles: string[],
+    authMethod: string,
+    ageSeconds: number,
+  ) => ({
+    sub: "u",
+    oid: "o",
+    tid: "t",
+    roles,
+    authMethod,
+    signedInAt: NOW_S - ageSeconds,
+  });
+
+  it.each([
+    ["internal-admin", "entra", 4],
+    ["internal-org-admin", "entra", 4],
+    ["internal-admin", "master", 1],
+    ["internal-auditor", "entra", 8],
+    ["internal-viewer", "local", 8],
+  ])(
+    "%s via %s: kept just inside %i h, rejected just past it",
+    async (role, method, hours) => {
+      const config = await loadWithConfig({
+        NODE_ENV: "development",
+        ...ENTRA,
+      });
+      const jwt = rawCallbackOf(config, "jwt");
+      expect(
+        await jwt({ token: tokenOf([role], method, hours * H - 60) }),
+      ).not.toBeNull();
+      expect(
+        await jwt({ token: tokenOf([role], method, hours * H + 60) }),
+      ).toBeNull();
+    },
+  );
 });

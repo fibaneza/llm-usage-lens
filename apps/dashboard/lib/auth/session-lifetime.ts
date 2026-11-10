@@ -17,12 +17,29 @@ const SignedInAtSchema = z.number();
 export function isWithinSessionLifetime(
   signedInAt: unknown,
   nowSeconds: number,
+  capSeconds: number = SESSION_MAX_AGE_SECONDS,
 ): boolean {
   const parsed = SignedInAtSchema.safeParse(signedInAt);
   if (!parsed.success) return false;
   const ageSeconds = nowSeconds - parsed.data;
-  return (
-    ageSeconds >= -SESSION_CLOCK_SKEW_SECONDS &&
-    ageSeconds <= SESSION_MAX_AGE_SECONDS
-  );
+  return ageSeconds >= -SESSION_CLOCK_SKEW_SECONDS && ageSeconds <= capSeconds;
+}
+
+// Access Control spec — Sign-in methods: master 1 h, admin and org-admin 4 h,
+// everyone else 8 h.
+export function sessionCapSeconds({
+  roles,
+  authMethod,
+}: {
+  roles: readonly string[];
+  authMethod: string;
+}): number {
+  if (authMethod === "master") return 60 * 60;
+  if (
+    roles.includes("internal-admin") ||
+    roles.includes("internal-org-admin")
+  ) {
+    return 4 * 60 * 60;
+  }
+  return SESSION_MAX_AGE_SECONDS;
 }

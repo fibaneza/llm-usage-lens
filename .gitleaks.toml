@@ -31,7 +31,10 @@ regexes = ['''^0{12}$''', '''^123456789012$''', '''^111122223333$''']
 # spec — Contract snapshot) repeats one example key hash and the placeholder
 # `your_api_key_here` from LiteLLM's public docs. Allow those exact, anchored
 # values only, never the whole file, so a real secret pasted into the snapshot
-# is still caught.
+# is still caught. The third value is the base32 form of RFC 6238 Appendix
+# B's public TOTP test secret ("12345678901234567890"), the fixture in
+# apps/dashboard/lib/auth/{totp,master-user}.test.ts.
 [allowlist]
-description = "LiteLLM public OpenAPI example token hash and placeholder"
-regexes = ['''^d5345c0ecc68ae6295c69f91926b2bd379e25481a40c34b5884d157a9f65d8fa$''', '''^your_api_key_here$''']
+description = "Public example values: LiteLLM OpenAPI token hash and placeholder, RFC 6238 test secret"
+regexes = ['''^d5345c0ecc68ae6295c69f91926b2bd379e25481a40c34b5884d157a9f65d8fa$''', '''^your_api_key_here$''', '''^GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ$''']
+

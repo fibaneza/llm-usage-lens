@@ -62,6 +62,7 @@ Pass with `-c key=value`; lists are comma-separated. Never commit real values
 | `entraIssuer` | both | `https://login.microsoftonline.com/<tenant>/v2.0`; the workflow reads `vars.ENTRA_ISSUER` |
 | `githubRepository` | both | `owner/repo` |
 | `imageTag` | both | image tag, default `latest` |
+| `masterUsername` | both | optional break-glass master user name; its hash and TOTP secret are hand-managed SSM SecureStrings under `/llm-usage-lens/<env>/auth/` |
 | `listenerArn`, `listenerRulePriority`, `albSecurityGroupId` | import | listener ARN, unique priority agreed with the ALB owner, the ALB's security group |
 | `companyCidrs` | create | `10.0.0.0/8` (never `0.0.0.0/0`) |
 

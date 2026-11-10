@@ -55,7 +55,7 @@ patterns) and current Next.js App Router guidance.
 15. **Settings CRUD's HTTP contract is the `/api/accounts` Route Handlers**
     (Data Model spec — *API Routes*; implementation-phases Phase 4.9). A
     Server Action, if one is added later (v1 has none), goes through `next-safe-action` with
-    a Zod input schema, an Auth.js session check and the `Admin` role check
+    a Zod input schema, an Auth.js session check and the `internal-admin` role check
     (`lib/auth/`; System Architecture — *Authentication & Access*), and calls
     the same `lib/data/account-meta.ts` functions.
 
@@ -89,7 +89,7 @@ patterns) and current Next.js App Router guidance.
     tested against DynamoDB Local, not mocks.
 23. **Route Handler tests assert the `{ data }` / `{ error }` shape** and
     cover the `401` (unauthenticated) and `400` (bad input) paths, plus `403`
-    (no `Admin` role) on every write route.
+    (no `internal-admin` role) on every write route.
 24. **No flaky tests.** No real network, no wall-clock `sleep`; control time
     with `vi.useFakeTimers()`.
 

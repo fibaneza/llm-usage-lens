@@ -98,14 +98,18 @@ describe("rolesFromProfile", () => {
 });
 
 describe("hasAdminRole", () => {
-  it("is true when session.user.roles contains Admin", () => {
-    expect(hasAdminRole(asSession({ user: { roles: ["Admin"] } }))).toBe(true);
+  it("is true when session.user.roles contains internal-admin", () => {
+    expect(
+      hasAdminRole(asSession({ user: { roles: ["internal-admin"] } })),
+    ).toBe(true);
   });
 
   it("is true when Admin is one of several roles", () => {
     expect(
       hasAdminRole(
-        asSession({ user: { roles: ["Reader", "Admin", "Other"] } }),
+        asSession({
+          user: { roles: ["internal-viewer", "internal-admin", "Other"] },
+        }),
       ),
     ).toBe(true);
   });
@@ -141,11 +145,12 @@ describe("hasAdminRole", () => {
   });
 
   it.each([
-    ["lower case", "admin"],
-    ["upper case", "ADMIN"],
-    ["a superstring", "SuperAdmin"],
-    ["a substring", "Adm"],
-    ["padded with whitespace", " Admin"],
+    ["lower case", "Internal-Admin"],
+    ["upper case", "INTERNAL-ADMIN"],
+    ["a superstring", "internal-admin-x"],
+    ["a substring", "internal-adm"],
+    ["padded with whitespace", " internal-admin"],
+    ["the legacy alias (resolved at sign-in, not at check time)", "Admin"],
   ])(
     "is false for a role that is only %s of Admin (exact match)",
     (_n, role) => {
@@ -154,9 +159,9 @@ describe("hasAdminRole", () => {
   );
 
   it.each([
-    ["the string 'Admin'", "Admin"],
+    ["the string 'internal-admin'", "internal-admin"],
     ["the string 'SuperAdmin'", "SuperAdmin"],
-    ["an object keyed by index", { 0: "Admin" }],
+    ["an object keyed by index", { 0: "internal-admin" }],
     ["true", true],
     ["null", null],
   ])("is false when roles is %s instead of an array", (_name, roles) => {
@@ -166,14 +171,18 @@ describe("hasAdminRole", () => {
   it("is false when the array holds Admin only as a non-string entry", () => {
     expect(
       hasAdminRole(
-        asSession({ user: { roles: [["Admin"], { name: "Admin" }] } }),
+        asSession({
+          user: { roles: [["internal-admin"], { name: "internal-admin" }] },
+        }),
       ),
     ).toBe(false);
   });
 
   it("reads session.user.roles only, not a top-level roles field", () => {
     expect(
-      hasAdminRole(asSession({ roles: ["Admin"], user: { name: "Ada" } })),
+      hasAdminRole(
+        asSession({ roles: ["internal-admin"], user: { name: "Ada" } }),
+      ),
     ).toBe(false);
   });
 });

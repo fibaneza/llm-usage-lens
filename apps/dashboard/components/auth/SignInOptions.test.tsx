@@ -62,3 +62,29 @@ describe("SignInOptions", () => {
     }
   });
 });
+
+describe("SignInOptions local login role choice", () => {
+  it("offers the four global roles, defaulting to internal-admin", () => {
+    render(<SignInOptions entra={false} devLogin {...actions} />);
+    const select = screen.getByLabelText(/role/i) as HTMLSelectElement;
+    expect(select.value).toBe("internal-admin");
+    expect(
+      Array.from(select.options)
+        .map((o) => o.value)
+        .sort(),
+    ).toEqual(
+      [
+        "internal-admin",
+        "internal-auditor",
+        "internal-org-admin",
+        "internal-viewer",
+      ].sort(),
+    );
+    expect(select.name).toBe("role");
+  });
+
+  it("shows no role choice without the local login", () => {
+    render(<SignInOptions entra devLogin={false} {...actions} />);
+    expect(screen.queryByLabelText(/role/i)).toBeNull();
+  });
+});

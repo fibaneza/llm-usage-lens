@@ -2,6 +2,7 @@ import {
   enabledSignInProviders,
   signInWithDevLogin,
   signInWithEntra,
+  signInWithMasterUser,
 } from "@/auth";
 import { SignInOptions } from "@/components/auth/SignInOptions";
 
@@ -16,6 +17,7 @@ export default function SignInPage() {
         {...enabledSignInProviders}
         entraAction={signInWithEntra}
         devLoginAction={signInWithDevLogin}
+        masterAction={signInWithMasterUser}
       />
     </main>
   );

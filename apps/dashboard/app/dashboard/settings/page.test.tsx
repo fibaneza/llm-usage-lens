@@ -23,7 +23,7 @@ afterEach(() => {
 
 describe("SettingsPage", () => {
   it("passes isAdmin=true for a session with the Admin role", async () => {
-    auth.mockResolvedValue({ user: { roles: ["Admin"] } });
+    auth.mockResolvedValue({ user: { roles: ["internal-admin"] } });
     render(await SettingsPage());
     expect(screen.getByTestId("content")).toHaveTextContent("true");
   });

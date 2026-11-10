@@ -20,6 +20,9 @@ export type TestUserOptions = {
   // Role claims carried in the forged token (`token.roles`, mapped to
   // `session.user.roles` by auth.ts). Defaults to none, i.e. a non-admin.
   roles?: string[];
+  oid?: string;
+  tid?: string;
+  authMethod?: "entra" | "master" | "local";
 };
 
 // Signs a real Auth.js session JWT with the dev server's AUTH_SECRET and
@@ -30,12 +33,21 @@ export type TestUserOptions = {
 // regardless of activity and a token without it is rejected.
 export async function signInAsTestUser(
   context: BrowserContext,
-  { signedInAt = Math.floor(Date.now() / 1000), roles }: TestUserOptions = {},
+  {
+    signedInAt = Math.floor(Date.now() / 1000),
+    roles,
+    oid = "e2e-user",
+    tid = "e2e-tenant",
+    authMethod = "entra",
+  }: TestUserOptions = {},
 ): Promise<void> {
   const sessionToken = await encode({
     token: {
       ...E2E_USER,
       sub: "e2e-user",
+      oid,
+      tid,
+      authMethod,
       ...(roles ? { roles } : {}),
       ...(signedInAt === null ? {} : { signedInAt }),
     },

@@ -59,7 +59,7 @@ async function openSettings(page: Page) {
 
 test.describe("settings page -- admin", () => {
   test.beforeEach(async ({ context }) => {
-    await signInAsTestUser(context, { roles: ["Admin"] });
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
   });
 
   test("shows the registry (inactive marked), sync status and retention with no console errors", async ({

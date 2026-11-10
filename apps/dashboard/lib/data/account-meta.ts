@@ -46,8 +46,8 @@ export async function getAllAccounts(): Promise<AccountMeta[]> {
     const page = await getDocumentClient().send(
       new ScanCommand({
         TableName: getTableName(),
-        FilterExpression: "SK = :meta",
-        ExpressionAttributeValues: { ":meta": META_SK },
+        FilterExpression: "begins_with(PK, :acct) AND SK = :meta",
+        ExpressionAttributeValues: { ":acct": "ACCT#", ":meta": META_SK },
         ExclusiveStartKey: startKey,
       }),
     );

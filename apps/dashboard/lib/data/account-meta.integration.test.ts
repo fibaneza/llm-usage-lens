@@ -65,6 +65,30 @@ describe("getAllAccounts", () => {
     expect([...result].sort(byId)).toEqual([eng1, eng2, fin]);
   });
 
+  it("ignores identity items that share SK = META (regression: /api/accounts 500)", async () => {
+    await putRaw({ PK: "IDENT#x", SK: "META" });
+    await putRaw({
+      PK: "IDENT#local:dev@localhost",
+      SK: "META",
+      gsi1pk: "IDENTS",
+      gsi1sk: "IDENT#local:dev@localhost",
+      oid: "local:dev@localhost",
+      tid: "local",
+      email: "dev@localhost",
+      lastSignInAt: "2026-11-10T10:00:00.000Z",
+      lastSeenRoles: ["internal-admin"],
+      authMethod: "local",
+      version: 1,
+    });
+    await putRaw({
+      PK: "IDENT#master:master-admin",
+      SK: "META",
+      failedAttempts: 2,
+    });
+    const result = await getAllAccounts();
+    expect([...result].sort(byId)).toEqual([eng1, eng2, fin]);
+  });
+
   it("returns an empty array when there are no accounts", async () => {
     await clearTable();
     expect(await getAllAccounts()).toEqual([]);

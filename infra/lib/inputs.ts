@@ -56,6 +56,9 @@ const BaseSchema = z.object({
     .refine((u) => u.startsWith("https://"), "entraIssuer must be https"),
   githubRepository: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
   imageTag: z.string().min(1).default("latest"),
+  // Optional break-glass master user name (Access Control spec — "Sign-in
+  // methods"); the hash and TOTP secret are hand-managed SSM SecureStrings.
+  masterUsername: z.string().min(1).max(64).optional(),
 });
 
 const ImportSchema = z.object({

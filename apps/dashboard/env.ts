@@ -7,6 +7,7 @@ import {
   AuthConfigError,
   ENTRA_TENANT_ISSUER_MESSAGE,
   ENTRA_TENANT_ISSUER_PATTERN,
+  resolveAccessMode,
   resolveSignInProviders,
 } from "@/lib/auth/auth-config";
 
@@ -28,6 +29,15 @@ export const env = createEnv({
       .regex(ENTRA_TENANT_ISSUER_PATTERN, ENTRA_TENANT_ISSUER_MESSAGE)
       .optional(),
     AUTH_DEV_LOGIN: z.string().optional(),
+    APP_ENV: z.enum(["dev", "prod"]),
+    AUTH_ACCESS_MODE: z.string().optional(),
+    AUTH_MASTER_USERNAME: z.string().min(1).optional(),
+    AUTH_MASTER_PASSWORD_HASH: z.string().min(1).optional(),
+    AUTH_MASTER_TOTP_SECRET: z
+      .string()
+      .min(16)
+      .regex(/^[A-Z2-7]+=*$/)
+      .optional(),
     NODE_ENV: z.enum(["development", "test", "production"]).optional(),
     NEXT_PHASE: z.string().optional(),
     AWS_REGION: z.string().default(COLLECTOR_REGION),
@@ -57,7 +67,12 @@ export const env = createEnv({
               entraSecret: value.AUTH_MICROSOFT_ENTRA_ID_SECRET,
               entraIssuer: value.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
               devLogin: value.AUTH_DEV_LOGIN,
+              appEnv: value.APP_ENV,
+              masterUsername: value.AUTH_MASTER_USERNAME,
+              masterPasswordHash: value.AUTH_MASTER_PASSWORD_HASH,
+              masterTotpSecret: value.AUTH_MASTER_TOTP_SECRET,
             });
+            resolveAccessMode(value.AUTH_ACCESS_MODE, value.APP_ENV);
           } catch (error) {
             if (!(error instanceof AuthConfigError)) throw error;
             ctx.addIssue({ code: "custom", message: error.message });

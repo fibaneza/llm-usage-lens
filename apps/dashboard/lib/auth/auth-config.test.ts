@@ -15,7 +15,7 @@ const ENTRA = {
 };
 
 const resolve = (input: Partial<AuthEnvInput>) =>
-  resolveSignInProviders({ nodeEnv: "development", ...input });
+  resolveSignInProviders({ nodeEnv: "development", appEnv: "dev", ...input });
 
 describe("DEV_LOGIN_PROVIDER_ID", () => {
   it('is "dev-login"', () => {
@@ -26,32 +26,33 @@ describe("DEV_LOGIN_PROVIDER_ID", () => {
 describe("resolveSignInProviders", () => {
   describe("enabled providers", () => {
     it("enables only Entra when fully configured", () => {
-      expect(resolve(ENTRA)).toEqual({ entra: true, devLogin: false });
+      expect(resolve(ENTRA)).toMatchObject({ entra: true, devLogin: false });
     });
 
     it("enables only the dev login outside production with AUTH_DEV_LOGIN=true", () => {
-      expect(resolve({ devLogin: "true" })).toEqual({
+      expect(resolve({ devLogin: "true" })).toMatchObject({
         entra: false,
         devLogin: true,
       });
     });
 
-    it("enables both when Entra is configured and the dev login is on", () => {
-      expect(resolve({ ...ENTRA, devLogin: "true" })).toEqual({
-        entra: true,
-        devLogin: true,
-      });
+    // Amended for Phase 4R.1 (Access Control spec, T7): the dev login is
+    // rejected, not enabled, when Entra is configured.
+    it("rejects the dev login when Entra is configured", () => {
+      expect(() => resolve({ ...ENTRA, devLogin: "true" })).toThrow(
+        AuthConfigError,
+      );
     });
 
     it("enables the dev login under the test environment", () => {
-      expect(resolve({ nodeEnv: "test", devLogin: "true" })).toEqual({
+      expect(resolve({ nodeEnv: "test", devLogin: "true" })).toMatchObject({
         entra: false,
         devLogin: true,
       });
     });
 
     it("enables the dev login when NODE_ENV is undefined", () => {
-      expect(resolve({ nodeEnv: undefined, devLogin: "true" })).toEqual({
+      expect(resolve({ nodeEnv: undefined, devLogin: "true" })).toMatchObject({
         entra: false,
         devLogin: true,
       });
@@ -60,15 +61,20 @@ describe("resolveSignInProviders", () => {
     it.each(["TRUE", "1", "yes", "false", "True"])(
       "does not enable the dev login for %j (exact 'true' only)",
       (value) => {
-        expect(resolve({ ...ENTRA, devLogin: value })).toEqual({
-          entra: true,
-          devLogin: false,
-        });
+        // A production provider (the master user) is present so the call
+        // resolves; only the exact string 'true' ever enables the dev login.
+        expect(
+          resolve({
+            masterUsername: "root",
+            masterPasswordHash: "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFz",
+            devLogin: value,
+          }),
+        ).toMatchObject({ entra: false, devLogin: false });
       },
     );
 
     it("treats an empty-string dev login as unset", () => {
-      expect(resolve({ ...ENTRA, devLogin: "" })).toEqual({
+      expect(resolve({ ...ENTRA, devLogin: "" })).toMatchObject({
         entra: true,
         devLogin: false,
       });
@@ -79,9 +85,9 @@ describe("resolveSignInProviders", () => {
     it.each(["development", "test", "production", undefined])(
       "throws AuthConfigError when nothing is configured (NODE_ENV=%s)",
       (nodeEnv) => {
-        expect(() => resolveSignInProviders({ nodeEnv })).toThrow(
-          AuthConfigError,
-        );
+        expect(() =>
+          resolveSignInProviders({ nodeEnv, appEnv: "dev" }),
+        ).toThrow(AuthConfigError);
       },
     );
 
@@ -138,7 +144,7 @@ describe("resolveSignInProviders", () => {
     const production = { nodeEnv: "production" };
 
     it("enables only Entra when fully configured", () => {
-      expect(resolve({ ...production, ...ENTRA })).toEqual({
+      expect(resolve({ ...production, ...ENTRA })).toMatchObject({
         entra: true,
         devLogin: false,
       });
@@ -158,7 +164,7 @@ describe("resolveSignInProviders", () => {
     );
 
     it("does not throw for an empty-string AUTH_DEV_LOGIN", () => {
-      expect(resolve({ ...production, ...ENTRA, devLogin: "" })).toEqual({
+      expect(resolve({ ...production, ...ENTRA, devLogin: "" })).toMatchObject({
         entra: true,
         devLogin: false,
       });
@@ -240,7 +246,7 @@ describe("resolveSignInProviders", () => {
     });
 
     it("still enables the dev login alone when no Entra variable is set", () => {
-      expect(resolve({ devLogin: "true" })).toEqual({
+      expect(resolve({ devLogin: "true" })).toMatchObject({
         entra: false,
         devLogin: true,
       });

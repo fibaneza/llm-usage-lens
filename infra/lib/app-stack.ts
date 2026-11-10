@@ -108,6 +108,18 @@ export class AppStack extends Stack {
       });
     const authSecretArn = secretArn("auth-secret");
     const entraSecretArn = secretArn("entra-client-secret");
+    // Hand-managed SecureStrings, never created by CDK (Access Control spec —
+    // "Sign-in methods"; Platform spec — "Runtime").
+    const authSecretParamArn = (name: string) =>
+      this.formatArn({
+        service: "ssm",
+        resource: "parameter",
+        resourceName: `${prefix.slice(1)}/auth/${name}`,
+        arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+      });
+    const masterHashArn = authSecretParamArn("master-password-hash");
+    const masterTotpArn = authSecretParamArn("master-totp-secret");
+    const masterEnabled = !!inputs.masterUsername;
 
     // Only the RP statements; 4R.2 adds the access-control keys and audit
     // (Platform spec — "Ownership").
@@ -154,7 +166,12 @@ export class AppStack extends Stack {
     taskDefinition.addToExecutionRolePolicy(
       new iam.PolicyStatement({
         actions: ["ssm:GetParameters"],
-        resources: [authSecretArn, entraSecretArn],
+        resources: [
+          authSecretArn,
+          entraSecretArn,
+          ...(masterEnabled ? [masterHashArn] : []),
+          ...(masterEnabled && prod ? [masterTotpArn] : []),
+        ],
       }),
     );
     taskDefinition.addToExecutionRolePolicy(
@@ -174,6 +191,10 @@ export class AppStack extends Stack {
         DYNAMODB_TABLE_NAME: tableName,
         AWS_REGION: COLLECTOR_REGION,
         APP_ENV: inputs.env,
+        AUTH_ACCESS_MODE: "enforce",
+        ...(inputs.masterUsername
+          ? { AUTH_MASTER_USERNAME: inputs.masterUsername }
+          : {}),
         NODE_ENV: "production",
         NEXT_PUBLIC_APP_URL: `https://${inputs.dashboardHostname}`,
         AUTH_URL: `https://${inputs.dashboardHostname}`,
@@ -183,6 +204,14 @@ export class AppStack extends Stack {
       secrets: {
         AUTH_SECRET: new ParameterSecret(authSecretArn),
         AUTH_MICROSOFT_ENTRA_ID_SECRET: new ParameterSecret(entraSecretArn),
+        ...(masterEnabled
+          ? {
+              AUTH_MASTER_PASSWORD_HASH: new ParameterSecret(masterHashArn),
+            }
+          : {}),
+        ...(masterEnabled && prod
+          ? { AUTH_MASTER_TOTP_SECRET: new ParameterSecret(masterTotpArn) }
+          : {}),
       },
     });
 

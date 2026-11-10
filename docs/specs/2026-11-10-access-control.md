@@ -88,7 +88,7 @@ Zod-parses `oid`, `tid`, `roles` and `groups` into the JWT and
 `session.user`. **Fail closed:** a missing `oid`, a foreign `tid`, or a
 `roles`/`groups` claim that is present but not an array means no session.
 The **identity record** `oid → { tid, email, upn, displayName, lastSignInAt,
-lastSeenRoles[] }` (lower-cased `email`/`upn`) is upserted at each sign-in.
+lastSeenRoles[] }` (lower-cased `email`/`upn`) is upserted at each sign-in. **Amended R1 (2026-11-10):** the item also carries `authMethod` (`entra` | `master` | `local`) and `version`; the master user's item carries the lockout fields; an identity upsert that fails fails the sign-in (fail closed).
 
 **Entra configuration** (user action; steps in `docs/guides/auth-setup.md`):
 "Assignment required?" = Yes; security groups assigned to the app roles
@@ -152,6 +152,9 @@ Architecture *Sign-in providers*):
   `env.ts`; absent → the method is not offered.
 - **Second factor:** TOTP required in `prod` (secret also an SSM
   SecureString). Constant-time verification, generic errors.
+- **Lockout (R1, 2026-11-10):** stored on the master identity item
+  (`failedAttempts`, `lockedUntil`, atomic `ADD`) so every task shares it;
+  the counter restarts after a lock expires; success resets it.
 - **Lockout:** 5 failures → 15 minutes. The one recorded exception to "no
   rate limiting".
 - **Session:** 1 hour. Every sign-in, failure and lockout is audited and
@@ -442,7 +445,7 @@ organisation administrators and auditors. Usage rollups are kept for
 | T4 | Elevation: non-`internal-admin` grants a global role | Grant routes `internal-admin` only; mappings cannot target global roles | R1 schema, R4 grant matrix |
 | T5 | Elevation: default viewer reaches team data | Data only through member/admin items | R3 "no affiliation" rows |
 | T6 | Elevation: usage data grants access | `resolveScope` never reads `byUser` | R3 |
-| T7 | Elevation: local users used while Entra is configured | `404` + ignored when Entra configured; Entra required in `prod` | R1 |
+| T7 | Elevation: local users used while Entra is configured | `404` + ignored when Entra configured; Entra required in `prod` | R1 (local login and env rejection); R2 (stored local users ignored); R4 (`/api/local-users` `404`) |
 | T8 | Elevation: ambiguous/overage groups give the wrong team | Ambiguous → none; overage → none + scopes suspended | R2 resolver table |
 | T9 | Elevation: privilege carried across a move | Move removes source team-scope admin atomically | R4 move test |
 | T10 | Tampering: UI overrides SSO-managed item | `409 MANAGED_BY_SSO` | R4 |
@@ -455,11 +458,13 @@ organisation administrators and auditors. Usage rollups are kept for
 | T17 | Disclosure: secrets or PII in logs/telemetry | Sanitised audit; id-only OTel; no claims logged | R2 sanitiser test |
 | T18 | Repudiation: unrecorded change | Audit semantics (one record per success/failure) | R2/R4 audit tests |
 | T19 | Repudiation: audit log edited | Task role `PutItem`-only on `AUDIT#`; CloudWatch copy | R2 CDK assertions on the task-role policy |
-| T20 | Spoofing: master credential brute force or theft | Argon2id in SSM, TOTP, lockout, 1 h session, audited + alarm, custody | R1 |
+| T20 | Spoofing: master credential brute force or theft | Argon2id in SSM, TOTP, lockout, 1 h session, audited + alarm, custody | R1 (hash, TOTP, lockout, 1 h, one id-only security event per attempt); R2 (persistent audit record and its alarm) |
 | T21 | Misconfiguration: `open` mode, missing TOTP or missing Entra in production | Keyed on validated `APP_ENV=prod`; default `enforce`; unset `APP_ENV` fails validation | R1 env tests |
 
 ## Residual risks
 
+- **TOTP replay window:** a TOTP code stays valid for its ±1-step window (about 90 s) and used steps are not recorded, so a code observed in that window could be replayed together with the password. Accepted for v1 (break-glass only, password and lockout still required); recording the last used step on the master identity item is the follow-up.
+- **Master user before 4R.2:** R1 emits only id-only telemetry for master-user sign-ins; the persistent audit record and alarm arrive in 4R.2. Do not set `masterUsername` in `prod` before 4R.2 is deployed.
 - `dynamodb:LeadingKeys` cannot separate `AccountMeta` (`ACCT#…/META`) from
   rollups (`ACCT#…/DAILY#…`), so the task role can technically write rollup
   items. Accepted for v1 (the shared contract's `ACCOUNT#` is the Data

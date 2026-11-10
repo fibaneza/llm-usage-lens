@@ -604,13 +604,15 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ### Phase 4R.1 — Identity, roles and sign-in (`feature/phase-4r-1-rbac-identity`)
 
-- [ ] `lib/auth` role model (global + scoped, union, `internal-viewer` default, legacy `Admin` alias, fail-closed parsing of `roles`/`groups`/`oid`/`tid`); identity record; session caps 8 h / 4 h / 1 h
-- [ ] `APP_ENV` in `env.ts` with placeholders in `build:ci` and `.env.example`; master user (Argon2id, TOTP, lockout, audit); local users; "no access" page; `AUTH_ACCESS_MODE`; dev login and e2e helper for every role
-- [ ] Verify: threat-model tests T1, T4, T7, T20, T21 pass
+- [x] `lib/auth` role model (global + scoped, union, `internal-viewer` default, legacy `Admin` alias, fail-closed parsing of `roles`/`groups`/`oid`/`tid`); identity record; session caps 8 h / 4 h / 1 h
+- [x] `APP_ENV` in `env.ts` with placeholders in `build:ci` and `.env.example`; master user (Argon2id, TOTP, lockout, security events); local login with role choice; "no access" page; `AUTH_ACCESS_MODE`; dev login and e2e helper for every role
+- [x] Verify: threat-model tests T1, T4, T7 (local login and env rejection), T20 (hash, TOTP, lockout, 1 h, security events), T21 pass
+- *Split (2026-11-10, R1):* the persistent audit record and alarm for master-user events land in 4R.2; stored local users (data) in 4R.2 and `/api/local-users` with its Settings section in 4R.4. R1's local login offers the four global roles.
 
 ### Phase 4R.2 — Authorization data (`feature/phase-4r-2-rbac-data`)
 
 - [ ] Entities and `server-only` data access (affiliation, admin scopes, role grants, pending items, group mappings, visibility, local users, identity links, audit); canonical usage identity in `packages/shared`; sign-in resolution and bind; atomic move; versioned writes with the audit item in the same transaction; the task-role DynamoDB policy added to the AppStack and asserted (T19); seeds per role
+- [ ] Wire R1's security events (`auth.master.*`, `auth.signin.error`) to the audit record and the alarm (T20); stored local users ignored while Entra is configured (T7)
 - [ ] Verify: T2, T8, T17, T18, T19 pass; integration tests against DynamoDB Local
 
 ### Phase 4R.3 — Server-side scoping (`feature/phase-4r-3-rbac-scope`)
@@ -857,7 +859,14 @@ AUTH_URL=http://localhost:3000
 AUTH_MICROSOFT_ENTRA_ID_ID=
 AUTH_MICROSOFT_ENTRA_ID_SECRET=
 AUTH_MICROSOFT_ENTRA_ID_ISSUER=               # https://login.microsoftonline.com/<tenant GUID, lowercase>/v2.0; tenant-specific only
-AUTH_DEV_LOGIN=                       # "true" enables the dev-only local login; rejected in production
+AUTH_DEV_LOGIN=                       # "true" enables the dev-only local login; rejected in production and when Entra is configured
+
+# Environment and access (Phase 4R.1; Access Control spec — Environment, Rollout, Sign-in methods)
+APP_ENV=dev                           # required: dev | prod — the only environment switch
+AUTH_ACCESS_MODE=                     # open | enforce; unset or invalid → enforce; open rejected with APP_ENV=prod
+AUTH_MASTER_USERNAME=                 # break-glass master user; with AUTH_MASTER_PASSWORD_HASH, or neither
+AUTH_MASTER_PASSWORD_HASH=            # Argon2id PHC string ($argon2id$…); SSM SecureString in AWS
+AUTH_MASTER_TOTP_SECRET=              # base32; required with APP_ENV=prod; SSM SecureString in AWS
 
 # AWS / DynamoDB
 AWS_REGION=ap-southeast-2

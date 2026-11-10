@@ -10,7 +10,7 @@ credentials must never reach the browser.
 | Data access functions | `apps/dashboard/lib/data/**` | Must `import "server-only"` at the top |
 | DynamoDB client | `apps/dashboard/lib/dynamodb.ts` | Server only |
 | LiteLLM gateway (from LiteLLM unit L1) | `apps/dashboard/lib/litellm/**` | Must `import "server-only"`; the only code that calls LiteLLM — one typed function per allowlisted operation (LiteLLM spec — *Allowlist*) |
-| Route Handlers (the only HTTP backend) | `apps/dashboard/app/api/**` | Check the Auth.js session (and the `Admin` role on account writes), validate input with Zod, query DynamoDB, return the standard shape |
+| Route Handlers (the only HTTP backend) | `apps/dashboard/app/api/**` | Check the Auth.js session (and the `internal-admin` role on account writes; legacy `Admin` is an alias outside `APP_ENV=prod`), validate input with Zod, query DynamoDB, return the standard shape |
 | Table setup + seeds | repo-root `scripts/` | Run via `pnpm db:create-table` / `pnpm db:seed` (`:empty` / `:large` / `:ranking`) |
 | Shared schemas + model normalization (+ pure, dependency-free utilities used by ≥2 workspaces) | `packages/shared` (`@llm-usage-lens/shared`) | Imported by both `apps/dashboard` and `apps/collector` |
 
@@ -35,8 +35,9 @@ credentials must never reach the browser.
    - Every write Route Handler (`POST`/`PUT`/`PATCH`/`DELETE`) under
      `app/api/`, except Auth.js's `auth/[...nextauth]` handler — today
      `POST /api/accounts` and `PATCH`/`DELETE /api/accounts/[id]` — returns
-     `403` `FORBIDDEN` when the session lacks the `Admin` role, before input
-     parsing (`withRoute(..., { requireAdmin: true })`; enforced by
+     `403` `FORBIDDEN` when the session lacks the `internal-admin` role (legacy
+     `Admin` alias outside `APP_ENV=prod`), before input parsing
+     (`withRoute(..., { requireAdmin: true })`; enforced by
      `app/api/write-routes.integration.test.ts`).
    - Validate query/body with Zod (`400` on failure).
    - Return `{ data: T }` on success, `{ error: { code, message } }` on failure.

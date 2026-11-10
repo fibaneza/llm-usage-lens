@@ -20,6 +20,7 @@ function stubBase(overrides: Record<string, string>) {
     AUTH_SECRET: "test-secret",
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     NEXT_PHASE: "",
+    APP_ENV: "dev",
     AUTH_DEV_LOGIN: "",
     AUTH_MICROSOFT_ENTRA_ID_ID: "",
     AUTH_MICROSOFT_ENTRA_ID_SECRET: "",

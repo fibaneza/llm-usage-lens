@@ -11,6 +11,9 @@ export {
 } from "./models";
 export type { ModelKey, ModelMeta } from "./models";
 
+export { IdentityRecordSchema } from "./identity";
+export type { IdentityRecord } from "./identity";
+
 export { COLLECTOR_REGION } from "./region";
 
 export { runBounded } from "./run-bounded";
@@ -142,3 +145,5 @@ export {
 } from "./table";
 export { classifyUsageType } from "./usage-type";
 export type { UsageTypeClassification } from "./usage-type";
+export { GroupMappingInputSchema } from "./group-mapping";
+export type { GroupMappingInput } from "./group-mapping";
