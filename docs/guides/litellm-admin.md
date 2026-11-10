@@ -9,9 +9,11 @@ LiteLLM master key.
 ## 1. Prerequisites (user)
 
 - The company's LiteLLM is **≥ 1.104.0** (`reset_budget`; past the
-  CVE-2026-47101 `allowed_routes` fix in 1.83.14). Check the LiteLLM
-  security advisories for the deployed version and note the date checked
-  here.
+  CVE-2026-47101 `allowed_routes` fix in 1.83.14). **Confirmed 2026-11-10:**
+  the company runs the latest release. Record the exact version here when
+  known: `<version>`.
+- At each LiteLLM upgrade, check the LiteLLM security advisories for the new
+  version and note the date checked here.
 - `dev` runs LiteLLM OSS (no SSO); `prod` runs LiteLLM Enterprise with Entra
   ID SSO. The dashboard derives the edition from `APP_ENV`.
 - The internal hostname (and port) of LiteLLM, reachable from the dashboard
@@ -132,9 +134,12 @@ route — compare the key's `allowed_routes` with §3.
 
 Changing a deployment's edition (OSS ↔ Enterprise) changes how LiteLLM user
 ids are assigned. After the change, an `internal-admin` re-resolves the
-identity links (`litellmUserId`) in Settings; each re-link is audited. On
-Enterprise, confirm against the real tenant whether LiteLLM's SSO `user_id`
-is the Entra object id or the email, and record it here.
+identity links (`litellmUserId`) in Settings; each re-link is audited.
+
+**Confirmed 2026-11-10:** on the company's Enterprise deployment, the
+`user_id` LiteLLM assigns at SSO sign-in is the **email**. The dashboard
+still looks the user up by email and stores the `user_id` LiteLLM returns.
+If LiteLLM's SSO mapping is ever changed, re-resolve the links as above.
 
 ## 8. Gateway principals (for combined totals, L6)
 

@@ -634,7 +634,7 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ### L0 — Spec, version pin, contract (`docs/litellm-admin`)
 
-- [x] Contract snapshot `docs/litellm/openapi.json` (1.108.3, fetched 2026-11-10, SHA-256 recorded); endpoints and fields confirmed; allowlist table with toggle defaults; service-key `allowed_routes`; threat model; decisions LD1–LD12
+- [x] Contract snapshot `docs/litellm/openapi.json` (1.108.3, fetched 2026-11-10, SHA-256 recorded); endpoints and fields confirmed; allowlist table with toggle defaults; service-key `allowed_routes`; threat model; decisions LD1–LD13
 - [x] Amendments: System Architecture (*LiteLLM Integration*), Data Model, Access Control error codes, Design System (*LiteLLM Page*), Platform, Rule 10; runbook `docs/guides/litellm-admin.md`
 - [x] Verify: `spec-guardian` APPROVE
 
