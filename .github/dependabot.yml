@@ -1,10 +1,15 @@
 version: 2
 updates:
-  # Keep GitHub Actions versions pinned and up-to-date.
+  # Keep GitHub Actions versions pinned and up-to-date. Every external action
+  # is pinned to a full commit SHA with a `# vX.Y.Z` comment; Dependabot bumps
+  # the SHA and the comment together. "/" covers `.github/workflows`; the glob
+  # covers the composite actions, which Dependabot does not scan by default.
   # The dashboard's npm ecosystem block is added in Phase 1 once its
   # package.json exists; the standalone simulator already has one (below).
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
     labels:

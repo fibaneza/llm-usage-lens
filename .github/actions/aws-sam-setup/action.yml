@@ -23,17 +23,17 @@ runs:
   using: composite
   steps:
     - name: Setup Node.js
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
       with:
         node-version: ${{ inputs.node-version }}
 
     - name: Setup pnpm
-      uses: pnpm/action-setup@v6
+      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       with:
         version: ${{ inputs.pnpm-version }}
 
     - name: Setup AWS SAM CLI
-      uses: aws-actions/setup-sam@v3
+      uses: aws-actions/setup-sam@341eee193f458fa5aae5d52c94b0c5cf3a1c5a52 # v3
       with:
         use-installer: true
 
@@ -45,7 +45,7 @@ runs:
 
     - name: Cache pnpm store
       if: inputs.cache-pnpm == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ env.PNPM_STORE_PATH }}
         key: ${{ runner.os }}-pnpm-${{ hashFiles(inputs.cache-dependency-path) }}

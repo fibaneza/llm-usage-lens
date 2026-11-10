@@ -77,7 +77,7 @@ risk). Source:
 | [`CODEOWNERS`](CODEOWNERS) | Required-reviewer routing per path. The `/.github/` rule covers this entire directory (workflows, actions, scripts) recursively. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Single contributor entrypoint — branching, commit format, PR process. GitHub surfaces it as "Contributing guidelines" when a new PR is opened. |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting policy. GitHub renders it under the repository's *Security policy* tab. |
-| [`dependabot.yml`](dependabot.yml) | Dependabot schedule — weekly GitHub Actions bumps, plus weekly npm bumps for `tools/bedrock-simulator` (minor/patch grouped into one PR; majors and security updates separate). PR titles are `chore`-prefixed to pass `pr-title-lint`. |
+| [`dependabot.yml`](dependabot.yml) | Dependabot schedule — weekly GitHub Actions bumps (workflows and the composite actions under `actions/`; every external action is pinned to a full commit SHA with a `# vX.Y.Z` comment, and Dependabot bumps both), plus weekly npm bumps for `tools/bedrock-simulator` (minor/patch grouped into one PR; majors and security updates separate). PR titles are `chore`-prefixed to pass `pr-title-lint`. |
 | [`pull_request_template.md`](pull_request_template.md) | Auto-populated PR description scaffold (Summary, Linked issue, Test plan, Reviewer guidance, Phase). |
 
 **Why these live in `.github/` and not the repo root.** GitHub auto-discovers
