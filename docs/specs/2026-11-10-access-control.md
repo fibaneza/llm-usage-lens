@@ -300,13 +300,22 @@ remains). The export is audited.
    **Authorization data is never cached** (roles, grants, affiliations,
    scopes, mappings, visibility, links, the approval), so changes apply on
    the next request on every task with no `revalidateTag`; no cross-task
-   invalidation is relied on. Every `/api/*` response sets
-   `Cache-Control: private, no-store`.
+   invalidation is relied on. Every Route Handler response under `/api/*`
+   sets `Cache-Control: private, no-store` (delivered 2026-11-11 with the
+   security-review fixes, ahead of R3). Auth.js's own handler sets its own
+   headers; the proxy's sign-in redirect and the framework's `404`/`405`
+   for an unknown path or method carry no data.
 5. **Exports and search are scoped:** CSV, command menu, search, and links.
 6. **Writes.** Zod-validated; a body `teamId`/`departmentId` must equal the
    path (`400`). Optimistic concurrency via a `version` attribute and a
-   conditional write (`409`). Same-origin check (`Origin` vs `Host`, else
-   `403`). `write-routes.integration.test.ts` enumerates every write route
+   conditional write (`409`). Same-origin check: every write request
+   (`POST`/`PUT`/`PATCH`/`DELETE`) must carry an `Origin` header whose host
+   equals the request `Host`; a missing or different `Origin` returns `403`
+   `FORBIDDEN`, after the session (`401`) and permission (`403`) checks and
+   before input parsing. A write body must be `Content-Type:
+   application/json`, else `400`. Both were delivered 2026-11-11 with the
+   security-review fixes, ahead of R4 (user direction); Auth.js's own
+   handler keeps its CSRF token instead. `write-routes.integration.test.ts` enumerates every write route
    with its required permission. **No rate limiting** of dashboard routes
    (internal, VPN-only; request/token limits are LiteLLM's), except the
    master-user lockout.
@@ -449,7 +458,7 @@ organisation administrators and auditors. Usage rollups are kept for
 | T8 | Elevation: ambiguous/overage groups give the wrong team | Ambiguous → none; overage → none + scopes suspended | R2 resolver table |
 | T9 | Elevation: privilege carried across a move | Move removes source team-scope admin atomically | R4 move test |
 | T10 | Tampering: UI overrides SSO-managed item | `409 MANAGED_BY_SSO` | R4 |
-| T11 | Tampering: lost update / cross-site write | `version` (`409`); same-origin check | R4 |
+| T11 | Tampering: lost update / cross-site write | `version` (`409`); same-origin check | R4 (same-origin check delivered 2026-11-11) |
 | T12 | Disclosure: aggregates reveal out-of-scope cost | Aggregate after filtering; scoped org totals | R3 leak tests (perturb out-of-scope team) |
 | T13 | Disclosure: department total reconstructed | Department `hidden`; visible totals are sums of visible rows | R3 leak test |
 | T14 | Disclosure: cache serves another caller's rows | Scope-independent cache; auth data uncached; `private, no-store` | R3 back-to-back callers; header assertion |

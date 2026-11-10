@@ -1,4 +1,7 @@
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { installFakeOtel, recordedSpans } from "@/test/otel-fake";
 
 // Source: docs/specs/2026-11-10-access-control.md — Identity, SSO mapping and
 // defaults; Sign-in methods; Threat model T1, T7. Contract R1 decisions 2-5,
@@ -238,6 +241,46 @@ describe("signIn callback", () => {
     const blob = JSON.stringify(ev);
     expect(blob).not.toContain("ada@example.com");
     expect(blob).not.toContain("ddb down");
+  });
+
+  // Rule 60.17 (errors reach OpenTelemetry) / 50.6 (no secrets in telemetry);
+  // security review 2026-11-11 (L5): the swallowed upsert failure is recorded
+  // on the active span, with the exception only — no identity or profile data.
+  it("records the upsert exception on the active span and marks it ERROR, still returning false and emitting the event", async () => {
+    installFakeOtel();
+    recordedSpans.length = 0;
+    const failure = new Error("ddb down");
+    upsertIdentity.mockRejectedValue(failure);
+    const cfg = await load(ENTRA);
+    const ok = await trace
+      .getTracer("test")
+      .startActiveSpan("sign-in", async (span) => {
+        try {
+          return await cfg.callbacks.signIn({
+            user: {},
+            account: entraAccount,
+            profile: entraProfile(),
+          });
+        } finally {
+          span.end();
+        }
+      });
+    expect(ok).toBe(false);
+    expect(recordSecurityEvent).toHaveBeenCalledTimes(1);
+    expect(recordSecurityEvent.mock.calls[0]?.[0]).toMatchObject({
+      action: "auth.signin.error",
+      result: "failed",
+      oid: "oid-1",
+    });
+    const recorded = recordedSpans.filter((s) =>
+      s.exceptions.includes(failure),
+    );
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]?.status.code).toBe(SpanStatusCode.ERROR);
+    const attrs = JSON.stringify(recordedSpans.map((s) => s.attributes));
+    for (const secret of ["ada@example.com", "Ada", "oid-1", "client-secret"]) {
+      expect(attrs).not.toContain(secret);
+    }
   });
 
   it("emits the error event for a failed local sign-in upsert too", async () => {

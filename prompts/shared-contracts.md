@@ -301,9 +301,10 @@ session and returns only `{ data: { status: "ok" } }`.
 
 **Runtime choices that keep the list this short**
 - **Task-role policy ownership.** RP creates the task role with DynamoDB
-  reads and writes limited to `ACCT#*` (Phase 4.9). R2 adds the
-  access-control leading keys and the `PutItem`-only audit statement. L2
-  adds `LITELLM#*`. The task role never gets SSM access.
+  reads and writes limited to `ACCT#*` (Phase 4.9) and `IDENT#*` (Phase
+  4R.1 identity and lockout writes; added 2026-11-11, security review). R2
+  adds the remaining access-control leading keys and the `PutItem`-only
+  audit statement. L2 adds `LITELLM#*`. The task role never gets SSM access.
 - **Credentials.** The **ECS task role** supplies AWS credentials through
   the default chain, so there are no static keys (Rule 50.1).
   `docs/guides/dashboard-deployment.md` is rewritten for ECS, and the

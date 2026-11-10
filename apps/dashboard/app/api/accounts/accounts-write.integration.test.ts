@@ -74,12 +74,27 @@ async function expectForbidden(res: Response) {
   expect(raw.data).toBeUndefined();
 }
 
-const json = (method: string, payload: unknown) =>
-  new Request("http://localhost/api/accounts", {
+// Writes are same-origin (Access Control spec — Enforcement item 6): Origin's
+// host equals the Host header. A Node `Request` has no Host header, so it is
+// set explicitly.
+const HOST = "localhost:3000";
+const SAME_ORIGIN = `http://${HOST}`;
+const URL_ = `http://${HOST}/api/accounts`;
+const sameOriginHeaders = { host: HOST, origin: SAME_ORIGIN };
+
+const json = (
+  method: string,
+  payload: unknown,
+  headers: Record<string, string> = sameOriginHeaders,
+) =>
+  new Request(URL_, {
     method,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: typeof payload === "string" ? payload : JSON.stringify(payload),
   });
+
+const deleteRequest = (headers: Record<string, string> = sameOriginHeaders) =>
+  new Request(URL_, { method: "DELETE", headers });
 
 const withId = (id: string) => ({ params: Promise.resolve({ id }) });
 
@@ -184,11 +199,7 @@ describe("PATCH /api/accounts/[id]", () => {
 });
 
 describe("DELETE /api/accounts/[id]", () => {
-  const del = (id = existing.accountId) =>
-    DELETE(
-      new Request("http://localhost/api/accounts", { method: "DELETE" }),
-      withId(id),
-    );
+  const del = (id = existing.accountId) => DELETE(deleteRequest(), withId(id));
 
   it("401 without a session", async () => {
     signedIn(false);
@@ -238,10 +249,7 @@ describe("account write routes require the Admin role", () => {
 
     it("DELETE /api/accounts/[id] is 403 FORBIDDEN and does not deactivate", async () => {
       const before = await getAccountMeta(existing.accountId);
-      const res = await DELETE(
-        new Request("http://localhost/api/accounts", { method: "DELETE" }),
-        withId(existing.accountId),
-      );
+      const res = await DELETE(deleteRequest(), withId(existing.accountId));
       await expectForbidden(res);
       expect(await getAccountMeta(existing.accountId)).toEqual(before);
       expect((await getAccountMeta(existing.accountId))?.active).toBe(true);
@@ -269,10 +277,7 @@ describe("account write routes require the Admin role", () => {
     });
 
     it("DELETE for a missing account is 403, not 404", async () => {
-      const res = await DELETE(
-        new Request("http://localhost/api/accounts", { method: "DELETE" }),
-        withId("999999999999"),
-      );
+      const res = await DELETE(deleteRequest(), withId("999999999999"));
       await expectForbidden(res);
     });
   });
@@ -282,9 +287,6 @@ describe("account write routes require the Admin role", () => {
   // request below would be a 400 for an Admin.
   describe("the role check comes before input parsing", () => {
     beforeEach(() => setSession({ user: { name: "M", roles: ["Reader"] } }));
-
-    const deleteRequest = () =>
-      new Request("http://localhost/api/accounts", { method: "DELETE" });
 
     it.each(NON_ADMIN_SESSIONS)(
       "POST with a body that is not JSON is 403, not 400 (signed in with %s)",
@@ -354,10 +356,7 @@ describe("account write routes require the Admin role", () => {
     });
 
     it("DELETE with an invalid account id is 401, not 400", async () => {
-      const res = await DELETE(
-        new Request("http://localhost/api/accounts", { method: "DELETE" }),
-        withId("not-an-id"),
-      );
+      const res = await DELETE(deleteRequest(), withId("not-an-id"));
       expect(res.status).toBe(401);
     });
   });
@@ -385,10 +384,7 @@ describe("account write routes require the Admin role", () => {
     });
 
     it("DELETE", async () => {
-      const res = await DELETE(
-        new Request("http://localhost/api/accounts", { method: "DELETE" }),
-        withId(existing.accountId),
-      );
+      const res = await DELETE(deleteRequest(), withId(existing.accountId));
       expect(res.status).toBe(401);
       expect(ApiErrorBodySchema.parse(await res.json()).error.code).toBe(
         "UNAUTHORIZED",
@@ -422,12 +418,97 @@ describe("account write routes require the Admin role", () => {
     });
 
     it("DELETE deactivates the account", async () => {
-      const res = await DELETE(
-        new Request("http://localhost/api/accounts", { method: "DELETE" }),
-        withId(existing.accountId),
-      );
+      const res = await DELETE(deleteRequest(), withId(existing.accountId));
       expect(res.status).toBe(200);
       expect((await getAccountMeta(existing.accountId))?.active).toBe(false);
     });
+  });
+});
+
+// Access Control spec — Enforcement item 6: an admin write with a missing or
+// foreign Origin is 403 FORBIDDEN, writes nothing, and does not reveal whether
+// the body or id is valid.
+describe("account writes are same-origin only", () => {
+  const foreign = { host: HOST, origin: "https://evil.example.test" };
+  const noOrigin = { host: HOST };
+
+  describe.each([
+    ["no Origin header", noOrigin],
+    ["a cross-site Origin", foreign],
+  ])("with %s", (_name, headers) => {
+    it("POST is 403 FORBIDDEN and creates nothing", async () => {
+      await expectForbidden(await POST(json("POST", body, headers)));
+      expect(await getAccountMeta(body.accountId)).toBeNull();
+    });
+
+    it("POST with an invalid body is 403, not 400", async () => {
+      await expectForbidden(await POST(json("POST", "{not json", headers)));
+    });
+
+    it("PATCH is 403 FORBIDDEN and leaves the account unchanged", async () => {
+      const before = await getAccountMeta(existing.accountId);
+      const res = await PATCH(
+        json("PATCH", { accountName: "hijacked" }, headers),
+        withId(existing.accountId),
+      );
+      await expectForbidden(res);
+      expect(await getAccountMeta(existing.accountId)).toEqual(before);
+    });
+
+    it("DELETE is 403 FORBIDDEN and does not deactivate", async () => {
+      await expectForbidden(
+        await DELETE(deleteRequest(headers), withId(existing.accountId)),
+      );
+      expect((await getAccountMeta(existing.accountId))?.active).toBe(true);
+    });
+  });
+
+  it("a same-origin POST that is not application/json is 400 BAD_REQUEST", async () => {
+    const res = await POST(
+      json("POST", JSON.stringify(body), {
+        ...sameOriginHeaders,
+        "content-type": "text/plain",
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(ApiErrorBodySchema.parse(await res.json()).error.code).toBe(
+      "BAD_REQUEST",
+    );
+    expect(await getAccountMeta(body.accountId)).toBeNull();
+  });
+
+  it("falls back to the request URL host when the Host header is absent", async () => {
+    const same = new Request(URL_, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: SAME_ORIGIN },
+      body: JSON.stringify(body),
+    });
+    expect((await POST(same)).status).toBe(200);
+    const cross = new Request(URL_, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://evil.example.test",
+      },
+      body: JSON.stringify({ accountName: "x" }),
+    });
+    await expectForbidden(await PATCH(cross, withId(existing.accountId)));
+  });
+
+  it("the permission check still precedes the origin check", async () => {
+    setSession({ user: { name: "M", roles: ["internal-viewer"] } });
+    const res = await POST(json("POST", body, foreign));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.message).toBe(
+      "internal-admin role required",
+    );
+  });
+
+  it("the 403 message names the internal-admin role", async () => {
+    setSession({ user: { name: "M", roles: ["internal-viewer"] } });
+    const res = await POST(json("POST", body));
+    expect((await res.json()).error.message).toBe(
+      "internal-admin role required",
+    );
   });
 });

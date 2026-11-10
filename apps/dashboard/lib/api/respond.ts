@@ -6,7 +6,7 @@ import { ZodError } from "zod";
 import type { ZodType, z } from "zod";
 
 import { auth } from "@/auth";
-import { ADMIN_ROLE, hasAdminRole } from "@/lib/auth/roles";
+import { INTERNAL_ADMIN_ROLE, hasAdminRole } from "@/lib/auth/roles";
 
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes"; Rule 10.3,
 // Rule 50.4 (401 before any data access), Rule 50.6, Rule 60.18; System
@@ -45,10 +45,15 @@ export class BadRequestError extends ZodError {
   }
 }
 
+// Access Control spec — Enforcement: every /api/* response is private, no-store.
+const NO_STORE = "private, no-store";
+
 export type RouteContext = { params: Promise<Record<string, string>> };
 
 export function jsonData<T>(data: T, init?: ResponseInit): Response {
-  return Response.json({ data }, init);
+  const headers = new Headers(init?.headers);
+  headers.set("Cache-Control", NO_STORE);
+  return Response.json({ data }, { ...init, headers });
 }
 
 export function jsonError(
@@ -56,7 +61,10 @@ export function jsonError(
   code: ApiErrorCode,
   message: string,
 ): Response {
-  return Response.json({ error: { code, message } }, { status });
+  return Response.json(
+    { error: { code, message } },
+    { status, headers: { "Cache-Control": NO_STORE } },
+  );
 }
 
 export function parseInput<S extends ZodType>(
@@ -84,6 +92,20 @@ export async function parseJsonBody<S extends ZodType>(
   request: Request,
   schema: S,
 ): Promise<z.output<S>> {
+  const essence = (request.headers.get("content-type") ?? "")
+    .split(";")[0]
+    ?.trim()
+    .toLowerCase();
+  if (essence !== "application/json") {
+    throw new BadRequestError([
+      {
+        code: "custom",
+        message: "Content-Type must be application/json",
+        path: [],
+        input: undefined,
+      },
+    ]);
+  }
   let payload: unknown;
   try {
     payload = await request.json();
@@ -98,6 +120,21 @@ export async function parseJsonBody<S extends ZodType>(
     ]);
   }
   return parseInput(payload, schema);
+}
+
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+// Access Control spec — Enforcement: writes must carry a same-origin Origin.
+// The Host header is never overridden by x-forwarded-host.
+function isSameOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin || origin === "null") return false;
+  const host = request.headers.get("host") || new URL(request.url).host;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
 }
 
 const tracer = trace.getTracer("bedrock-usage-dashboard");
@@ -119,7 +156,14 @@ export function withRoute(
           return jsonError(401, "UNAUTHORIZED", "Not authenticated");
         }
         if (options.requireAdmin && !hasAdminRole(session)) {
-          return jsonError(403, "FORBIDDEN", `${ADMIN_ROLE} role required`);
+          return jsonError(
+            403,
+            "FORBIDDEN",
+            `${INTERNAL_ADMIN_ROLE} role required`,
+          );
+        }
+        if (WRITE_METHODS.has(request.method) && !isSameOrigin(request)) {
+          return jsonError(403, "FORBIDDEN", "Cross-origin request rejected");
         }
         return await handler(request, ctx);
       } catch (error) {

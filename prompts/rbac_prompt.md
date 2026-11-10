@@ -470,7 +470,9 @@ secret, and brings back overage handling.
      with a DynamoDB conditional write; a conflict returns `409`. Document the
      new `409` in Data Model *HTTP status codes*.
    - **Origin:** write routes verify same-origin (an `Origin`/`Host` check)
-     in addition to the SameSite session cookie.
+     in addition to the SameSite session cookie (delivered 2026-11-11 in
+     `withRoute`; R4 extends coverage to its new write routes, not a second
+     implementation).
    - **Structural test:** `write-routes.integration.test.ts` enumerates every
      write route with its required permission, so none ships ungated.
    - **No rate limiting of the dashboard's own routes** (decided 2026-11-09).

@@ -12,7 +12,7 @@ the existing SNS topic supplied as `alarmTopicArn`.
 | Alarm | Meaning | First look |
 |---|---|---|
 | Running task count below desired | Fewer tasks running than the service wants (`ECS/ContainerInsights` `RunningTaskCount`) | ECS console, service Events tab: image pull, health-check or capacity errors. `aws ecs describe-services --cluster <cluster> --services <service>` |
-| Task failures / restarts | Tasks stopping or restarting | `aws ecs list-tasks --desired-status STOPPED`, then `describe-tasks` for `stoppedReason`; app log group for the crash. A failed deploy rolls back (circuit breaker) |
+| Task failures / restarts | Tasks stopping or restarting | `aws ecs list-tasks --desired-status STOPPED`, then `describe-tasks` for `stoppedReason`; app log group for the crash. The environment is validated when the server starts, so a missing or invalid variable stops the task at boot and the first app log lines name it. A failed deploy rolls back (circuit breaker) |
 | Target-group unhealthy hosts and 5xx (create mode only) | Targets fail `/api/health` or return 5xx | Target group health in the console; app log group. In import mode the shared ALB's own alarms apply |
 | Application 5xx | Log metric filter on the app log group | Logs Insights on the app log group for the failing route and stack. `/api/health` returns `200` with `status: degraded` when DynamoDB is unreachable, so look at its body too |
 | Security events | Metric filter on `/llm-usage-lens/<env>/audit`: global-role grants, master-user sign-ins, failures, lockouts | Logs Insights on the audit log group; confirm each event against an expected admin action. Unexpected: treat as an incident (Access Control spec - *Threat model*) |

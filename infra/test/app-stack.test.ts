@@ -271,7 +271,10 @@ describe.each(["import", "create"] as Mode[])("AppStack (%s mode)", (mode) => {
       expect(read?.Condition).toBeUndefined();
     });
 
-    it("writes: only on the table, restricted to ACCT# leading keys", () => {
+    // Platform spec — Ownership: ACCT# (account CRUD) and IDENT# (the identity
+    // record and master-user lockout counter written on every sign-in, Phase
+    // 4R.1; added 2026-11-11, security review H2). Nothing else until 4R.2/L2.
+    it("writes: only on the table, restricted to ACCT# and IDENT# leading keys", () => {
       const write = stmts.find((s) =>
         actionsOf(s).includes("dynamodb:PutItem"),
       );
@@ -284,8 +287,24 @@ describe.each(["import", "create"] as Mode[])("AppStack (%s mode)", (mode) => {
         ]),
       );
       expect(write?.Condition).toEqual({
-        "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["ACCT#*"] },
+        "ForAllValues:StringLike": {
+          "dynamodb:LeadingKeys": ["ACCT#*", "IDENT#*"],
+        },
       });
+      const keys: string[] =
+        write?.Condition?.["ForAllValues:StringLike"]?.[
+          "dynamodb:LeadingKeys"
+        ] ?? [];
+      for (const other of [
+        "USAGEKEY#*",
+        "GROUPMAP#*",
+        "LITELLM#*",
+        "AUDIT#*",
+        "SYSTEM#*",
+        "*",
+      ]) {
+        expect(keys).not.toContain(other);
+      }
       const res = resourcesOf(write ?? {});
       expect(res).toHaveLength(1);
       expect(str(res[0])).not.toContain("/index/");
@@ -344,6 +363,18 @@ describe.each(["import", "create"] as Mode[])("AppStack (%s mode)", (mode) => {
           expect(actionsOf(s)).toEqual(["ecr:GetAuthorizationToken"]);
         }
       }
+    });
+
+    // Platform spec — Task role policy / Verification (RP): the execution role
+    // may use the CMK only through SSM (security review L1).
+    it("conditions kms:Decrypt on kms:ViaService for SSM in the collector region", () => {
+      const kms = stmts.filter((s) => actionsOf(s).includes("kms:Decrypt"));
+      expect(kms).toHaveLength(1);
+      expect(kms[0]?.Condition).toEqual({
+        StringEquals: {
+          "kms:ViaService": "ssm.ap-southeast-2.amazonaws.com",
+        },
+      });
     });
 
     it("can pull from ECR and write logs", () => {

@@ -159,6 +159,21 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ## Security & CI
 
+### Script and style Content Security Policy
+
+- **Status:** Deferred.
+- **What:** A full `Content-Security-Policy` (`script-src`, `style-src`,
+  `connect-src`) on dashboard responses, beyond the `frame-ancestors 'none'`
+  directive v1 sets.
+- **Why deferred:** A strict policy needs per-request nonces through the
+  proxy, which makes every page dynamic, and Recharts and Tailwind's inline
+  styles need `style-src` exceptions. The dashboard is internal, VPN-only and
+  renders no user-authored HTML.
+- **Adopt when:** The dashboard renders user-authored rich content, embeds
+  third-party scripts, or a security review requires it.
+- **References:** [Platform spec — *Runtime*](specs/2026-11-10-platform.md),
+  [Rule 50](../.claude/rules/50-security-and-secrets.md).
+
 ### GitHub Advanced Security / CodeQL
 
 - **Status:** Deferred.
