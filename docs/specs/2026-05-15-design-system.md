@@ -65,7 +65,7 @@ Decisions on technologies evaluated and excluded, with rationale:
 - **Session:** Auth.js encrypted JWT session cookie; it ends 8 hours after sign-in regardless of activity (System Architecture — *Authentication & Access*).
 - **Proxy:** Auth.js in the Next.js proxy (`proxy.ts`) protects all `/dashboard/*` and `/api/*` routes except `/api/health` (Platform spec).
 - **Sign-in page:** One action per configured provider — "Sign in with Microsoft" when Entra ID is configured, a local dev sign-in only when the dev login is enabled outside production. No sign-up — identities are managed in Entra ID.
-- **User menu:** Custom user menu in the top bar (avatar, name, sign out) backed by the Auth.js session.
+- **User menu:** Custom user menu in the top bar backed by the Auth.js session: avatar, name, email, the caller's role label(s), the sign-in method (Microsoft Entra ID, master user — labelled as break-glass access — or local login) and sign out. Role labels come from `lib/auth/` (Rule 50.3). Role and sign-in method were added on 2026-11-11 (user direction).
 - **Roles:** global `internal-admin`, `internal-org-admin`, `internal-auditor`, `internal-viewer` and scoped `internal-team-admin` ([Access Control spec](2026-11-10-access-control.md) — *Roles*; replaces the single `Admin` role from Phase 4R). The UI hides what the caller cannot use; the server enforces it regardless of the UI.
 
 ## Data Access Boundary
@@ -237,7 +237,7 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
 | Mobile | 375px | Single column, collapsible sidebar |
 | Tablet | 768px | Two columns, sidebar overlay |
 | Desktop | 1024px | Full sidebar + content |
-| Wide | 1440px | Full sidebar + content with max-width container |
+| Wide | 1440px | Full sidebar + fluid content; KPI cards five across, 12-column panel grid |
 
 ### Structure
 
@@ -260,7 +260,8 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
 ```
 
 - Brand (logo + product + org name) sits at the top of the sidebar, not in a
-  full-width header; it collapses to the mark when the rail collapses.
+  full-width header; it collapses to the mark when the rail collapses. The
+  product name shown is **LLM Usage Lens**.
 - Top bar lives **inside** the content area, to the right of the sidebar. The
   active page title and its sync-status badge read as one unit on the left; the
   global `DateRangePicker`, command menu, sync countdown, and user menu sit on
@@ -281,7 +282,24 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
   sidebar label ("Overview").
 - Sidebar: collapsible, persistent on desktop, overlay on mobile; nav is grouped
   (**Main**, **Attribution**) with Settings pinned to the footer.
-- Content area: max-width 1280px, centered
+- Content area: **fluid** (decided 2026-11-11, user direction; replaces the
+  earlier 1280px centred column). It fills the inset beside the sidebar at
+  every breakpoint, with no page-level max-width. Gutters are 16px below `md`,
+  24px from `md` and 32px from 1440.
+- Readable measure: the content limits line length, not the page. Prose,
+  forms, dialogs and `EmptyState` text keep a max-width of 72ch; cards, charts
+  and tables take the full width of their grid cell.
+- Panel grid (data-dense dashboard): from `lg` (1024) page sections sit on a
+  12-column grid with a 16px gap; below `lg` they stack in one column. A
+  primary chart spans 8 columns and its companion panel 4; from 1440 a page
+  may place three or four panels in a row. KPI cards sit one across at 375,
+  two from `md`, three from `lg` and five from 1440.
+- Panels and density: every section, tables included, sits on a card surface
+  (card background, 1px border token, soft shadow). KPI cards and panels use
+  compact 16px padding. Table rows use the 1px border-token divider and a
+  hover highlight; no heavier rules.
+- Chart height does not grow with width: a chart panel keeps a fixed height
+  (240–360px), so a wide screen adds data width, not empty height.
 - Spacing: 4px/8px grid system
 
 ## Page Architecture

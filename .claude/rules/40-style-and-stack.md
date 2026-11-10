@@ -36,8 +36,9 @@ Source: `docs/specs/2026-05-15-design-system.md`.
    - Server state → TanStack Query
    - URL state → nuqs
    - Local UI state → `useState`
-6. **Breakpoints:** 375 / 768 / 1024 / 1440. Content max-width 1280px,
-   centered.
+6. **Breakpoints:** 375 / 768 / 1024 / 1440. The content area is fluid: no
+   page-level max-width, gutters of 16 / 24 / 32px, and a 72ch measure for
+   prose and forms (Design System — *Layout*, decided 2026-11-11).
 7. **Typography:** Space Grotesk (UI) + JetBrains Mono (numeric/code),
    self-hosted from the `@fontsource-variable/*` packages via `next/font/local`
    (Design System — *Typography*). No build-time Google Fonts fetch.

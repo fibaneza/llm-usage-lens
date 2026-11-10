@@ -122,7 +122,7 @@ Phase 1 (Foundation).
   - Footer rail toggle is named for its action — "Collapse" when the rail is expanded and in the mobile sheet, "Expand" when the desktop rail is collapsed; the icon and the collapsed-rail tooltip follow the same word (WCAG 4.1.2, Rule 60.30; follow-up, 2026-10-30)
 - [x] Build responsive layout structure (the `/dashboard` layout)
   - Breakpoints: 375 / 768 / 1024 / 1440
-  - Content area max-width 1280px, centered
+  - Content area max-width 1280px, centered (superseded 2026-11-11 by the fluid content area — Phase 5 *UI refresh*)
   - Mobile: single column, collapsible sidebar
   - Tablet: sidebar overlay
   - Desktop: persistent sidebar + content
@@ -692,6 +692,14 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ### Tasks
 
+- [ ] UI refresh — fluid workspace (user direction 2026-11-11; Design System — *Layout*). It may run before the rest of Phase 5, on `feature/ui-fluid-workspace`, at the user's direction; one branch, one squash commit
+  - Remove the 1280px cap from the `/dashboard` layout; gutters 16 / 24 / 32px
+  - Overview on the 12-column panel grid; KPI cards five across from 1440
+  - Every table on a card surface with border-token dividers and row hover
+  - Compact 16px padding on KPI cards and panels
+  - User menu shows the role label(s) and the sign-in method
+  - Sidebar brand reads "LLM Usage Lens"
+  - `e2e/responsive.spec.ts` also covers 1920: no horizontal scroll, and the content area fills the inset
 - [ ] Add `ErrorBoundary` per section on every page (one chart failing doesn't crash the page)
 - [ ] Accessibility audit
   > Smoke-level a11y is enforced continuously before Phase 5:
