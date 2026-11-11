@@ -695,12 +695,13 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 - [ ] UI refresh — fluid workspace (user direction 2026-11-11; Design System — *Layout*). It may run before the rest of Phase 5, on `feature/ui-fluid-workspace`, at the user's direction; one branch, one squash commit
   - Remove the 1280px cap from the `/dashboard` layout; gutters 16 / 24 / 32px
-  - Overview on the 12-column panel grid; KPI cards five across from 1440
+  - Overview on the 12-column panel grid (16px gap; 8 + 4 column rows); the Overview KPI row five across from 1440
   - Every table on a card surface with border-token dividers and row hover
   - Compact 16px padding on KPI cards and panels
-  - User menu shows the role label(s) and the sign-in method
+  - `max-w-[72ch]` on `EmptyState` description text and the Settings forms
+  - User menu shows the role label(s) and the sign-in method, from the label maps in `lib/auth/roles.ts`
   - Sidebar brand reads "LLM Usage Lens"
-  - `e2e/responsive.spec.ts` also covers 1920: no horizontal scroll, and the content area fills the inset
+  - `e2e/responsive.spec.ts` also covers 1920: no horizontal scroll; the content container's width equals the `SidebarInset` width and its left and right padding is 32px
 - [ ] Add `ErrorBoundary` per section on every page (one chart failing doesn't crash the page)
 - [ ] Accessibility audit
   > Smoke-level a11y is enforced continuously before Phase 5:

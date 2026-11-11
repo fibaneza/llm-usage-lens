@@ -36,7 +36,7 @@ Spec units come before code.
 | 15 | **L6** combined usage | `litellm_prompt.md` | | Bedrock + LiteLLM totals without double counting; *My usage* completed |
 | 16 | **L7** self-service keys | `litellm_prompt.md` | | Request, Lead approval, reveal once |
 | 17 | **L8** monthly statement | `litellm_prompt.md` | | Finance CSV per department and team |
-| 18 | **Phase 5** polish and accessibility | `master_prompt.md` | | Full accessibility audit (includes the focus-ring token), responsive checks, e2e journeys. Also two workstreams the user started on 2026-11-11 (user direction), each beginning with a spec amendment: the **UI refresh** (fluid full-width workspace layout, denser Grafana-style panel grid, LiteLLM-style grouped sidebar, role and sign-in method in the user menu; light mode stays the default) and a periodic read-only **security and best-practices review** (HIGH findings block the next unit) |
+| 18 | **Phase 5** polish and accessibility | `master_prompt.md` | | Full accessibility audit (includes the focus-ring token), responsive checks, e2e journeys. Also two workstreams the user started on 2026-11-11 (user direction), each beginning with a spec amendment: the **UI refresh** (fluid full-width workspace layout, denser Grafana-style panel grid, role and sign-in method in the user menu; light mode stays the default) and a periodic read-only **security and best-practices review** (HIGH findings block the next unit) |
 
 L0 ran early and R1 ran before R2, as the plan allows. The next run takes
 **R2**. Phase 4.9b (tag coverage) is deferred and does not block Phase 5.

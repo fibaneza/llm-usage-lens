@@ -76,7 +76,7 @@ Light analytics aesthetic: soft blue-gray canvas, white card surfaces, generous 
 - **Motion.** 150–300ms, ease-out entering / ease-in exiting. Respect `prefers-reduced-motion`. No bounces.
 - **Charts.** Recharts, lazy-loaded with `next/dynamic` + `ssr: false`. Always wrapped in `ResponsiveContainer`. Gridlines `rgba(15,23,42,0.06)`. Legends always visible and near chart.
 - **Tables.** TanStack Table. Sticky header, right-aligned numeric columns, hairline row dividers, no zebra. Collapses to card layout below `md` breakpoint.
-- **Layout.** Fixed left sidebar (collapsible icon rail) + sticky top bar (org name · sync status · date range · search · user menu). Content max-width 1280px centered.
+- **Layout.** Fixed left sidebar (collapsible icon rail) + sticky top bar (org name · sync status · date range · search · user menu). Content max-width 1280px centered (superseded 2026-11-11 by the fluid content area — Design System spec, *Layout*).
 
 ---
 

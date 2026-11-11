@@ -65,7 +65,9 @@ Decisions on technologies evaluated and excluded, with rationale:
 - **Session:** Auth.js encrypted JWT session cookie; it ends 8 hours after sign-in regardless of activity (System Architecture — *Authentication & Access*).
 - **Proxy:** Auth.js in the Next.js proxy (`proxy.ts`) protects all `/dashboard/*` and `/api/*` routes except `/api/health` (Platform spec).
 - **Sign-in page:** One action per configured provider — "Sign in with Microsoft" when Entra ID is configured, a local dev sign-in only when the dev login is enabled outside production. No sign-up — identities are managed in Entra ID.
-- **User menu:** Custom user menu in the top bar backed by the Auth.js session: avatar, name, email, the caller's role label(s), the sign-in method (Microsoft Entra ID, master user — labelled as break-glass access — or local login) and sign out. Role labels come from `lib/auth/` (Rule 50.3). Role and sign-in method were added on 2026-11-11 (user direction).
+- **User menu:** Custom user menu in the top bar backed by the Auth.js session: avatar, name, email, the caller's role label(s), the sign-in method and sign out. Role and sign-in method were added on 2026-11-11 (user direction).
+  - **Role labels** come from one map in `lib/auth/roles.ts` (Rule 50.3), never from string literals in the component: `internal-admin` → "Admin", `internal-org-admin` → "Org admin", `internal-auditor` → "Auditor", `internal-viewer` → "Viewer". The menu shows the session's global roles in `GLOBAL_ROLES` order, comma-separated; a session role with no label is not shown. Scoped admin grants (`internal-team-admin`) are not shown: they are authorization data read per request, not session data (Access Control — *Enforcement*).
+  - **Sign-in method labels** come from the same module: `entra` → "Microsoft Entra ID", `master` → "Master user (break-glass)", `local` → "Local login (dev)". A session without a valid `authMethod` shows no sign-in method line.
 - **Roles:** global `internal-admin`, `internal-org-admin`, `internal-auditor`, `internal-viewer` and scoped `internal-team-admin` ([Access Control spec](2026-11-10-access-control.md) — *Roles*; replaces the single `Admin` role from Phase 4R). The UI hides what the caller cannot use; the server enforces it regardless of the UI.
 
 ## Data Access Boundary
@@ -113,6 +115,10 @@ Each dashboard section loads independently. A slow chart does not block KPI card
 │ UsageTable (paginated, 20 rows default)       │
 └──────────────────────────────────────────────┘
 ```
+
+The diagram shows the loading pattern, not the exact arrangement. The Overview
+arrangement (five KPI cards, then the 8 + 4 panel rows) is in *Layout —
+Structure*.
 
 ### Patterns to Follow
 
@@ -235,9 +241,9 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
 | Name | Width | Layout |
 |------|-------|--------|
 | Mobile | 375px | Single column, collapsible sidebar |
-| Tablet | 768px | Two columns, sidebar overlay |
-| Desktop | 1024px | Full sidebar + content |
-| Wide | 1440px | Full sidebar + fluid content; KPI cards five across, 12-column panel grid |
+| Tablet | 768px | Single-column sections, KPI cards two across, sidebar overlay |
+| Desktop | 1024px | Full sidebar + fluid content; 12-column panel grid (Overview) |
+| Wide | 1440px | Full sidebar + fluid content with 32px gutters; Overview KPI cards five across |
 
 ### Structure
 
@@ -284,20 +290,27 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
   (**Main**, **Attribution**) with Settings pinned to the footer.
 - Content area: **fluid** (decided 2026-11-11, user direction; replaces the
   earlier 1280px centred column). It fills the inset beside the sidebar at
-  every breakpoint, with no page-level max-width. Gutters are 16px below `md`,
-  24px from `md` and 32px from 1440.
-- Readable measure: the content limits line length, not the page. Prose,
-  forms, dialogs and `EmptyState` text keep a max-width of 72ch; cards, charts
-  and tables take the full width of their grid cell.
-- Panel grid (data-dense dashboard): from `lg` (1024) page sections sit on a
-  12-column grid with a 16px gap; below `lg` they stack in one column. A
-  primary chart spans 8 columns and its companion panel 4; from 1440 a page
-  may place three or four panels in a row. KPI cards sit one across at 375,
-  two from `md`, three from `lg` and five from 1440.
+  every breakpoint, with no page-level max-width: the content container is as
+  wide as the inset. Gutters (the container's padding) are 16px below `md`,
+  24px from `md` and 32px from 1440 (`min-[1440px]:`; 1440 is a project
+  breakpoint, not Tailwind's `2xl`).
+- Readable measure: the content limits line length, not the page.
+  `EmptyState` description text, the Settings forms and standalone paragraphs
+  keep `max-w-[72ch]`; dialogs keep their shadcn width; cards, charts and
+  tables take the full width of their grid cell.
+- Panel grid (data-dense dashboard): from `lg` (1024) the Overview sections
+  sit on a 12-column grid with a 16px gap; below `lg` they stack in one
+  column. Cost trend spans 8 columns and model distribution 4; top
+  departments spans 8 and sync status 4. Other pages keep their current
+  section layout inside the fluid content area until a later amendment names
+  them.
+- KPI rows: the Overview KPI row (five cards) shows one across at 375, two
+  from `md`, three from `lg` and five from 1440. Any other KPI row shows one
+  across below `md`, then all its cards in one row.
 - Panels and density: every section, tables included, sits on a card surface
-  (card background, 1px border token, soft shadow). KPI cards and panels use
-  compact 16px padding. Table rows use the 1px border-token divider and a
-  hover highlight; no heavier rules.
+  (card background, 1px `--color-border` border, soft shadow). KPI cards and
+  panels use compact 16px padding on all four sides. Table rows use the 1px
+  `--color-border` divider and a hover highlight; no heavier rules.
 - Chart height does not grow with width: a chart panel keeps a fixed height
   (240–360px), so a wide screen adds data width, not empty height.
 - Spacing: 4px/8px grid system

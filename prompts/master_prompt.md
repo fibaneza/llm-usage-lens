@@ -168,10 +168,12 @@ On later runs, extend that branch rather than redoing it.
 Two workstreams the user started on 2026-11-11 belong to Phase 5, after the
 Phase 4R and LiteLLM units, unless the user directs an earlier run. **Each
 starts with a spec amendment** (Rule 00): no code until the amendment is
-reviewed by `spec-guardian`. Neither is listed in `implementation-phases.md`
-yet, so the amendment adds it there. The 2026-11-11 run drafted the layout
-amendment on `feature/ui-fluid-workspace` and ran the first security audit;
-its findings and the UI review are in `temp/report_261111.md`.
+reviewed by `spec-guardian`. The UI refresh is listed in
+`implementation-phases.md` (Phase 5, *UI refresh — fluid workspace*); the
+security review is not listed yet, so its amendment adds it there. The
+2026-11-11 run drafted the layout amendment on `feature/ui-fluid-workspace`
+and ran the first security audit; its findings and the UI review are in
+`temp/report_261111.md`.
 
 1. **UI refresh: fluid workspace layout.**
    - Modern full-width layout that uses all the available space instead of
@@ -179,7 +181,8 @@ its findings and the UI review are in `temp/report_261111.md`.
      and an amendment of Rule 40.6** (content max-width 1280px, centred)
      first.
    - A denser, Grafana-style panel grid.
-   - A LiteLLM-style grouped sidebar.
+   - The grouped sidebar (**Main**, **Attribution**, Settings in the footer)
+     already exists and stays as it is; the brand reads "LLM Usage Lens".
    - The signed-in user's role, identity and sign-in method (Entra ID,
      master user or local login) surfaced in the user menu.
    - Light mode stays the default and primary theme (Rule 40.1). The
