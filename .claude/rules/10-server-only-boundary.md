@@ -31,7 +31,7 @@ credentials must never reach the browser.
      an out-of-scope detail returns the same `404` body as a missing one,
      and each write route checks its own permission (Access Control spec —
      *Permission matrix*) and returns `403` before input parsing. Every
-     `/api/*` response sets `Cache-Control: private, no-store`.
+     `/api/*` Route Handler response sets `Cache-Control: private, no-store`.
    - Every write Route Handler (`POST`/`PUT`/`PATCH`/`DELETE`) under
      `app/api/`, except Auth.js's `auth/[...nextauth]` handler — today
      `POST /api/accounts` and `PATCH`/`DELETE /api/accounts/[id]` — returns

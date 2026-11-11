@@ -1,3 +1,4 @@
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 import NextAuth from "next-auth";
 import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
@@ -189,7 +190,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Loaded on demand: the data layer is server-only and pulls the AWS SDK.
         const { upsertIdentity } = await import("@/lib/data/identity");
         await upsertIdentity(identity, new Date());
-      } catch {
+      } catch (error) {
+        const span = trace.getActiveSpan();
+        span?.recordException(error instanceof Error ? error : String(error));
+        span?.setStatus({ code: SpanStatusCode.ERROR });
         recordSecurityEvent({
           action: "auth.signin.error",
           result: "failed",

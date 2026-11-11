@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { ApiRequestError, fetchApi } from "@/lib/query/fetch-api";
+import { ApiRequestError, fetchApi, mutateApi } from "@/lib/query/fetch-api";
 
 // Source: Phase 3.3 contract — TanStack Query client; Rule 20.11 (response
 // shape validated on both ends); Rule 60.24 (stubbed fetch, no real network).
@@ -55,5 +55,26 @@ describe("fetchApi", () => {
       vi.fn(async () => new Response("<html>", { status: 502 })),
     );
     await expect(fetchApi("/api/x", schema)).rejects.toThrow();
+  });
+});
+
+describe("mutateApi", () => {
+  // Source: Access Control spec — Enforcement item 6: a write body must be
+  // application/json, else the server answers 400.
+  it("sends Content-Type: application/json with a JSON body", async () => {
+    const fn = stubFetch({ data: { n: 1 } });
+    await mutateApi("/api/x", "POST", { a: 1 }, schema);
+    const init = fn.mock.calls[0]?.[1];
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("content-type")).toBe(
+      "application/json",
+    );
+    expect(init?.body).toBe(JSON.stringify({ a: 1 }));
+  });
+
+  it("sends no body (and no content type) for an undefined body", async () => {
+    const fn = stubFetch({ data: { n: 1 } });
+    await mutateApi("/api/x", "DELETE", undefined, schema);
+    expect(fn.mock.calls[0]?.[1]?.body).toBeUndefined();
   });
 });

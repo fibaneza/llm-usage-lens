@@ -111,6 +111,11 @@ Order: InfraStack, then AppStack.
 5. Verify: `GET https://<dashboardHostname>/api/health` returns `200` with
    `status: ok`; sign in.
 
+Writes are accepted only when the browser's `Origin` host equals the `Host`
+header the task receives (Access Control spec — *Enforcement* item 6). The
+ALB forwards `Host` unchanged; keep the HTTPS listener on 443 and serve the
+dashboard only at `<dashboardHostname>`, or account edits return `403`.
+
 ## 7. Undeploy
 
 See [operations.md](operations.md) - *Deploy and undeploy*. The InfraStack

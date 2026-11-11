@@ -11,14 +11,25 @@ The single source for everything that `rbac_prompt.md` and
   §3". They do not repeat its text. Where a prompt and this file differ,
   this file wins, and the run reports the conflict.
 
+**Role words.** Plain words in the sections below stand for role values
+(`rbac_prompt.md` §1.1): **Admin** is `internal-admin`; **Lead** is
+`internal-team-admin` within its scope (and `internal-org-admin` on every
+team, with no configuration); **Auditor** is `internal-auditor`; **Viewer**
+is `internal-viewer` and members. The role values are authoritative.
+
 ## 1. Environments (decided 2026-11-09)
 
 | Env (`<env>`) | LiteLLM | Identity mapping to LiteLLM | Entra |
 |---|---|---|---|
 | `dev` | **OSS** (non-Enterprise) | LiteLLM `user_id` = lower-cased work email | Same tenant; dev app registration |
-| `prod` | **Enterprise**, with SSO through Entra ID | The `user_id` LiteLLM assigns at SSO sign-in, looked up by email | Production app registration |
+| `prod` | **Enterprise**, with SSO through Entra ID | The `user_id` LiteLLM assigns at SSO sign-in, looked up by email. It is the email (confirmed by the user 2026-11-10, LiteLLM spec LD13), but is still read from LiteLLM, never composed | Production app registration |
 
 - **Only these two environments exist.** No staging.
+- **The dashboard's own environment switch is `APP_ENV` (`dev` | `prod`),**
+  a validated variable in `env.ts`. It, never `NODE_ENV`, decides every
+  "in `prod`" control (Entra required, master-user TOTP, the per-user
+  approval gate, `AUTH_ACCESS_MODE=enforce` only, the legacy `Admin` alias
+  removed).
 - `<env>` appears in SSM parameter names (`/llm-usage-lens/<env>/…`), CDK
   stack names and the CI deploy jobs.
 - **The `edition` flag defaults by environment** (`oss` in `dev`,
@@ -40,7 +51,7 @@ the `internal-` prefix.
 | `internal-team-admin` | Scoped to **one or more** teams and/or departments (each a separate admin scope); set in the UI or by SSO group mapping | Everything in its scope | Members, promotions and visibility in its scope; with department scope, also moves within the department and the department cap; LiteLLM team administration for its teams |
 | member (no role value) | A plain affiliation to one team; UI or SSO group mapping | The team, as visibility allows | Nothing |
 
-- **Membership versus admin scopes.**
+- **Affiliation versus admin scopes.**
   - A user is a **member of at most one team**.
   - A lead may hold `internal-team-admin` on **one or more** teams and/or
     departments.
@@ -63,6 +74,12 @@ the `internal-` prefix.
   Argon2id hash in an SSM SecureString, TOTP in `prod`, a 5-attempt
   lockout, a 1-hour session, and every sign-in audited
   (`rbac_prompt.md` §1.3).
+- **Sessions and entry points.** Sessions are capped at 8 hours, 4 hours
+  with `internal-admin` or `internal-org-admin`, and 1 hour for the master
+  user. A sign-in that fails closed (a malformed token, a foreign `tid`, no
+  `oid`) ends on the `/no-access` page. Local users are stored data, ignored while
+  Entra is configured. `AUTH_ACCESS_MODE` (`open` | `enforce`) stages the
+  rollout and is `enforce` in `prod`.
 - **Storage:** the existing DynamoDB table. Aurora Serverless v2 was
   considered and deferred; see `rbac_prompt.md` §1.5 *Storage*.
 
@@ -136,11 +153,16 @@ the dashboard use the same one; Rule 20.5's "no duplicate tables" applies):
   - DynamoDB is the queryable copy: append-only, `PutItem` only.
   - Each record is **also** written as one structured JSON line to a
     dedicated CloudWatch Logs group, `/llm-usage-lens/<env>/audit`, in
-    the AppStack. Retention is at least 1 year (R0 confirms), with KMS
-    encryption.
+    the AppStack, with KMS encryption. The Access Control spec sets
+    retention at 400 days in both stores (decision D3; the user confirms).
   - The security team can subscribe their SIEM to that log group. No SIEM
     resource is created here.
-- **Retention:** R0 sets it. A DynamoDB TTL is used only if R0 chooses it.
+- **Retention:** 400 days (Access Control spec, D3), by CloudWatch
+  retention and a DynamoDB TTL attribute.
+- **Security events.** The master-user events (`auth.master.*`) and
+  `auth.signin.error` start as id-only telemetry in R1. R2 writes them to
+  the audit record and the AppStack alarm. A successful write's audit item
+  is written in the same `TransactWriteItems` as the change.
 
 ## 5. Usage and cost: two sources, one combined view
 
@@ -205,6 +227,10 @@ The requirement changed (2026-11-09). The dashboard runs on **AWS**, not
 Netlify, for **private use only**, inside the company network and VPN. The
 infrastructure is defined in **CDK**. R0 and `litellm_prompt.md` L0 record
 these changes jointly as spec amendments.
+
+**Region.** All stacks deploy to `ap-southeast-2`, from `COLLECTOR_REGION`
+in `packages/shared/src/region.ts` (Rule 50.7). Cost Explorer is the one
+call that stays on `us-east-1`. Netlify hosting is superseded.
 
 **Design principle: minimum resources.**
 - **Reuse what exists:** the VPC, the network routing (Transit Gateway), the
@@ -274,6 +300,11 @@ session and returns only `{ data: { status: "ok" } }`.
 - any LiteLLM resource
 
 **Runtime choices that keep the list this short**
+- **Task-role policy ownership.** RP creates the task role with DynamoDB
+  reads and writes limited to `ACCT#*` (Phase 4.9) and `IDENT#*` (Phase
+  4R.1 identity and lockout writes; added 2026-11-11, security review). R2
+  adds the remaining access-control leading keys and the `PutItem`-only
+  audit statement. L2 adds `LITELLM#*`. The task role never gets SSM access.
 - **Credentials.** The **ECS task role** supplies AWS credentials through
   the default chain, so there are no static keys (Rule 50.1).
   `docs/guides/dashboard-deployment.md` is rewritten for ECS, and the

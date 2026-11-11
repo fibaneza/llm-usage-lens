@@ -245,7 +245,7 @@ describe("AccountRegistry -- add account", () => {
 
   it("surfaces a 403 FORBIDDEN message", async () => {
     stubAccounts([ACTIVE], () =>
-      apiError(403, "FORBIDDEN", "Admin role required"),
+      apiError(403, "FORBIDDEN", "internal-admin role required"),
     );
     renderWithProviders(<AccountRegistry isAdmin />);
     const { user, dialog } = await openAdd();
@@ -261,7 +261,7 @@ describe("AccountRegistry -- add account", () => {
       within(dialog).getByRole("button", { name: "Create account" }),
     );
     expect(
-      await within(dialog).findByText(/Admin role required/),
+      await within(dialog).findByText(/internal-admin role required/),
     ).toBeInTheDocument();
   });
 });

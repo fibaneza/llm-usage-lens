@@ -4,10 +4,12 @@ import {
 } from "@llm-usage-lens/shared";
 
 import { aggregateDepartmentDetail } from "@/lib/aggregate/departments";
+import { IdParamSchema } from "@/lib/api/id-param";
 import { loadRangeRollups } from "@/lib/api/load-range-rollups";
 import {
   NotFoundError,
   jsonData,
+  parseInput,
   parseSearchParams,
   withRoute,
 } from "@/lib/api/respond";
@@ -16,8 +18,7 @@ import { getAccountsByDepartmentCached } from "@/lib/api/cached-reads";
 export const revalidate = 3600;
 
 export const GET = withRoute(async (request, { params }) => {
-  const { id } = await params;
-  if (!id) throw new NotFoundError("Missing id");
+  const id = parseInput((await params).id, IdParamSchema);
   const { dateFrom, dateTo, accountId } = parseSearchParams(
     request,
     DateRangeQuerySchema,

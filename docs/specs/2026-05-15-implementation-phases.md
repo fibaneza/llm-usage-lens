@@ -597,7 +597,7 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ### Phase 4R.P — Platform (`feature/phase-4r-p-platform`)
 
-- [x] `infra/` CDK app: InfraStack (table, CMK, cluster, ECR, SSM parameters) and AppStack (task definition, Fargate service, execution role, task role with Reads and `ACCT#*` writes, security group, target group, listener rule, audit log group, alarms, CI deploy role); both ALB modes
+- [x] `infra/` CDK app: InfraStack (table, CMK, cluster, ECR, SSM parameters) and AppStack (task definition, Fargate service, execution role, task role with Reads and `ACCT#*` writes (`IDENT#*` added 2026-11-11, security review), security group, target group, listener rule, audit log group, alarms, CI deploy role); both ALB modes
 - [x] `/api/health` with dependency checks; the structural test allows exactly this unauthenticated route
 - [x] AppStack deploy job in CI (`workflow_dispatch`, GitHub OIDC deploy role; run by the user)
 - [x] Verify: `cdk synth` and assertions for both ALB modes, the execution role, the task-role shell and every "not created" resource; nothing deployed
@@ -608,6 +608,7 @@ Tag coverage per team is Phase 4.9b (deferred).
 - [x] `APP_ENV` in `env.ts` with placeholders in `build:ci` and `.env.example`; master user (Argon2id, TOTP, lockout, security events); local login with role choice; "no access" page; `AUTH_ACCESS_MODE`; dev login and e2e helper for every role
 - [x] Verify: threat-model tests T1, T4, T7 (local login and env rejection), T20 (hash, TOTP, lockout, 1 h, security events), T21 pass
 - *Split (2026-11-10, R1):* the persistent audit record and alarm for master-user events land in 4R.2; stored local users (data) in 4R.2 and `/api/local-users` with its Settings section in 4R.4. R1's local login offers the four global roles.
+- *Security review fixes (2026-11-11, `fix/security-review-findings`; user direction):* delivered ahead of their phases — the task role's `IDENT#*` write leading key (4R.2; Platform spec — *Ownership*), `Cache-Control: private, no-store` on every `/api/*` response (4R.3) and the write same-origin and JSON content-type checks (4R.4; Access Control spec — *Enforcement* items 4 and 6). Also: the execution role's `kms:ViaService` condition, the response security headers (Platform spec — *Runtime*), `id` path-parameter validation on the team and department detail routes (Data Model spec — *API Routes*), the `403` message naming `internal-admin`, the sign-in error recorded on the span, and `OTEL_SERVICE_NAME` read through `env.ts`.
 
 ### Phase 4R.2 — Authorization data (`feature/phase-4r-2-rbac-data`)
 

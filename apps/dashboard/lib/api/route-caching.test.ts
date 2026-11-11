@@ -83,10 +83,16 @@ const SESSION = { user: { name: "t", email: "t@company.com" } };
 const ADMIN_SESSION = { user: { ...SESSION.user, roles: ["internal-admin"] } };
 const ctx = (id = acct(1)) => ({ params: Promise.resolve({ id }) });
 const get = (url: string) => new Request(`http://localhost${url}`);
+// Same-origin write (Access Control spec — Enforcement item 6): Origin's host
+// equals the Host header, which a Node `Request` does not carry by default.
 const write = (method: string, body: unknown) =>
   new Request("http://localhost/api/accounts", {
     method,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      host: "localhost",
+      origin: "http://localhost",
+    },
     body: JSON.stringify(body),
   });
 const OVERVIEW = "/api/overview?dateFrom=2026-10-01&dateTo=2026-10-02";
@@ -246,6 +252,48 @@ describe("account writes invalidate the accounts tag", () => {
     const res = await POST(write("POST", CREATE_BODY));
     expect(res.status).toBe(401);
     expect(data.createAccount).not.toHaveBeenCalled();
+    expect(revalidatedTags).toEqual([]);
+  });
+});
+
+describe("Cache-Control: private, no-store on API responses", () => {
+  // Source: Access Control spec — Enforcement item 4.
+  it("a cached read (GET /api/overview) is private, no-store", async () => {
+    const res = await callOverview();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("a successful write is private, no-store", async () => {
+    auth.mockResolvedValue(ADMIN_SESSION);
+    const res = await POST(write("POST", CREATE_BODY));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+});
+
+describe("a cross-site account write neither writes nor revalidates", () => {
+  // Source: Access Control spec — Enforcement item 6.
+  it.each([
+    ["POST", (r: Request) => POST(r), "POST"],
+    ["PATCH", (r: Request) => PATCH(r, ctx()), "PATCH"],
+    ["DELETE", (r: Request) => DELETE(r, ctx()), "DELETE"],
+  ])("%s with a foreign Origin is 403", async (_name, run, method) => {
+    auth.mockResolvedValue(ADMIN_SESSION);
+    const req = new Request("http://localhost/api/accounts", {
+      method,
+      headers: {
+        "content-type": "application/json",
+        host: "localhost",
+        origin: "https://evil.example.test",
+      },
+      body: JSON.stringify(method === "POST" ? CREATE_BODY : {}),
+    });
+    const res = await run(req);
+    expect(res.status).toBe(403);
+    expect(data.createAccount).not.toHaveBeenCalled();
+    expect(data.updateAccount).not.toHaveBeenCalled();
+    expect(data.deactivateAccount).not.toHaveBeenCalled();
     expect(revalidatedTags).toEqual([]);
   });
 });

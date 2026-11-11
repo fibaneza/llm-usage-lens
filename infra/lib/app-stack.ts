@@ -147,7 +147,9 @@ export class AppStack extends Stack {
         ],
         resources: [tableArn],
         conditions: {
-          "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["ACCT#*"] },
+          "ForAllValues:StringLike": {
+            "dynamodb:LeadingKeys": ["ACCT#*", "IDENT#*"],
+          },
         },
       }),
     );
@@ -178,6 +180,11 @@ export class AppStack extends Stack {
       new iam.PolicyStatement({
         actions: ["kms:Decrypt"],
         resources: [keyArn],
+        conditions: {
+          StringEquals: {
+            "kms:ViaService": `ssm.${COLLECTOR_REGION}.amazonaws.com`,
+          },
+        },
       }),
     );
     taskDefinition.addContainer("web", {

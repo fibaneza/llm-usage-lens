@@ -6,7 +6,22 @@ import type { NextConfig } from "next";
 // evaluated so it takes effect at CLI startup (next dev / next build).
 process.env.NEXT_TELEMETRY_DISABLED = "1";
 
+// Platform spec — Runtime (response security headers); no includeSubDomains.
+const SECURITY_HEADERS = [
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Strict-Transport-Security", value: "max-age=31536000" },
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=()",
+  },
+];
+
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
+  headers: async () => [{ source: "/:path*", headers: SECURITY_HEADERS }],
   // Self-contained server bundle for the ECS container image; the tracing root
   // is the monorepo root so the workspace package is traced.
   // See docs/specs/2026-11-10-platform.md — Runtime.

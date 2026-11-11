@@ -292,9 +292,11 @@ SHA is currently the only way to use an action as an immutable release" — a ta
 can be moved by whoever controls the action repo, a SHA cannot.
 
 > **In this project.** [`.github/dependabot.yml`](../../.github/dependabot.yml)
-> runs the `github-actions` ecosystem weekly, so pins are bumped automatically
-> (labelled `chore`). Keep third-party actions at a pinned ref; let Dependabot
-> raise the upgrade PRs.
+> runs the `github-actions` ecosystem weekly over the workflows and the
+> composite actions, so pins are bumped automatically (labelled `chore`).
+> Every external action — first-party `actions/*` included — is pinned to a
+> full commit SHA with a `# vX.Y.Z` comment (since 2026-11-11, security
+> review); never add a tag-only `uses:`. Let Dependabot raise the upgrade PRs.
 
 ---
 

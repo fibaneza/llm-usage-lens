@@ -153,15 +153,27 @@ const BODIES: [string, string][] = [
   ["an empty object", "{}"],
 ];
 
+// Same-origin by default (Access Control spec — Enforcement item 6): Origin's
+// host equals the Host header. `origin: null` omits the header. The host header
+// is set explicitly because a Node `Request` has none; the implementation
+// reads `request.headers.get("host")`, falling back to `new URL(request.url).host`.
+const HOST = "localhost:3000";
+const SAME_ORIGIN = `http://${HOST}`;
+
 function call(
   route: WriteRoute,
   body: string | undefined,
   params: WriteRoute["params"] = route.params,
+  origin: string | null = SAME_ORIGIN,
 ) {
   return route.handler(
-    new Request(`http://localhost${route.path}`, {
+    new Request(`http://${HOST}${route.path}`, {
       method: route.method,
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        host: HOST,
+        ...(origin === null ? {} : { origin }),
+      },
       body,
     }),
     // RouteContext types every param as a string; Next.js passes string[] for
@@ -238,6 +250,41 @@ async function expectForbiddenWithoutTouchingTheTable(route: WriteRoute) {
       403,
       "FORBIDDEN",
     );
+  }
+  expect(await snapshotTable()).toEqual(before);
+}
+
+const ADMIN_SESSION = { user: { name: "A", roles: ["internal-admin"] } };
+const CROSS_SITE_ORIGINS: [string, string | null][] = [
+  ["no Origin header", null],
+  ["a cross-site Origin", "https://evil.example.test"],
+  ["the same host on another port", "http://localhost:4000"],
+  ["a null Origin", "null"],
+];
+
+// An internal-admin session with a missing or foreign Origin must get 403
+// before the handler parses the body or touches the table.
+async function expectForbiddenForCrossSiteAdminWrites(route: WriteRoute) {
+  const before = await snapshotTable();
+  const realParams = Object.fromEntries(
+    Object.entries(route.params).map(([name, value]) => [
+      name,
+      Array.isArray(value) ? [existing.accountId] : existing.accountId,
+    ]),
+  );
+  for (const [originName, origin] of CROSS_SITE_ORIGINS) {
+    for (const [bodyName, body] of [
+      ...BODIES,
+      ["a valid PATCH body", JSON.stringify({ accountName: "hijacked" })],
+    ] as [string, string][]) {
+      setSession(ADMIN_SESSION);
+      const res = await call(route, body, realParams, origin);
+      expect(
+        res.status,
+        `${label(route)} as internal-admin with ${originName}, sent ${bodyName}`,
+      ).toBe(403);
+      await expectError(res, 403, "FORBIDDEN");
+    }
   }
   expect(await snapshotTable()).toEqual(before);
 }
@@ -335,6 +382,77 @@ describe("every write route requires a session", () => {
   );
 });
 
+// Access Control spec — Enforcement item 6 and item 4: same-origin check on
+// every write, after the session (401) and permission (403) checks, before
+// input parsing; every response is Cache-Control: private, no-store.
+describe("every write route enforces the same-origin check", () => {
+  it.each(eachWriteRoute)(
+    "%s: an internal-admin write with no or a foreign Origin gets 403 FORBIDDEN and the table is untouched",
+    async (_label, route) => {
+      await expectForbiddenForCrossSiteAdminWrites(route);
+    },
+  );
+
+  it.each(eachWriteRoute)(
+    "%s: a same-origin internal-admin write is not stopped by the origin or role gate",
+    async (_label, route) => {
+      setSession(ADMIN_SESSION);
+      const res = await call(route, "{}");
+      expect(res.status).not.toBe(401);
+      expect(res.status).not.toBe(403);
+    },
+  );
+
+  it.each(eachWriteRoute)(
+    "%s: no session with a foreign Origin is still 401",
+    async (_label, route) => {
+      setSession(null);
+      await expectError(
+        await call(route, "{}", route.params, "https://evil.example.test"),
+        401,
+        "UNAUTHORIZED",
+      );
+    },
+  );
+
+  it.each(eachWriteRoute)(
+    "%s: a non-admin with a foreign Origin gets the permission 403, naming internal-admin",
+    async (_label, route) => {
+      setSession({ user: { name: "M", roles: ["internal-viewer"] } });
+      const res = await call(
+        route,
+        "{}",
+        route.params,
+        "https://evil.example.test",
+      );
+      expect(res.status).toBe(403);
+      expect((await res.json()).error.message).toBe(
+        "internal-admin role required",
+      );
+    },
+  );
+
+  it.each(eachWriteRoute)(
+    "%s: 401, 403 and 400 responses carry Cache-Control: private, no-store",
+    async (_label, route) => {
+      setSession(null);
+      expect((await call(route, "{}")).headers.get("cache-control")).toBe(
+        "private, no-store",
+      );
+      setSession({ user: { name: "M", roles: [] } });
+      expect((await call(route, "{}")).headers.get("cache-control")).toBe(
+        "private, no-store",
+      );
+      setSession(ADMIN_SESSION);
+      expect(
+        (await call(route, "{}", route.params, null)).headers.get(
+          "cache-control",
+        ),
+      ).toBe("private, no-store");
+    },
+  );
+});
+
 // Negative controls: the checks above must fail for a route that is not gated,
 // otherwise a green run proves nothing. Synthetic handlers stand in for a
 // future route; they are not files under app/api.
@@ -361,7 +479,7 @@ describe("the structural checks catch a route that is not gated", () => {
     withRoute(
       async () => {
         await putRaw({ PK: "ACCOUNT#999999999999", SK: "META", written: true });
-        return jsonError(403, "FORBIDDEN", "Admin role required");
+        return jsonError(403, "FORBIDDEN", "internal-admin role required");
       },
       { requireAdmin: false },
     ),
@@ -402,6 +520,22 @@ describe("the structural checks catch a route that is not gated", () => {
     await expect(
       expectForbiddenForEveryNonAdmin(noSessionCheck),
     ).rejects.toThrow(/to be 403/);
+  });
+
+  it("rejects a route that gates the role but not the origin", async () => {
+    const noOriginCheck = synthetic(async (request, ctx) => {
+      const session = await auth();
+      if (!session) return jsonError(401, "UNAUTHORIZED", "Not authenticated");
+      void request;
+      void ctx;
+      return jsonData({ ok: true });
+    });
+    await expect(
+      expectForbiddenForCrossSiteAdminWrites(noOriginCheck),
+    ).rejects.toThrow(/to be 403/);
+    await expect(
+      expectForbiddenForCrossSiteAdminWrites(gated),
+    ).resolves.toBeUndefined();
   });
 
   it("rejects a route that writes to the table before it answers 403", async () => {
