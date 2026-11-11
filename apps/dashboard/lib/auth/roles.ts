@@ -16,6 +16,19 @@ export const GLOBAL_ROLES = [
 ] as const;
 export type GlobalRole = (typeof GLOBAL_ROLES)[number];
 
+export const ROLE_LABELS: Record<GlobalRole, string> = {
+  "internal-admin": "Admin",
+  "internal-org-admin": "Org admin",
+  "internal-auditor": "Auditor",
+  "internal-viewer": "Viewer",
+};
+
+export const AUTH_METHOD_LABELS = {
+  entra: "Microsoft Entra ID",
+  master: "Master user (break-glass)",
+  local: "Local login (dev)",
+} as const;
+
 const DEFAULT_ROLE: GlobalRole = "internal-viewer";
 
 export function isGlobalRole(value: unknown): value is GlobalRole {

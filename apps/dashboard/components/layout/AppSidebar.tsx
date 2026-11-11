@@ -76,13 +76,13 @@ function SidebarNav({ toHref }: { toHref: ToHref }) {
           href={toHref("/dashboard")}
           onClick={closeMobileSheet}
           className="flex items-center gap-2.5 px-1"
-          aria-label="Bedrock Cost — go to overview"
+          aria-label="LLM Usage Lens — go to overview"
         >
           <div className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
             <Gauge className="size-5" />
           </div>
           <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
-            <span className="font-semibold">Bedrock Cost</span>
+            <span className="font-semibold">LLM Usage Lens</span>
             <span className="text-primary text-xs font-medium tracking-wide uppercase">
               {env.NEXT_PUBLIC_ORG_NAME}
             </span>

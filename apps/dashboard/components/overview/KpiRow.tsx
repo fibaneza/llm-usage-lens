@@ -14,7 +14,7 @@ import { sectionData } from "@/lib/query/section-data";
 import { RecurringIndicator } from "./RecurringIndicator";
 
 const KPI_GRID =
-  "grid gap-4 md:grid-cols-2 lg:grid-cols-3 min-[1440px]:grid-cols-5";
+  "grid gap-4 md:grid-cols-2 lg:grid-cols-3 min-[90rem]:grid-cols-5";
 const KPI_SKELETON_KEYS = [
   "total-cost",
   "total-tokens",

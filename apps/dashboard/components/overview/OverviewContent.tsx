@@ -48,11 +48,11 @@ export function OverviewContent() {
         <KpiRow range={range} />
       </SectionBoundary>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-12">
         <OverviewSectionCard
           title="Cost trend"
           boundaryTitle="cost trend"
-          className="lg:col-span-2"
+          className="lg:col-span-8"
           {...boundary}
         >
           <OverviewChartBody
@@ -66,6 +66,7 @@ export function OverviewContent() {
         <OverviewSectionCard
           title="Model distribution"
           boundaryTitle="model distribution"
+          className="lg:col-span-4"
           {...boundary}
         >
           <OverviewChartBody
@@ -82,11 +83,11 @@ export function OverviewContent() {
         </OverviewSectionCard>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-12">
         <OverviewSectionCard
           title="Top 5 departments"
           boundaryTitle="top departments"
-          className="lg:col-span-2"
+          className="lg:col-span-8"
           {...boundary}
         >
           <OverviewChartBody
@@ -102,6 +103,7 @@ export function OverviewContent() {
         <OverviewSectionCard
           title="Sync status"
           boundaryTitle="sync status"
+          className="lg:col-span-4"
           {...boundary}
         >
           <SyncStatusSection />

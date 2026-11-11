@@ -12,6 +12,7 @@ const BREAKPOINTS = [
   { label: "tablet", width: 768, height: 1024 },
   { label: "laptop", width: 1024, height: 768 },
   { label: "desktop", width: 1440, height: 900 },
+  { label: "wide", width: 1920, height: 1080 },
 ] as const;
 
 // Smoke-level responsive gate: no page may scroll horizontally at any
@@ -56,6 +57,58 @@ test.describe("responsive breakpoints", () => {
       }
 
       expect(clientErrors).toEqual([]);
+    });
+  }
+});
+
+// Design System -- Layout -> Structure: the content area is fluid (no
+// page-level max-width). The content container is as wide as the SidebarInset,
+// with gutters of 16px below 768, 24px from 768 and 32px from 1440. The
+// container is the element that follows the top bar inside the inset.
+test.describe("fluid content container", () => {
+  test.beforeEach(async ({ context }) => {
+    await signInAsTestUser(context);
+  });
+
+  for (const [width, gutter] of [
+    [375, 16],
+    [767, 16],
+    [768, 24],
+    [1024, 24],
+    [1439, 24],
+    [1440, 32],
+    [1920, 32],
+  ] as const) {
+    test(`container fills the inset with ${gutter}px gutters at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/dashboard");
+      await waitForHydration(page);
+
+      const inset = page.locator('[data-slot="sidebar-inset"]');
+      const container = inset.locator(":scope > header + *");
+      await expect(container).toHaveCount(1);
+      await expect(container).toBeVisible();
+
+      const insetBox = await inset.boundingBox();
+      const containerBox = await container.boundingBox();
+      if (!insetBox || !containerBox) throw new Error("no layout box");
+      expect(Math.abs(containerBox.width - insetBox.width)).toBeLessThanOrEqual(
+        1,
+      );
+
+      const style = await container.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          maxWidth: cs.maxWidth,
+          paddingLeft: cs.paddingLeft,
+          paddingRight: cs.paddingRight,
+        };
+      });
+      expect(style.maxWidth).toBe("none");
+      expect(style.paddingLeft).toBe(`${gutter}px`);
+      expect(style.paddingRight).toBe(`${gutter}px`);
     });
   }
 });

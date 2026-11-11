@@ -260,4 +260,17 @@ describe("AppSidebar - rail toggle accessible name (desktop, 1440px)", () => {
       screen.queryByRole("button", { name: "Expand" }),
     ).not.toBeInTheDocument();
   });
+
+  // Design System — Layout → Structure: the product name shown is "LLM Usage
+  // Lens".
+  it("brands the sidebar LLM Usage Lens, with the home link named accordingly", () => {
+    renderSidebar("/dashboard");
+
+    const brand = screen.getByRole("link", {
+      name: "LLM Usage Lens — go to overview",
+    });
+    expect(brand).toHaveAttribute("href", "/dashboard");
+    expect(brand).toHaveTextContent("LLM Usage Lens");
+    expect(screen.queryByText("Bedrock Cost")).not.toBeInTheDocument();
+  });
 });

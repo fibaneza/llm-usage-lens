@@ -292,8 +292,10 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
   earlier 1280px centred column). It fills the inset beside the sidebar at
   every breakpoint, with no page-level max-width: the content container is as
   wide as the inset. Gutters (the container's padding) are 16px below `md`,
-  24px from `md` and 32px from 1440 (`min-[1440px]:`; 1440 is a project
-  breakpoint, not Tailwind's `2xl`).
+  24px from `md` and 32px from 1440. 1440 is a project breakpoint, not
+  Tailwind's `2xl`; write it in rem (`min-[90rem]:`), never as
+  `min-[1440px]:` — Tailwind orders a px variant before the rem-based `md`
+  and `lg` rules, so those override it.
 - Readable measure: the content limits line length, not the page.
   `EmptyState` description text, the Settings forms and standalone paragraphs
   keep `max-w-[72ch]`; dialogs keep their shadcn width; cards, charts and

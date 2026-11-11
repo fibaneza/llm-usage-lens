@@ -12,12 +12,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AUTH_METHOD_LABELS,
+  GLOBAL_ROLES,
+  ROLE_LABELS,
+} from "@/lib/auth/roles";
 
 export type UserMenuUser = {
   name?: string | null;
   email?: string | null;
   image?: string | null;
+  roles?: readonly string[];
+  authMethod?: string;
 };
+
+// Design System — User menu: labelled roles in GLOBAL_ROLES order; a role
+// without a label is not shown.
+function roleLabels(roles: readonly string[] | undefined): string {
+  return GLOBAL_ROLES.filter((role) => roles?.includes(role))
+    .map((role) => ROLE_LABELS[role])
+    .join(", ");
+}
+
+function authMethodLabel(method: string | undefined): string | null {
+  return (
+    Object.entries(AUTH_METHOD_LABELS).find(([key]) => key === method)?.[1] ??
+    null
+  );
+}
 
 function initials(user: UserMenuUser | null): string {
   const source = user?.name?.trim() || user?.email?.trim() || "";
@@ -40,6 +62,8 @@ type UserMenuProps = {
 export function UserMenu({ user, signOutAction }: UserMenuProps) {
   const name = user?.name ?? "Signed in";
   const email = user?.email ?? null;
+  const roles = roleLabels(user?.roles);
+  const method = authMethodLabel(user?.authMethod);
 
   return (
     <DropdownMenu>
@@ -65,6 +89,16 @@ export function UserMenu({ user, signOutAction }: UserMenuProps) {
           {email ? (
             <span className="text-muted-foreground truncate text-xs font-normal">
               {email}
+            </span>
+          ) : null}
+          {roles ? (
+            <span className="text-muted-foreground text-xs font-normal">
+              {roles}
+            </span>
+          ) : null}
+          {method ? (
+            <span className="text-muted-foreground text-xs font-normal">
+              {method}
             </span>
           ) : null}
         </DropdownMenuLabel>

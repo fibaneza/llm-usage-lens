@@ -188,7 +188,7 @@ describe("AppSidebar - mobile sheet (375px)", () => {
     },
     {
       label: "brand link",
-      name: "Bedrock Cost — go to overview",
+      name: "LLM Usage Lens — go to overview",
       to: "/dashboard",
     },
   ])("navigates and closes the sheet from the $label", async ({ name, to }) => {

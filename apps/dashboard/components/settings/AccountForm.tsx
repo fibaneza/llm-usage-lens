@@ -83,7 +83,11 @@ export function AccountForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+    <form
+      onSubmit={handleSubmit}
+      noValidate
+      className="flex max-w-[72ch] flex-col gap-4"
+    >
       {FIELDS.map(({ key, label }) => {
         const id = `${formId}-${key}`;
         const error = errors[key];

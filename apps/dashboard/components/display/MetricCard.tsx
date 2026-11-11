@@ -25,7 +25,7 @@ export function MetricCard({
 
   return (
     <Card role="group" aria-labelledby={titleId} className="gap-3 py-4">
-      <CardHeader className="flex flex-row items-center justify-between gap-2">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 px-4">
         <CardTitle
           id={titleId}
           className="text-muted-foreground text-sm font-medium"
@@ -34,7 +34,7 @@ export function MetricCard({
         </CardTitle>
         <Icon className="text-muted-foreground size-4 shrink-0" aria-hidden />
       </CardHeader>
-      <CardContent className="flex flex-col gap-1">
+      <CardContent className="flex flex-col gap-1 px-4">
         <div className="flex flex-wrap items-baseline gap-2">
           <span className="font-mono text-2xl font-semibold tabular-nums">
             {value}

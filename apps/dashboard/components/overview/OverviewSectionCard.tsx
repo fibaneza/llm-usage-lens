@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { SectionBoundary } from "@/components/display/SectionBoundary";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type OverviewSectionCardProps = {
@@ -24,13 +25,13 @@ export function OverviewSectionCard({
   children,
 }: OverviewSectionCardProps) {
   return (
-    <Card className={className}>
-      <CardHeader>
+    <Card className={cn("py-4", className)}>
+      <CardHeader className="px-4">
         <CardTitle>
           <h2>{title}</h2>
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-4">
         <SectionBoundary
           title={boundaryTitle}
           resetKeys={resetKeys}

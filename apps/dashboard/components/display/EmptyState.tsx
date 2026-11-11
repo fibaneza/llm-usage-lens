@@ -23,7 +23,9 @@ export function EmptyState({
       ) : null}
       <p className="text-foreground text-sm font-medium">{title}</p>
       {description ? (
-        <p className="text-muted-foreground text-sm">{description}</p>
+        <p className="text-muted-foreground max-w-[72ch] text-sm">
+          {description}
+        </p>
       ) : null}
       {action}
     </div>

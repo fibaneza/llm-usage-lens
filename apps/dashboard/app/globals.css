@@ -104,6 +104,19 @@
   --color-avatar-8: #9f1239;
 }
 
+/* Tailwind v4 defaults `border` to currentColor; the Design System spec
+   (Layout — Structure) requires the `--color-border` token on every card,
+   table and divider. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentColor);
+  }
+}
+
 :root {
   color-scheme: light;
 }

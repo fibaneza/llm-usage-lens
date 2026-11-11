@@ -6,8 +6,10 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 // Shell: a collapsible sidebar (brand + grouped nav) beside the content inset.
 // The inset opens with its own top bar (page title + sync status, account
-// actions); content is capped at 1280px and centered (design reference —
-// sidebar + main with an in-content top bar). --header-height aligns the
+// actions); the content container fills the inset with no page-level
+// max-width and gutters of 16 / 24 / 32px (Design System — Layout: Structure).
+// The 1440 breakpoint is written in rem (min-[90rem]) so it sorts after the
+// rem-based lg: utilities in the compiled CSS. --header-height aligns the
 // sidebar's brand header with the inset's top bar. Every dashboard page renders
 // here.
 export default function DashboardLayout({
@@ -23,7 +25,7 @@ export default function DashboardLayout({
       </Suspense>
       <SidebarInset className="min-w-0">
         <AppHeader />
-        <div className="mx-auto w-full max-w-[1280px] flex-1 p-4 md:p-6">
+        <div className="w-full flex-1 p-4 md:p-6 min-[90rem]:p-8">
           {children}
         </div>
       </SidebarInset>
