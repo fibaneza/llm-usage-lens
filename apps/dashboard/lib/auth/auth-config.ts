@@ -15,6 +15,11 @@ export const ENTRA_TENANT_ISSUER_MESSAGE =
 
 export const MASTER_HASH_PREFIX = "$argon2id$";
 
+// The committed `.env.example` value: public, so sessions signed with it are
+// forgeable. Allowed only for local development (auth guide — Dev-only local
+// login).
+export const LOCAL_AUTH_SECRET_PLACEHOLDER = "local-dev-placeholder";
+
 export type AppEnv = "dev" | "prod";
 export type AccessMode = "open" | "enforce";
 

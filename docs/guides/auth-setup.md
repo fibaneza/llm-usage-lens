@@ -144,6 +144,7 @@ AUTH_DEV_LOGIN=true
 - From Phase 4R the dev-only login is rejected when Entra is configured (env validation fails).
 - **Role choice (Phase 4R.1).** The local login asks for a role — `internal-admin` (default), `internal-org-admin`, `internal-auditor` or `internal-viewer` — and signs in `dev@localhost` with `oid` `local:dev@localhost` and `tid` `local`. Scoped roles (`internal-team-admin`, members) come from stored affiliations (Phase 4R.2 onward). The headless e2e helper (`e2e/support/session.ts`) forges the same session shape for any role.
 - `APP_ENV=dev` is required locally too (`.env.example`).
+- **Template.** `apps/dashboard/.env.example` ships this setup: copy it to `.env` and `pnpm dev` runs with the local login and no secrets to fill in. Its `AUTH_SECRET` placeholder is public, so env validation rejects it when `APP_ENV=prod` or `NODE_ENV=production`. To use Entra locally, put the three `AUTH_MICROSOFT_ENTRA_ID_*` variables, a real `AUTH_SECRET` and an empty `AUTH_DEV_LOGIN=` in `.env.prod` (with `APP_ENV=prod`) or `.env.local` (implementation-phases — *Environment Files*).
 
 ---
 

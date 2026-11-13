@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseEnv } from "node:util";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -72,6 +73,35 @@ describe("env.ts sign-in provider cross-check", () => {
     stubBase({ NODE_ENV: "development", AUTH_DEV_LOGIN: "true" });
     const { env } = await loadEnv();
     expect(env.AUTH_DEV_LOGIN).toBe("true");
+  });
+
+  it("passes in development with the .env.example values", async () => {
+    const template = parseEnv(
+      readFileSync(join(import.meta.dirname, ".env.example"), "utf8"),
+    );
+    stubBase({ NODE_ENV: "development", ...template });
+    const { env } = await loadEnv();
+    expect(env.AUTH_DEV_LOGIN).toBe("true");
+    expect(env.AUTH_MICROSOFT_ENTRA_ID_ID).toBeUndefined();
+  });
+
+  it("throws in a production build with the .env.example AUTH_SECRET", async () => {
+    stubBase({
+      NODE_ENV: "production",
+      AUTH_SECRET: "local-dev-placeholder",
+      ...ENTRA,
+    });
+    await expect(loadEnv()).rejects.toThrow();
+  });
+
+  it("throws with APP_ENV=prod and the .env.example AUTH_SECRET", async () => {
+    stubBase({
+      NODE_ENV: "development",
+      APP_ENV: "prod",
+      AUTH_SECRET: "local-dev-placeholder",
+      ...ENTRA,
+    });
+    await expect(loadEnv()).rejects.toThrow();
   });
 
   it("passes in production with full Entra", async () => {

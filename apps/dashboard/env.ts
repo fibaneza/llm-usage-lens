@@ -7,6 +7,7 @@ import {
   AuthConfigError,
   ENTRA_TENANT_ISSUER_MESSAGE,
   ENTRA_TENANT_ISSUER_PATTERN,
+  LOCAL_AUTH_SECRET_PLACEHOLDER,
   resolveAccessMode,
   resolveSignInProviders,
 } from "@/lib/auth/auth-config";
@@ -60,6 +61,16 @@ export const env = createEnv({
   createFinalSchema: (shape, isServer) =>
     isServer
       ? z.object(shape).superRefine((value, ctx) => {
+          if (
+            value.AUTH_SECRET === LOCAL_AUTH_SECRET_PLACEHOLDER &&
+            (value.APP_ENV === "prod" || value.NODE_ENV === "production")
+          ) {
+            ctx.addIssue({
+              code: "custom",
+              message:
+                "AUTH_SECRET is the .env.example placeholder: generate a real secret outside local development.",
+            });
+          }
           try {
             resolveSignInProviders({
               nodeEnv: value.NODE_ENV,

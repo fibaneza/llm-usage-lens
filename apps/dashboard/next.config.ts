@@ -1,10 +1,26 @@
 import { fileURLToPath } from "node:url";
 
+import { initialEnv, updateInitialEnv } from "@next/env";
 import type { NextConfig } from "next";
+
+import { applyAppEnvFile } from "./lib/env-files";
 
 // Disable Next.js anonymous telemetry — must be set before the config is
 // evaluated so it takes effect at CLI startup (next dev / next build).
 process.env.NEXT_TELEMETRY_DISABLED = "1";
+
+// Layer `.env.<APP_ENV>` over Next's .env loading (implementation-phases spec —
+// Environment Files). Registering the values as initial env keeps them across
+// Next's dev-time .env reloads. Skipped under test, like Next's `.env.local`.
+if (process.env.NODE_ENV !== "test") {
+  updateInitialEnv(
+    applyAppEnvFile({
+      dir: fileURLToPath(new URL(".", import.meta.url)),
+      processEnv: process.env,
+      initialEnv,
+    }),
+  );
+}
 
 // Platform spec — Runtime (response security headers); no includeSubDomains.
 const SECURITY_HEADERS = [

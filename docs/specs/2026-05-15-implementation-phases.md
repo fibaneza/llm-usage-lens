@@ -854,9 +854,22 @@ Prerequisite: organization-wide OTel instrumentation of every Bedrock caller.
 
 | File | Purpose | Git Tracked |
 |---|---|---|
-| `.env.example` | Template with all required variable names (no values) | Yes |
-| `.env.local` | Local development (Auth.js + Entra ID config, DynamoDB Local endpoint) | No |
+| `.env.example` | Template with all variable names. Copied to `.env` it runs `pnpm dev` as-is: `APP_ENV=dev`, the dev-only local login, a non-secret `AUTH_SECRET` placeholder, Entra lines commented out. No real secret values | Yes |
+| `.env` | Shared local defaults; `APP_ENV` here selects `.env.dev` or `.env.prod` | No |
+| `.env.dev` | Loaded when `APP_ENV=dev` | No |
+| `.env.prod` | Loaded when `APP_ENV=prod` (Entra ID config, real `AUTH_SECRET`) | No |
+| `.env.local` | Personal overrides and secrets | No |
 | `.env.test` | Test configuration (DynamoDB Local, mock auth) | No |
+
+Decided 2026-11-13. The files live in `apps/dashboard/`. Precedence, highest
+first: the process environment, `.env.<NODE_ENV>.local`, `.env.local`,
+`.env.<APP_ENV>`, `.env.<NODE_ENV>`, `.env`. Next.js loads all but
+`.env.<APP_ENV>`, which `next.config.ts` layers in at startup
+(`lib/env-files.ts`), so editing `.env.dev` or `.env.prod` needs a dev-server
+restart; it is skipped under `NODE_ENV=test`, and a file cannot change
+`APP_ENV`. The `AUTH_SECRET` placeholder fails env validation when
+`APP_ENV=prod` or `NODE_ENV=production`. Deployed environments take their
+variables from the task definition, never from these files (Platform spec).
 
 ### Required Environment Variables
 
