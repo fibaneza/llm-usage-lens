@@ -8,7 +8,7 @@ import type { Template } from "aws-cdk-lib/assertions";
 import { Template as T } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { AppStack } from "../lib/app-stack";
+import { DashboardServiceStack } from "../lib/dashboard-service-stack";
 import { parseAppInputs } from "../lib/inputs";
 
 import { ACCOUNT, REGION, actionsOf, contextFor } from "./support";
@@ -23,7 +23,7 @@ function synth(
   extra: Record<string, unknown> = {},
 ): Template {
   const app = new App();
-  const stack = new AppStack(app, "App", {
+  const stack = new DashboardServiceStack(app, "App", {
     inputs: parseAppInputs({ ...contextFor(mode, env), ...extra }),
     env: { account: ACCOUNT, region: REGION },
   });
@@ -74,7 +74,7 @@ const HASH = "/auth/master-password-hash";
 const TOTP = "/auth/master-totp-secret";
 
 describe.each(["import", "create"] as Mode[])(
-  "AppStack master user (%s)",
+  "DashboardServiceStack master user (%s)",
   (mode) => {
     describe("masterUsername unset", () => {
       const t = synth(mode, "dev");

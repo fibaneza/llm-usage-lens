@@ -153,7 +153,7 @@ the dashboard use the same one; Rule 20.5's "no duplicate tables" applies):
   - DynamoDB is the queryable copy: append-only, `PutItem` only.
   - Each record is **also** written as one structured JSON line to a
     dedicated CloudWatch Logs group, `/llm-usage-lens/<env>/audit`, in
-    the AppStack, with KMS encryption. The Access Control spec sets
+    the DashboardServiceStack, with KMS encryption. The Access Control spec sets
     retention at 400 days in both stores (decision D3; the user confirms).
   - The security team can subscribe their SIEM to that log group. No SIEM
     resource is created here.
@@ -161,7 +161,7 @@ the dashboard use the same one; Rule 20.5's "no duplicate tables" applies):
   retention and a DynamoDB TTL attribute.
 - **Security events.** The master-user events (`auth.master.*`) and
   `auth.signin.error` start as id-only telemetry in R1. R2 writes them to
-  the audit record and the AppStack alarm. A successful write's audit item
+  the audit record and the DashboardServiceStack alarm. A successful write's audit item
   is written in the same `TransactWriteItems` as the change.
 
 ## 5. Usage and cost: two sources, one combined view
@@ -254,7 +254,7 @@ call that stays on `us-east-1`. Netlify hosting is superseded.
 
 **Load balancer: reuse when given, create only when not**
 - **If an ALB HTTPS listener ARN is provided** (CDK context or an SSM
-  parameter name), the AppStack **imports** that listener, its ALB and its
+  parameter name), the DashboardServiceStack **imports** that listener, its ALB and its
   security group. It adds only:
   - its own target group
   - one **host-based** listener rule, for example
@@ -267,7 +267,7 @@ call that stays on `us-east-1`. Netlify hosting is superseded.
 
   It never changes the ALB, the listener's default action or settings, or
   other rules and target groups. Undeploying removes only what it added.
-- **If no ARN is provided,** the AppStack creates one **internal** ALB
+- **If no ARN is provided,** the DashboardServiceStack creates one **internal** ALB
   (`internetFacing: false`) in the imported private subnets. It has:
   - one HTTPS listener using the imported certificate and a TLS 1.2+
     policy; there is no HTTP listener
@@ -287,9 +287,9 @@ session and returns only `{ data: { status: "ok" } }`.
 
 | Stack | Creates | Notes |
 |---|---|---|
-| **InfraStack** (shared, stateful) | The `bedrock-usage` DynamoDB table (with a TTL attribute only if R0 implements audit retention through TTL), the KMS CMK the specs already require, the ECS cluster, the ECR repository, and SSM parameters holding shared non-secret identifiers | Long-lived, with termination protection. `RemovalPolicy.RETAIN` on the table and the CMK. Table ownership moves here from the collector's SAM template |
+| **FoundationStack** (shared, stateful) | The `bedrock-usage` DynamoDB table (with a TTL attribute only if R0 implements audit retention through TTL), the KMS CMK the specs already require, the ECS cluster, the ECR repository, and SSM parameters holding shared non-secret identifiers | Long-lived, with termination protection. `RemovalPolicy.RETAIN` on the table and the CMK. Table ownership moves here from the collector's SAM template |
 | **CollectorStack** | Nothing yet | **Not built by these prompts.** Phase 6 stays last (Rule 30.5). Moving the collector from SAM to CDK is a Phase 6 spec amendment that R0 records |
-| **AppStack** (dashboard, stateless) | The ECS task definition and Fargate service, its log group, the audit log group (§4), the alarms in §8, the **task role**, the **task execution role**, the task security group, the target group and listener rule. The internal ALB and its HTTPS listener are created **only when no listener ARN is given**. Also the CI deploy role (GitHub OIDC) | Every permission these two prompts add goes here |
+| **DashboardServiceStack** (dashboard, stateless) | The ECS task definition and Fargate service, its log group, the audit log group (§4), the alarms in §8, the **task role**, the **task execution role**, the task security group, the target group and listener rule. The internal ALB and its HTTPS listener are created **only when no listener ARN is given**. Also the CI deploy role (GitHub OIDC) | Every permission these two prompts add goes here |
 
 **Not created (decided 2026-11-09):**
 - a VPC, a NAT gateway or VPC endpoints
@@ -331,17 +331,17 @@ session and returns only `{ data: { status: "ok" } }`.
 **IaC layout.** One CDK app in `infra/`, with the three stacks above. Each
 is deployable on its own and has a deploy and undeploy runbook.
 - **Stacks share values through SSM parameters,** never through secrets.
-  The InfraStack writes non-secret identifiers (table name, cluster ARN,
+  The FoundationStack writes non-secret identifiers (table name, cluster ARN,
   repository URI) to parameters under `/llm-usage-lens/<env>/infra/*`.
   Imported ids (VPC, subnets, certificate, optional listener) are supplied
   as CDK context or SSM parameter names.
 - **Not CloudFormation exports.** An export locks the producer: it cannot
   change or delete an exported value while another stack uses it.
-- **Deploy order is explicit:** InfraStack → AppStack (and CollectorStack,
+- **Deploy order is explicit:** FoundationStack → DashboardServiceStack (and CollectorStack,
   later). It is stated in the runbooks and CI.
 - **CI deploy role.** GitHub Actions assumes it through OIDC. It can push the
   ECR image, update the ECS service and run CloudFormation for the
-  AppStack. It cannot read secrets.
+  DashboardServiceStack. It cannot read secrets.
 - **Spec changes R0 records:**
   - the stack tool (Rule 40: CDK is added, and SAM is kept only until the
     Phase 6 amendment)
@@ -362,10 +362,10 @@ is deployable on its own and has a deploy and undeploy runbook.
 
 ## 8. Operations
 
-- **Alarms in the AppStack:**
+- **Alarms in the DashboardServiceStack:**
   - the ECS service running task count below desired
   - task restarts or failures
-  - the target group's unhealthy hosts and 5xx, **only when the AppStack
+  - the target group's unhealthy hosts and 5xx, **only when the DashboardServiceStack
     created the ALB**
   - application 5xx through a log metric filter
 - **Imported ALB:** the existing ALB's own alarms already cover it, so no ALB

@@ -1,16 +1,16 @@
 // @vitest-environment node
-// Source: docs/specs/2026-11-10-platform.md — "Created resources" (InfraStack:
+// Source: docs/specs/2026-11-10-platform.md — "Created resources" (FoundationStack:
 // table, CMK, cluster, ECR, SSM name parameters); contract rp-contract.md.
 import { GSI1_NAME } from "@llm-usage-lens/shared";
 import { App } from "aws-cdk-lib";
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { InfraStack } from "../lib/infra-stack";
+import { FoundationStack } from "../lib/foundation-stack";
 
 import { ACCOUNT, REGION, synthInfra } from "./support";
 
-describe.each(["dev", "prod"] as const)("InfraStack (%s)", (env) => {
+describe.each(["dev", "prod"] as const)("FoundationStack (%s)", (env) => {
   const t = synthInfra(env);
 
   it("creates exactly one retained, PITR, CMK-encrypted on-demand table", () => {
@@ -101,7 +101,7 @@ describe.each(["dev", "prod"] as const)("InfraStack (%s)", (env) => {
 
   it("has termination protection on", () => {
     // Stack-level flag is read from the synthesized stack artifact.
-    const stack = new InfraStack(new App(), "Infra", {
+    const stack = new FoundationStack(new App(), "Infra", {
       appEnv: env,
       env: { account: ACCOUNT, region: REGION },
     });

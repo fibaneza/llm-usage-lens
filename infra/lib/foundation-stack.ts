@@ -12,13 +12,13 @@ import { GSI1_NAME, TABLE_NAME_DEFAULT } from "@llm-usage-lens/shared";
 import { ssmPrefix } from "./inputs";
 import type { AppEnv } from "./inputs";
 
-// Source: docs/specs/2026-11-10-platform.md — "Created resources" (InfraStack:
+// Source: docs/specs/2026-11-10-platform.md — "Created resources" (FoundationStack:
 // shared, stateful) and "IaC layout" (values shared through SSM, never exports).
 
-export type InfraStackProps = StackProps & { appEnv: AppEnv };
+export type FoundationStackProps = StackProps & { appEnv: AppEnv };
 
-export class InfraStack extends Stack {
-  constructor(scope: Construct, id: string, props: InfraStackProps) {
+export class FoundationStack extends Stack {
+  constructor(scope: Construct, id: string, props: FoundationStackProps) {
     super(scope, id, { ...props, terminationProtection: true });
     const prefix = `${ssmPrefix(props.appEnv)}/infra`;
 
@@ -27,7 +27,7 @@ export class InfraStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     });
     // CloudWatch Logs encrypts the audit log group with this key
-    // (Platform spec — AppStack audit log group).
+    // (Platform spec — DashboardServiceStack audit log group).
     key.addToResourcePolicy(
       new iam.PolicyStatement({
         principals: [

@@ -71,7 +71,7 @@ edition, audit retention, identity links.
   by a step-up sign-in with `max_age=900` and `prompt=login` (the master
   user re-enters password and TOTP) — else `403 REAUTH_REQUIRED`, and a
   written reason; each is audited (`role.grant` / `role.revoke`) and emits an id-only
-  security event the AppStack alarms on; the access review shows each grant's
+  security event the DashboardServiceStack alarms on; the access review shows each grant's
   source (`entra` | `app` | `master`). The last `internal-admin` cannot be
   revoked (`409`). Removing the Entra role does not remove an in-app grant;
   the access review flags it.

@@ -8,11 +8,11 @@ import { NOT_CREATED_TYPES, synthApp, synthInfra } from "./support";
 import type { Mode } from "./support";
 
 const stacks = [
-  ["InfraStack dev", () => synthInfra("dev")],
-  ["InfraStack prod", () => synthInfra("prod")],
+  ["FoundationStack dev", () => synthInfra("dev")],
+  ["FoundationStack prod", () => synthInfra("prod")],
   ...(["import", "create"] as Mode[]).flatMap((m) => [
-    [`AppStack ${m} dev`, () => synthApp(m, "dev")] as const,
-    [`AppStack ${m} prod`, () => synthApp(m, "prod")] as const,
+    [`DashboardServiceStack ${m} dev`, () => synthApp(m, "dev")] as const,
+    [`DashboardServiceStack ${m} prod`, () => synthApp(m, "prod")] as const,
   ]),
 ] as const;
 

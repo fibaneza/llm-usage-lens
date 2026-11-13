@@ -1,7 +1,7 @@
 name: "llm-usage-lens: deploy - dashboard"
 
-# Builds the dashboard image, pushes it to ECR and deploys the AppStack only.
-# The InfraStack is deployed once by the user, never from CI.
+# Builds the dashboard image, pushes it to ECR and deploys the DashboardServiceStack only.
+# The FoundationStack is deployed once by the user, never from CI.
 # Running this workflow is a user action (workflow_dispatch).
 # Source: docs/specs/2026-11-10-platform.md - IaC layout.
 
@@ -54,7 +54,7 @@ jobs:
           IMAGE="${REGISTRY}/${ECR_REPOSITORY_NAME}:${GITHUB_SHA}"
           docker build -f apps/dashboard/Dockerfile -t "$IMAGE" .
           docker push "$IMAGE"
-      - name: Deploy AppStack
+      - name: Deploy DashboardServiceStack
         env:
           AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
           VPC_ID: ${{ vars.VPC_ID }}

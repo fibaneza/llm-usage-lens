@@ -67,7 +67,7 @@ Two stacks, both deployed through the CloudFormation control plane:
 | `cost-explorer-read-role` | Plain CloudFormation (YAML) | Management | `CostExplorerReadRole` (trusts the collector Lambda role) |
 | `bedrock-cost-collector` | AWS SAM (`apps/collector/template.yaml`) | Observability | Lambda, execution role, log group, EventBridge rule, CloudWatch alarm, `bedrock-usage` DynamoDB table |
 
-> **Changing (decided 2026-11-10):** table ownership moves to the CDK InfraStack when Phase 4R.P lands ([Platform spec](../specs/2026-11-10-platform.md)); this section is then updated.
+> **Changing (decided 2026-11-10):** table ownership moves to the CDK FoundationStack when Phase 4R.P lands ([Platform spec](../specs/2026-11-10-platform.md)); this section is then updated.
 
 The SAM stack **owns the production `bedrock-usage` table**. The repo-root
 `scripts/create-table.ts` is for DynamoDB Local only and never touches AWS.

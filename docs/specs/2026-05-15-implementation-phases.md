@@ -597,9 +597,9 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ### Phase 4R.P — Platform (`feature/phase-4r-p-platform`)
 
-- [x] `infra/` CDK app: InfraStack (table, CMK, cluster, ECR, SSM parameters) and AppStack (task definition, Fargate service, execution role, task role with Reads and `ACCT#*` writes (`IDENT#*` added 2026-11-11, security review), security group, target group, listener rule, audit log group, alarms, CI deploy role); both ALB modes
+- [x] `infra/` CDK app: FoundationStack (table, CMK, cluster, ECR, SSM parameters) and DashboardServiceStack (task definition, Fargate service, execution role, task role with Reads and `ACCT#*` writes (`IDENT#*` added 2026-11-11, security review), security group, target group, listener rule, audit log group, alarms, CI deploy role); both ALB modes
 - [x] `/api/health` with dependency checks; the structural test allows exactly this unauthenticated route
-- [x] AppStack deploy job in CI (`workflow_dispatch`, GitHub OIDC deploy role; run by the user)
+- [x] DashboardServiceStack deploy job in CI (`workflow_dispatch`, GitHub OIDC deploy role; run by the user)
 - [x] Verify: `cdk synth` and assertions for both ALB modes, the execution role, the task-role shell and every "not created" resource; nothing deployed
 
 ### Phase 4R.1 — Identity, roles and sign-in (`feature/phase-4r-1-rbac-identity`)
@@ -612,7 +612,7 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ### Phase 4R.2 — Authorization data (`feature/phase-4r-2-rbac-data`)
 
-- [ ] Entities and `server-only` data access (affiliation, admin scopes, role grants, pending items, group mappings, visibility, local users, identity links, audit); canonical usage identity in `packages/shared`; sign-in resolution and bind; atomic move; versioned writes with the audit item in the same transaction; the task-role DynamoDB policy added to the AppStack and asserted (T19); seeds per role
+- [ ] Entities and `server-only` data access (affiliation, admin scopes, role grants, pending items, group mappings, visibility, local users, identity links, audit); canonical usage identity in `packages/shared`; sign-in resolution and bind; atomic move; versioned writes with the audit item in the same transaction; the task-role DynamoDB policy added to the DashboardServiceStack and asserted (T19); seeds per role
 - [ ] Wire R1's security events (`auth.master.*`, `auth.signin.error`) to the audit record and the alarm (T20); stored local users ignored while Entra is configured (T7)
 - [ ] Verify: T2, T8, T17, T18, T19 pass; integration tests against DynamoDB Local
 
@@ -646,7 +646,7 @@ Tag coverage per team is Phase 4.9b (deferred).
 - [ ] `env.ts`: `LITELLM_SERVICE_KEY` (server-only, optional; missing → "not configured") and `LITELLM_ALLOWED_HOSTS`, with placeholders in `build:ci` and `.env.example` (no real values); `edition` derived from `APP_ENV`
 - [ ] `lib/litellm/client.ts` (`server-only`): base URL from `LiteLLMConnection`, host allowlist, `https` in prod, no userinfo/query/fragment, 10 s timeout, GET retries ≤ 2, writes never retried, sanitised error mapping (`LITELLM_UNAVAILABLE`); every LiteLLM route `403` in `open` mode
 - [ ] `/api/litellm/connection` (GET/PUT, test-before-save, versioned, audited) and `/api/litellm/connection/test`; Settings → LiteLLM panel (status, URL, edition, test; no key entry)
-- [ ] AppStack: `LITELLM_SERVICE_KEY` in the task definition's `secrets` (`valueFrom` the parameter ARN); execution role `ssm:GetParameters` on that ARN and `kms:Decrypt` on the CMK with `kms:ViaService`; nothing added to the task role; optional `litellmEgressCidrs` egress rule; synthesised and asserted, never deployed
+- [ ] DashboardServiceStack: `LITELLM_SERVICE_KEY` in the task definition's `secrets` (`valueFrom` the parameter ARN); execution role `ssm:GetParameters` on that ARN and `kms:Decrypt` on the CMK with `kms:ViaService`; nothing added to the task role; optional `litellmEgressCidrs` egress rule; synthesised and asserted, never deployed
 - [ ] Verify: LT1 (bundle and static-output grep, response/log/span scans), LT2, LT6, LT11, LT12 pass; CDK assertions (execution role only, one ARN, no `ssm:PutParameter`, secret never in `environment`); `401` → "rotate and redeploy", no retry
 
 ### L2 — Gateway and toggles (`feature/phase-l2-litellm-gateway`)
@@ -958,7 +958,7 @@ jobs:
       - sam deploy --no-confirm-changeset (bedrock-cost-collector stack)
 ```
 
-The `deploy-collector` job is added in Phase 6 — Phases 1–5 ship the `quality`/`test`/`build` jobs only. Dashboard hosting is AWS ECS Fargate (decided 2026-11-09; Platform spec): Phase 4R.P adds the `llm-usage-lens-deploy.yml` workflow (job `deploy`; `workflow_dispatch`, GitHub OIDC deploy role) that builds and pushes the image to ECR and deploys the AppStack; deploying is the user's action.
+The `deploy-collector` job is added in Phase 6 — Phases 1–5 ship the `quality`/`test`/`build` jobs only. Dashboard hosting is AWS ECS Fargate (decided 2026-11-09; Platform spec): Phase 4R.P adds the `llm-usage-lens-deploy.yml` workflow (job `deploy`; `workflow_dispatch`, GitHub OIDC deploy role) that builds and pushes the image to ECR and deploys the DashboardServiceStack; deploying is the user's action.
 
 ## Conventions
 

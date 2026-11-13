@@ -24,7 +24,7 @@ the existing SNS topic supplied as `alarmTopicArn`.
 
 - **New code:** run the `llm-usage-lens-deploy.yml` workflow (`environment` =
   dev or prod). It builds the image tagged with the commit SHA, pushes it, and
-  deploys the AppStack.
+  deploys the DashboardServiceStack.
 - **Roll back:** redeploy a previous SHA with
   `cdk deploy LlmUsageLens-<env>-App --exclusively -c imageTag=<previous-sha> ...`.
 - **Restart without a change:** `aws ecs update-service --cluster <cluster>
@@ -53,19 +53,19 @@ The CI deploy role cannot read these parameters.
 
 ## Deploy and undeploy
 
-Order: **InfraStack, then AppStack**. Undeploy in reverse.
+Order: **FoundationStack, then DashboardServiceStack**. Undeploy in reverse.
 
 - **Deploy:** see [dashboard-deployment.md](dashboard-deployment.md) section 6.
-- **Undeploy AppStack:** `cdk destroy LlmUsageLens-<env>-App --exclusively`. In import
+- **Undeploy DashboardServiceStack:** `cdk destroy LlmUsageLens-<env>-App --exclusively`. In import
   mode this removes only the target group, listener rule and ingress rule it
   added; the shared ALB is untouched. The audit log group is retained, so a
   redeploy first needs it imported or removed (see *Known gaps and retained
   resources*).
-- **Undeploy InfraStack:** it has termination protection and `RETAIN` on the
+- **Undeploy FoundationStack:** it has termination protection and `RETAIN` on the
   table and CMK. Disable termination protection on the stack deliberately
   first. Destroying the stack still **keeps the DynamoDB table and the
   KMS key** (and their data); deleting those is a separate, explicit manual
-  step. Destroy the AppStack first.
+  step. Destroy the DashboardServiceStack first.
 
 ## Known gaps and retained resources
 
@@ -73,7 +73,7 @@ Order: **InfraStack, then AppStack**. Undeploy in reverse.
   (`$.status >= 500`). The dashboard does not emit them yet, so that alarm
   stays quiet until a logging unit adds structured request logs.
 - The audit log group `/llm-usage-lens/<env>/audit` is **retained** when the
-  AppStack is destroyed (400-day audit retention). Redeploying the AppStack
+  DashboardServiceStack is destroyed (400-day audit retention). Redeploying the DashboardServiceStack
   then fails on the name clash: import the existing group or delete it by
   hand first. This is a user action.
 

@@ -12,7 +12,7 @@ This replaces the Netlify runbook (retired 2026-11-10, Phase 4R.P).
 ## 1. Hosting model
 
 - Image built from `apps/dashboard/Dockerfile` (Next.js `output: "standalone"`,
-  Node 22, non-root, port 3000), stored in the InfraStack's ECR repository.
+  Node 22, non-root, port 3000), stored in the FoundationStack's ECR repository.
 - Two stacks per environment (`dev` or `prod`), region `ap-southeast-2`
   (`COLLECTOR_REGION`, Rule 50.7):
   - `LlmUsageLens-<env>-Infra`: DynamoDB table, KMS CMK, ECS cluster, ECR
@@ -95,14 +95,14 @@ pnpm --filter @llm-usage-lens/infra synth -c env=dev -c account=123456789012 \
 
 ## 6. Deploy (user action)
 
-Order: InfraStack, then AppStack.
+Order: FoundationStack, then DashboardServiceStack.
 
 1. `cdk deploy LlmUsageLens-<env>-Infra` (once; from `infra/`, with the
    inputs). Note the table, key, cluster and repository outputs in SSM.
 2. Create the two secrets (section 4).
-3. Build and push the image, then deploy the AppStack. Locally:
+3. Build and push the image, then deploy the DashboardServiceStack. Locally:
    `docker build -f apps/dashboard/Dockerfile -t <repo-uri>:<tag> .`, `docker push`, then
-   `cdk deploy LlmUsageLens-<env>-App --exclusively -c imageTag=<tag> ...`. The first AppStack deploy
+   `cdk deploy LlmUsageLens-<env>-App --exclusively -c imageTag=<tag> ...`. The first DashboardServiceStack deploy
    also creates the CI deploy role; later deploys can run the
    `llm-usage-lens-deploy.yml` workflow (see [ACTIONS.md](../../.github/ACTIONS.md)).
 4. Create the internal DNS record: `<dashboardHostname>` to the ALB
@@ -118,5 +118,5 @@ dashboard only at `<dashboardHostname>`, or account edits return `403`.
 
 ## 7. Undeploy
 
-See [operations.md](operations.md) - *Deploy and undeploy*. The InfraStack
+See [operations.md](operations.md) - *Deploy and undeploy*. The FoundationStack
 retains the table and CMK by design.

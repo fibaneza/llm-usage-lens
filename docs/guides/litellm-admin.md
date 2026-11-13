@@ -97,7 +97,7 @@ aws ssm put-parameter --name /llm-usage-lens/<env>/litellm/service-key \
 - Standard tier (no charge); encrypted with the project CMK, which the task
   execution role can already decrypt (the CMK's usage is an accepted,
   existing cost).
-- No CDK, script or app code writes this parameter; the AppStack only
+- No CDK, script or app code writes this parameter; the DashboardServiceStack only
   references its ARN in the task definition's `secrets`.
 - Keep the value out of shell history (for example, read it from a prompt).
 
@@ -107,7 +107,7 @@ aws ssm put-parameter --name /llm-usage-lens/<env>/litellm/service-key \
    hostname only (with `:port` if not 443).
 2. If LiteLLM listens on a port other than 443, supply `litellmEgressCidrs`
    (LiteLLM's address range) so L1's egress rule can be synthesised.
-3. Deploy the AppStack (`cdk deploy`, user action).
+3. Deploy the DashboardServiceStack (`cdk deploy`, user action).
 4. As `internal-admin`, open **Settings → LiteLLM**: enter the `https` base
    URL, run the connection test (it must report `ok` before the URL saves),
    check the edition shown, then link dashboard teams to LiteLLM teams.

@@ -55,7 +55,7 @@ Two deliverables (plus the platform IaC) in a **pnpm monorepo**, sharing `packag
 1. **Next.js dashboard** (`apps/dashboard`) — reads aggregated Bedrock cost/usage from DynamoDB, displays 9 pages. Built first (Phases 1–5), developed against **DynamoDB Local**.
 2. **AWS Lambda collector** (`apps/collector`, `bedrock-cost-collector`) — serverless hourly pipeline that collects real Bedrock data and writes to DynamoDB. Built last (Phase 6).
 
-The dashboard's AWS platform (ECS Fargate, InfraStack + AppStack) is a CDK app in `infra/` (`@llm-usage-lens/infra`; [Platform spec](docs/specs/2026-11-10-platform.md)). Deploying is always a user action.
+The dashboard's AWS platform (ECS Fargate, FoundationStack + DashboardServiceStack) is a CDK app in `infra/` (`@llm-usage-lens/infra`; [Platform spec](docs/specs/2026-11-10-platform.md)). Deploying is always a user action.
 
 ## Cost posture
 
@@ -124,7 +124,7 @@ is the source of truth — read it before touching any workflow.
 | Workflow | Trigger | Purpose |
 |---|---|---|
 | `llm-usage-lens-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (both Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`) |
-| `llm-usage-lens-deploy.yml` | `workflow_dispatch` (user action) | Builds the dashboard image, pushes it to ECR via OIDC and deploys the AppStack only |
+| `llm-usage-lens-deploy.yml` | `workflow_dispatch` (user action) | Builds the dashboard image, pushes it to ECR via OIDC and deploys the DashboardServiceStack only |
 | `claude-pr-review.yml` | PR opened / synchronize / ready / reopened | Inline review + security findings; HIGH findings submit a `REQUEST_CHANGES` review |
 | `claude-code-review.yml` | release tag push / `workflow_dispatch` | Release audit scoped to commits since the previous tag; files issues |
 | `github-pr-title-lint.yml` | PR opened / edited / reopened | Conventional-Commits check on the PR title (the squash-merge commit on `main`) |

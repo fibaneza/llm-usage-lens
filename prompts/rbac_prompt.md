@@ -119,7 +119,7 @@ Only `internal-admin` changes configuration.
   - Each needs a sign-in within the last 15 minutes (otherwise
     `403 REAUTH_REQUIRED`) and a written reason.
   - Each is audited (`role.grant` / `role.revoke`) and emits an id-only
-    security event that the AppStack alarms on.
+    security event that the DashboardServiceStack alarms on.
   - Each grant shows its source (`entra`, `app` or `master`) in the access
     review.
   - The last `internal-admin` cannot be revoked (`409`).
@@ -517,7 +517,7 @@ secret, and brings back overage handling.
     dashboard: affiliations, role grants, group mappings, local users, visibility, identity records and links,
     and audit records. The dashboard's AWS credentials are read-only today
     (`docs/guides/dashboard-deployment.md` §2).
-    - **R0 defines the least-privilege ECS task role** (AppStack, §1.8),
+    - **R0 defines the least-privilege ECS task role** (DashboardServiceStack, §1.8),
       shared with `litellm_prompt.md` §1.2 item 6a:
       - DynamoDB reads on the table and GSI1
       - writes limited by `dynamodb:LeadingKeys` to this feature's
@@ -589,9 +589,9 @@ unit before any code.
 | Unit | Branch | Content | Depends on |
 |---|---|---|---|
 | **R0: spec and threat model** | `docs/rbac-entra-roles` | See the R0 scope below this table, including every shared-contracts decision | — |
-| **RP: platform** | `feature/phase-<n>-platform` | The `infra/` CDK app: InfraStack and AppStack per shared-contracts §7, both ALB modes, the ECS service and task definition for the existing dashboard, the `/api/health` route with dependency checks (§8 there), alarms (§8), the CI deploy role. Synthesised and asserted, never deployed | R0 |
+| **RP: platform** | `feature/phase-<n>-platform` | The `infra/` CDK app: FoundationStack and DashboardServiceStack per shared-contracts §7, both ALB modes, the ECS service and task definition for the existing dashboard, the `/api/health` route with dependency checks (§8 there), alarms (§8), the CI deploy role. Synthesised and asserted, never deployed | R0 |
 | **R1: identity, roles and sign-in** | `feature/phase-<n>-rbac-identity` | The `lib/auth` role model (§1.1: global and scoped roles, union, default `internal-viewer`, the legacy `Admin` alias, fail-closed parsing of `roles`, `groups`, `oid` and `tid`); `oid`/`tid` in the session; the `auth.ts` mapping; the identity record with `lastSeenRoles`; session caps (8 h / 4 h / 1 h); the master user (§1.3: Argon2id hash, TOTP, lockout, audit); local users (§1.3); the "no access" page; `AUTH_ACCESS_MODE` in `env.ts`; `internal-auditor` (read everything, every write `403`); the dev login and e2e helper for every role | R0, RP |
-| **R2: authorization data** | `feature/phase-<n>-rbac-data` | The ECS task role's DynamoDB policy for this unit, added to RP's AppStack (synthesised and asserted, never deployed); the shared usage-identity canonicaliser (shared-contracts §3.1), applied on read; identity links (unique per person); the audit log to DynamoDB and the CloudWatch audit group (shared-contracts §4); entities and `server-only` data access for affiliations (pending and bound), group mappings, in-app role grants, visibility and caps, local users and the audit log; **sign-in resolution** (§1.2: mapping → affiliation, ambiguity and overage flags, pending bind; audited); atomic move (`TransactWriteItems`); versioned conditional writes; Zod schemas in `packages/shared`; seeds for every role and affiliation case | R0, R1 |
+| **R2: authorization data** | `feature/phase-<n>-rbac-data` | The ECS task role's DynamoDB policy for this unit, added to RP's DashboardServiceStack (synthesised and asserted, never deployed); the shared usage-identity canonicaliser (shared-contracts §3.1), applied on read; identity links (unique per person); the audit log to DynamoDB and the CloudWatch audit group (shared-contracts §4); entities and `server-only` data access for affiliations (pending and bound), group mappings, in-app role grants, visibility and caps, local users and the audit log; **sign-in resolution** (§1.2: mapping → affiliation, ambiguity and overage flags, pending bind; audited); atomic move (`TransactWriteItems`); versioned conditional writes; Zod schemas in `packages/shared`; seeds for every role and affiliation case | R0, R1 |
 | **R3: server-side scoping** | `feature/phase-<n>-rbac-scope` | The policy module (`resolveScope` with the §1.4 evaluation order and inheritance caps, and `can`); every read Route Handler and Server Component filtered; aggregates computed after filtering; `404` parity; `Cache-Control: private, no-store`; authorization data read uncached (§1.6 item 4); scoped CSV, search and command menu; the role × route matrix and leak tests | R1, R2 |
 | **R4: management UI and writes** | `feature/phase-<n>-rbac-settings` | Settings per §1.5's matrix: members (add by email or UPN, remove, promote, demote, move, pending and stale lists); visibility and department caps; group mappings, role grants (re-auth and reason), identity links, local users, and the per-user approval (all `internal-admin`); the audit log view and the access-review CSV (`internal-admin`, `internal-auditor`; both audited); write routes with permission, origin, re-auth and `409` handling; the structural write-route test updated; accessible forms (Phase 5 floor: axe clean, keyboard, focus) | R3, plus Phase 4.9's Settings shell |
 | **R5: UI gating and copy** | `feature/phase-<n>-rbac-ui` | Navigation and pages reflect scope: "your teams" labels, "not visible", "limited by department" and "no access" states, no dead links. **Role-aware landing:** `internal-viewer` and member land on *My usage* (direct Bedrock usage via usage identities; LiteLLM is added in L6); leads on *My team* or *My department*; `internal-org-admin`, `internal-admin` and `internal-auditor` on the Overview | R3 |

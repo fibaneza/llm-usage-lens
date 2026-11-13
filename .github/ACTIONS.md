@@ -4,7 +4,7 @@ This folder holds the project's GitHub-side automation.
 
 | File | Trigger | Purpose |
 | --- | --- | --- |
-| [`workflows/llm-usage-lens-deploy.yml`](workflows/llm-usage-lens-deploy.yml) | `workflow_dispatch` (environment = dev or prod) | Builds the dashboard image, pushes it to ECR (tag = commit SHA) and runs `cdk deploy` of the AppStack only, assuming `vars.DEPLOY_ROLE_ARN` via GitHub OIDC (no static keys). Never deploys the InfraStack. **Running it is a user action.** |
+| [`workflows/llm-usage-lens-deploy.yml`](workflows/llm-usage-lens-deploy.yml) | `workflow_dispatch` (environment = dev or prod) | Builds the dashboard image, pushes it to ECR (tag = commit SHA) and runs `cdk deploy` of the DashboardServiceStack only, assuming `vars.DEPLOY_ROLE_ARN` via GitHub OIDC (no static keys). Never deploys the FoundationStack. **Running it is a user action.** |
 | [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) | Pull request events | Inline review comments + PR comment with HIGH/MEDIUM security findings; HIGH findings submit a REQUEST_CHANGES review and fail the check |
 | [`workflows/claude-code-review.yml`](workflows/claude-code-review.yml) | Push of release tags (`v*`, `*-rc*`, `*-beta*`) and `workflow_dispatch` | Release audit (code review + security) scoped to commits since the previous release tag; files GitHub issues for HIGH/MEDIUM security and HIGH code-review findings |
 | [`workflows/bedrock-simulator-build.yml`](workflows/bedrock-simulator-build.yml) | `workflow_dispatch`; `release: published` | Builds the simulator SAM artifact. `gate` (typecheck + tests + `sam validate`) and `deps` (freshness/duplicates report + **blocking `pnpm audit`**) run in parallel; `build` needs both, so a vulnerability blocks the artifact. pnpm store cached. Touches no AWS |
@@ -56,9 +56,9 @@ The job runs in the GitHub Environment named by the `environment` input
 `ECR_REPOSITORY_NAME`, `ENTRA_CLIENT_ID` (Entra application ID), `ENTRA_ISSUER`
 (`https://login.microsoftonline.com/<tenant>/v2.0`), and either `LISTENER_ARN` + `LISTENER_RULE_PRIORITY` +
 `ALB_SECURITY_GROUP_ID` (import mode) or `COMPANY_CIDRS` (create mode). The
-deploy role is created by the AppStack and trusts the account's existing
+deploy role is created by the DashboardServiceStack and trusts the account's existing
 GitHub OIDC provider (adding that provider if absent is a user action), so
-the first AppStack deploy is run by the user locally. The role trust is
+the first DashboardServiceStack deploy is run by the user locally. The role trust is
 scoped to `repo:<owner/repo>:environment:<env>`, so GitHub environments named
 `dev` and `prod` **must exist** (add required-reviewer protection rules on
 `prod`). The role assumes the CDK bootstrap deploy role, so run

@@ -157,7 +157,7 @@ the read-only model list or info endpoint as confirmed in L0.
      - It is created and updated **by hand**. No CDK, script or app code
        writes it; CDK only references its name and ARN.
      - Encryption uses `aws/ssm` or the project CMK; L0 records which.
-     - The AppStack task definition declares `LITELLM_SERVICE_KEY` under
+     - The DashboardServiceStack task definition declares `LITELLM_SERVICE_KEY` under
        `secrets` (`valueFrom` the parameter ARN). ECS reads it when each task
        starts, using the **task execution role**, and injects it as a
        server-only environment variable.
@@ -212,7 +212,7 @@ the read-only model list or info endpoint as confirmed in L0.
      through. A LiteLLM outage shows a handled "LiteLLM unavailable" state on
      the LiteLLM panels only. The rest of the dashboard keeps working
      (Rule 40.4).
-6a. **Cloud permissions (yes, they are required), in the CDK AppStack**
+6a. **Cloud permissions (yes, they are required), in the CDK DashboardServiceStack**
     (`rbac_prompt.md` §1.8).
     - **ECS task execution role.** It injects the secret at task start:
       - `ssm:GetParameters` on the exact parameter ARN only
@@ -224,7 +224,7 @@ the read-only model list or info endpoint as confirmed in L0.
       shared definition. R2 adds the access-control leading keys and the
       `PutItem`-only audit statement, and L2 adds the `LITELLM#*` leading
       key.
-    - **CI deploy role (GitHub OIDC).** It deploys the AppStack. It cannot
+    - **CI deploy role (GitHub OIDC).** It deploys the DashboardServiceStack. It cannot
       read the parameter.
     - **No `ssm:PutParameter` anywhere,** because the parameter is managed by
       hand.
@@ -431,7 +431,7 @@ the read-only model list or info endpoint as confirmed in L0.
   LiteLLM setting (§1.1), configured by the LiteLLM operators. The dashboard
   only shows budget-usage indicators (spend against max and soft budget).
 - **Phase 6 and other AWS changes:** any change to Phase 6 or the collector
-  (including the CollectorStack). The only AWS pieces are the AppStack
+  (including the CollectorStack). The only AWS pieces are the DashboardServiceStack
   additions in CDK (§1.2 item 6a), synthesised and never deployed by a run,
   and a reference to the hand-managed SSM parameter.
 
@@ -449,7 +449,7 @@ Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
 | Unit | Branch | Content | Depends on |
 |---|---|---|---|
 | **L0: spec, version pin, contract** | `docs/litellm-admin` | See the L0 scope below this table | — |
-| **L1: secrets, connection and permissions** | `feature/phase-<n>-litellm-connection` | `env.ts` entries (`LITELLM_SERVICE_KEY` server-only, `LITELLM_ALLOWED_HOSTS`), the AppStack task-definition secret wiring (`valueFrom` the SSM ARN), the Admin-configured base URL checked against the host allowlist, a server-only client (timeouts, GET retries, error mapping), the connection test, the edition flag, the Admin Settings panel (status, URL, edition, test; no key entry), and the CDK AppStack additions: execution-role SSM and KMS access for the one parameter, nothing added to the task role (synthesised and asserted, never deployed) | L0, RBAC R1–R4, Phase 4.9 |
+| **L1: secrets, connection and permissions** | `feature/phase-<n>-litellm-connection` | `env.ts` entries (`LITELLM_SERVICE_KEY` server-only, `LITELLM_ALLOWED_HOSTS`), the DashboardServiceStack task-definition secret wiring (`valueFrom` the SSM ARN), the Admin-configured base URL checked against the host allowlist, a server-only client (timeouts, GET retries, error mapping), the connection test, the edition flag, the Admin Settings panel (status, URL, edition, test; no key entry), and the CDK DashboardServiceStack additions: execution-role SSM and KMS access for the one parameter, nothing added to the task role (synthesised and asserted, never deployed) | L0, RBAC R1–R4, Phase 4.9 |
 | **L2: gateway and toggles** | `feature/phase-<n>-litellm-gateway` | `lib/litellm/` typed allowlist functions with Zod in and out; operation toggles (DynamoDB, versioned, audited); the team-link table; the structural allowlist test; contract tests against the fake | L1, RBAC R2 |
 | **L3: read views** | `feature/phase-<n>-litellm-views` | Read Route Handlers (scoped); the `/dashboard/litellm` page with "My usage", "Team spend & budgets", "Members", "Keys" (metadata only) and "Model access" (read); provenance labels; outage states | L2, RBAC R3 |
 | **L4: lead and admin writes** | `feature/phase-<n>-litellm-writes` | Write Route Handlers: member add and remove; member budget set and reset; reset spend; enable and disable; key generate (shown once), block, unblock and delete; team model access; rate limits at team (Admin set or raise, Lead lower), member and key level, validated against the team's limits; team budget (Admin set, Lead lower); team create and link (Admin); audit records | L3 |

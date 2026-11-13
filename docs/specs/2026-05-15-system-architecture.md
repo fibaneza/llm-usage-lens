@@ -293,7 +293,7 @@ Not used: **Amazon Security Lake** — a security-operations data lake in OCSF f
 
 ## Infrastructure as Code
 
-**Dashboard hosting (decided 2026-11-09):** AWS ECS Fargate behind an imported or internal ALB, defined in a CDK app (`infra/`: InfraStack, AppStack; CollectorStack in Phase 6) — see the [Platform spec](2026-11-10-platform.md). The `bedrock-usage` table moves to the CDK InfraStack when RP lands; the SAM stack below then stops defining it, and moving the collector itself to CDK is a Phase 6 amendment.
+**Dashboard hosting (decided 2026-11-09):** AWS ECS Fargate behind an imported or internal ALB, defined in a CDK app (`infra/`: FoundationStack, DashboardServiceStack; CollectorStack in Phase 6) — see the [Platform spec](2026-11-10-platform.md). The `bedrock-usage` table moves to the CDK FoundationStack when RP lands; the SAM stack below then stops defining it, and moving the collector itself to CDK is a Phase 6 amendment.
 
 Two IaC artifacts, both deployed through the CloudFormation control plane to different accounts:
 

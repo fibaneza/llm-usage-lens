@@ -3,8 +3,8 @@
 import { App } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 
-import { AppStack } from "../lib/app-stack";
-import { InfraStack } from "../lib/infra-stack";
+import { DashboardServiceStack } from "../lib/dashboard-service-stack";
+import { FoundationStack } from "../lib/foundation-stack";
 import { parseAppInputs } from "../lib/inputs";
 
 export const ACCOUNT = "123456789012";
@@ -56,7 +56,7 @@ export function contextFor(
 
 export function synthInfra(env: "dev" | "prod" = "dev"): Template {
   const app = new App();
-  const stack = new InfraStack(app, "Infra", {
+  const stack = new FoundationStack(app, "Infra", {
     appEnv: env,
     env: { account: ACCOUNT, region: REGION },
   });
@@ -65,7 +65,7 @@ export function synthInfra(env: "dev" | "prod" = "dev"): Template {
 
 export function synthApp(mode: Mode, env: "dev" | "prod" = "dev"): Template {
   const app = new App();
-  const stack = new AppStack(app, "App", {
+  const stack = new DashboardServiceStack(app, "App", {
     inputs: parseAppInputs(contextFor(mode, env)),
     env: { account: ACCOUNT, region: REGION },
   });
