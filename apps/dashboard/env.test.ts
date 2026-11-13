@@ -356,3 +356,33 @@ describe("env.ts requires a tenant-specific Entra issuer", () => {
     expect(env.AUTH_MICROSOFT_ENTRA_ID_ISSUER).toBeUndefined();
   });
 });
+
+// Source: docs/specs/2026-11-10-platform.md — Data isolation, "Encryption key"
+// row: the container gets TOTP_KMS_KEY_ID (the CMK) and prod requires it.
+describe("env.ts TOTP_KMS_KEY_ID", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("is required when APP_ENV=prod", async () => {
+    stubBase({ NODE_ENV: "production", APP_ENV: "prod", ...ENTRA });
+    await expect(loadEnv()).rejects.toThrow(/TOTP_KMS_KEY_ID/);
+  });
+
+  it("passes in prod when set", async () => {
+    stubBase({
+      NODE_ENV: "production",
+      APP_ENV: "prod",
+      TOTP_KMS_KEY_ID: "key-id-1",
+      ...ENTRA,
+    });
+    await expect(loadEnv()).resolves.toBeDefined();
+  });
+
+  it("is optional when APP_ENV=dev", async () => {
+    stubBase({ NODE_ENV: "production", ...ENTRA });
+    await expect(loadEnv()).resolves.toBeDefined();
+  });
+});

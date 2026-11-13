@@ -221,7 +221,13 @@ describe.each(["dev", "prod"] as const)("task role (%s)", (env) => {
       ],
     );
     expect(keys).toEqual(
-      expect.arrayContaining(["SSOEXPECT#*", "SSOREF#*", "ACCT#*", "IDENT#*"]),
+      expect.arrayContaining([
+        "SETUPLINK#*",
+        "SSOEXPECT#*",
+        "SSOREF#*",
+        "ACCT#*",
+        "IDENT#*",
+      ]),
     );
   });
 });

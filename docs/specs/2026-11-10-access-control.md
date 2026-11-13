@@ -523,6 +523,7 @@ Same table `bedrock-usage`; no new GSI (new GSI1 prefixes never collide with
 | SsoReservation | `SSOEXPECT#{OID\|UPN}#{value}` | `OWNER` | — | — |
 | SsoRef | `SSOREF#{tid}#{oid}` | `OWNER` | — | — |
 | PasswordSignIn | `GOVERNANCE` | `PASSWORD_SIGNIN` | — | — |
+| SetupLink (amended 2026-11-14, R2b-2) | `SETUPLINK#{sha256(token)}` | `OWNER` | — | — |
 | PerUserApproval | `GOVERNANCE` | `PER_USER` | — | — |
 | AuditRecord | `AUDIT#{YYYY-MM-DD}` | `{timestamp}#{requestId}#{nn}` | — | — |
 
@@ -540,7 +541,7 @@ Every mutable item carries `version`. Access patterns: caller's items
 `Query PK=IDENT#{oid}`; a team's members/admins `Query GSI1` (paginated,
 Rule 20.6); bind `Query PK=PENDING#{upn}`; visibility
 `BatchGetItem`; audit by day `Query PK=AUDIT#{day}`; access review `Query
-GSI1=IDENTS`. Password sign-in `GetItem PK=LOCALUSER#{email}`; bind
+GSI1=IDENTS`. Password sign-in `GetItem PK=LOCALUSER#{email}`; setup `GetItem PK=SETUPLINK#{sha256(token)}` (holds the email and a TTL at the link expiry; only the token hash is ever stored); bind
 `GetItem` on `SSOEXPECT#OID#{oid}` and `SSOEXPECT#UPN#{upn}`. Unique usage keys use `UsageKeyClaim` in the same
 `TransactWriteItems` with `attribute_not_exists(PK)`.
 

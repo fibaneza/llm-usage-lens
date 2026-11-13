@@ -185,6 +185,13 @@ const ENTRA_USER = {
 // Contract R1 decision 3: a valid profile carries `oid` and the configured
 // `tid`; plain-object profiles get both unless the test overrides them.
 const ENTRA_TID = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
+// A stored token that went through a real sign-in carries oid, tid and
+// authMethod; parseSessionToken (T1 carry-in) rejects one that does not.
+const WELL_FORMED_IDENTITY = {
+  oid: "oid-1",
+  tid: ENTRA_TID,
+  authMethod: "entra",
+};
 function entraSignIn(profile: unknown, token: Json = { sub: "entra-user-1" }) {
   const full =
     typeof profile === "object" && profile !== null && !Array.isArray(profile)
@@ -416,6 +423,7 @@ describe("auth.ts session callback", () => {
       session: baseSession(),
       token: {
         sub: "entra-user-1",
+        ...WELL_FORMED_IDENTITY,
         roles: ["internal-admin", "internal-auditor"],
       },
     });
@@ -432,7 +440,11 @@ describe("auth.ts session callback", () => {
       "session",
     )({
       session: baseSession(),
-      token: { sub: "entra-user-1", roles: ["internal-admin"] },
+      token: {
+        sub: "entra-user-1",
+        ...WELL_FORMED_IDENTITY,
+        roles: ["internal-admin"],
+      },
     });
     expect(session).toMatchObject({
       user: { name: "Ada", email: "ada@company.com" },
@@ -440,7 +452,7 @@ describe("auth.ts session callback", () => {
     });
   });
 
-  it("exposes an empty list (never undefined) for a token that predates roles; no admin", async () => {
+  it("yields no session user for a token that predates roles (fail closed, never admin)", async () => {
     const config = await loadWithConfig({
       NODE_ENV: "development",
       ...ENTRA,
@@ -450,29 +462,32 @@ describe("auth.ts session callback", () => {
       "session",
     )({
       session: baseSession(),
-      token: { sub: "entra-user-1" },
+      token: { sub: "entra-user-1", ...WELL_FORMED_IDENTITY },
     });
-    expect(rolesOf(session)).toEqual([]);
+    expect(session.user).toBeUndefined();
   });
 
   it.each([
     ["a string", "Admin"],
     ["an object", { 0: "Admin" }],
     ["null", null],
-  ])("exposes an empty list when token.roles is %s", async (_n, roles) => {
-    const config = await loadWithConfig({
-      NODE_ENV: "development",
-      ...ENTRA,
-    });
-    const session = await callbackOf(
-      config,
-      "session",
-    )({
-      session: baseSession(),
-      token: { sub: "entra-user-1", roles },
-    });
-    expect(rolesOf(session)).toEqual([]);
-  });
+  ])(
+    "yields no session user when token.roles is %s (malformed token, fail closed)",
+    async (_n, roles) => {
+      const config = await loadWithConfig({
+        NODE_ENV: "development",
+        ...ENTRA,
+      });
+      const session = await callbackOf(
+        config,
+        "session",
+      )({
+        session: baseSession(),
+        token: { sub: "entra-user-1", ...WELL_FORMED_IDENTITY, roles },
+      });
+      expect(session.user).toBeUndefined();
+    },
+  );
 
   it("an Entra sign-in with the Admin app role yields a session with the Admin role", async () => {
     const config = await loadWithConfig({
@@ -719,6 +734,7 @@ describe("auth.ts ends a session 8 hours after sign-in, regardless of activity",
     const { jwt } = await startClock();
     const stored = (agoMs: number) => ({
       sub: "entra-user-1",
+      ...WELL_FORMED_IDENTITY,
       roles: ["internal-viewer"],
       signedInAt: SIGN_IN_AT_SECONDS - agoMs / 1000,
     });
@@ -880,6 +896,7 @@ describe("auth.ts rejects a sign-in time in the future", () => {
 
   const tokenSignedInAt = (signedInAt: number): Json => ({
     sub: "entra-user-1",
+    ...WELL_FORMED_IDENTITY,
     roles: ["internal-viewer"],
     signedInAt,
   });
@@ -925,7 +942,11 @@ describe("auth.ts rejects a sign-in time in the future", () => {
     const token = await jwt(
       entraSignIn(
         { roles: ["internal-viewer"] },
-        { sub: "entra-user-1", signedInAt: YEAR_2100_SECONDS },
+        {
+          sub: "entra-user-1",
+          ...WELL_FORMED_IDENTITY,
+          signedInAt: YEAR_2100_SECONDS,
+        },
       ),
     );
     expect(token).toMatchObject({
@@ -974,6 +995,7 @@ describe("auth.ts session update cannot change roles or the sign-in time", () =>
 
   const memberToken = (): Json => ({
     sub: "entra-user-1",
+    ...WELL_FORMED_IDENTITY,
     name: "Ada",
     email: "ada@company.com",
     roles: ["internal-viewer"],
@@ -1021,6 +1043,7 @@ describe("auth.ts session update cannot change roles or the sign-in time", () =>
     );
     expect(result).toMatchObject({
       sub: "entra-user-1",
+      ...WELL_FORMED_IDENTITY,
       name: "Ada",
       email: "ada@company.com",
     });
@@ -1077,7 +1100,11 @@ describe("auth.ts session update cannot change roles or the sign-in time", () =>
         user: { name: "Ada", email: "ada@company.com" },
         expires: "2099-01-01T00:00:00.000Z",
       },
-      token: { sub: "entra-user-1", roles: ["internal-viewer"] },
+      token: {
+        sub: "entra-user-1",
+        ...WELL_FORMED_IDENTITY,
+        roles: ["internal-viewer"],
+      },
       newSession: { user: { roles: ["internal-admin"] }, roles: ["Admin"] },
       trigger: "update",
     });

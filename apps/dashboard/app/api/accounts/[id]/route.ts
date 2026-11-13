@@ -30,7 +30,10 @@ const patchHandler = withRoute(
     revalidateAccounts();
     return jsonData(parsed);
   },
-  { requireAdmin: true },
+  {
+    requireAdmin: true,
+    denied: { action: "account.update", pattern: "/api/accounts/[id]" },
+  },
 );
 
 const deleteHandler = withRoute(
@@ -42,7 +45,10 @@ const deleteHandler = withRoute(
     revalidateAccounts();
     return jsonData(parsed);
   },
-  { requireAdmin: true },
+  {
+    requireAdmin: true,
+    denied: { action: "account.deactivate", pattern: "/api/accounts/[id]" },
+  },
 );
 
 export const PATCH = (request: Request, ctx: IdContext) =>

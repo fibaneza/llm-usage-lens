@@ -624,6 +624,13 @@ sign-in/sign-out records, security-event persistence, the app side of the
 CloudWatch audit copy and its `audit.delivery_failed` line, `requireAdmin`
 → `denied` wiring) remains, on `feature/phase-4r-2b-rbac-signin`. The tasks
 below stay open until R2b lands; Verify runs once for the whole phase.
+*Update 2026-11-14:* R2b-1 (sign-in) and R2b-2 (password users and SSO
+binding) are approved and on `main`. Still open before the phase Verify:
+register the `password` and `password-setup` providers in `auth.ts` (password
+sign-ins recorded with method `password`); pass the shared audit sequence to
+the `auth.signin.error` record; `withRoute` treats a session without
+`user.oid` as unauthenticated; one-line clarification of resolution case 6
+(pending admin-scope invite during overage).
 
 - [ ] Entities and `server-only` data access (affiliation, admin scopes, role grants, pending items, group mappings, visibility, password users with SSO reservations and references, identity links, audit); canonical usage identity in `packages/shared`; sign-in resolution and bind; atomic move; versioned writes with the audit item in the same transaction; the task-role DynamoDB policy added to the DashboardServiceStack and asserted (T19); seeds per role
 - [ ] Wire R1's security events (`auth.master.*`, `auth.signin.error`) to the audit record and the alarm (T20); the dev login rejected while Entra is configured (T7)
@@ -910,6 +917,7 @@ AUTH_MASTER_USERNAME=                 # break-glass master user; with AUTH_MASTE
 AUTH_MASTER_PASSWORD_HASH=            # Argon2id PHC string ($argon2id$…); SSM SecureString in AWS
 AUTH_MASTER_TOTP_SECRET=              # base32; required with APP_ENV=prod; SSM SecureString in AWS
 AUDIT_LOG_GROUP_NAME=                 # optional (4R.2): CloudWatch audit log group; unset → the CloudWatch copy is skipped
+TOTP_KMS_KEY_ID=                      # required when APP_ENV=prod (4R.2 R2b-2): the project CMK ARN, set by the DashboardServiceStack; encrypts password users' TOTP secrets (envelope)
 
 # AWS / DynamoDB
 AWS_REGION=ap-southeast-2

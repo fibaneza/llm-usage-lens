@@ -8,6 +8,10 @@ const ENTRA = {
   AUTH_MICROSOFT_ENTRA_ID_ISSUER:
     "https://login.microsoftonline.com/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d/v2.0",
 };
+const KMS_KEY = {
+  TOTP_KMS_KEY_ID:
+    "arn:aws:kms:ap-southeast-2:123456789012:key/00000000-0000-0000-0000-000000000000",
+};
 const MASTER = {
   AUTH_MASTER_USERNAME: "root",
   AUTH_MASTER_PASSWORD_HASH: "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA",
@@ -66,6 +70,7 @@ describe("env.ts R1 rules", () => {
     stubBase({
       NODE_ENV: "production",
       APP_ENV: "prod",
+      ...KMS_KEY,
       AUTH_ACCESS_MODE: "open",
       ...ENTRA,
     });
@@ -84,6 +89,7 @@ describe("env.ts R1 rules", () => {
     stubBase({
       NODE_ENV: "production",
       APP_ENV: "prod",
+      ...KMS_KEY,
       ...MASTER,
       AUTH_MASTER_TOTP_SECRET: "JBSWY3DPEHPK3PXP",
     });
@@ -92,17 +98,29 @@ describe("env.ts R1 rules", () => {
     stubBase({ NODE_ENV: "production", APP_ENV: "prod" });
     await expect(loadEnv()).rejects.toThrow();
     vi.unstubAllEnvs();
-    stubBase({ NODE_ENV: "production", APP_ENV: "prod", ...MASTER });
+    stubBase({
+      NODE_ENV: "production",
+      APP_ENV: "prod",
+      ...KMS_KEY,
+      ...MASTER,
+    });
     await expect(loadEnv()).rejects.toThrow();
   });
 
   it("T21: APP_ENV=prod with the master user requires TOTP", async () => {
-    stubBase({ NODE_ENV: "production", APP_ENV: "prod", ...ENTRA, ...MASTER });
+    stubBase({
+      NODE_ENV: "production",
+      APP_ENV: "prod",
+      ...KMS_KEY,
+      ...ENTRA,
+      ...MASTER,
+    });
     await expect(loadEnv()).rejects.toThrow();
     vi.unstubAllEnvs();
     stubBase({
       NODE_ENV: "production",
       APP_ENV: "prod",
+      ...KMS_KEY,
       ...ENTRA,
       ...MASTER,
       AUTH_MASTER_TOTP_SECRET: "JBSWY3DPEHPK3PXP",

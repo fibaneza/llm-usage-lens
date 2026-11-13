@@ -9,6 +9,9 @@ export const IDENTS_GSI1PK = "IDENTS";
 export const AFFILIATION_SK = "AFFILIATION";
 export const LINK_SK = "LINK";
 export const OWNER_SK = "OWNER";
+export const META_SK = "META";
+export const GOVERNANCE_PK = "GOVERNANCE";
+export const PASSWORD_SIGNIN_SK = "PASSWORD_SIGNIN";
 export const ROLEGRANTS_GSI1PK = "ROLEGRANTS";
 export const GROUPMAPS_GSI1PK = "GROUPMAPS";
 export const LOCALUSERS_GSI1PK = "LOCALUSERS";
@@ -39,3 +42,10 @@ export const auditSk = (
   requestId: string,
   index: number,
 ): string => `${timestamp}#${requestId}#${String(index).padStart(2, "0")}`;
+export const ssoExpectPk = (kind: "OID" | "UPN", value: string): string =>
+  `SSOEXPECT#${kind}#${kind === "UPN" ? value.toLowerCase() : value}`;
+export const ssoRefPk = (tid: string, oid: string): string =>
+  `SSOREF#${tid}#${oid}`;
+// Setup-link lookup by token hash (the token is the only input at setup).
+export const setupLinkPk = (tokenHash: string): string =>
+  `SETUPLINK#${tokenHash}`;

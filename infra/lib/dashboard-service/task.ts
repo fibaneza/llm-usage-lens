@@ -31,6 +31,7 @@ const WRITE_LEADING_KEYS = [
   "IDENT#*",
   "LOCALUSER#*",
   "PENDING#*",
+  "SETUPLINK#*",
   "SSOEXPECT#*",
   "SSOREF#*",
   "USAGEKEY#*",
@@ -200,6 +201,7 @@ export function addDashboardTask(
     }),
     environment: {
       DYNAMODB_TABLE_NAME: tableName,
+      TOTP_KMS_KEY_ID: keyArn,
       AWS_REGION: COLLECTOR_REGION,
       APP_ENV: inputs.env,
       AUTH_ACCESS_MODE: "enforce",

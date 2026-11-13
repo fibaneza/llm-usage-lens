@@ -21,6 +21,15 @@ vi.mock("@opentelemetry/api", async (orig) => {
   };
 });
 
+// The OpenTelemetry sink is what this suite covers; persistence is covered by
+// security-events.persistence.integration.test.ts against DynamoDB Local.
+vi.mock("@/lib/data/access/audit", () => ({
+  appendAuditRecord: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/data/access/audit-delivery", () => ({
+  deliverAuditLine: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { recordSecurityEvent } from "@/lib/auth/security-events";
 
 beforeEach(() => {
@@ -31,8 +40,8 @@ beforeEach(() => {
 afterEach(() => addEvent.mockReset());
 
 describe("recordSecurityEvent default sink", () => {
-  it("emits one event whose attributes are only action, result, oid and at", () => {
-    recordSecurityEvent({
+  it("emits one event whose attributes are only action, result, oid and at", async () => {
+    await recordSecurityEvent({
       action: "auth.master.failure",
       result: "failed",
       oid: "master:master-admin",
@@ -51,9 +60,9 @@ describe("recordSecurityEvent default sink", () => {
     });
   });
 
-  it("still emits an id-only event through its own span when no span is active", () => {
+  it("still emits an id-only event through its own span when no span is active", async () => {
     m.activeSpan = undefined;
-    recordSecurityEvent({
+    await recordSecurityEvent({
       action: "auth.master.signin",
       result: "success",
       oid: "master:x",
@@ -68,8 +77,8 @@ describe("recordSecurityEvent default sink", () => {
     expect(spanEnd).toHaveBeenCalled();
   });
 
-  it("accepts the auth.signin.error action without an oid", () => {
-    recordSecurityEvent({
+  it("accepts the auth.signin.error action without an oid", async () => {
+    await recordSecurityEvent({
       action: "auth.signin.error",
       result: "failed",
       at: "2026-11-10T10:00:00.000Z",

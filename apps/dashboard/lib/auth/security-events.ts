@@ -1,8 +1,12 @@
+import { randomUUID } from "node:crypto";
+
 import { trace } from "@opentelemetry/api";
+import type { AuditRecord } from "@llm-usage-lens/shared";
 
 // Source: docs/specs/2026-11-10-access-control.md — "Threat model" T20,
-// "Audit log". Id-only event: never the username, password, code or hash
-// (Rule 50.6). R2 wires the persistent audit record.
+// "Audit log" (security events are security records; the actor is the oid or
+// `system`; the request id is generated on the server). Id-only event: never
+// the username, password, code or hash (Rule 50.6).
 export type SecurityEvent = {
   action:
     | "auth.master.signin"
@@ -14,7 +18,7 @@ export type SecurityEvent = {
   at: string;
 };
 
-export function recordSecurityEvent(event: SecurityEvent): void {
+function emitTelemetry(event: SecurityEvent): void {
   const attributes = {
     action: event.action,
     result: event.result,
@@ -30,4 +34,38 @@ export function recordSecurityEvent(event: SecurityEvent): void {
   const span = trace.getTracer("llm-usage-lens-auth").startSpan(name);
   span.addEvent(name, attributes);
   span.end();
+}
+
+// A master sign-in whose record cannot be stored rejects, so that sign-in
+// fails; other events record the exception and continue (T20).
+export async function recordSecurityEvent(
+  event: SecurityEvent & { requestId?: string },
+): Promise<void> {
+  emitTelemetry(event);
+  const record: AuditRecord = {
+    actor: event.oid ?? "system",
+    action: event.action,
+    category: "security",
+    result: event.result,
+    target: { type: "identity", id: event.oid ?? "unknown" },
+    timestamp: event.at,
+    requestId: event.requestId ?? randomUUID(),
+  };
+  // Loaded on demand: the data layer is server-only and pulls the AWS SDK.
+  const { appendAuditRecord } = await import("@/lib/data/access/audit");
+  const { deliverAuditLine } = await import("@/lib/data/access/audit-delivery");
+  let failure: unknown;
+  try {
+    await appendAuditRecord(record);
+  } catch (error) {
+    failure = error;
+  }
+  await deliverAuditLine(record);
+  if (failure === undefined) return;
+  if (event.action === "auth.master.signin") throw failure;
+  trace
+    .getActiveSpan()
+    ?.recordException(
+      failure instanceof Error ? failure : new Error("audit write failed"),
+    );
 }

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { SpanStatusCode, trace } from "@opentelemetry/api";
 import NextAuth from "next-auth";
 import type { Provider } from "next-auth/providers";
@@ -15,6 +17,7 @@ import {
   authorizeMasterUser,
   type SignedInIdentity,
 } from "@/lib/auth/master-user";
+import { parseSessionToken } from "@/lib/auth/session-token";
 import { recordSecurityEvent } from "@/lib/auth/security-events";
 import {
   INTERNAL_ADMIN_ROLE,
@@ -180,26 +183,60 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   callbacks: {
     // Gates the routes matched by proxy.ts.
-    authorized: ({ auth }) => !!auth,
+    authorized: ({ auth }) => !!auth?.user?.oid,
     // Fail closed (Access Control spec — Threat model T1): a malformed token
     // or a failed identity upsert yields no session.
     signIn: async ({ user, account, profile }) => {
-      const identity = identityFor(account?.provider ?? "", profile, user);
+      const provider = account?.provider ?? "";
+      const identity = identityFor(provider, profile, user);
       if (!identity) return false;
+      const requestId = randomUUID();
+      const now = new Date();
       try {
         // Loaded on demand: the data layer is server-only and pulls the AWS SDK.
         const { upsertIdentity } = await import("@/lib/data/identity");
-        await upsertIdentity(identity, new Date());
+        await upsertIdentity(identity, now);
+        if (identity.authMethod === "entra") {
+          // The sync writes auth.signin.success in its own transaction (D18).
+          const claims = parseEntraProfile(profile, tenantId);
+          if (!claims) return false;
+          const { applySignInResolution } =
+            await import("@/lib/data/access/sign-in-sync");
+          await applySignInResolution({
+            identity,
+            groups: claims.groups,
+            groupsOverage: claims.groupsOverage,
+            expectedTid: tenantId,
+            requestId,
+            now,
+          });
+        } else {
+          const { recordSignIn } =
+            await import("@/lib/data/access/session-audit");
+          await recordSignIn({
+            oid: identity.oid,
+            method: identity.authMethod,
+            requestId,
+            now,
+          });
+        }
       } catch (error) {
         const span = trace.getActiveSpan();
         span?.recordException(error instanceof Error ? error : String(error));
         span?.setStatus({ code: SpanStatusCode.ERROR });
-        recordSecurityEvent({
-          action: "auth.signin.error",
-          result: "failed",
-          oid: identity.oid,
-          at: new Date().toISOString(),
-        });
+        try {
+          await recordSecurityEvent({
+            action: "auth.signin.error",
+            result: "failed",
+            oid: identity.oid,
+            at: new Date().toISOString(),
+            requestId,
+          });
+        } catch (eventError) {
+          span?.recordException(
+            eventError instanceof Error ? eventError : String(eventError),
+          );
+        }
         return false;
       }
       return true;
@@ -222,8 +259,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.roles = identity.roles;
         token.authMethod = identity.authMethod;
         token.signedInAt = nowSeconds;
-        return token;
+        return parseSessionToken(token) ? token : null;
       }
+      if (!parseSessionToken(token)) return null;
       const cap = sessionCapSeconds({
         roles: parseRoles(token.roles),
         authMethod:
@@ -233,18 +271,44 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ? token
         : null;
     },
-    session: ({ session, token }) => ({
-      ...session,
-      user: {
-        ...session.user,
-        oid: typeof token.oid === "string" ? token.oid : "",
-        tid: typeof token.tid === "string" ? token.tid : "",
-        roles: parseRoles(token.roles),
-        ...(isAuthMethod(token.authMethod)
-          ? { authMethod: token.authMethod }
-          : {}),
-      },
-    }),
+    session: ({ session, token }) => {
+      const claims = parseSessionToken(token);
+      if (!claims) return { expires: session.expires } as typeof session;
+      return {
+        ...session,
+        user: {
+          ...session.user,
+          oid: claims.oid,
+          tid: claims.tid,
+          roles: parseRoles(claims.roles),
+          authMethod: claims.authMethod,
+        },
+      };
+    },
+  },
+  events: {
+    // Best-effort: a sign-out never fails because its record could not be
+    // stored (Access Control spec - Audit log D18).
+    signOut: async (message) => {
+      try {
+        const token = "token" in message ? message.token : null;
+        if (typeof token?.oid !== "string" || token.oid === "") return;
+        const method = token.authMethod;
+        if (!isAuthMethod(method)) return;
+        const { recordSignOut } =
+          await import("@/lib/data/access/session-audit");
+        await recordSignOut({
+          oid: token.oid,
+          method,
+          requestId: randomUUID(),
+          now: new Date(),
+        });
+      } catch (error) {
+        trace
+          .getActiveSpan()
+          ?.recordException(error instanceof Error ? error : String(error));
+      }
+    },
   },
 });
 

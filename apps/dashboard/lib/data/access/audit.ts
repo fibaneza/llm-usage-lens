@@ -12,6 +12,7 @@ import type { AuditAction, AuditRecord } from "@llm-usage-lens/shared";
 
 import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 
+import { deliverAuditLine } from "./audit-delivery";
 import { auditPk, auditSk } from "./keys";
 
 // Source: docs/specs/2026-11-10-access-control.md — "Audit log" (schema,
@@ -125,19 +126,20 @@ export async function appendDeniedAudit(
     suppressedCount += 1;
     return { suppressed: true };
   }
+  const record: AuditRecord = {
+    actor: input.actor,
+    action: input.action,
+    category: "security",
+    result: "denied",
+    timestamp: now.toISOString(),
+    requestId: input.requestId,
+    code: input.code,
+    ...(input.route ? { route: input.route } : {}),
+    ...(input.target ? { target: input.target } : {}),
+    ...(input.teamId ? { teamId: input.teamId } : {}),
+  };
   try {
-    await appendAuditRecord({
-      actor: input.actor,
-      action: input.action,
-      category: "security",
-      result: "denied",
-      timestamp: now.toISOString(),
-      requestId: input.requestId,
-      code: input.code,
-      ...(input.route ? { route: input.route } : {}),
-      ...(input.target ? { target: input.target } : {}),
-      ...(input.teamId ? { teamId: input.teamId } : {}),
-    });
+    await appendAuditRecord(record);
   } catch {
     // D17: a failed denied-record write never changes the response; the
     // caller counts it on the delivery metric from this outcome.
@@ -149,5 +151,6 @@ export async function appendDeniedAudit(
     }
   }
   lastDenied.set(key, now.getTime());
+  await deliverAuditLine(record);
   return { written: true };
 }

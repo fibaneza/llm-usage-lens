@@ -37,6 +37,15 @@ vi.mock("next-auth/providers/microsoft-entra-id", () => ({
 }));
 vi.mock("@/lib/data/identity", () => ({ upsertIdentity }));
 vi.mock("@/lib/auth/security-events", () => ({ recordSecurityEvent }));
+// R2b-1 wiring (covered in auth.r2.test.ts); mocked so these R1 cases stay
+// store-free.
+vi.mock("@/lib/data/access/sign-in-sync", () => ({
+  applySignInResolution: vi.fn().mockResolvedValue({}),
+}));
+vi.mock("@/lib/data/access/session-audit", () => ({
+  recordSignIn: vi.fn().mockResolvedValue(undefined),
+  recordSignOut: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/auth/master-user", () => ({
   MASTER_USER_PROVIDER_ID: "master-user",
   authorizeMasterUser,

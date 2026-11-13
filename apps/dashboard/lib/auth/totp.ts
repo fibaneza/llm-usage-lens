@@ -54,3 +54,28 @@ export function verifyTotp(secret: string, code: string, now: Date): boolean {
   }
   return ok;
 }
+
+// The time step a code matches within the ±1 window, or null. Password users
+// store the last accepted step so a code cannot be replayed (T27).
+export function findTotpStep(
+  secret: string,
+  code: string,
+  now: Date,
+): number | null {
+  if (!/^\d{6}$/.test(code)) return null;
+  let key: Uint8Array;
+  try {
+    key = base32Decode(secret);
+  } catch {
+    return null;
+  }
+  const counter = Math.floor(now.getTime() / 1000 / STEP_SECONDS);
+  const given = Buffer.from(code);
+  let matched: number | null = null;
+  for (const delta of [-1, 0, 1]) {
+    if (counter + delta < 0) continue;
+    const expected = Buffer.from(hotp(key, counter + delta));
+    if (timingSafeEqual(expected, given)) matched = counter + delta;
+  }
+  return matched;
+}

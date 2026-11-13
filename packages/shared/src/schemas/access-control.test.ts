@@ -249,7 +249,7 @@ describe("UsageKeyClaimSchema", () => {
 
 describe("audit schemas", () => {
   it("lists every audited action", () => {
-    expect(AUDIT_ACTIONS).toHaveLength(37);
+    expect(AUDIT_ACTIONS).toHaveLength(39);
     expect(AUDIT_ACTIONS).toContain("auth.signin.success");
     expect(AUDIT_ACTIONS).toContain("auth.signout");
     expect(AUDIT_ACTIONS).toContain("affiliation.move");

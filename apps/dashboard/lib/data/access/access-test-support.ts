@@ -2,9 +2,10 @@
 // production code). Rule 60.22: tests run against DynamoDB Local, no mocks of
 // the data layer; the only injected behaviour is a client wrapper that fails a
 // chosen command so the `failed` audit path can be exercised.
+import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { vi } from "vitest";
 
-import { putRaw } from "@/test/test-support";
+import { TEST_TABLE_NAME, putRaw, testDoc } from "@/test/test-support";
 
 import {
   adminScopeSk,
@@ -142,4 +143,21 @@ export async function faultyDynamodb() {
       });
     },
   };
+}
+
+// Whole-table dump as one string, for "never stored" assertions (T24, T27).
+export async function dumpTable(): Promise<string> {
+  const items: unknown[] = [];
+  let startKey: Record<string, unknown> | undefined;
+  do {
+    const page = await testDoc().send(
+      new ScanCommand({
+        TableName: TEST_TABLE_NAME,
+        ExclusiveStartKey: startKey,
+      }),
+    );
+    items.push(...(page.Items ?? []));
+    startKey = page.LastEvaluatedKey;
+  } while (startKey);
+  return JSON.stringify(items);
 }

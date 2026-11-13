@@ -13,7 +13,6 @@ import {
   auditPk,
   auditSk,
   groupMapPk,
-  identPk,
   localUserPk,
   membersGsi1pk,
   pendingPk,
@@ -36,10 +35,7 @@ describe("access-control key builders", () => {
     expect(LOCALUSERS_GSI1PK).toBe("LOCALUSERS");
   });
 
-  it("builds identity, group mapping and usage key partition keys", () => {
-    expect(identPk("00000000-0000-4000-8000-000000000001")).toBe(
-      "IDENT#00000000-0000-4000-8000-000000000001",
-    );
+  it("builds group mapping and usage key partition keys", () => {
     expect(groupMapPk("g-1")).toBe("GROUPMAP#g-1");
     expect(usageKeyPk("jane@example.com")).toBe("USAGEKEY#jane@example.com");
   });

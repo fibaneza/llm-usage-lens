@@ -99,7 +99,9 @@ function makeDeps() {
     deps: {
       now: () => now,
       lockout,
-      recordEvent: (e: Record<string, unknown>) => events.push(e),
+      recordEvent: async (e: Record<string, unknown>) => {
+        events.push(e);
+      },
     },
     events,
     lockout,

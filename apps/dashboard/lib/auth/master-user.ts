@@ -39,7 +39,7 @@ export type MasterUserDeps = {
     ) => Promise<{ allowed: boolean; lockedNow: boolean }>;
     reset: (oid: string) => Promise<void>;
   };
-  recordEvent: (event: SecurityEvent) => void;
+  recordEvent: (event: SecurityEvent) => Promise<void>;
 };
 
 const CredentialsSchema = z.object({
@@ -72,24 +72,38 @@ export async function authorizeMasterUser(
       ? { now: deps.now, lockout: deps.lockout, recordEvent: deps.recordEvent }
       : { ...(await defaultDeps()), ...deps };
   const oid = `master:${config.username.toLowerCase()}`;
-  const emit = (action: SecurityEvent["action"]) =>
+  const emit = (action: SecurityEvent["action"]): Promise<void> =>
     d.recordEvent({
       action,
       result: action === "auth.master.signin" ? "success" : "failed",
       oid,
       at: d.now().toISOString(),
     });
+  // A failure record that cannot be stored never changes the generic null.
+  const emitFailure = async (
+    action: SecurityEvent["action"],
+  ): Promise<void> => {
+    try {
+      await emit(action);
+    } catch (error) {
+      trace
+        .getActiveSpan()
+        ?.recordException(
+          error instanceof Error ? error : new Error("security event failed"),
+        );
+    }
+  };
 
   const parsed = CredentialsSchema.safeParse(credentials);
   if (!parsed.success) {
-    emit("auth.master.failure");
+    await emitFailure("auth.master.failure");
     return null;
   }
   const { username, password, totp } = parsed.data;
 
   const reservation = await d.lockout.reserve(oid, d.now());
   if (!reservation.allowed) {
-    emit("auth.master.lockout");
+    await emitFailure("auth.master.lockout");
     return null;
   }
 
@@ -120,12 +134,23 @@ export async function authorizeMasterUser(
     : true;
 
   if (!(userOk && passwordOk && totpOk)) {
-    emit(reservation.lockedNow ? "auth.master.lockout" : "auth.master.failure");
+    await emitFailure(
+      reservation.lockedNow ? "auth.master.lockout" : "auth.master.failure",
+    );
     return null;
   }
 
   await d.lockout.reset(oid);
-  emit("auth.master.signin");
+  try {
+    await emit("auth.master.signin");
+  } catch (error) {
+    trace
+      .getActiveSpan()
+      ?.recordException(
+        error instanceof Error ? error : new Error("security event failed"),
+      );
+    return null;
+  }
   return {
     oid,
     tid: "master",

@@ -16,7 +16,7 @@ declare module "next-auth" {
     oid?: string;
     tid?: string;
     roles?: string[];
-    authMethod?: "entra" | "master" | "local";
+    authMethod?: "entra" | "master" | "local" | "password";
   }
 }
 

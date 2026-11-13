@@ -12,6 +12,7 @@ import type {
 import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 
 import { appendAuditRecord, auditPutItem } from "./audit";
+import { deliverAuditLine } from "./audit-delivery";
 import type { TransactItem } from "./audit";
 import type { AccessErrorCode, AuditContext } from "./result";
 
@@ -70,15 +71,14 @@ export async function commitAudited(args: {
 }): Promise<CommitResult> {
   const { items, audit, ctx, conflictCodes = {} } = args;
   try {
+    const record = buildRecord(audit, ctx, "success");
     await getDocumentClient().send(
       new TransactWriteCommand({
-        TransactItems: [
-          ...items,
-          auditPutItem(buildRecord(audit, ctx, "success"), ctx.sequence.next),
-        ],
+        TransactItems: [...items, auditPutItem(record, ctx.sequence.next)],
       }),
     );
     ctx.sequence.next += 1;
+    await deliverAuditLine(record);
     return { ok: true };
   } catch (error) {
     if (error instanceof TransactionCanceledException) {
@@ -90,11 +90,10 @@ export async function commitAudited(args: {
       }
     }
     try {
-      await appendAuditRecord(
-        buildRecord(audit, ctx, "failed"),
-        ctx.sequence.next,
-      );
+      const failed = buildRecord(audit, ctx, "failed");
+      await appendAuditRecord(failed, ctx.sequence.next);
       ctx.sequence.next += 1;
+      await deliverAuditLine(failed);
     } catch (auditError) {
       throw new AggregateError(
         [error, auditError],

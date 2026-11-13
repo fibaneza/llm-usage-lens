@@ -27,7 +27,6 @@ export const LOCALUSERS_GSI1PK = "LOCALUSERS";
 
 const scopeTag = (t: ScopeType): string => (t === "team" ? "TEAM" : "DEPT");
 
-export const identPk = (oid: string): string => `IDENT#${oid}`;
 export const adminScopeSk = (t: ScopeType, id: string): string =>
   `ADMINSCOPE#${scopeTag(t)}#${id}`;
 export const membersGsi1pk = (teamId: string): string =>

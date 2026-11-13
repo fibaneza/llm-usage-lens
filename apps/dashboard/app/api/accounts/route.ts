@@ -35,7 +35,10 @@ const createHandler = withRoute(
       throw error;
     }
   },
-  { requireAdmin: true },
+  {
+    requireAdmin: true,
+    denied: { action: "account.create", pattern: "/api/accounts" },
+  },
 );
 
 export const POST = (request: Request) =>

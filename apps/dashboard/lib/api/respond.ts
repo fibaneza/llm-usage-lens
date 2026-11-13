@@ -1,7 +1,9 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import { SpanStatusCode, trace } from "@opentelemetry/api";
-import type { ApiErrorCode } from "@llm-usage-lens/shared";
+import type { ApiErrorCode, AuditAction } from "@llm-usage-lens/shared";
 import { ZodError } from "zod";
 import type { ZodType, z } from "zod";
 
@@ -139,6 +141,38 @@ function isSameOrigin(request: Request): boolean {
 
 const tracer = trace.getTracer("bedrock-usage-dashboard");
 
+export type RouteOptions = {
+  requireAdmin?: boolean;
+  // The operation and fixed route pattern a `requireAdmin` refusal records
+  // (Access Control spec - Audit log D17, T22); never the raw path.
+  denied?: { action: AuditAction; pattern: string };
+};
+
+// Best-effort: a failed record write never changes the response (D17). The
+// request id is generated here, never taken from a header.
+async function recordDeniedWrite(
+  request: Request,
+  actor: string,
+  denied: NonNullable<RouteOptions["denied"]>,
+): Promise<void> {
+  try {
+    const { appendDeniedAudit } = await import("@/lib/data/access/audit");
+    await appendDeniedAudit({
+      actor,
+      action: denied.action,
+      requestId: randomUUID(),
+      code: "FORBIDDEN",
+      route: { method: request.method, pattern: denied.pattern },
+    });
+  } catch (error) {
+    trace
+      .getActiveSpan()
+      ?.recordException(
+        error instanceof Error ? error : new Error("denied audit failed"),
+      );
+  }
+}
+
 // Each request runs in its own span so recordException always lands (Rule
 // 60.17). The span name is fixed and carries no attributes: nothing from env,
 // headers, cookies or the query string reaches telemetry (Rule 50.6).
@@ -146,7 +180,7 @@ const tracer = trace.getTracer("bedrock-usage-dashboard");
 // check, so the role is enforced before the handler parses input or reads data.
 export function withRoute(
   handler: (request: Request, ctx: RouteContext) => Promise<Response>,
-  options: { requireAdmin?: boolean } = {},
+  options: RouteOptions = {},
 ) {
   return (request: Request, ctx: RouteContext): Promise<Response> =>
     tracer.startActiveSpan("api.route", async (span) => {
@@ -156,6 +190,13 @@ export function withRoute(
           return jsonError(401, "UNAUTHORIZED", "Not authenticated");
         }
         if (options.requireAdmin && !hasAdminRole(session)) {
+          if (options.denied) {
+            await recordDeniedWrite(
+              request,
+              session.user?.oid ?? "unknown",
+              options.denied,
+            );
+          }
           return jsonError(
             403,
             "FORBIDDEN",

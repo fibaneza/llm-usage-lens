@@ -109,6 +109,32 @@ export const LocalUserSchema = z.object({
   updatedAt: Iso8601Schema,
 });
 
+export const PasswordUserStatusSchema = z.enum([
+  "enabled",
+  "disabled",
+  "sso-bound",
+]);
+
+// Read model of a password user (Access Control spec — Password users): never
+// a hash, TOTP secret or setup token.
+export const PasswordUserSchema = z.object({
+  email: z.email(),
+  oid: IdSchema,
+  tid: z.literal("local"),
+  displayName: z.string().min(1),
+  status: PasswordUserStatusSchema,
+  version: VersionSchema,
+  sso: z.object({
+    expectedUpn: z.string().min(1),
+    expectedOid: IdSchema.optional(),
+    tid: IdSchema.optional(),
+    oid: IdSchema.optional(),
+    boundAt: Iso8601Schema.optional(),
+  }),
+  setup: z.object({ expiresAt: Iso8601Schema }).optional(),
+  ssoConflict: z.boolean().optional(),
+});
+
 export const IdentityLinkSchema = z
   .object({
     oid: IdSchema,
@@ -158,6 +184,8 @@ export const AUDIT_ACTIONS = [
   "localuser.create",
   "localuser.update",
   "localuser.delete",
+  "identity.bind.sso",
+  "governance.passwordsignin.update",
   "account.create",
   "account.update",
   "account.deactivate",
@@ -265,6 +293,7 @@ const SNAPSHOT_KEYS: ReadonlySet<string> = new Set([
   "aliases",
   "accountId",
   "active",
+  "method",
 ]);
 
 export function sanitizeAuditSnapshot(
@@ -297,6 +326,7 @@ export type GrantableRole = z.infer<typeof GrantableRoleSchema>;
 export type RoleGrant = z.infer<typeof RoleGrantSchema>;
 export type TeamVisibility = z.infer<typeof TeamVisibilitySchema>;
 export type DepartmentVisibility = z.infer<typeof DepartmentVisibilitySchema>;
+export type PasswordUser = z.infer<typeof PasswordUserSchema>;
 export type LocalUser = z.infer<typeof LocalUserSchema>;
 export type IdentityLink = z.infer<typeof IdentityLinkSchema>;
 export type UsageKeyClaim = z.infer<typeof UsageKeyClaimSchema>;

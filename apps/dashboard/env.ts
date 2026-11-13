@@ -39,6 +39,7 @@ export const env = createEnv({
       .min(16)
       .regex(/^[A-Z2-7]+=*$/)
       .optional(),
+    TOTP_KMS_KEY_ID: z.string().min(1).optional(),
     AUDIT_LOG_GROUP_NAME: z.string().min(1).optional(),
     NODE_ENV: z.enum(["development", "test", "production"]).optional(),
     NEXT_PHASE: z.string().optional(),
@@ -72,6 +73,13 @@ export const env = createEnv({
                 "AUTH_SECRET is the .env.example placeholder: generate a real secret outside local development.",
             });
           }
+          if (value.APP_ENV === "prod" && !value.TOTP_KMS_KEY_ID) {
+            ctx.addIssue({
+              code: "custom",
+              path: ["TOTP_KMS_KEY_ID"],
+              message: "TOTP_KMS_KEY_ID is required when APP_ENV=prod.",
+            });
+          }
           try {
             resolveSignInProviders({
               nodeEnv: value.NODE_ENV,
@@ -91,6 +99,12 @@ export const env = createEnv({
           }
         })
       : z.object(shape),
+  // Names the failing variables (never their values) so a misconfigured deploy
+  // is diagnosable from the thrown error alone.
+  onValidationError: (issues) => {
+    const names = issues.map((i) => i.path?.join(".") || i.message);
+    throw new Error(`Invalid environment variables: ${names.join(", ")}`);
+  },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
 });
