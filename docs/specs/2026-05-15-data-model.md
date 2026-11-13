@@ -33,7 +33,7 @@ All data is stored in a single DynamoDB table (`bedrock-usage`) with one GSI. Th
 | DailyRollup | `ACCT#{accountId}` | `DAILY#{YYYY-MM-DD}` | `DATE#{YYYY-MM-DD}` | `ACCT#{accountId}` |
 | SyncStatus | `SYSTEM` | `SYNC#LATEST` | — | — |
 
-Access-control entities (identity, member affiliation, admin scopes, role grants, group mappings, visibility, local users, audit records, the per-user approval) share this table under new key prefixes — see [Access Control spec](2026-11-10-access-control.md) — *Data model additions* (decided 2026-11-10). `byUser` keys are canonical usage identities (the lower-cased email after the SSO prefix; same spec — *Canonical usage identity*), canonicalised on read until the Phase 6 collector writes them. LiteLLM entities (connection, operation toggles, team links and their claims, gateway configuration, key requests) use the `LITELLM#` prefix — see [LiteLLM spec](2026-11-10-litellm.md) — *Data model additions*; no service key or key value is ever stored.
+Access-control entities (identity, member affiliation, admin scopes, role grants, group mappings, visibility, password users and their SSO reservations and references, audit records, the per-user approval, the password sign-in switch) share this table under new key prefixes — see [Access Control spec](2026-11-10-access-control.md) — *Data model additions* (decided 2026-11-10). `byUser` keys are canonical usage identities (the lower-cased email after the SSO prefix; same spec — *Canonical usage identity*), canonicalised on read until the Phase 6 collector writes them. LiteLLM entities (connection, operation toggles, team links and their claims, gateway configuration, key requests) use the `LITELLM#` prefix — see [LiteLLM spec](2026-11-10-litellm.md) — *Data model additions*; no service key or key value is ever stored.
 
 ## Entity: AccountMeta
 
@@ -345,7 +345,7 @@ All routes live under `apps/dashboard/app/api/`, require an Auth.js session, val
 | `/api/accounts/[id]` | PATCH | `UpdateAccountPatchSchema` | Settings CRUD (`Admin`) |
 | `/api/accounts/[id]` | DELETE | — | Soft-deactivate (`active: false`; `Admin`) |
 
-The access-control routes (`/api/health`, `/api/me`, members, admins, moves, role grants, group mappings, visibility, identities, local users, the per-user approval, audit, access review) and their permissions are listed in [Access Control spec](2026-11-10-access-control.md) — *API routes*. The LiteLLM routes (`/api/litellm/**`, `/api/finance/statement`) and the error codes `OPERATION_DISABLED` (403), `OPERATION_UNAVAILABLE` (403), `LITELLM_UNAVAILABLE` (503) and `PRIVILEGED_TARGET` (409) are in the [LiteLLM spec](2026-11-10-litellm.md) — *API routes*. `Admin` above reads `internal-admin` from Phase 4R.
+The access-control routes (`/api/health`, `/api/me`, members, admins, moves, role grants, group mappings, visibility, identities, password users, the password sign-in switch, the per-user approval, audit, access review) and their permissions are listed in [Access Control spec](2026-11-10-access-control.md) — *API routes*. The LiteLLM routes (`/api/litellm/**`, `/api/finance/statement`) and the error codes `OPERATION_DISABLED` (403), `OPERATION_UNAVAILABLE` (403), `LITELLM_UNAVAILABLE` (503) and `PRIVILEGED_TARGET` (409) are in the [LiteLLM spec](2026-11-10-litellm.md) — *API routes*. `Admin` above reads `internal-admin` from Phase 4R.
 
 ## Design Decisions
 

@@ -9,7 +9,8 @@ Items marked **(user)** need the user's confirmation before production.
 ## Overview
 
 Access is role-based and scope-limited, with identity from Microsoft Entra
-ID. Every decision is enforced on the server by one policy module, and every
+ID or, until SSO is approved, from admin-managed password users (*Pre-SSO
+mode*, amended 2026-11-14). Every decision is enforced on the server by one policy module, and every
 change is audited. The model follows LiteLLM's user-management hierarchy,
 role-based access, JWT team mapping and inheritance (docs.litellm.ai —
 *User Management Hierarchy*, *Role-based Access Control*, *JWT-based Auth*,
@@ -26,8 +27,8 @@ certification claim).
 
 `APP_ENV` (`dev` | `prod`) is a required, Zod-validated variable in `env.ts`
 and the **only** switch for environment-dependent controls: every rule in
-this spec stated "in `prod`" keys on `APP_ENV=prod` (Entra required, TOTP
-for the master user, the per-user approval gate, `AUTH_ACCESS_MODE=enforce`
+this spec stated "in `prod`" keys on `APP_ENV=prod` (Entra or the master
+user required — *Pre-SSO mode*; TOTP for the master user, the per-user approval gate, `AUTH_ACCESS_MODE=enforce`
 only, the legacy `Admin` alias removed). A deployed `dev` task runs `next
 start` and therefore has `NODE_ENV=production`; `NODE_ENV` checks stay as an
 additional floor for the dev-only login, never as the environment switch.
@@ -57,7 +58,8 @@ Values are lower-kebab-case, case-sensitive, and live only in
 | member (no role value) | A plain affiliation to one team | team role `user` | UI or SSO group mapping | The team, as visibility allows | Nothing |
 
 **Configuration** (only `internal-admin`): group mappings, account CRUD
-(Phase 4.9), the per-user approval, local users, the LiteLLM gateway and
+(Phase 4.9), the per-user approval, password users and the password
+sign-in switch, the LiteLLM gateway and
 edition, audit retention, identity links.
 
 - **Union.** Effective permission = global role grants ∪ admin-scope grants,
@@ -88,7 +90,7 @@ Zod-parses `oid`, `tid`, `roles` and `groups` into the JWT and
 `session.user`. **Fail closed:** a missing `oid`, a foreign `tid`, or a
 `roles`/`groups` claim that is present but not an array means no session.
 The **identity record** `oid → { tid, email, upn, displayName, lastSignInAt,
-lastSeenRoles[] }` (lower-cased `email`/`upn`) is upserted at each sign-in. **Amended R1 (2026-11-10):** the item also carries `authMethod` (`entra` | `master` | `local`) and `version`; the master user's item carries the lockout fields; an identity upsert that fails fails the sign-in (fail closed).
+lastSeenRoles[] }` (lower-cased `email`/`upn`) is upserted at each sign-in. **Amended R1 (2026-11-10):** the item also carries `authMethod` (`entra` | `master` | `local` | `password`, `password` amended 2026-11-14) and `version`; the master user's item carries the lockout fields; an identity upsert that fails fails the sign-in (fail closed).
 
 **Entra configuration** (user action; steps in `docs/guides/auth-setup.md`):
 "Assignment required?" = Yes; security groups assigned to the app roles
@@ -140,9 +142,10 @@ per request and apply on the next request.
 
 | Method | Where | Role |
 |---|---|---|
-| Entra ID (OIDC) | All environments; **required in `prod`** | From the token |
-| **Master user** (username + password) | All environments; the only password login in `prod` | Always `internal-admin` |
-| Local users (no password) | **Outside production and only while Entra is not configured** | As set in Settings; the built-in default local identity is `internal-admin` |
+| Entra ID (OIDC) | All environments; **required in `prod` once SSO is approved** — until then `prod` runs in *Pre-SSO mode* | From the token |
+| **Master user** (username + password) | All environments; **required** in Pre-SSO `prod` | Always `internal-admin` |
+| **Password users** (email + password, amended 2026-11-14) | All environments, while password sign-in is on (*Password users*) | In-app role grants, member team and admin scopes, set in Settings |
+| Dev login (no password) | **Outside production and only while Entra is not configured** | Chosen at sign-in; the default is `internal-admin` |
 
 **Master user** (break-glass and first-time setup; amends System
 Architecture *Sign-in providers*):
@@ -164,15 +167,111 @@ Architecture *Sign-in providers*):
   review.
 - **Custody:** sealed with two-person control, rotated after every use and
   at least yearly, test sign-in quarterly (`auth-setup.md` — *Master user*).
+  In Pre-SSO mode it stays break-glass: it creates the first password
+  `internal-admin`, is rotated and sealed again, and is not the daily admin
+  login.
 
-**Local users.** An `internal-admin` adds users and sets their roles in
-Settings (`/api/local-users`, audited; the last local `internal-admin` is
-protected, `409`). Each gets a deterministic fake `oid` and placeholder
-`tid`. While Entra is configured the section is hidden, `/api/local-users`
-returns `404` and stored local users are ignored. **The dev-only login is
-rejected by env validation when Entra is configured** (amending *Sign-in
-providers*, which allowed both outside production). Production fail-closed
-checks are unchanged; no production bypass exists (Rule 70.11).
+**Dev login.** Outside production and only while Entra is not configured, a
+no-password login offers a role choice (R1). **It is rejected by env
+validation when Entra is configured** (amending *Sign-in providers*, which
+allowed both outside production). Production fail-closed checks are
+unchanged; no production bypass exists (Rule 70.11).
+
+### Pre-SSO mode
+
+Amended 2026-11-14 (user, D19): setting up SSO needs company approval and
+governance, so `prod` may run **without Entra** until it is approved. Env
+validation accepts `APP_ENV=prod` with the Entra variables unset only when
+the master user is configured (with TOTP); everyone else signs in as a
+password user. Turning SSO on later is configuration only: the two Entra
+CDK inputs and the client-secret parameter, then a redeploy (Platform —
+*Inputs*). From then on the rules in *Identity, SSO mapping and defaults*
+apply and password users move to Entra through *SSO reference and binding*.
+
+### Password users
+
+Amended 2026-11-14 (user, D9 superseded by D20; storage D21). They replace
+v1's dev-only stored local users.
+
+- **Accounts.** Only an `internal-admin` creates, disables, re-enables,
+  resets or deletes a password user (`/api/password-users`, audited). The
+  admin enters the work email (lower-cased; it is also the person's
+  canonical usage identity, *Canonical usage identity*), a display name and,
+  optionally, the SSO reference below. The email must not be another
+  identity's email, usage identity or alias (`409`). Global roles are in-app
+  role grants (D15); the member team and admin scopes are ordinary UI-sourced
+  items under the user's identity, managed as for Entra users (*Permission
+  matrix*). The last enabled password `internal-admin` is protected (`409`)
+  while Entra is not configured.
+- **Identity.** Each password user gets an identity `oid` `local:<uuid>`
+  (random, namespaced; never collides with Entra or `master:`), `tid`
+  `local`, and `authMethod: password`.
+- **Setup (D22).** Creating or resetting a user returns a **one-time setup
+  link** in exactly one response (`no-store`; never stored or shown again):
+  `https://<host>/account/setup#<token>`, a 32-byte random token in the URL
+  fragment so it never reaches access logs. Only its SHA-256 hash and expiry
+  (72 h) are stored; it is single-use, and a reset or delete invalidates it.
+  The setup page posts the token to the Auth.js **`password-setup`**
+  credentials provider (no new unauthenticated Route Handler), which sets
+  the password, enrols TOTP when required and starts a session. An unknown,
+  used or expired token gives one generic error.
+- **Passwords.** Argon2id hash only (the master user's parameters), never
+  returned by any API or logged. 12–128 characters, no composition rules,
+  rejected when in a bundled common-password list; **no periodic rotation**
+  (NIST SP 800-63B). A signed-in password user may change their own
+  password with the current one (and TOTP when enrolled); a forgotten
+  password is an admin reset (no self-service reset: there is no email
+  service).
+- **TOTP (D23).** **Required** when the user holds any global role other
+  than `internal-viewer` or any admin scope; optional otherwise. A grant
+  that makes it required takes effect at the next sign-in, which requires
+  enrolment before a session is issued. The secret is envelope-encrypted
+  with a CMK data key before it is stored and never returned; the last used
+  time step is stored and a reused code is refused.
+- **Sign-in.** Email + password (+ TOTP) through the Auth.js `password`
+  credentials provider. Per-user lockout as for the master user (5 failures
+  → 15 minutes, atomic `ADD`, shared by every task); an unknown email runs
+  the same Argon2id work against a dummy hash and returns the same generic
+  error. Session caps as for Entra users (8 h; 4 h with `internal-admin` or
+  `internal-org-admin`). Disabled, deleted, locked and `sso-bound` users get
+  the same generic error.
+- **Alongside Entra (D24).** A `GOVERNANCE`/`PASSWORD_SIGNIN` switch
+  (`internal-admin`, audited, versioned) turns password sign-in off for
+  everyone. It is on by default, so that, once Entra is configured, users
+  not yet bound keep working while they move; the access review flags every
+  enabled password user, and turning the switch off once everyone is bound
+  is a runbook step. It cannot be turned off while Entra is not configured.
+
+### SSO reference and binding
+
+Each password user's record carries the person's **future Entra identity**,
+so enabling SSO converts accounts in place (user, 2026-11-14).
+
+- **Stored:** `sso.expectedUpn` (defaults to the email), optional
+  `sso.expectedOid` (the person's Entra object id, copied from Entra by the
+  admin — the stronger match), and, once bound, `sso.tid`, `sso.oid` and
+  `sso.boundAt`. Each expected value is reserved by an `SsoReservation` item
+  and each binding by an `SsoRef` item (*Data model additions*), written in
+  the same transaction with `attribute_not_exists(PK)`, so one Entra
+  identity can never attach to two people.
+- **Bind (D25)** at an Entra sign-in when `tid` is the configured tenant and
+  either the token's `oid` equals a reserved `expectedOid`, or, with no
+  `expectedOid` set, `preferred_username` equals a reserved `expectedUpn`
+  case-insensitively. The `email` claim and guest UPNs (`#EXT#`) never
+  match (T2). **One `TransactWriteItems`** moves every item that references
+  the `local:` identity (member affiliation, admin scopes, role grants,
+  identity link, usage-key claims) to the Entra `oid`, writes the `SsoRef`,
+  deletes the reservations, sets the password user's `status: sso-bound`
+  and writes one `identity.bind.sso` audit record (actor `system`, with both
+  ids). A person whose items would not fit one transaction, or whose Entra
+  `oid` already owns items, is **not** merged: the Entra sign-in proceeds as
+  a separate identity and Settings flags the conflict for an
+  `internal-admin` to resolve.
+- **After binding** the password is refused for that user and Entra is
+  their only sign-in; their dashboards, budget and spend continue under the
+  same email. Roles then follow *Identity, SSO mapping and defaults*: the
+  token's app roles plus the migrated in-app grants, with SSO precedence for
+  team items.
 
 ## Visibility and inheritance
 
@@ -352,13 +451,14 @@ remains). The export is audited.
   item 7).
 - **Sign-ins and sign-outs (D18, (user) 2026-11-14):** every successful
   sign-in writes `auth.signin.success` and every explicit sign-out
-  `auth.signout`, with the method (`entra`, `master`, `local`) and no
+  `auth.signout`, with the method (`entra`, `master`, `password`, `local`) and no
   claims. They are not security events. Master-user sign-ins also keep their
   `auth.master.*` security records; session expiry is not an action and is
   not recorded.
 - **Covered:** role grants, group mappings, affiliations (add, remove, move,
-  bind), admin scopes, visibility, identity links, local users, accounts,
-  the approval, sign-ins and sign-outs, denied write attempts, and the
+  bind), admin scopes, visibility, identity links, password users (create, setup,
+  reset, TOTP reset, disable, delete, own password change, bind), the
+  password sign-in switch, accounts, the approval, sign-ins and sign-outs, denied write attempts, and the
   LiteLLM actions (LiteLLM spec — *Audit*).
 - **Atomicity:** a successful write's audit item is written **in the same
   `TransactWriteItems`** as the change, so neither exists without the
@@ -397,7 +497,10 @@ Same table `bedrock-usage`; no new GSI (new GSI1 prefixes never collide with
 | Pending item | `PENDING#{emailOrUpn}` | `AFFILIATION` or `ADMINSCOPE#…` | `MEMBERS#…` / `ADMINS#…` | `PENDING#{emailOrUpn}` |
 | GroupMapping | `GROUPMAP#{groupId}` | `META` | `GROUPMAPS` | `GROUPMAP#{groupId}` |
 | Visibility | `VIS#{TEAM\|DEPT}#{id}` | `META` | — | — |
-| LocalUser | `LOCALUSER#{email}` | `META` | `LOCALUSERS` | `LOCALUSER#{email}` |
+| PasswordUser (was LocalUser; amended 2026-11-14) | `LOCALUSER#{email}` | `META` | `LOCALUSERS` | `LOCALUSER#{email}` |
+| SsoReservation | `SSOEXPECT#{OID\|UPN}#{value}` | `OWNER` | — | — |
+| SsoRef | `SSOREF#{tid}#{oid}` | `OWNER` | — | — |
+| PasswordSignIn | `GOVERNANCE` | `PASSWORD_SIGNIN` | — | — |
 | PerUserApproval | `GOVERNANCE` | `PER_USER` | — | — |
 | AuditRecord | `AUDIT#{YYYY-MM-DD}` | `{timestamp}#{requestId}` | — | — |
 
@@ -405,7 +508,8 @@ Every mutable item carries `version`. Access patterns: caller's items
 `Query PK=IDENT#{oid}`; a team's members/admins `Query GSI1` (paginated,
 Rule 20.6); bind `Query PK=PENDING#{email}` and `PENDING#{upn}`; visibility
 `BatchGetItem`; audit by day `Query PK=AUDIT#{day}`; access review `Query
-GSI1=IDENTS`. Unique usage keys use `UsageKeyClaim` in the same
+GSI1=IDENTS`. Password sign-in `GetItem PK=LOCALUSER#{email}`; bind
+`GetItem` on `SSOEXPECT#OID#{oid}` and `SSOEXPECT#UPN#{upn}`. Unique usage keys use `UsageKeyClaim` in the same
 `TransactWriteItems` with `attribute_not_exists(PK)`.
 
 ## API routes (additions)
@@ -426,13 +530,16 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/role-grants/[oid]/[role]` | DELETE | `internal-admin` |
 | `/api/group-mappings`, `/api/group-mappings/[groupId]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`) |
 | `/api/identities`, `/api/identities/[oid]/links` | GET, PUT | `internal-admin` (GET also `internal-auditor`) |
-| `/api/local-users`, `/api/local-users/[email]` | GET, POST, PATCH, DELETE | `internal-admin`; local-login mode only (`404` otherwise) |
+| `/api/password-users`, `/api/password-users/[email]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`); POST returns the setup link once |
+| `/api/password-users/[email]/reset`, `/api/password-users/[email]/totp-reset` | POST | `internal-admin` (new setup link once; TOTP re-enrolment at next sign-in) |
+| `/api/account/password` | POST | The signed-in password user (own password; current password and TOTP required) |
+| `/api/governance/password-sign-in` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` |
 | `/api/governance/per-user-approval` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` |
 | `/api/audit`, `/api/access-review` | GET | `internal-admin`, `internal-auditor` (audited) |
 
 **Error-code registry:** `UNAUTHORIZED` (401), `FORBIDDEN` (403),
 `REAUTH_REQUIRED` (403), `BAD_REQUEST` (400), `NOT_FOUND` (404), `CONFLICT`,
-`MANAGED_BY_SSO`, `ALREADY_AFFILIATED` (409), `INTERNAL` (500), and from the
+`MANAGED_BY_SSO`, `ALREADY_AFFILIATED`, `SSO_BOUND` (409, the password user is bound to Entra; amended 2026-11-14), `WEAK_PASSWORD` (400), `INTERNAL` (500), and from the
 [LiteLLM spec](2026-11-10-litellm.md): `OPERATION_DISABLED` (403, operation
 toggle off), `OPERATION_UNAVAILABLE` (403, Enterprise-only on OSS, or any
 LiteLLM route in `open` mode), `LITELLM_UNAVAILABLE` (503, not configured,
@@ -451,8 +558,8 @@ user holds a proxy role). A new code is added here first.
 | D6 | Privacy wording | — | Proposed below — **(user)** with DPO/HR |
 | D7 | Local login role without Entra | Admin / Viewer | **`internal-admin` by default** (user, 2026-11-10) |
 | D8 | Role of an SSO user with no app role | deny / viewer | **`internal-viewer`** (user); data stays membership-gated; malformed claims fail closed |
-| D9 | Managing users without SSO | none / local users | **Local users, local-login mode only** (user) |
-| D10 | Database | DynamoDB / Aurora Serverless v2 | **DynamoDB** — key lookups, small data, invariant in keys, transactions; Aurora adds a VPC cluster, credentials, migrations, connection handling and resume latency (against shared-contracts §7 minimum resources). **Revisit** on per-request relational reporting, > ~100k identities or SQL access for finance |
+| D9 | Managing users without SSO | none / local users | **Local users, local-login mode only** (user) — **superseded by D20** (2026-11-14) |
+| D10 | Database | DynamoDB / Aurora Serverless v2 | **DynamoDB** — key lookups, small data, invariant in keys, transactions; Aurora adds a VPC cluster, credentials, migrations, connection handling and resume latency (against shared-contracts §7 minimum resources). **Revisit** on per-request relational reporting, > ~100k identities or SQL access for finance | *Re-opened 2026-11-14 for password users and the access-control data (D21).*
 | D11 | Role model | four Entra roles / global + scoped (LiteLLM) | **Global `internal-*` + scoped `internal-team-admin`** (user) |
 | D12 | Cardinality | multi-team members / single | **Member of ≤ 1 team; `internal-team-admin` on ≥ 1 scopes** (user) |
 | D13 | SSO vs UI | UI / SSO / last write | **SSO > UI > none, per item** |
@@ -461,6 +568,13 @@ user holds a proxy role). A new code is added here first.
 | D16 | Password login | none / master user | **One master user = `internal-admin`**, Argon2id, TOTP in `prod`, lockout, 1 h (user); amends *Sign-in providers* |
 | D17 | Refused write attempts | none / every rejection / authorization refusals only | **Authorization refusals only** (`403 FORBIDDEN`, out-of-scope `404`, `409 PRIVILEGED_TARGET`), recorded as `denied` security events, one per actor and action per minute per task (user, 2026-11-14) — validation errors and conflicts are noise |
 | D18 | Ordinary sign-ins | master only / all | **All sign-ins and sign-outs**, not security events (user, 2026-11-14) — who used the dashboard and when |
+| D19 | Production before SSO is approved | Entra required / master only / Pre-SSO mode | **Pre-SSO mode**: `prod` without Entra when the master user (with TOTP) is configured; everyone else uses password users; SSO later by configuration only (user, 2026-11-14) |
+| D20 | Managing users without SSO | dev-only local users / password users | **Password users in every environment**, admin-created, with the SSO reference stored for later binding (user, 2026-11-14) |
+| D21 | Where password users and credentials live | Aurora Serverless v2 / DynamoDB | **Open (user deciding, 2026-11-14).** Written here against DynamoDB (same table, key lookups per sign-in). The user accepts Aurora's resume delay and is considering moving more access-control data to Aurora, which would amend D10, the data model above and the Platform stacks |
+| D22 | First password | admin-set temporary password / one-time setup link | **One-time setup link** (72 h, single use, fragment, hash stored); the admin never knows the password (user, 2026-11-14) |
+| D23 | TOTP for password users | everyone / admin roles / none | **Required for any role above `internal-viewer` or any admin scope**, optional otherwise (user, 2026-11-14) |
+| D24 | Password sign-in once Entra is configured | stop at once / switch | **Admin switch, on by default**; bound users are always refused; access review flags enabled password users (user, 2026-11-14) |
+| D25 | Matching a password user to Entra | email claim / UPN / object id | **`expectedOid` when set, else `expectedUpn`**, tenant-checked, never the `email` claim or a guest UPN; conflicts flagged, never merged (user, 2026-11-14) |
 
 **Proposed privacy wording (D6):** "LLM Usage Lens processes the AWS
 sign-in identity and the Amazon Bedrock usage and cost attributed to it, to
@@ -482,7 +596,7 @@ organisation administrators and auditors. Usage rollups are kept for
 | T4 | Elevation: non-`internal-admin` grants a global role | Grant routes `internal-admin` only; mappings cannot target global roles | R1 schema, R4 grant matrix |
 | T5 | Elevation: default viewer reaches team data | Data only through member/admin items | R3 "no affiliation" rows |
 | T6 | Elevation: usage data grants access | `resolveScope` never reads `byUser` | R3 |
-| T7 | Elevation: local users used while Entra is configured | `404` + ignored when Entra configured; Entra required in `prod` | R1 (local login and env rejection); R2 (stored local users ignored); R4 (`/api/local-users` `404`) |
+| T7 | Elevation: the dev login used in production or while Entra is configured; a bound password user signs in with the password (amended 2026-11-14) | Env rejection of the dev login; `sso-bound` users refused; password sign-in switch (D24) | R1 (dev login and env rejection); R2 (bound user refused); R4 (switch) |
 | T8 | Elevation: ambiguous/overage groups give the wrong team | Ambiguous → none; overage → none + scopes suspended | R2 resolver table |
 | T9 | Elevation: privilege carried across a move | Move removes source team-scope admin atomically | R4 move test |
 | T10 | Tampering: UI overrides SSO-managed item | `409 MANAGED_BY_SSO` | R4 |
@@ -496,8 +610,14 @@ organisation administrators and auditors. Usage rollups are kept for
 | T18 | Repudiation: unrecorded change | Audit semantics (one record per success/failure) | R2/R4 audit tests |
 | T19 | Repudiation: audit log edited | Task role `PutItem`-only on `AUDIT#`; CloudWatch copy | R2 CDK assertions on the task-role policy |
 | T20 | Spoofing: master credential brute force or theft | Argon2id in SSM, TOTP, lockout, 1 h session, audited + alarm, custody | R1 (hash, TOTP, lockout, 1 h, one id-only security event per attempt); R2 (persistent audit record and its alarm) |
-| T21 | Misconfiguration: `open` mode, missing TOTP or missing Entra in production | Keyed on validated `APP_ENV=prod`; default `enforce`; unset `APP_ENV` fails validation | R1 env tests |
+| T21 | Misconfiguration: `open` mode, missing TOTP, or production with neither Entra nor the master user (amended 2026-11-14, D19) | Keyed on validated `APP_ENV=prod`; default `enforce`; unset `APP_ENV` fails validation; `prod` without Entra requires the master user with TOTP; CDK synth refuses neither | R1 env tests; 4R.2 env and CDK tests |
 | T22 | Repudiation: probing writes outside one's permissions leaves no trace | `denied` records (D17) with the security alarm; unchanged response and `404` parity; per-minute suppression | R2 (record type, `requireAdmin` refusals); R4 and L4 write matrices (one `denied` per refusal, none on `400`, identical bodies) |
+| T23 | Spoofing: password guessing or credential stuffing on password users | Argon2id; per-user lockout; dummy-hash work and one generic error for unknown, disabled, locked or bound users; common-password list; TOTP for admin roles; VPN-only reach | R2 (lockout, timing-equal paths, generic errors); R4 sign-in tests |
+| T24 | Spoofing: a setup link is intercepted or reused | 32-byte token in the URL fragment; only its hash stored; 72 h; single use; shown once; reset or delete invalidates; setup audited | R2 (hash only, single use, expiry, invalidation); R4 e2e setup |
+| T25 | Disclosure: an admin types the wrong email and the account sees another person's spend | Admin-only creation, audited; the email is shown at setup and in the user menu; uniqueness against identities, usage identities and aliases; access review | R2 uniqueness (`409`); R4 setup page shows the email |
+| T26 | Elevation: an Entra identity binds to someone else's password user | Tenant check; `expectedOid` or `expectedUpn` only, never the `email` claim or a guest UPN; unique reservations and `SsoRef`; conflicts flagged, never merged | R2 bind tests (foreign `tid`, `#EXT#`, `email`-only match, duplicate reservation, existing Entra items) |
+| T27 | Disclosure or replay of a password user's TOTP secret or code | Envelope-encrypted secret, never returned; last used step stored, reuse refused | R2 (stored value is ciphertext; replayed code refused) |
+| T28 | Bypass: password sign-in sidesteps Entra Conditional Access once SSO is live | Bound users refused; password sign-in switch (D24); access review flag | R2 (bound refused); R4 (switch off refuses every password user) |
 
 ## Residual risks
 
@@ -511,6 +631,12 @@ organisation administrators and auditors. Usage rollups are kept for
   10.3, allowed by a structural test.
 - The master user is a password credential in production; its controls and
   custody (above) are the mitigation.
+- **Password users are password credentials in production** (D20), possibly
+  for months before SSO. Mitigations: T23–T28, TOTP for admin roles, the
+  VPN-only reach and the D24 switch. A regular user without TOTP is protected
+  by the password alone; accepted, because they see only their own data and
+  what their team visibility allows. No self-service reset (no email
+  service): a forgotten password needs an `internal-admin`.
 - **Lockout as denial of service:** anyone on the VPN can repeatedly lock the
   master user. Mitigations: lockout per username with an alarm on every
   lockout, reach limited to the VPN, Entra `internal-admin` holders remain

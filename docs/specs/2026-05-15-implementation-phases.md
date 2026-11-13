@@ -607,15 +607,16 @@ Tag coverage per team is Phase 4.9b (deferred).
 - [x] `lib/auth` role model (global + scoped, union, `internal-viewer` default, legacy `Admin` alias, fail-closed parsing of `roles`/`groups`/`oid`/`tid`); identity record; session caps 8 h / 4 h / 1 h
 - [x] `APP_ENV` in `env.ts` with placeholders in `build:ci` and `.env.example`; master user (Argon2id, TOTP, lockout, security events); local login with role choice; "no access" page; `AUTH_ACCESS_MODE`; dev login and e2e helper for every role
 - [x] Verify: threat-model tests T1, T4, T7 (local login and env rejection), T20 (hash, TOTP, lockout, 1 h, security events), T21 pass
-- *Split (2026-11-10, R1):* the persistent audit record and alarm for master-user events land in 4R.2; stored local users (data) in 4R.2 and `/api/local-users` with its Settings section in 4R.4. R1's local login offers the four global roles.
+- *Split (2026-11-10, R1):* the persistent audit record and alarm for master-user events land in 4R.2; stored local users (data) in 4R.2 and `/api/local-users` with its Settings section in 4R.4 — *superseded 2026-11-14*: local users became password users (Access Control — *Password users*), data and sign-in in 4R.2, management in 4R.4. R1's local login offers the four global roles.
 - *Security review fixes (2026-11-11, `fix/security-review-findings`; user direction):* delivered ahead of their phases — the task role's `IDENT#*` write leading key (4R.2; Platform spec — *Ownership*), `Cache-Control: private, no-store` on every `/api/*` response (4R.3) and the write same-origin and JSON content-type checks (4R.4; Access Control spec — *Enforcement* items 4 and 6). Also: the execution role's `kms:ViaService` condition, the response security headers (Platform spec — *Runtime*), `id` path-parameter validation on the team and department detail routes (Data Model spec — *API Routes*), the `403` message naming `internal-admin`, the sign-in error recorded on the span, and `OTEL_SERVICE_NAME` read through `env.ts`.
 
 ### Phase 4R.2 — Authorization data (`feature/phase-4r-2-rbac-data`)
 
-- [ ] Entities and `server-only` data access (affiliation, admin scopes, role grants, pending items, group mappings, visibility, local users, identity links, audit); canonical usage identity in `packages/shared`; sign-in resolution and bind; atomic move; versioned writes with the audit item in the same transaction; the task-role DynamoDB policy added to the DashboardServiceStack and asserted (T19); seeds per role
-- [ ] Wire R1's security events (`auth.master.*`, `auth.signin.error`) to the audit record and the alarm (T20); stored local users ignored while Entra is configured (T7)
+- [ ] Entities and `server-only` data access (affiliation, admin scopes, role grants, pending items, group mappings, visibility, password users with SSO reservations and references, identity links, audit); canonical usage identity in `packages/shared`; sign-in resolution and bind; atomic move; versioned writes with the audit item in the same transaction; the task-role DynamoDB policy added to the DashboardServiceStack and asserted (T19); seeds per role
+- [ ] Wire R1's security events (`auth.master.*`, `auth.signin.error`) to the audit record and the alarm (T20); the dev login rejected while Entra is configured (T7)
+- [ ] Pre-SSO mode and password users (Access Control — *Pre-SSO mode*, *Password users*, *SSO reference and binding*; D19–D25; amended 2026-11-14): `resolveSignInProviders` accepts `APP_ENV=prod` without Entra when the master user with TOTP is configured; Auth.js `password` and `password-setup` credentials providers (Argon2id, common-password list, per-user lockout, dummy-hash path, TOTP enrolment and replay check, envelope-encrypted secret); bind at Entra sign-in with the one-transaction move; CDK: Entra inputs optional as a pair, no Entra secret or grant without them, synth requires Entra or `masterUsername`, `SSOEXPECT#*`/`SSOREF#*` write leading keys
 - [ ] Audit additions (Access Control — *Audit log*, D17, D18; amended 2026-11-14): `denied` result with per-minute suppression and the `DeniedSuppressed` metric; `denied` record on `requireAdmin` refusals of the existing account write routes; `auth.signin.success` and `auth.signout` for every sign-in method
-- [ ] Verify: T2, T8, T17, T18, T19, T22 (record type and `requireAdmin` refusals; response bodies unchanged) pass; integration tests against DynamoDB Local
+- [ ] Verify: T2, T7, T8, T17, T18, T19, T21, T22 (record type and `requireAdmin` refusals; response bodies unchanged), T23, T24, T26, T27, T28 pass; integration tests against DynamoDB Local
 
 ### Phase 4R.3 — Server-side scoping (`feature/phase-4r-3-rbac-scope`)
 
@@ -624,8 +625,8 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ### Phase 4R.4 — Management UI and writes (`feature/phase-4r-4-rbac-settings`)
 
-- [ ] Settings access sections (Design System — *Settings Page*); write routes with permission, origin, re-auth and `409`; structural write-route test updated
-- [ ] Verify: write matrix and T3, T9–T11, T16, T22 (one `denied` per authorization refusal, none on `400`) pass; axe clean; seeded probe per role
+- [ ] Settings access sections (Design System — *Settings Page*); write routes with permission, origin, re-auth and `409`; structural write-route test updated; **Password users** section and routes (`/api/password-users`, reset, TOTP reset, `/api/account/password`, `/api/governance/password-sign-in`); sign-in form and `/account/setup` page; auth and deployment guides (Pre-SSO setup, enabling SSO later, turning password sign-in off)
+- [ ] Verify: write matrix and T3, T9–T11, T16, T22 (one `denied` per authorization refusal, none on `400`), T7 (switch), T23, T24 (e2e setup), T25, T28 pass; axe clean; seeded probe per role
 
 ### Phase 4R.5 — UI gating and copy (`feature/phase-4r-5-rbac-ui`)
 
