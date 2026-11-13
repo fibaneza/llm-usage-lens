@@ -90,6 +90,79 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ## Collector & infrastructure
 
+### Aurora Serverless v2 for access-control data
+
+- **Status:** Deferred (decided 2026-11-14, user; Access Control — D21).
+- **What:** Move the access-control data — identities, password users and
+  their SSO reservations and references, member affiliations, admin scopes,
+  role grants, pending items, group mappings, visibility, governance
+  switches, identity links, usage-key claims, the audit log and the LiteLLM
+  admin data (team links, toggles, connection, key requests) — from the
+  DynamoDB table to Aurora Serverless v2 (PostgreSQL). Cost data (rollups,
+  `AccountMeta`, `SyncStatus`) stays in DynamoDB.
+- **Why deferred:** DynamoDB needs no cluster, credentials, migrations or
+  connection handling, costs close to nothing at this scale, and keeps
+  sign-in instant. The user accepts Aurora's resume delay; the D26 storage
+  boundary keeps the move to one layer, so it is cheap to take later.
+- **Adopt when:** SQL reporting or ad-hoc queries over people, memberships or
+  the audit log are needed; more data is to move to Aurora; relational
+  integrity is required by policy; or D10's thresholds are reached
+  (per-request relational reporting, more than about 100,000 identities, SQL
+  access for finance).
+- **Required actions** (in order; each spec change first, per Rule 00):
+  1. *Specs.* Amend Access Control D10, D21 and *Data model additions*
+     (entities become tables with unique constraints and foreign keys
+     instead of claim and reservation items; the audit TTL becomes an
+     `expires_at` column and a scheduled delete); Platform *Created
+     resources*, *Task role policy* and *Data isolation* (below); Data Model
+     (access-control entities leave the table); Rule 40 stack list (SQL
+     library such as Kysely or Drizzle, migration tool); Rule 10 (where the
+     SQL client lives: `lib/data/access/**` only); a cost note where the
+     cluster is introduced (CLAUDE.md *Cost posture*).
+  2. *Platform (FoundationStack, retained, deletion protection on).* Aurora
+     PostgreSQL Serverless v2 cluster, minimum 0 ACU with auto-pause and a
+     small maximum; DB subnet group in the imported private subnets; not
+     publicly accessible; storage, snapshots and the Performance Insights
+     key on the project CMK; automated backups and point-in-time recovery;
+     **RDS Data API** enabled; master credentials in a Secrets Manager
+     secret on the CMK.
+  3. *Isolation.* Cluster security group with **no inbound rules** (the Data
+     API needs none; if direct connections are ever used, inbound only from
+     the dashboard task security group, never from subnet CIDRs); the
+     secret's resource policy and the task role's `rds-data:*` and
+     `secretsmanager:GetSecretValue` grants limited to that cluster and
+     secret; the collector role gets no Aurora access; database roles: an
+     app role with `SELECT`/`INSERT`/`UPDATE`/`DELETE` on the access tables
+     and **`INSERT`/`SELECT` only on the audit table** (append-only, as
+     T19), and a separate migration role the app never holds.
+  4. *Schema and migrations.* DDL for every entity with the uniqueness and
+     foreign-key rules; migrations run as a deploy step (a one-off ECS task
+     with the migration role), never at app start.
+  5. *Code.* An Aurora implementation of every `lib/data/access/**` domain
+     function behind the same signatures; transactions via the Data API
+     (`BeginTransaction`/`CommitTransaction`); opaque cursors keep their
+     shape; `/api/health` must not query Aurora, so readiness checks never
+     keep the cluster awake.
+  6. *Tests.* Postgres in the devcontainer compose next to DynamoDB Local;
+     the behaviour suite (D26) runs against both implementations; CDK
+     assertions for the cluster, the empty security group and the grants.
+  7. *Data move.* A one-time script exports each record type from DynamoDB,
+     loads it into the tables, and verifies counts and checksums; cut over
+     in a maintenance window behind a server-only `ACCESS_STORE` env
+     variable; keep the DynamoDB items read-only (writes denied in the task
+     role) for a rollback window, then remove their leading keys from the
+     task role and delete the items (user action).
+  8. *Operations.* Runbook: pause and resume behaviour (about 15 s on the
+     first request after a pause), snapshot restore, secret rotation
+     (Secrets Manager; the Data API reads it per call), alarms on capacity
+     and Data API errors, and the monthly cost line.
+- **References:** [`2026-11-10-access-control.md`](specs/2026-11-10-access-control.md)
+  — *Data model additions*, *Storage boundary*, D10, D21, D26;
+  [`2026-11-10-platform.md`](specs/2026-11-10-platform.md) — *Created
+  resources*, *Task role policy*, *Data isolation*;
+  [Rule 10](../.claude/rules/10-server-only-boundary.md),
+  [Rule 40](../.claude/rules/40-style-and-stack.md).
+
 ### Multi-region collection
 
 - **Status:** Deferred (documented future enhancement).

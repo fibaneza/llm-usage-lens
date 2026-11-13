@@ -512,6 +512,30 @@ GSI1=IDENTS`. Password sign-in `GetItem PK=LOCALUSER#{email}`; bind
 `GetItem` on `SSOEXPECT#OID#{oid}` and `SSOEXPECT#UPN#{upn}`. Unique usage keys use `UsageKeyClaim` in the same
 `TransactWriteItems` with `attribute_not_exists(PK)`.
 
+**Storage boundary (D26, amended 2026-11-14).** The access-control store is
+replaceable (D21: DynamoDB now, Aurora later):
+
+1. **One layer.** Every read and write of the entities above goes through
+   domain functions in `apps/dashboard/lib/data/access/**` (for example
+   `createPasswordUser`, `bindToEntra`, `moveAffiliation`, `grantRole`,
+   `appendAudit`). Route Handlers, Server Components, `auth.ts` and the
+   policy module call only these; none of them sees a key, item shape,
+   expression or DynamoDB error type.
+2. **Operations own their transactions.** A change and its audit record are
+   committed inside one domain function (`TransactWriteItems` today, a SQL
+   transaction later); callers never assemble transactions.
+3. **Storage-neutral schemas.** The Zod schemas in `packages/shared` describe
+   people, memberships, grants and records; the key builders for the
+   prefixes above live inside the storage layer, not in `packages/shared`
+   (the collector never needs them). Cost-data keys (`ACCT#`, `DAILY#`,
+   `SYSTEM`) stay shared.
+4. **Portable ids and cursors.** Identity ids (`oid`, `local:<uuid>`,
+   `master:`) are plain strings; list functions return an opaque, signed
+   cursor, never a raw `LastEvaluatedKey`.
+5. **Behaviour tests.** Integration tests assert each domain function's
+   behaviour (results, uniqueness, atomicity, audit) against DynamoDB Local,
+   not item layouts, so the same suite can certify another implementation.
+
 ## API routes (additions)
 
 All follow Rule 10.3 and set `Cache-Control: private, no-store`.
@@ -559,7 +583,7 @@ user holds a proxy role). A new code is added here first.
 | D7 | Local login role without Entra | Admin / Viewer | **`internal-admin` by default** (user, 2026-11-10) |
 | D8 | Role of an SSO user with no app role | deny / viewer | **`internal-viewer`** (user); data stays membership-gated; malformed claims fail closed |
 | D9 | Managing users without SSO | none / local users | **Local users, local-login mode only** (user) — **superseded by D20** (2026-11-14) |
-| D10 | Database | DynamoDB / Aurora Serverless v2 | **DynamoDB** — key lookups, small data, invariant in keys, transactions; Aurora adds a VPC cluster, credentials, migrations, connection handling and resume latency (against shared-contracts §7 minimum resources). **Revisit** on per-request relational reporting, > ~100k identities or SQL access for finance | *Re-opened 2026-11-14 for password users and the access-control data (D21).*
+| D10 | Database | DynamoDB / Aurora Serverless v2 | **DynamoDB** — key lookups, small data, invariant in keys, transactions; Aurora adds a VPC cluster, credentials, migrations, connection handling and resume latency (against shared-contracts §7 minimum resources). **Revisit** on per-request relational reporting, > ~100k identities or SQL access for finance | *Re-examined 2026-11-14 (D21): DynamoDB now, Aurora later behind the D26 boundary.*
 | D11 | Role model | four Entra roles / global + scoped (LiteLLM) | **Global `internal-*` + scoped `internal-team-admin`** (user) |
 | D12 | Cardinality | multi-team members / single | **Member of ≤ 1 team; `internal-team-admin` on ≥ 1 scopes** (user) |
 | D13 | SSO vs UI | UI / SSO / last write | **SSO > UI > none, per item** |
@@ -570,7 +594,8 @@ user holds a proxy role). A new code is added here first.
 | D18 | Ordinary sign-ins | master only / all | **All sign-ins and sign-outs**, not security events (user, 2026-11-14) — who used the dashboard and when |
 | D19 | Production before SSO is approved | Entra required / master only / Pre-SSO mode | **Pre-SSO mode**: `prod` without Entra when the master user (with TOTP) is configured; everyone else uses password users; SSO later by configuration only (user, 2026-11-14) |
 | D20 | Managing users without SSO | dev-only local users / password users | **Password users in every environment**, admin-created, with the SSO reference stored for later binding (user, 2026-11-14) |
-| D21 | Where password users and credentials live | Aurora Serverless v2 / DynamoDB | **Open (user deciding, 2026-11-14).** Written here against DynamoDB (same table, key lookups per sign-in). The user accepts Aurora's resume delay and is considering moving more access-control data to Aurora, which would amend D10, the data model above and the Platform stacks |
+| D21 | Where password users and the access-control data live | Aurora Serverless v2 / DynamoDB | **DynamoDB now, Aurora later** (user, 2026-11-14): the same table as written above; the user accepts Aurora's resume delay and may move the access-control data to it. The move and every action it needs are parked in `docs/future-improvements.md` — *Aurora Serverless v2 for access-control data*; the storage boundary (D26) keeps it a one-layer change |
+| D26 | Keeping the store replaceable | DynamoDB-shaped code / storage boundary | **Storage boundary** (*Data model additions*): every access-control read and write goes through domain functions in `apps/dashboard/lib/data/access/**`; nothing outside it sees a key, item or query (user, 2026-11-14) |
 | D22 | First password | admin-set temporary password / one-time setup link | **One-time setup link** (72 h, single use, fragment, hash stored); the admin never knows the password (user, 2026-11-14) |
 | D23 | TOTP for password users | everyone / admin roles / none | **Required for any role above `internal-viewer` or any admin scope**, optional otherwise (user, 2026-11-14) |
 | D24 | Password sign-in once Entra is configured | stop at once / switch | **Admin switch, on by default**; bound users are always refused; access review flags enabled password users (user, 2026-11-14) |
@@ -618,6 +643,7 @@ organisation administrators and auditors. Usage rollups are kept for
 | T26 | Elevation: an Entra identity binds to someone else's password user | Tenant check; `expectedOid` or `expectedUpn` only, never the `email` claim or a guest UPN; unique reservations and `SsoRef`; conflicts flagged, never merged | R2 bind tests (foreign `tid`, `#EXT#`, `email`-only match, duplicate reservation, existing Entra items) |
 | T27 | Disclosure or replay of a password user's TOTP secret or code | Envelope-encrypted secret, never returned; last used step stored, reuse refused | R2 (stored value is ciphertext; replayed code refused) |
 | T28 | Bypass: password sign-in sidesteps Entra Conditional Access once SSO is live | Bound users refused; password sign-in switch (D24); access review flag | R2 (bound refused); R4 (switch off refuses every password user) |
+| T29 | Disclosure: another app, service or principal in the account reads user data (shared subnets, broad IAM) | Platform — *Data isolation*: table resource policy limited to named roles, optional VPC-endpoint condition, CMK key policy, collector limited to cost keys, no inbound path to the tasks except the ALB | 4R.2 CDK assertions (policy present, principal list exact, data-plane actions only) |
 
 ## Residual risks
 
