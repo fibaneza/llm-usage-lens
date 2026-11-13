@@ -10,18 +10,27 @@ LiteLLM master key.
 
 - The company's LiteLLM is **≥ 1.104.0** (`reset_budget`; past the
   CVE-2026-47101 `allowed_routes` fix in 1.83.14). **Confirmed 2026-11-10:**
-  the company runs the latest release. Record the exact version here when
-  known: `<version>`.
+  the company runs the latest release. **Version 1.109.0** (user,
+  2026-11-14); update this line at each upgrade.
 - At each LiteLLM upgrade, check the LiteLLM security advisories for the new
   version and note the date checked here.
 - `dev` runs LiteLLM OSS (no SSO); `prod` runs LiteLLM Enterprise with Entra
   ID SSO. The dashboard derives the edition from `APP_ENV`.
-- The internal hostname (and port) of LiteLLM, reachable from the dashboard
-  subnets over the existing VPC / Transit Gateway path.
+- The internal hostname and port of LiteLLM. It runs on ECS in the same
+  subnets as the dashboard; its security group must accept that port from
+  the dashboard task security group (the stack output `TaskSecurityGroupId`),
+  never from the subnet range. The dashboard never connects to LiteLLM's
+  Aurora PostgreSQL database.
 - **LiteLLM audit logging** (LiteLLM spec — *Audit*, LD14/LD15): the
-  operators enable LiteLLM's audit-log storage (`store_audit_logs` in the
-  proxy settings, per the LiteLLM docs; confirm the name and whether it
-  needs Enterprise on the company's version). Without it, the
+  operators enable LiteLLM's audit-log storage in the proxy `config.yaml`:
+
+  ```yaml
+  litellm_settings:
+    store_audit_logs: true
+  ```
+
+  (per the LiteLLM docs; confirm on 1.109.0 that the key sits under
+  `litellm_settings` and whether it needs Enterprise). Without it, the
   `litellm-changed-by` attribution is not stored and the dashboard's
   *LiteLLM audit* section stays empty. Record the date enabled here:
   `<date>`.
@@ -113,8 +122,9 @@ aws ssm put-parameter --name /llm-usage-lens/<env>/litellm/service-key \
 
 1. Set `LITELLM_ALLOWED_HOSTS` in the deploy configuration to the LiteLLM
    hostname only (with `:port` if not 443).
-2. If LiteLLM listens on a port other than 443, supply `litellmEgressCidrs`
-   (LiteLLM's address range) so L1's egress rule can be synthesised.
+2. Ask the LiteLLM operators to allow the LiteLLM port on LiteLLM's
+   security group from the dashboard task security group (stack output
+   `TaskSecurityGroupId`); no dashboard-side rule is needed.
 3. Deploy the DashboardServiceStack (`cdk deploy`, user action).
 4. As `internal-admin`, open **Settings → LiteLLM**: enter the `https` base
    URL, run the connection test (it must report `ok` before the URL saves),

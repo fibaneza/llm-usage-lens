@@ -649,7 +649,7 @@ Tag coverage per team is Phase 4.9b (deferred).
 - [ ] `env.ts`: `LITELLM_SERVICE_KEY` (server-only, optional; missing → "not configured") and `LITELLM_ALLOWED_HOSTS`, with placeholders in `build:ci` and `.env.example` (no real values); `edition` derived from `APP_ENV`
 - [ ] `lib/litellm/client.ts` (`server-only`): base URL from `LiteLLMConnection`, host allowlist, `https` in prod, no userinfo/query/fragment, 10 s timeout, GET retries ≤ 2, writes never retried, sanitised error mapping (`LITELLM_UNAVAILABLE`); every LiteLLM route `403` in `open` mode
 - [ ] `/api/litellm/connection` (GET/PUT, test-before-save, versioned, audited) and `/api/litellm/connection/test`; Settings → LiteLLM panel (status, URL, edition, test; no key entry)
-- [ ] DashboardServiceStack: `LITELLM_SERVICE_KEY` in the task definition's `secrets` (`valueFrom` the parameter ARN); execution role `ssm:GetParameters` on that ARN and `kms:Decrypt` on the CMK with `kms:ViaService`; nothing added to the task role; optional `litellmEgressCidrs` egress rule; synthesised and asserted, never deployed
+- [ ] DashboardServiceStack: `LITELLM_SERVICE_KEY` in the task definition's `secrets` (`valueFrom` the parameter ARN); execution role `ssm:GetParameters` on that ARN and `kms:Decrypt` on the CMK with `kms:ViaService`; nothing added to the task role; `TaskSecurityGroupId` stack output for LiteLLM's ingress rule (no egress rule; same subnets, amended 2026-11-14); the connection test probes the three templated routes (LD4); synthesised and asserted, never deployed
 - [ ] Verify: LT1 (bundle and static-output grep, response/log/span scans), LT2, LT6, LT11, LT12 pass; CDK assertions (execution role only, one ARN, no `ssm:PutParameter`, secret never in `environment`); `401` → "rotate and redeploy", no retry
 
 ### L2 — Gateway and toggles (`feature/phase-l2-litellm-gateway`)
@@ -697,7 +697,7 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ### Tasks
 
-- [ ] UI refresh — fluid workspace (user direction 2026-11-11; Design System — *Layout*). It may run before the rest of Phase 5, on `feature/ui-fluid-workspace`, at the user's direction; one branch, one squash commit
+- [x] UI refresh — fluid workspace (user direction 2026-11-11; delivered 85609ea; Design System — *Layout*). It may run before the rest of Phase 5, on `feature/ui-fluid-workspace`, at the user's direction; one branch, one squash commit
   - Remove the 1280px cap from the `/dashboard` layout; gutters 16 / 24 / 32px
   - Overview on the 12-column panel grid (16px gap; 8 + 4 column rows); the Overview KPI row five across from 1440
   - Every table on a card surface with border-token dividers and row hover
@@ -768,6 +768,7 @@ Phase 4 (all sub-phases complete).
   - Enable source links organization-wide so current and future member accounts auto-link
 - [ ] Configure the organization CloudTrail; set the observability account as CloudTrail delegated administrator (CloudTrail Lake event data store queried locally)
 - [ ] Deploy `CostExplorerReadRole` to the management account (single plain-CloudFormation stack, separate from the collector SAM stack)
+  - **Open (user, 2026-11-14; ask before Phase 6):** confirm company policy allows a role in the management account with `ce:GetCostAndUsage`. If it does not, Cost Explorer is unavailable and every day's cost becomes a list-price estimate from the price table (`costFinalized` never `true`); that is a System Architecture amendment before the collector is built
   - `ce:GetCostAndUsage`
   - Trust: `BedrockCollectorLambdaRole` in the observability account
 - [ ] Create the GitHub Actions OIDC deploy role(s) — one in the observability account (collector SAM stack) and deploy permissions in the management account (`CostExplorerReadRole` stack); used by the CD `deploy` job, no static AWS keys in CI

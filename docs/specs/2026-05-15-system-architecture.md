@@ -438,7 +438,7 @@ effect, and an estimate uses the price in effect when the tokens were used.
   collector and dashboard (Rule 20.5). One entry per base model id and
   effective moment: `modelId` (base id, the profile prefix stripped),
   `effectiveFrom` (UTC ISO timestamp, inclusive), USD per **1M** tokens for
-  `input`, `output` and, when the model has them, `cacheWrite` and
+  `input`, and when the model has them `output`, `cacheWrite` and
   `cacheRead`; `section: "geo-and-in-region"`, `region: "ap-southeast-2"`,
   `source` (URL), `recordedAt` (date read) and an optional `note`.
 - **Append-only history.** A merged entry is never edited or deleted. A price
@@ -455,6 +455,12 @@ effect, and an estimate uses the price in effect when the tokens were used.
   effect, or token types without a price (for example cache tokens on an
   entry with no cache prices), gets no estimate — today's model `cost` is
   omitted with `priceMissing: true` until Cost Explorer reports — never `0`.
+- **Models in use (user, 2026-11-14):** Anthropic Claude through the `au.`
+  geographic profiles, and Amazon Titan, all in Sydney only. Titan
+  embedding models bill input tokens only, so their entries carry `input`
+  with no `output`; Titan normalises to the `other` canonical key
+  (`packages/shared/src/models.ts`) unless a `titan` key is added (a Data
+  Model change).
 - **Not priced from this table:** Global cross-region inference (`global.`
   profiles), batch, Priority and Flex tiers, Provisioned Throughput and
   every non-model charge. Their today's cost waits for Cost Explorer.

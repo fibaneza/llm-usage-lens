@@ -469,7 +469,7 @@ remains). The export is audited.
   record in the KMS-encrypted CloudWatch Logs group
   `/llm-usage-lens/<env>/audit` (a SIEM may subscribe). An id-only
   OpenTelemetry event accompanies each record.
-- **Retention (D3, (user)):** 400 days in both stores (CloudWatch
+- **Retention (D3, confirmed 2026-11-14):** 400 days in both stores (CloudWatch
   `retentionInDays: 400`; DynamoDB TTL `expiresAt`).
 
 ## Rollout
@@ -576,7 +576,7 @@ user holds a proxy role). A new code is added here first.
 |---|---|---|---|
 | D1 | How users get team access | explicit in-app affiliation / Entra group owners via Graph / derived from `byUser` | **Explicit affiliation plus SSO group mapping** — no Graph secret, no group-ID code; usage derivation rejected. Graph group-owner membership recorded as a later option |
 | D2 | Stale windows | 14 / 30 / 90 days | **30 days pending, 90 days inactive** (quarterly review cycle) |
-| D3 | Audit retention | 1 y / 400 d / 7 y | **400 days, both stores** — **(user)** to confirm |
+| D3 | Audit retention | 1 y / 400 d / 7 y | **400 days, both stores** — confirmed (user, 2026-11-14) |
 | D4 | Session caps | 8 h for all / shorter for privilege | **8 h; 4 h with `internal-admin`/`internal-org-admin`; 1 h master user** |
 | D5 | Visibility defaults | open / least privilege | **team `visible`, user `own`, department `hidden`, cap `own`** |
 | D6 | Privacy wording | — | Proposed below — **(user)** with DPO/HR |
