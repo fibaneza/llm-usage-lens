@@ -612,6 +612,19 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 ### Phase 4R.2 — Authorization data (`feature/phase-4r-2-rbac-data`)
 
+*Split 2026-11-14 (user):* 4R.2 is delivered in three slices, each through
+the Rule 70 loop. **R2a — access data layer and audit** (storage boundary,
+affiliations with atomic move, admin scopes, pending items, role grants,
+identity links with usage-key claims, audit records incl. `denied`, signed
+cursors) and **R2c — platform** (pre-SSO inputs, Entra CDK inputs optional,
+task-role statements, table resource policy, key policy, prod warning) are
+delivered and on `main`. **R2b — sign-in** (group mappings, visibility,
+sign-in resolution and sync, pending bind, password users, SSO binding,
+sign-in/sign-out records, security-event persistence, the app side of the
+CloudWatch audit copy and its `audit.delivery_failed` line, `requireAdmin`
+→ `denied` wiring) remains, on `feature/phase-4r-2b-rbac-signin`. The tasks
+below stay open until R2b lands; Verify runs once for the whole phase.
+
 - [ ] Entities and `server-only` data access (affiliation, admin scopes, role grants, pending items, group mappings, visibility, password users with SSO reservations and references, identity links, audit); canonical usage identity in `packages/shared`; sign-in resolution and bind; atomic move; versioned writes with the audit item in the same transaction; the task-role DynamoDB policy added to the DashboardServiceStack and asserted (T19); seeds per role
 - [ ] Wire R1's security events (`auth.master.*`, `auth.signin.error`) to the audit record and the alarm (T20); the dev login rejected while Entra is configured (T7)
 - [ ] Pre-SSO mode and password users (Access Control — *Pre-SSO mode*, *Password users*, *SSO reference and binding*; D19–D25; amended 2026-11-14): `resolveSignInProviders` accepts `APP_ENV=prod` without Entra when the master user with TOTP is configured; Auth.js `password` and `password-setup` credentials providers (Argon2id, common-password list, per-user lockout, dummy-hash path, TOTP enrolment and replay check, envelope-encrypted secret); bind at Entra sign-in with the one-transaction move; CDK: Entra inputs optional as a pair, no Entra secret or grant without them, synth requires Entra or `masterUsername`, `SSOEXPECT#*`/`SSOREF#*` write leading keys
@@ -896,6 +909,7 @@ AUTH_ACCESS_MODE=                     # open | enforce; unset or invalid → enf
 AUTH_MASTER_USERNAME=                 # break-glass master user; with AUTH_MASTER_PASSWORD_HASH, or neither
 AUTH_MASTER_PASSWORD_HASH=            # Argon2id PHC string ($argon2id$…); SSM SecureString in AWS
 AUTH_MASTER_TOTP_SECRET=              # base32; required with APP_ENV=prod; SSM SecureString in AWS
+AUDIT_LOG_GROUP_NAME=                 # optional (4R.2): CloudWatch audit log group; unset → the CloudWatch copy is skipped
 
 # AWS / DynamoDB
 AWS_REGION=ap-southeast-2

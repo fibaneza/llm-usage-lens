@@ -90,7 +90,7 @@ Zod-parses `oid`, `tid`, `roles` and `groups` into the JWT and
 `session.user`. **Fail closed:** a missing `oid`, a foreign `tid`, or a
 `roles`/`groups` claim that is present but not an array means no session.
 The **identity record** `oid → { tid, email, upn, displayName, lastSignInAt,
-lastSeenRoles[] }` (lower-cased `email`/`upn`) is upserted at each sign-in. **Amended R1 (2026-11-10):** the item also carries `authMethod` (`entra` | `master` | `local` | `password`, `password` amended 2026-11-14) and `version`; the master user's item carries the lockout fields; an identity upsert that fails fails the sign-in (fail closed).
+lastSeenRoles[] }` (lower-cased `email`/`upn`) is upserted at each sign-in. **Amended R1 (2026-11-10):** the item also carries `authMethod` (`entra` | `master` | `local` | `password`, `password` amended 2026-11-14) and `version`; the master user's item carries the lockout fields; an identity upsert that fails fails the sign-in (fail closed). **Amended R2 (2026-11-12):** the item also carries the optional flags `ambiguousMembership` and `groupsOverage`, set and cleared by the sign-in resolution below.
 
 **Entra configuration** (user action; steps in `docs/guides/auth-setup.md`):
 "Assignment required?" = Yes; security groups assigned to the app roles
@@ -127,6 +127,17 @@ team-role assignment. `member` targets must be teams.
 6. **Group overage** (`_claim_names`/`hasgroups` instead of `groups`) →
    treated as case 2 plus a flag; SSO-sourced admin scopes are suspended
    until a sign-in with a full claim. v1 makes no Microsoft Graph call.
+   **Amended R2 (2026-11-12):** the flag is `groupsOverage` on the identity
+   record. During overage no scope item is written or deleted; an
+   SSO-sourced scope counts as suspended while the flag is true (one
+   predicate in `packages/shared`), which the policy module enforces from
+   4R.3. Ambiguity (case 5) sets `ambiguousMembership` the same way.
+
+**One item per scope key (amended R2, 2026-11-12).** An SSO mapping onto an
+existing UI-sourced admin scope overwrites it with `source: "sso"`; removing
+the mapping later deletes the item. A sign-in's changes, flag updates and
+their audit items are one `TransactWriteItems`; a sign-in whose
+synchronisation fails gets no session (fail closed).
 
 **Precedence: SSO-sourced > UI-sourced > none, per item** (the member
 affiliation and each admin scope). A UI change to an SSO-sourced item
@@ -329,8 +340,12 @@ and admit anyone who once used an account.
 
 **Joiner.** An admin enters a work email or UPN → a **pending** member
 affiliation (or pending admin scope). At first sign-in it is **bound to the
-`oid`** when `tid` is the configured tenant and `preferred_username` or
-`email` matches case-insensitively (audited, actor `system`). After binding,
+`oid`** when `tid` is the configured tenant and the lower-cased
+`preferred_username` (UPN) equals the pending key (audited, actor `system`).
+**Amended R2 (2026-11-12):** the `email` claim is display-only and is never a
+bind key (it is not a verified, unique attribute in Entra); a guest UPN
+(`#EXT#`) is never bound automatically; there is no fallback to `email`. Two
+pending affiliations for different teams bind neither (fail closed). After binding,
 `oid` is the key, so a UPN change or reuse cannot redirect it. An SSO member
 mapping at the same sign-in wins and the invite is discarded (audited). No
 Graph permission or client secret is needed. Pending items grant nothing.
@@ -424,10 +439,15 @@ remains). The export is audited.
 
 ## Audit log
 
-- **Schema:** actor `oid` (or `system`), `action`, `target`, `teamId?`,
+- **Schema:** actor `oid` (or `system`), `action`, `target` (omitted only on `denied`), `teamId?`,
   sanitised `before`/`after` (never secrets or key values), `result`
   (`success` | `failed` | `denied`; `denied` amended 2026-11-14),
-  `timestamp` (UTC), `requestId`.
+  `timestamp` (UTC), `requestId`, and `category` (`security` | `change`,
+  amended R2 2026-11-12): `security` for `auth.master.*`,
+  `auth.signin.error`, `role.grant`, `role.revoke` and every `denied` record
+  — the field the Platform security alarm filters on; `change` otherwise.
+  `before`/`after` keep only allowlisted keys with scalar, string-array or
+  `{type,id}` values.
 - **Semantics:** a successful write → exactly one `success`; a write that
   passed authorization but failed downstream → exactly one `failed`; a write
   refused by **authorization** → exactly one `denied` (below); any other
@@ -438,8 +458,10 @@ remains). The export is audited.
 - **Denied attempts (D17, (user) 2026-11-14):** a write refused with
   `403 FORBIDDEN`, with the `404` returned for an existing but out-of-scope
   target, or with `409 PRIVILEGED_TARGET` writes one `denied` record: actor,
-  `action` (the operation, or the route and method when refused before
-  parsing), the error code, and `target`/`teamId` only when they are already
+  `action` (the operation; a route refused before parsing records the
+  operation it serves, plus `route: { method, pattern }` with the route's
+  fixed pattern, never the raw path), the error code (`code`:
+  `FORBIDDEN` | `NOT_FOUND` | `PRIVILEGED_TARGET`; amended 2026-11-13, R2a), and `target`/`teamId` only when they are already
   validated ids (otherwise omitted — raw path or body values are never
   recorded). `denied` records are **security events**: they feed the
   Platform security alarm. The record is a separate `PutItem` before the
@@ -502,11 +524,21 @@ Same table `bedrock-usage`; no new GSI (new GSI1 prefixes never collide with
 | SsoRef | `SSOREF#{tid}#{oid}` | `OWNER` | — | — |
 | PasswordSignIn | `GOVERNANCE` | `PASSWORD_SIGNIN` | — | — |
 | PerUserApproval | `GOVERNANCE` | `PER_USER` | — | — |
-| AuditRecord | `AUDIT#{YYYY-MM-DD}` | `{timestamp}#{requestId}` | — | — |
+| AuditRecord | `AUDIT#{YYYY-MM-DD}` | `{timestamp}#{requestId}#{nn}` | — | — |
+
+`{nn}` is the record's two-digit index within its **request** (amended R2,
+2026-11-12; "request" rather than "transaction" amended 2026-11-13, R2a):
+one request can write several records (sign-in synchronisation, or two
+domain calls), which `{timestamp}#{requestId}` alone would collide on. Every
+audit `PutItem` carries `attribute_not_exists(SK)`, so a collision fails
+loudly instead of overwriting (append-only, T18, T19).
+The role literals the shared schemas need (grantable and local-user roles)
+live in `packages/shared` beside the group-mapping schema; the role *check*
+stays in `lib/auth/` (Rule 50.3).
 
 Every mutable item carries `version`. Access patterns: caller's items
 `Query PK=IDENT#{oid}`; a team's members/admins `Query GSI1` (paginated,
-Rule 20.6); bind `Query PK=PENDING#{email}` and `PENDING#{upn}`; visibility
+Rule 20.6); bind `Query PK=PENDING#{upn}`; visibility
 `BatchGetItem`; audit by day `Query PK=AUDIT#{day}`; access review `Query
 GSI1=IDENTS`. Password sign-in `GetItem PK=LOCALUSER#{email}`; bind
 `GetItem` on `SSOEXPECT#OID#{oid}` and `SSOEXPECT#UPN#{upn}`. Unique usage keys use `UsageKeyClaim` in the same
@@ -528,7 +560,12 @@ replaceable (D21: DynamoDB now, Aurora later):
    people, memberships, grants and records; the key builders for the
    prefixes above live inside the storage layer, not in `packages/shared`
    (the collector never needs them). Cost-data keys (`ACCT#`, `DAILY#`,
-   `SYSTEM`) stay shared.
+   `SYSTEM`) stay shared. *Amended 2026-11-13 (R2a):* the builders sit in
+   `apps/dashboard/lib/data/access/keys.ts`, which holds pure functions only
+   and no `server-only` import, so the DynamoDB-Local seed scripts can use
+   it; a structural test allows imports of it only from
+   `apps/dashboard/lib/data/access/**` and `scripts/**`. R1's `identPk` moves
+   there in R2b.
 4. **Portable ids and cursors.** Identity ids (`oid`, `local:<uuid>`,
    `master:`) are plain strings; list functions return an opaque, signed
    cursor, never a raw `LastEvaluatedKey`.
@@ -568,7 +605,7 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 toggle off), `OPERATION_UNAVAILABLE` (403, Enterprise-only on OSS, or any
 LiteLLM route in `open` mode), `LITELLM_UNAVAILABLE` (503, not configured,
 unreachable or rejected upstream), `PRIVILEGED_TARGET` (409, target LiteLLM
-user holds a proxy role). A new code is added here first.
+user holds a proxy role). A new code is added here first. A bad or foreign list cursor returns `400` `BAD_REQUEST`; `BAD_CURSOR` is internal to `lib/data/access` and never reaches a response (decided 2026-11-14).
 
 ## Decisions
 
@@ -616,7 +653,7 @@ organisation administrators and auditors. Usage rollups are kept for
 | # | Threat | Mitigation | Test (unit) |
 |---|---|---|---|
 | T1 | Spoofing: forged or foreign-tenant token | Tenant-specific issuer; `tid` check; missing `oid` fails closed | R1 parser tests |
-| T2 | Spoofing: UPN reuse inherits access | Bind once on `tid` + UPN/email, then key by `oid` | R2 bind tests |
+| T2 | Spoofing: UPN reuse inherits access | Bind once on `tid` + UPN (never `email`, never a guest UPN), then key by `oid` | R2 bind tests |
 | T3 | Elevation: scoped admin acts outside scope | `can()` per action; `403` before parsing | R4 write matrix |
 | T4 | Elevation: non-`internal-admin` grants a global role | Grant routes `internal-admin` only; mappings cannot target global roles | R1 schema, R4 grant matrix |
 | T5 | Elevation: default viewer reaches team data | Data only through member/admin items | R3 "no affiliation" rows |

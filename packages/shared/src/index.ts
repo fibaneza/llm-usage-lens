@@ -147,3 +147,72 @@ export { classifyUsageType } from "./usage-type";
 export type { UsageTypeClassification } from "./usage-type";
 export { GroupMappingInputSchema } from "./group-mapping";
 export type { GroupMappingInput } from "./group-mapping";
+export { GroupMappingBaseSchema, GroupMappingSchema } from "./group-mapping";
+export type { GroupMapping } from "./group-mapping";
+export { canonicalUsageIdentity, canonicaliseByUser } from "./usage-identity";
+export type { CanonicalUsageIdentity } from "./usage-identity";
+
+export {
+  AUDIT_ACTIONS,
+  AccessSourceSchema,
+  AdminScopeSchema,
+  AuditActionSchema,
+  AuditItemSchema,
+  AuditRecordSchema,
+  AuditSnapshotSchema,
+  DEFAULT_DEPARTMENT_VISIBILITY,
+  DEFAULT_TEAM_VISIBILITY,
+  DepartmentVisibilitySchema,
+  GrantableRoleSchema,
+  IdentityLinkSchema,
+  LocalUserSchema,
+  MemberAffiliationSchema,
+  PendingItemSchema,
+  RoleGrantSchema,
+  ScopeTypeSchema,
+  TeamVisibilitySchema,
+  UsageKeyClaimSchema,
+  auditCategory,
+  isAdminScopeSuspended,
+  sanitizeAuditSnapshot,
+} from "./schemas/access-control";
+export type {
+  AccessSource,
+  AdminScope,
+  AuditAction,
+  AuditRecord,
+  AuditSnapshot,
+  DepartmentVisibility,
+  GrantableRole,
+  IdentityLink,
+  LocalUser,
+  MemberAffiliation,
+  PendingItem,
+  RoleGrant,
+  TeamVisibility,
+  UsageKeyClaim,
+} from "./schemas/access-control";
+
+export {
+  AFFILIATION_SK,
+  GROUPMAPS_GSI1PK,
+  IDENTS_GSI1PK,
+  LINK_SK,
+  LOCALUSERS_GSI1PK,
+  OWNER_SK,
+  ROLEGRANTS_GSI1PK,
+  adminScopeSk,
+  adminsGsi1pk,
+  auditPk,
+  auditSk,
+  groupMapPk,
+  identPk,
+  localUserPk,
+  membersGsi1pk,
+  pendingPk,
+  roleGrantGsi1sk,
+  roleGrantSk,
+  usageKeyPk,
+  visibilityPk,
+} from "./table";
+export type { ScopeType } from "./table";

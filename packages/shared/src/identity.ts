@@ -14,5 +14,9 @@ export const IdentityRecordSchema = z.object({
   lastSeenRoles: z.array(z.string()),
   authMethod: z.enum(["entra", "master", "local"]),
   version: z.number().int().min(0),
+  ambiguousMembership: z.boolean().optional(),
+  groupsOverage: z.boolean().optional(),
+  failedAttempts: z.number().int().min(0).optional(),
+  lockedUntil: Iso8601Schema.optional(),
 });
 export type IdentityRecord = z.infer<typeof IdentityRecordSchema>;

@@ -69,6 +69,17 @@ export function resolveAccessMode(
   return "enforce";
 }
 
+// The build phase runs with placeholder env, so it never throws; at runtime an
+// invalid combination (open in prod) fails fast.
+export function resolveRuntimeAccessMode(input: {
+  isBuildPhase: boolean;
+  raw: string | undefined;
+  appEnv: string | undefined;
+}): AccessMode {
+  if (input.isBuildPhase) return input.raw === "open" ? "open" : "enforce";
+  return resolveAccessMode(input.raw, input.appEnv === "prod" ? "prod" : "dev");
+}
+
 // Sign-in providers rule set: system-architecture spec — Authentication &
 // Access; auth guide — Dev-only local login.
 export function resolveSignInProviders(input: AuthEnvInput): SignInProviders {
@@ -114,9 +125,11 @@ export function resolveSignInProviders(input: AuthEnvInput): SignInProviders {
         : "AUTH_DEV_LOGIN must not be set when Microsoft Entra ID is configured.",
     );
   }
-  if (prod && !entra) {
+  // Pre-SSO mode (Access Control spec — "Pre-SSO mode"): prod may run without
+  // Entra only through the master user, whose TOTP is checked below.
+  if (prod && !entra && !master) {
     throw new AuthConfigError(
-      "Microsoft Entra ID must be configured when APP_ENV=prod.",
+      "Microsoft Entra ID or the master user must be configured when APP_ENV=prod.",
     );
   }
   if (prod && master && !isSet(input.masterTotpSecret)) {

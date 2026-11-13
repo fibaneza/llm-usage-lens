@@ -91,6 +91,7 @@ export class DashboardServiceStack extends Stack {
       keyArn,
       repository,
       appLogGroup,
+      auditLogGroup,
     });
 
     const taskSecurityGroup = new ec2.SecurityGroup(this, "TaskSg", {

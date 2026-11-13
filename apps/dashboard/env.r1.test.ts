@@ -79,13 +79,20 @@ describe("env.ts R1 rules", () => {
     }
   });
 
-  it("T21: APP_ENV=prod requires Entra", async () => {
+  // Access Control spec — Pre-SSO mode (D19).
+  it("T21: APP_ENV=prod without Entra needs the master user with TOTP", async () => {
     stubBase({
       NODE_ENV: "production",
       APP_ENV: "prod",
       ...MASTER,
       AUTH_MASTER_TOTP_SECRET: "JBSWY3DPEHPK3PXP",
     });
+    await expect(loadEnv()).resolves.toBeDefined();
+    vi.unstubAllEnvs();
+    stubBase({ NODE_ENV: "production", APP_ENV: "prod" });
+    await expect(loadEnv()).rejects.toThrow();
+    vi.unstubAllEnvs();
+    stubBase({ NODE_ENV: "production", APP_ENV: "prod", ...MASTER });
     await expect(loadEnv()).rejects.toThrow();
   });
 

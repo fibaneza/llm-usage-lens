@@ -245,8 +245,8 @@ describe.each(["import", "create"] as Mode[])(
     describe("task role (Task role policy)", () => {
       const stmts = policyStatementsFor(t, roleIdFromTaskDef(t, "TaskRoleArn"));
 
-      it("has exactly the read, scoped-write and CMK statements", () => {
-        expect(stmts).toHaveLength(3);
+      it("has exactly the read, scoped-write, audit-put, audit-log and CMK statements", () => {
+        expect(stmts).toHaveLength(5);
         for (const s of stmts) expect(s.Effect).toBe("Allow");
       });
 
@@ -282,9 +282,11 @@ describe.each(["import", "create"] as Mode[])(
       // Platform spec — Ownership: ACCT# (account CRUD) and IDENT# (the identity
       // record and master-user lockout counter written on every sign-in, Phase
       // 4R.1; added 2026-11-11, security review H2). Nothing else until 4R.2/L2.
-      it("writes: only on the table, restricted to ACCT# and IDENT# leading keys", () => {
-        const write = stmts.find((s) =>
-          actionsOf(s).includes("dynamodb:PutItem"),
+      it("writes: only on the table, restricted to the ten Platform write prefixes", () => {
+        const write = stmts.find(
+          (s) =>
+            actionsOf(s).includes("dynamodb:PutItem") &&
+            actionsOf(s).includes("dynamodb:UpdateItem"),
         );
         expect(sorted(actionsOf(write ?? {}))).toEqual(
           sorted([
@@ -296,21 +298,25 @@ describe.each(["import", "create"] as Mode[])(
         );
         expect(write?.Condition).toEqual({
           "ForAllValues:StringLike": {
-            "dynamodb:LeadingKeys": ["ACCT#*", "IDENT#*"],
+            "dynamodb:LeadingKeys": [
+              "ACCT#*",
+              "GOVERNANCE",
+              "GROUPMAP#*",
+              "IDENT#*",
+              "LOCALUSER#*",
+              "PENDING#*",
+              "SSOEXPECT#*",
+              "SSOREF#*",
+              "USAGEKEY#*",
+              "VIS#*",
+            ],
           },
         });
         const keys: string[] =
           write?.Condition?.["ForAllValues:StringLike"]?.[
             "dynamodb:LeadingKeys"
           ] ?? [];
-        for (const other of [
-          "USAGEKEY#*",
-          "GROUPMAP#*",
-          "LITELLM#*",
-          "AUDIT#*",
-          "SYSTEM#*",
-          "*",
-        ]) {
+        for (const other of ["LITELLM#*", "AUDIT#*", "SYSTEM#*", "*"]) {
           expect(keys).not.toContain(other);
         }
         const res = resourcesOf(write ?? {});
@@ -340,7 +346,10 @@ describe.each(["import", "create"] as Mode[])(
           for (const r of resourcesOf(s)) expect(r).not.toBe("*");
         }
         expect(str(stmts)).not.toContain("SYSTEM");
-        expect(str(stmts)).not.toContain("AUDIT#");
+        // AUDIT# appears only in the single PutItem-only audit statement.
+        const withAudit = stmts.filter((s) => str(s).includes("AUDIT#"));
+        expect(withAudit).toHaveLength(1);
+        expect(actionsOf(withAudit[0] ?? {})).toEqual(["dynamodb:PutItem"]);
       });
     });
 
@@ -484,9 +493,9 @@ describe.each(["import", "create"] as Mode[])(
         const filters = Object.values(
           t.findResources("AWS::Logs::MetricFilter"),
         ).map((f) => f.Properties as Json);
-        expect(filters).toHaveLength(2);
-        const groups = filters.map((f) => str(f.LogGroupName));
-        expect(new Set(groups).size).toBe(2);
+        // 5xx on the app group, security events on the audit group, and the
+        // audit-delivery-failure filter on the app group (T19/T20).
+        expect(filters).toHaveLength(3);
         const logGroups = t.findResources("AWS::Logs::LogGroup");
         const auditId = Object.keys(logGroups).find(
           (id) =>

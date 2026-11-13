@@ -65,6 +65,7 @@ jobs:
           ALARM_TOPIC_ARN: ${{ vars.ALARM_TOPIC_ARN }}
           ENTRA_CLIENT_ID: ${{ vars.ENTRA_CLIENT_ID }}
           ENTRA_ISSUER: ${{ vars.ENTRA_ISSUER }}
+          MASTER_USERNAME: ${{ vars.MASTER_USERNAME }}
           GITHUB_REPOSITORY_NAME: ${{ github.repository }}
           LISTENER_ARN: ${{ vars.LISTENER_ARN }}
           LISTENER_RULE_PRIORITY: ${{ vars.LISTENER_RULE_PRIORITY }}
@@ -76,6 +77,11 @@ jobs:
             LB_ARGS=(-c "listenerArn=${LISTENER_ARN}" -c "listenerRulePriority=${LISTENER_RULE_PRIORITY}" -c "albSecurityGroupId=${ALB_SECURITY_GROUP_ID}")
           else
             LB_ARGS=(-c "companyCidrs=${COMPANY_CIDRS}")
+          fi
+          if [ -n "${ENTRA_CLIENT_ID}" ]; then
+            ENTRA_ARGS=(-c "entraClientId=${ENTRA_CLIENT_ID}" -c "entraIssuer=${ENTRA_ISSUER}")
+          else
+            ENTRA_ARGS=()
           fi
           pnpm --filter @llm-usage-lens/infra exec cdk deploy \
             "LlmUsageLens-${APP_ENV}-App" \
@@ -89,8 +95,8 @@ jobs:
             -c "certificateArn=${CERTIFICATE_ARN}" \
             -c "dashboardHostname=${DASHBOARD_HOSTNAME}" \
             -c "alarmTopicArn=${ALARM_TOPIC_ARN}" \
-            -c "entraClientId=${ENTRA_CLIENT_ID}" \
-            -c "entraIssuer=${ENTRA_ISSUER}" \
+            -c "masterUsername=${MASTER_USERNAME}" \
             -c "githubRepository=${GITHUB_REPOSITORY_NAME}" \
             -c "imageTag=${GITHUB_SHA}" \
-            "${LB_ARGS[@]}"
+            "${LB_ARGS[@]}" \
+            "${ENTRA_ARGS[@]}"

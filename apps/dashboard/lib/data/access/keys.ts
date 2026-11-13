@@ -1,0 +1,41 @@
+// Pure access-control key builders (no `server-only`, no AWS SDK) so seed
+// scripts can share them with the storage modules.
+// Source: docs/specs/2026-11-10-access-control.md — "Data model additions" and
+// "Storage boundary (D26.3, amended R2a)".
+
+export type ScopeType = "team" | "department";
+
+export const IDENTS_GSI1PK = "IDENTS";
+export const AFFILIATION_SK = "AFFILIATION";
+export const LINK_SK = "LINK";
+export const OWNER_SK = "OWNER";
+export const ROLEGRANTS_GSI1PK = "ROLEGRANTS";
+export const GROUPMAPS_GSI1PK = "GROUPMAPS";
+export const LOCALUSERS_GSI1PK = "LOCALUSERS";
+
+const scopeTag = (t: ScopeType): string => (t === "team" ? "TEAM" : "DEPT");
+
+export const identPk = (oid: string): string => `IDENT#${oid}`;
+export const adminScopeSk = (t: ScopeType, id: string): string =>
+  `ADMINSCOPE#${scopeTag(t)}#${id}`;
+export const membersGsi1pk = (teamId: string): string =>
+  `MEMBERS#TEAM#${teamId}`;
+export const adminsGsi1pk = (t: ScopeType, id: string): string =>
+  `ADMINS#${scopeTag(t)}#${id}`;
+export const roleGrantSk = (role: string): string => `ROLEGRANT#${role}`;
+export const roleGrantGsi1sk = (oid: string, role: string): string =>
+  `IDENT#${oid}#${role}`;
+export const pendingPk = (emailOrUpn: string): string =>
+  `PENDING#${emailOrUpn.toLowerCase()}`;
+export const groupMapPk = (groupId: string): string => `GROUPMAP#${groupId}`;
+export const visibilityPk = (t: ScopeType, id: string): string =>
+  `VIS#${scopeTag(t)}#${id}`;
+export const localUserPk = (email: string): string =>
+  `LOCALUSER#${email.toLowerCase()}`;
+export const usageKeyPk = (key: string): string => `USAGEKEY#${key}`;
+export const auditPk = (utcDay: string): string => `AUDIT#${utcDay}`;
+export const auditSk = (
+  timestamp: string,
+  requestId: string,
+  index: number,
+): string => `${timestamp}#${requestId}#${String(index).padStart(2, "0")}`;

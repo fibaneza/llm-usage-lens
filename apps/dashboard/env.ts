@@ -39,6 +39,7 @@ export const env = createEnv({
       .min(16)
       .regex(/^[A-Z2-7]+=*$/)
       .optional(),
+    AUDIT_LOG_GROUP_NAME: z.string().min(1).optional(),
     NODE_ENV: z.enum(["development", "test", "production"]).optional(),
     NEXT_PHASE: z.string().optional(),
     AWS_REGION: z.string().default(COLLECTOR_REGION),

@@ -41,25 +41,54 @@ const PrioritySchema = z.preprocess(
   z.number().int().min(1).max(50000),
 );
 
-const BaseSchema = z.object({
-  env: AppEnvSchema,
-  account: z.string().regex(/^\d{12}$/),
-  vpcId: z.string().regex(/^vpc-[0-9a-f]+$/),
-  availabilityZones: list(1),
-  privateSubnetIds: list(2),
-  certificateArn: z.string().startsWith("arn:aws:acm:"),
-  dashboardHostname: z.string().min(1),
-  alarmTopicArn: z.string().startsWith("arn:aws:sns:"),
-  entraClientId: z.string().min(1),
-  entraIssuer: z
-    .url()
-    .refine((u) => u.startsWith("https://"), "entraIssuer must be https"),
-  githubRepository: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
-  imageTag: z.string().min(1).default("latest"),
-  // Optional break-glass master user name (Access Control spec — "Sign-in
-  // methods"); the hash and TOTP secret are hand-managed SSM SecureStrings.
-  masterUsername: z.string().min(1).max(64).optional(),
-});
+const BaseSchema = z
+  .object({
+    env: AppEnvSchema,
+    account: z.string().regex(/^\d{12}$/),
+    vpcId: z.string().regex(/^vpc-[0-9a-f]+$/),
+    availabilityZones: list(1),
+    privateSubnetIds: list(2),
+    certificateArn: z.string().startsWith("arn:aws:acm:"),
+    dashboardHostname: z.string().min(1),
+    alarmTopicArn: z.string().startsWith("arn:aws:sns:"),
+    // Entra is an optional pair; both absent is Pre-SSO mode and needs the
+    // master user (Access Control spec — "Pre-SSO mode").
+    entraClientId: z.string().min(1).optional(),
+    entraIssuer: z
+      .url()
+      .refine((u) => u.startsWith("https://"), "entraIssuer must be https")
+      .optional(),
+    githubRepository: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
+    imageTag: z.string().min(1).default("latest"),
+    // Optional break-glass master user name (Access Control spec — "Sign-in
+    // methods"); the hash and TOTP secret are hand-managed SSM SecureStrings.
+    masterUsername: z.string().min(1).max(64).optional(),
+    // Platform spec — "Inputs": principals allowed past the table resource
+    // policy, and the DynamoDB gateway endpoint the task role is bound to.
+    opsRoleArn: z
+      .string()
+      .regex(/^arn:aws:iam::\d{12}:role\/.+/)
+      .optional(),
+    dynamodbVpcEndpointId: z
+      .string()
+      .regex(/^vpce-[0-9a-f]+$/)
+      .optional(),
+  })
+  .superRefine((v, ctx) => {
+    if ((v.entraClientId === undefined) !== (v.entraIssuer === undefined)) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "entraClientId and entraIssuer must be set together or not at all",
+      });
+    }
+    if (v.entraClientId === undefined && v.masterUsername === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "masterUsername is required when the Entra inputs are absent",
+      });
+    }
+  });
 
 const ImportSchema = z.object({
   listenerArn: z.string().startsWith("arn:aws:elasticloadbalancing:"),
@@ -83,7 +112,19 @@ export type AppInputs = z.infer<typeof BaseSchema> & {
 };
 
 export function parseAppInputs(context: Record<string, unknown>): AppInputs {
-  const base = BaseSchema.parse(context);
+  const optionalKeys = [
+    "entraClientId",
+    "entraIssuer",
+    "masterUsername",
+    "opsRoleArn",
+    "dynamodbVpcEndpointId",
+  ];
+  const cleaned = Object.fromEntries(
+    Object.entries(context).filter(
+      ([k, v]) => !(optionalKeys.includes(k) && v === ""),
+    ),
+  );
+  const base = BaseSchema.parse(cleaned);
   if (base.availabilityZones.length !== base.privateSubnetIds.length) {
     throw new Error(
       "availabilityZones and privateSubnetIds must have the same length",
@@ -91,7 +132,7 @@ export function parseAppInputs(context: Record<string, unknown>): AppInputs {
   }
   const loadBalancer =
     context.listenerArn !== undefined
-      ? ({ mode: "import", ...ImportSchema.parse(context) } as const)
-      : ({ mode: "create", ...CreateSchema.parse(context) } as const);
+      ? ({ mode: "import", ...ImportSchema.parse(cleaned) } as const)
+      : ({ mode: "create", ...CreateSchema.parse(cleaned) } as const);
   return { ...base, loadBalancer };
 }

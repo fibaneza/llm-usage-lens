@@ -13,6 +13,30 @@ import type { AppInputs } from "../inputs";
 
 export const CONTAINER_PORT = 3000;
 
+// Fixed so FoundationStack can name the role in the table resource policy and
+// the key policy (Platform spec — "Data isolation").
+export function taskRoleName(env: AppInputs["env"]): string {
+  return `llm-usage-lens-${env}-task`;
+}
+
+export function executionRoleName(env: AppInputs["env"]): string {
+  return `llm-usage-lens-${env}-exec`;
+}
+
+// Platform spec — "Task role policy"; never SYSTEM (the collector's SyncStatus).
+const WRITE_LEADING_KEYS = [
+  "ACCT#*",
+  "GOVERNANCE",
+  "GROUPMAP#*",
+  "IDENT#*",
+  "LOCALUSER#*",
+  "PENDING#*",
+  "SSOEXPECT#*",
+  "SSOREF#*",
+  "USAGEKEY#*",
+  "VIS#*",
+];
+
 // An SSM parameter injected as a container secret. The execution-role grant is
 // written explicitly below (ssm:GetParameters only), so the CDK helper's
 // broader default grant is dropped here.
@@ -33,6 +57,7 @@ export type DashboardTaskProps = {
   keyArn: string;
   repository: ecr.IRepository;
   appLogGroup: logs.ILogGroup;
+  auditLogGroup: logs.ILogGroup;
 };
 
 // The task role, the Fargate task definition and its `web` container.
@@ -40,8 +65,15 @@ export function addDashboardTask(
   stack: Stack,
   props: DashboardTaskProps,
 ): ecs.FargateTaskDefinition {
-  const { inputs, tableName, tableArn, keyArn, repository, appLogGroup } =
-    props;
+  const {
+    inputs,
+    tableName,
+    tableArn,
+    keyArn,
+    repository,
+    appLogGroup,
+    auditLogGroup,
+  } = props;
   const prefix = ssmPrefix(inputs.env);
   const prod = inputs.env === "prod";
 
@@ -53,6 +85,10 @@ export function addDashboardTask(
       arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
     });
   const authSecretArn = secretArn("auth-secret");
+  const entra =
+    inputs.entraClientId !== undefined && inputs.entraIssuer !== undefined
+      ? { clientId: inputs.entraClientId, issuer: inputs.entraIssuer }
+      : undefined;
   const entraSecretArn = secretArn("entra-client-secret");
   // Hand-managed SecureStrings, never created by CDK (Access Control spec —
   // "Sign-in methods"; Platform spec — "Runtime").
@@ -67,9 +103,10 @@ export function addDashboardTask(
   const masterTotpArn = authSecretParamArn("master-totp-secret");
   const masterEnabled = !!inputs.masterUsername;
 
-  // Only the RP statements; 4R.2 adds the access-control keys and audit
-  // (Platform spec — "Ownership").
+  // The fixed name lets the table resource policy and the CMK key policy name
+  // the role without a cross-stack reference (Platform spec — "Data isolation").
   const taskRole = new iam.Role(stack, "TaskRole", {
+    roleName: taskRoleName(inputs.env),
     assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
   });
   taskRole.addToPolicy(
@@ -94,9 +131,25 @@ export function addDashboardTask(
       resources: [tableArn],
       conditions: {
         "ForAllValues:StringLike": {
-          "dynamodb:LeadingKeys": ["ACCT#*", "IDENT#*"],
+          "dynamodb:LeadingKeys": WRITE_LEADING_KEYS,
         },
       },
+    }),
+  );
+  // Append-only: PutItem alone on AUDIT#* (Access Control spec — T19).
+  taskRole.addToPolicy(
+    new iam.PolicyStatement({
+      actions: ["dynamodb:PutItem"],
+      resources: [tableArn],
+      conditions: {
+        "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["AUDIT#*"] },
+      },
+    }),
+  );
+  taskRole.addToPolicy(
+    new iam.PolicyStatement({
+      actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
+      resources: [auditLogGroup.logGroupArn],
     }),
   );
   taskRole.addToPolicy(
@@ -111,12 +164,17 @@ export function addDashboardTask(
     memoryLimitMiB: 1024,
     taskRole,
   });
+  // Named in place (escape hatch) so the CMK key policy can grant it
+  // kms:Decrypt via SSM without changing the role's logical ID.
+  (
+    taskDefinition.obtainExecutionRole().node.defaultChild as iam.CfnRole
+  ).roleName = executionRoleName(inputs.env);
   taskDefinition.addToExecutionRolePolicy(
     new iam.PolicyStatement({
       actions: ["ssm:GetParameters"],
       resources: [
         authSecretArn,
-        entraSecretArn,
+        ...(entra ? [entraSecretArn] : []),
         ...(masterEnabled ? [masterHashArn] : []),
         ...(masterEnabled && prod ? [masterTotpArn] : []),
       ],
@@ -151,12 +209,21 @@ export function addDashboardTask(
       NODE_ENV: "production",
       NEXT_PUBLIC_APP_URL: `https://${inputs.dashboardHostname}`,
       AUTH_URL: `https://${inputs.dashboardHostname}`,
-      AUTH_MICROSOFT_ENTRA_ID_ID: inputs.entraClientId,
-      AUTH_MICROSOFT_ENTRA_ID_ISSUER: inputs.entraIssuer,
+      AUDIT_LOG_GROUP_NAME: `${prefix}/audit`,
+      ...(entra
+        ? {
+            AUTH_MICROSOFT_ENTRA_ID_ID: entra.clientId,
+            AUTH_MICROSOFT_ENTRA_ID_ISSUER: entra.issuer,
+          }
+        : {}),
     },
     secrets: {
       AUTH_SECRET: new ParameterSecret(authSecretArn),
-      AUTH_MICROSOFT_ENTRA_ID_SECRET: new ParameterSecret(entraSecretArn),
+      ...(entra
+        ? {
+            AUTH_MICROSOFT_ENTRA_ID_SECRET: new ParameterSecret(entraSecretArn),
+          }
+        : {}),
       ...(masterEnabled
         ? {
             AUTH_MASTER_PASSWORD_HASH: new ParameterSecret(masterHashArn),

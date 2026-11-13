@@ -17,6 +17,8 @@ export function buildApp(
   const infra = new FoundationStack(app, `LlmUsageLens-${inputs.env}-Infra`, {
     stackName: `LlmUsageLens-${inputs.env}-Infra`,
     appEnv: inputs.env,
+    opsRoleArn: inputs.opsRoleArn,
+    dynamodbVpcEndpointId: inputs.dynamodbVpcEndpointId,
     env,
   });
   const appStack = new DashboardServiceStack(

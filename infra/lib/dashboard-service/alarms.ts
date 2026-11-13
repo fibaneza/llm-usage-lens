@@ -67,6 +67,18 @@ export function addDashboardAlarms(
     metricName: "Application5xx",
     metricValue: "1",
   });
+  // Delivery failures are written to stdout by the app, so the filter sits on
+  // the app log group (contract R2 decision 13).
+  props.appLogGroup.addMetricFilter("AuditDeliveryFailuresFilter", {
+    filterPattern: logs.FilterPattern.stringValue(
+      "$.event",
+      "=",
+      "audit.delivery_failed",
+    ),
+    metricNamespace,
+    metricName: "AuditDeliveryFailures",
+    metricValue: "1",
+  });
   props.auditLogGroup.addMetricFilter("SecurityEventsFilter", {
     filterPattern: logs.FilterPattern.stringValue(
       "$.category",
@@ -80,6 +92,7 @@ export function addDashboardAlarms(
   for (const [alarmId, metricName] of [
     ["App5xxAlarm", "Application5xx"],
     ["SecurityEventsAlarm", "SecurityEvents"],
+    ["AuditDeliveryAlarm", "AuditDeliveryFailures"],
   ] as const) {
     addAlarm(alarmId, {
       metric: new cloudwatch.Metric({

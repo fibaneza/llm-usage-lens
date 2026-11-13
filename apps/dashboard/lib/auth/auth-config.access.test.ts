@@ -68,14 +68,22 @@ describe("resolveSignInProviders (R1 rules)", () => {
     ).toThrow(AuthConfigError);
   });
 
-  it("T21: APP_ENV=prod requires Entra", () => {
-    expect(() =>
+  // Access Control spec — Pre-SSO mode (D19): prod without Entra is valid
+  // only with the master user and TOTP.
+  it("T21: APP_ENV=prod without Entra needs the master user with TOTP", () => {
+    expect(
       resolve({
         appEnv: "prod",
         nodeEnv: "production",
         ...MASTER,
         masterTotpSecret: "JBSWY3DPEHPK3PXP",
       }),
+    ).toMatchObject({ entra: false, master: true, devLogin: false });
+    expect(() => resolve({ appEnv: "prod", nodeEnv: "production" })).toThrow(
+      AuthConfigError,
+    );
+    expect(() =>
+      resolve({ appEnv: "prod", nodeEnv: "production", ...MASTER }),
     ).toThrow(AuthConfigError);
   });
 
