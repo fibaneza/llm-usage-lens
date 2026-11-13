@@ -320,20 +320,46 @@ remains). The export is audited.
    (internal, VPN-only; request/token limits are LiteLLM's), except the
    master-user lockout.
 7. **Observability.** Policy denials (403/404) are a metric with no personal
-   data; tokens, claims and session contents are never logged.
+   data; tokens, claims and session contents are never logged. Write
+   denials additionally produce a `denied` audit record (*Audit log*, D17).
 
 ## Audit log
 
 - **Schema:** actor `oid` (or `system`), `action`, `target`, `teamId?`,
   sanitised `before`/`after` (never secrets or key values), `result`
-  (`success` | `failed`), `timestamp` (UTC), `requestId`.
+  (`success` | `failed` | `denied`; `denied` amended 2026-11-14),
+  `timestamp` (UTC), `requestId`.
 - **Semantics:** a successful write → exactly one `success`; a write that
   passed authorization but failed downstream → exactly one `failed`; a write
-  rejected with `400`/`401`/`403`/`404`/`409` → none. Audit-log views and
-  access-review exports are themselves audited.
+  refused by **authorization** → exactly one `denied` (below); any other
+  rejection (`400`, `401`, `403 OPERATION_DISABLED`/`OPERATION_UNAVAILABLE`,
+  `404` for a target that does not exist, `409` version or
+  `MANAGED_BY_SSO` conflicts) → none. Audit-log views and access-review
+  exports are themselves audited.
+- **Denied attempts (D17, (user) 2026-11-14):** a write refused with
+  `403 FORBIDDEN`, with the `404` returned for an existing but out-of-scope
+  target, or with `409 PRIVILEGED_TARGET` writes one `denied` record: actor,
+  `action` (the operation, or the route and method when refused before
+  parsing), the error code, and `target`/`teamId` only when they are already
+  validated ids (otherwise omitted — raw path or body values are never
+  recorded). `denied` records are **security events**: they feed the
+  Platform security alarm. The record is a separate `PutItem` before the
+  response; the response body, status and `404` parity are unchanged, and a
+  failed record write increments the delivery metric instead of changing the
+  response. To bound noise, each task keeps at most one `denied` record per
+  actor and action per minute; repeats in that minute only increment a
+  `DeniedSuppressed` metric. Read refusals stay metric-only (*Enforcement*,
+  item 7).
+- **Sign-ins and sign-outs (D18, (user) 2026-11-14):** every successful
+  sign-in writes `auth.signin.success` and every explicit sign-out
+  `auth.signout`, with the method (`entra`, `master`, `local`) and no
+  claims. They are not security events. Master-user sign-ins also keep their
+  `auth.master.*` security records; session expiry is not an action and is
+  not recorded.
 - **Covered:** role grants, group mappings, affiliations (add, remove, move,
   bind), admin scopes, visibility, identity links, local users, accounts,
-  the approval, master-user sign-ins, and the LiteLLM actions.
+  the approval, sign-ins and sign-outs, denied write attempts, and the
+  LiteLLM actions (LiteLLM spec — *Audit*).
 - **Atomicity:** a successful write's audit item is written **in the same
   `TransactWriteItems`** as the change, so neither exists without the
   other; a `failed` record is a separate `PutItem` after the downstream
@@ -433,6 +459,8 @@ user holds a proxy role). A new code is added here first.
 | D14 | Org-wide team administration | only `internal-admin` / separate role | **`internal-org-admin`** (user) — keeps `internal-admin` small |
 | D15 | Who grants `internal-admin` | Entra only / also in-app | **Entra or in-app by `internal-admin` only**, with re-auth, reason, audit, alarm (user) |
 | D16 | Password login | none / master user | **One master user = `internal-admin`**, Argon2id, TOTP in `prod`, lockout, 1 h (user); amends *Sign-in providers* |
+| D17 | Refused write attempts | none / every rejection / authorization refusals only | **Authorization refusals only** (`403 FORBIDDEN`, out-of-scope `404`, `409 PRIVILEGED_TARGET`), recorded as `denied` security events, one per actor and action per minute per task (user, 2026-11-14) — validation errors and conflicts are noise |
+| D18 | Ordinary sign-ins | master only / all | **All sign-ins and sign-outs**, not security events (user, 2026-11-14) — who used the dashboard and when |
 
 **Proposed privacy wording (D6):** "LLM Usage Lens processes the AWS
 sign-in identity and the Amazon Bedrock usage and cost attributed to it, to
@@ -469,6 +497,7 @@ organisation administrators and auditors. Usage rollups are kept for
 | T19 | Repudiation: audit log edited | Task role `PutItem`-only on `AUDIT#`; CloudWatch copy | R2 CDK assertions on the task-role policy |
 | T20 | Spoofing: master credential brute force or theft | Argon2id in SSM, TOTP, lockout, 1 h session, audited + alarm, custody | R1 (hash, TOTP, lockout, 1 h, one id-only security event per attempt); R2 (persistent audit record and its alarm) |
 | T21 | Misconfiguration: `open` mode, missing TOTP or missing Entra in production | Keyed on validated `APP_ENV=prod`; default `enforce`; unset `APP_ENV` fails validation | R1 env tests |
+| T22 | Repudiation: probing writes outside one's permissions leaves no trace | `denied` records (D17) with the security alarm; unchanged response and `404` parity; per-minute suppression | R2 (record type, `requireAdmin` refusals); R4 and L4 write matrices (one `denied` per refusal, none on `400`, identical bodies) |
 
 ## Residual risks
 

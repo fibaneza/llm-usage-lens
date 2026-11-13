@@ -614,7 +614,8 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 - [ ] Entities and `server-only` data access (affiliation, admin scopes, role grants, pending items, group mappings, visibility, local users, identity links, audit); canonical usage identity in `packages/shared`; sign-in resolution and bind; atomic move; versioned writes with the audit item in the same transaction; the task-role DynamoDB policy added to the DashboardServiceStack and asserted (T19); seeds per role
 - [ ] Wire R1's security events (`auth.master.*`, `auth.signin.error`) to the audit record and the alarm (T20); stored local users ignored while Entra is configured (T7)
-- [ ] Verify: T2, T8, T17, T18, T19 pass; integration tests against DynamoDB Local
+- [ ] Audit additions (Access Control — *Audit log*, D17, D18; amended 2026-11-14): `denied` result with per-minute suppression and the `DeniedSuppressed` metric; `denied` record on `requireAdmin` refusals of the existing account write routes; `auth.signin.success` and `auth.signout` for every sign-in method
+- [ ] Verify: T2, T8, T17, T18, T19, T22 (record type and `requireAdmin` refusals; response bodies unchanged) pass; integration tests against DynamoDB Local
 
 ### Phase 4R.3 — Server-side scoping (`feature/phase-4r-3-rbac-scope`)
 
@@ -624,7 +625,7 @@ Tag coverage per team is Phase 4.9b (deferred).
 ### Phase 4R.4 — Management UI and writes (`feature/phase-4r-4-rbac-settings`)
 
 - [ ] Settings access sections (Design System — *Settings Page*); write routes with permission, origin, re-auth and `409`; structural write-route test updated
-- [ ] Verify: write matrix and T3, T9–T11, T16 pass; axe clean; seeded probe per role
+- [ ] Verify: write matrix and T3, T9–T11, T16, T22 (one `denied` per authorization refusal, none on `400`) pass; axe clean; seeded probe per role
 
 ### Phase 4R.5 — UI gating and copy (`feature/phase-4r-5-rbac-ui`)
 
@@ -653,17 +654,18 @@ Tag coverage per team is Phase 4.9b (deferred).
 
 - [ ] `lib/litellm/` one typed function per allowlisted operation (fixed method and path, strict Zod builders, Zod-parsed responses); edition gate; `OperationToggles` (versioned, audited, defaults per the spec); `TeamLink` + `TeamLinkClaim`; `/api/litellm/toggles`, `/api/litellm/team-links`; task role gains `LITELLM#*` write leading keys (asserted)
 - [ ] Fake LiteLLM for both editions; contract test of every call against the snapshot
-- [ ] Verify: structural allowlist test; `allowed_routes` list = runbook = gateway paths; LT3, LT4, LT7, LT14, LT15, LT17; disabled operation → `403 OPERATION_DISABLED` with no call
+- [ ] `litellm-changed-by` on every write call, built from the session (LiteLLM spec — *Audit*, LD14)
+- [ ] Verify: structural allowlist test; `allowed_routes` list = runbook = gateway paths; LT3, LT4, LT7, LT14, LT15, LT17, LT19; disabled operation → `403 OPERATION_DISABLED` with no call
 
 ### L3 — Read views (`feature/phase-l3-litellm-views`)
 
-- [ ] Scoped read routes (`/api/litellm/me`, `/teams/[teamId]`, members, keys metadata, spend logs, models); `/dashboard/litellm` with *My usage*, *Team spend & budgets*, *Members*, *Keys*, *Model access* (read), each in its own Suspense + ErrorBoundary; "LiteLLM-reported" labels; outage and "not connected" states; nav item
-- [ ] Verify: role × read matrix (unauthenticated, no role, Viewer own/other, Lead own/other/department incl. moved team, Auditor, Admin) with `404` parity; LT8 labels; outage leaves other pages working; e2e probe (fake unless a non-production LiteLLM is provided)
+- [ ] Scoped read routes (`/api/litellm/me`, `/teams/[teamId]`, members, keys metadata, spend logs, models); `/dashboard/litellm` with *My usage*, *Team spend & budgets*, *Members*, *Keys*, *Model access* (read), *LiteLLM audit* (`/api/litellm/audit`, Admin and Auditor, audited view; LD15), each in its own Suspense + ErrorBoundary; "LiteLLM-reported" labels; outage and "not connected" states; nav item
+- [ ] Verify: role × read matrix (unauthenticated, no role, Viewer own/other, Lead own/other/department incl. moved team, Auditor, Admin) with `404` parity; LT8 labels; LT20; outage leaves other pages working; e2e probe (fake unless a non-production LiteLLM is provided)
 
 ### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)
 
 - [ ] Write routes for every allowlisted write (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list
-- [ ] Verify: write matrix; LT5, LT9, LT10, LT13, LT16, LT18 (privileged member → `409`, no key or membership write); one audit record per success/failure and none on rejection; structural write-route test includes every LiteLLM write route; e2e probe
+- [ ] Verify: write matrix; LT5, LT9, LT10, LT13, LT16, LT18 (privileged member → `409`, no key or membership write); one audit record per success/failure, one `denied` per authorization refusal (incl. `409 PRIVILEGED_TARGET`) and none on other rejections; structural write-route test includes every LiteLLM write route; e2e probe
 
 ### L5 — Polish and verification (`feature/phase-l5-litellm-polish`)
 

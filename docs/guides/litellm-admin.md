@@ -18,6 +18,13 @@ LiteLLM master key.
   ID SSO. The dashboard derives the edition from `APP_ENV`.
 - The internal hostname (and port) of LiteLLM, reachable from the dashboard
   subnets over the existing VPC / Transit Gateway path.
+- **LiteLLM audit logging** (LiteLLM spec — *Audit*, LD14/LD15): the
+  operators enable LiteLLM's audit-log storage (`store_audit_logs` in the
+  proxy settings, per the LiteLLM docs; confirm the name and whether it
+  needs Enterprise on the company's version). Without it, the
+  `litellm-changed-by` attribution is not stored and the dashboard's
+  *LiteLLM audit* section stays empty. Record the date enabled here:
+  `<date>`.
 
 ## 2. Create the dashboard service user and key (LiteLLM operators)
 
@@ -85,6 +92,7 @@ dashboard, its CI or its AWS account. `$LITELLM` is the proxy base URL.
 /spend/logs/v2
 /models
 /global/spend/report
+/audit
 ```
 
 ## 4. Store the key in SSM (user, by hand)
