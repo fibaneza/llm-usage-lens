@@ -5,7 +5,7 @@ import type * as cwActions from "aws-cdk-lib/aws-cloudwatch-actions";
 import type * as ecs from "aws-cdk-lib/aws-ecs";
 import * as logs from "aws-cdk-lib/aws-logs";
 
-import type { AppInputs } from "./inputs";
+import type { AppInputs } from "../inputs";
 
 // Source: docs/specs/2026-11-10-platform.md — "Operations".
 

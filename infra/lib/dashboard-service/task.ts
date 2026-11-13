@@ -6,8 +6,8 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import type * as logs from "aws-cdk-lib/aws-logs";
 import { COLLECTOR_REGION, GSI1_NAME } from "@llm-usage-lens/shared";
 
-import { ssmPrefix } from "./inputs";
-import type { AppInputs } from "./inputs";
+import { ssmPrefix } from "../inputs";
+import type { AppInputs } from "../inputs";
 
 // Source: docs/specs/2026-11-10-platform.md — "Runtime", "Task role policy".
 

@@ -6,8 +6,8 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import type * as ecs from "aws-cdk-lib/aws-ecs";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 
-import { CONTAINER_PORT } from "./dashboard-task";
-import type { AppInputs } from "./inputs";
+import { CONTAINER_PORT } from "./task";
+import type { AppInputs } from "../inputs";
 
 // Source: docs/specs/2026-11-10-platform.md — "Load balancer", "Operations".
 

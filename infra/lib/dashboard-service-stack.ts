@@ -10,18 +10,18 @@ import * as sns from "aws-cdk-lib/aws-sns";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
 
-import { addCiDeployRole } from "./ci-deploy-role";
-import { addDashboardAlarms } from "./dashboard-alarms";
-import { addDashboardIngress } from "./dashboard-ingress";
-import { addDashboardTask } from "./dashboard-task";
+import { addCiDeployRole } from "./dashboard-service/ci-deploy-role";
+import { addDashboardAlarms } from "./dashboard-service/alarms";
+import { addDashboardIngress } from "./dashboard-service/ingress";
+import { addDashboardTask } from "./dashboard-service/task";
 import { ssmPrefix } from "./inputs";
 import type { AppInputs } from "./inputs";
 
 // Source: docs/specs/2026-11-10-platform.md — "Created resources" (DashboardServiceStack).
-// The stack wires the dashboard's Fargate service; its parts live beside it:
-// dashboard-task.ts (task role, task definition, container),
-// dashboard-ingress.ts (target group, load balancer), dashboard-alarms.ts
-// (alarms, metric filters) and ci-deploy-role.ts (GitHub OIDC deploy role).
+// The stack wires the dashboard's Fargate service; its parts live in
+// dashboard-service/: task.ts (task role, task definition, container),
+// ingress.ts (target group, load balancer), alarms.ts (alarms, metric
+// filters) and ci-deploy-role.ts (GitHub OIDC deploy role).
 // Each part takes the stack as its construct scope, so logical IDs stay flat.
 
 export type DashboardServiceStackProps = StackProps & { inputs: AppInputs };

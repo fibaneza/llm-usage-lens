@@ -5,7 +5,7 @@ import type * as ecs from "aws-cdk-lib/aws-ecs";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { COLLECTOR_REGION } from "@llm-usage-lens/shared";
 
-import type { AppInputs } from "./inputs";
+import type { AppInputs } from "../inputs";
 
 // Source: docs/specs/2026-11-10-platform.md — "Created resources" (DashboardServiceStack).
 
