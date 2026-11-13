@@ -102,6 +102,8 @@ Attributes:
       outputTokens     number
       invocations      number
       rawModelIds      list         (only on the "other" entry — raw IDs not yet mapped)
+      priceEffectiveFrom list       (only when token-priced: the price-table `effectiveFrom` values used; amended 2026-11-14)
+      priceMissing     boolean      (only on today's rollup: no list price in effect, so `cost` is omitted until Cost Explorer reports; amended 2026-11-14)
 
       byUser           map {
         "<sso-username>": {         e.g. "john.doe@company.com"
@@ -225,7 +227,7 @@ Some charges are token usage of a specific model but are **priced differently** 
 These are **model** cost. They go in `models[<canonical-key>].cost`, not in `nonModel`, because they are a model's tokens. Consequences:
 
 - The collector must still extract the model from these usage types, even though their names carry extra batch, cache, or cross-Region markers (System Architecture spec — *Cost Explorer `USAGE_TYPE` classification*).
-- *Today's cost fallback* prices tokens at standard on-demand rates only, so today's estimate is less accurate for accounts that use batch, caching, or other tiers. Yesterday's Cost Explorer figure corrects it.
+- *Today's cost fallback* prices tokens at the Sydney **Geo and In-region** list prices in effect at each hour, including cache read and write where the table has them (System Architecture spec — *Price table (effective-dated)*, amended 2026-11-14). Batch, Global inference, Priority and Flex tokens are not list-priced, so today's estimate is less accurate for accounts that use them. Yesterday's Cost Explorer figure corrects it.
 - Batch inference may not appear in CloudTrail `InvokeModel` events or CloudWatch per-invocation metrics. Proportional `byUser`/`byService` splits then spread batch cost across real-time callers. This must be verified in Phase 6. A per-pricing-mode breakdown of model cost is deferred (see [`docs/future-improvements.md`](../future-improvements.md) — *Per-pricing-mode model cost breakdown*).
 
 ### Rules

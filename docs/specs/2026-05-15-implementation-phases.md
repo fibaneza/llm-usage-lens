@@ -792,6 +792,7 @@ Phase 4 (all sub-phases complete).
     - Per ModelId: InputTokenCount, OutputTokenCount, Invocations, InvocationLatency
   - Normalize raw Bedrock model IDs to canonical keys (`@llm-usage-lens/shared`)
   - Apply today's cost fallback when Cost Explorer returns zero (shared price table + token counts)
+  - Effective-dated price table (System Architecture — *Price table (effective-dated)*, amended 2026-11-14): `BedrockPriceEntrySchema` with valid and invalid cases (duplicates, negative, non-UTC); first Sydney Geo and In-region entries for every model in use, read from the pricing page; hourly lookup with a mid-day price change split at the hour; `priceMissing` instead of `0`; `priceEffectiveFrom` recorded; the Admin/Auditor list-price comparison on finalised days (computed on read, labelled "list-price estimate"); check whether the AWS Price List exposes Geo/In-region rates and, if so, a `scripts/` generator; monthly upkeep step in the AWS infrastructure runbook
   - Write `nextScheduledAt` on SyncStatus (next UTC hour boundary)
   - Merge all three data sources per account per day (System Architecture spec — Three-source merge rules)
   - Resolve inference profile tags per Tag resolution appendix

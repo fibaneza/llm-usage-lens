@@ -80,7 +80,7 @@ for cost.
 - **OpenTelemetry provides tokens and attribution only — never cost.** Cost
   Explorer remains the authoritative cost source in every configuration.
   OTel-sourced rollups still derive cost from Cost Explorer (and from the
-  static price table for today, per *Today's cost fallback*).
+  effective-dated price table for today, per *Today's cost fallback*).
 - **It only sees instrumented callers.** CloudWatch and CloudTrail capture
   every Bedrock call org-wide; OTel sees a call only if the calling
   application emits it. The OTel source is therefore valid only when **every**
@@ -315,7 +315,7 @@ Two IaC artifacts, both deployed through the CloudFormation control plane to dif
 ## Known Limitations
 
 1. **Single region**: Only `ap-southeast-2` (Sydney) Bedrock usage is collected. Usage in other regions is not captured.
-2. **Cost Explorer lag**: Cost data is 8-24h behind. Today's cost is estimated from token counts and model pricing. Yesterday's cost is finalized.
+2. **Cost Explorer lag**: Cost data is 8-24h behind. Today's cost is estimated from token counts and the Sydney Geo and In-region list prices in effect at each hour (*Price table (effective-dated)*). Yesterday's cost is finalized.
 3. **Per-user/per-service cost is approximate**: Calculated proportionally from token usage ratio. Only account-level and model-level cost from Cost Explorer is exact.
 4. **Service tagging dependency**: `byService` data quality depends on teams routing calls through tagged **application inference profiles** (`service=<name>`). Usage not routed through a tagged profile falls into the `_untagged` bucket. Billing cost allocation tags in the AWS console do not populate `byService` in v1.
 5. **CloudTrail Lake query cost**: CloudTrail Lake charges per query scan. At high Bedrock call volumes, this cost should be monitored.
@@ -409,11 +409,72 @@ GROUP BY 1, 2, 3, 4
 When Cost Explorer returns **zero or no rows** for a model on today's UTC day (common due to 8–24h lag). The trigger is evaluated **per model**, over rows that `classifyUsageType` maps to `{ kind: "model" }` only. `nonModel` rows never suppress it: an idle Provisioned Throughput or storage row that posts for today while token rows still lag does not count as Cost Explorer data for any model.
 
 1. Use **CloudWatch token counts** per model for today (exact).
-2. Estimate model cost: `(modelInputTokens × inputPricePer1K + modelOutputTokens × outputPricePer1K) / 1000` using a **static price table** in `packages/shared` (updated manually when AWS publishes new list prices).
+2. Estimate model cost from **how much** (tokens by type) and **when** (the hour they were used) with the effective-dated **price table** (*Price table (effective-dated)* below, amended 2026-11-14): for each UTC hour, the tokens of each type × the price in effect at that hour, summed over the day.
 3. Set `costFinalized: false` and `costEstimated: true` at model and account level for today.
 4. When yesterday's CE data arrives, overwrite with exact costs (`costFinalized: true`).
 
 Yesterday's rollup must **never** use token-based pricing if Cost Explorer returned data for that day.
+
+### Price table (effective-dated)
+
+Amended 2026-11-14 (user). List prices change rarely but do change, and the
+pricing page records dated changes (read 2026-11-14: "Starting October 7,
+2026, cache read pricing for Claude Sonnet 5.5 is reduced by 50% from the
+prior rate"). The table therefore keeps every price with the moment it took
+effect, and an estimate uses the price in effect when the tokens were used.
+
+- **Source.** The [Amazon Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/),
+  tab **"Geo and In-region Cross-region Inference"**, region **Asia Pacific
+  (Sydney)** — the collector's only region (Rule 50.7). These rates apply to
+  in-region calls (base model ids) and to geographic inference profiles
+  (`au.`, `apac.`), which Cost Explorer and CloudWatch record against
+  Sydney. The page loads prices dynamically, so the fetched text did not
+  contain Sydney Claude prices (checked 2026-11-14): entries are read from
+  the rendered page by a person. Whether the AWS Price List files expose the
+  same Geo/In-region rates, so a script can produce entries instead, is a
+  Phase 6 check.
+- **Location and shape.** `packages/shared/src/prices/bedrock-ap-southeast-2.ts`,
+  an array validated by `BedrockPriceEntrySchema` (Zod), shared by the
+  collector and dashboard (Rule 20.5). One entry per base model id and
+  effective moment: `modelId` (base id, the profile prefix stripped),
+  `effectiveFrom` (UTC ISO timestamp, inclusive), USD per **1M** tokens for
+  `input`, `output` and, when the model has them, `cacheWrite` and
+  `cacheRead`; `section: "geo-and-in-region"`, `region: "ap-southeast-2"`,
+  `source` (URL), `recordedAt` (date read) and an optional `note`.
+- **Append-only history.** A merged entry is never edited or deleted. A price
+  change is a **new entry** with a later `effectiveFrom`, so every past
+  estimate can be reproduced. Validation fails on duplicate
+  `(modelId, effectiveFrom)` pairs, negative prices or an `effectiveFrom`
+  not in UTC.
+- **Lookup.** For tokens used in hour *h* (the CloudWatch period start,
+  UTC), the entry for that model with the greatest `effectiveFrom ≤ h`.
+  Cost = Σ over token types of tokens × price ÷ 1,000,000. A change in the
+  middle of a day therefore splits that day's estimate at the hour it took
+  effect.
+- **Gaps are never zero** (Rule 20.12 spirit): a model with no entry in
+  effect, or token types without a price (for example cache tokens on an
+  entry with no cache prices), gets no estimate — today's model `cost` is
+  omitted with `priceMissing: true` until Cost Explorer reports — never `0`.
+- **Not priced from this table:** Global cross-region inference (`global.`
+  profiles), batch, Priority and Flex tiers, Provisioned Throughput and
+  every non-model charge. Their today's cost waits for Cost Explorer.
+- **Traceability.** A token-priced model entry records the `effectiveFrom`
+  values it used (`priceEffectiveFrom`, Data Model spec — *DailyRollup*).
+- **Upkeep.** Checked monthly and whenever AWS announces a price change (a
+  runbook step in `docs/guides/aws-infrastructure.md`); each update is a
+  reviewed PR that adds entries.
+- **List-price comparison (dashboard).** For finalised days the dashboard
+  can show, next to the billed Cost Explorer cost, the **list-price
+  estimate** of the same tokens and the difference between them. A
+  difference points to discounts, batch, Global inference, service tiers or
+  caching. It is computed on read from the shared table and the stored
+  daily tokens with the entry in effect at 00:00 UTC of that day, so it is
+  labelled "list-price estimate", never replaces the billed figure and is
+  shown to `internal-admin` and `internal-auditor` only. Rollups store input
+  and output tokens only, so cache pricing is not part of the comparison.
+  The same figure is the Bedrock side of the LiteLLM reconciliation
+  ([LiteLLM spec](2026-11-10-litellm.md) — *Cost visualisation and
+  provenance*), whose spend comes from LiteLLM's own price map.
 
 ### Three-source merge rules
 
