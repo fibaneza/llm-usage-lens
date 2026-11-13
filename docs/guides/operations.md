@@ -67,6 +67,31 @@ Order: **FoundationStack, then DashboardServiceStack**. Undeploy in reverse.
   KMS key** (and their data); deleting those is a separate, explicit manual
   step. Destroy the DashboardServiceStack first.
 
+## Break-glass data access
+
+The table resource policy refuses every principal except the dashboard task
+role, the collector role and `opsRoleArn` (Platform spec — *Data isolation*).
+`opsRoleArn` is the break-glass permission set: use it only when the
+dashboard cannot do the job (a corrupt item the app cannot read, an incident
+investigation, a restore check).
+
+1. **Decide and record.** Open an incident or change record with the reason
+   and the expected actions before signing in. A second person agrees.
+2. **Sign in** through IAM Identity Center with MFA and pick the break-glass
+   permission set. Read or change only what the record names; never copy
+   password hashes, TOTP ciphertext or audit items out of the account.
+3. **Prefer reads.** A change made here bypasses the dashboard's audit log, so
+   write the before and after values into the incident record.
+4. **Review afterwards.** Within a working day, list the session's DynamoDB
+   data events in CloudTrail (filter on the role) and attach them to the
+   record. Any use without a record is a security incident.
+5. **Quarterly:** confirm the permission set is still assigned to the named
+   people only, and that `opsRoleArn` still matches its role ARN.
+
+Changing the table policy itself is a FoundationStack deploy; an edit made
+outside CDK shows in CloudTrail as `PutResourcePolicy` and is reverted by the
+next deploy.
+
 ## Known gaps and retained resources
 
 - The application 5xx metric filter matches structured JSON request logs
@@ -82,5 +107,7 @@ Order: **FoundationStack, then DashboardServiceStack**. Undeploy in reverse.
 Fargate tasks, ECR storage and CloudWatch Logs (audit group kept 400 days),
 plus the internal ALB only in create mode. ECS Container Insights is a paid CloudWatch feature (custom metrics),
 required by the running-task alarm. No NAT gateway, VPC endpoints,
-cache, WAF or certificate cost. The KMS CMK and DynamoDB are accepted costs
+cache, WAF or certificate cost. CloudTrail data events on the table (for
+break-glass review) are billed per event; dashboard traffic makes them a
+small, accepted cost. The KMS CMK and DynamoDB are accepted costs
 (CLAUDE.md - *Cost posture*).

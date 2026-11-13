@@ -42,6 +42,18 @@ This replaces the Netlify runbook (retired 2026-11-10, Phase 4R.P).
   trust is scoped to `repo:<owner/repo>:environment:<env>`, so the deploy
   job only works from an environment of that name. Add protection rules
   (required reviewers) on `prod`.
+- **Break-glass permission set (`prod`, recommended)** — Platform spec,
+  *Data isolation*. In IAM Identity Center create a dedicated permission set
+  (for example `LlmUsageLensBreakGlass`) with read and write on the
+  `bedrock-usage` table and `kms:Decrypt` on the project CMK only; assign it
+  to one or two named people, with MFA. Note its role ARN in the account (IAM
+  roles, `AWSReservedSSO_LlmUsageLensBreakGlass_<suffix>`, under the path
+  `/aws-reserved/sso.amazonaws.com/...`) for `opsRoleArn`. Re-provisioning
+  the permission set changes the suffix: update `opsRoleArn` and redeploy
+  the FoundationStack.
+- **CloudTrail data events on the table** — on the account trail, an
+  advanced event selector for DynamoDB data events on the table ARN, so
+  break-glass reads and writes can be reviewed (small per-event cost).
 
 ## 3. Inputs (CDK context)
 
@@ -63,6 +75,8 @@ Pass with `-c key=value`; lists are comma-separated. Never commit real values
 | `githubRepository` | both | `owner/repo` |
 | `imageTag` | both | image tag, default `latest` |
 | `masterUsername` | both | optional break-glass master user name; its hash and TOTP secret are hand-managed SSM SecureStrings under `/llm-usage-lens/<env>/auth/` |
+| `opsRoleArn` | both | `prod`: the break-glass permission set's role ARN (section 2; recommended — synth warns when unset); `dev`: unset or your usual admin role |
+| `dynamodbVpcEndpointId` | both | optional existing DynamoDB gateway endpoint, e.g. `vpce-00000000000000000` |
 | `listenerArn`, `listenerRulePriority`, `albSecurityGroupId` | import | listener ARN, unique priority agreed with the ALB owner, the ALB's security group |
 | `companyCidrs` | create | `10.0.0.0/8` (never `0.0.0.0/0`) |
 
@@ -108,8 +122,10 @@ Order: FoundationStack, then DashboardServiceStack.
 4. Create the internal DNS record: `<dashboardHostname>` to the ALB
    (CNAME or alias). In create mode the ALB DNS name is a stack output; in
    import mode it is the shared ALB's.
-5. Verify: `GET https://<dashboardHostname>/api/health` returns `200` with
-   `status: ok`; sign in.
+. Verify the data isolation (Platform spec — *Data isolation*), in `dev`
+   first: a `GetItem` on the table with an account admin role that is **not**
+   `opsRoleArn` must return `AccessDeniedException`, and the dashboard must
+   still sign in and load. Only then deploy the FoundationStack to `prod`.
 
 Writes are accepted only when the browser's `Origin` host equals the `Host`
 header the task receives (Access Control spec — *Enforcement* item 6). The
