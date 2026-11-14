@@ -384,6 +384,25 @@ for 90 days (decision D2).
 identity belongs to one person (duplicate → `409`). Links show a person
 their own usage and **never grant access**.
 
+**Usage-identity mapping rules (D27, amended 2026-11-14, user).** Some
+Bedrock callers sign in with a session name that is not an email — for
+example the identity ARN
+`arn:aws:sts::000000000000:assumed-role/AWSReservedSSO_<set>_<id>/jane-sso`
+canonicalises to the non-person key `jane-sso`, while the person's
+dashboard and LiteLLM identity is `jane@company.com`. An `internal-admin`
+defines **mapping rules** in Settings: a pattern with one `{name}`
+placeholder over the session name (e.g. `{name}-sso`) and a template for the
+email (e.g. `{name}@company.com`). Rules are stored in one
+`GOVERNANCE`/`IDENTITY_MAP_RULES` item (versioned, audited; no new key
+prefix). The Identity links section then **suggests** a link for each
+non-person usage key that a rule maps to an existing identity's email; the
+admin confirms each suggestion (or confirms all for one rule), and the
+confirmed key is stored as an exact `alias` with its `UsageKeyClaim` —
+matching stays exact and never fuzzy, and uniqueness still applies
+(`409`). The same email resolves the LiteLLM user (`litellmUserId`,
+LiteLLM spec — *Identity mapping and members*). Rules never grant access
+and never map to a person automatically.
+
 **Canonical usage identity.** One function in `packages/shared` (dashboard
 on read now; collector in Phase 6): take the substring after the **last** `/`
 or `:` of CloudTrail `userIdentity.arn`/`principalId`, trim, lower-case,
@@ -637,6 +656,7 @@ user holds a proxy role). A new code is added here first. A bad or foreign list 
 | D20 | Managing users without SSO | dev-only local users / password users | **Password users in every environment**, admin-created, with the SSO reference stored for later binding (user, 2026-11-14) |
 | D21 | Where password users and the access-control data live | Aurora Serverless v2 / DynamoDB | **DynamoDB now, Aurora later** (user, 2026-11-14): the same table as written above; the user accepts Aurora's resume delay and may move the access-control data to it. The move and every action it needs are parked in `docs/future-improvements.md` — *Aurora Serverless v2 for access-control data*; the storage boundary (D26) keeps it a one-layer change |
 | D26 | Keeping the store replaceable | DynamoDB-shaped code / storage boundary | **Storage boundary** (*Data model additions*): every access-control read and write goes through domain functions in `apps/dashboard/lib/data/access/**`; nothing outside it sees a key, item or query (user, 2026-11-14) |
+| D27 | Session names that are not emails | manual aliases only / fuzzy matching / admin mapping rules | **Admin mapping rules that suggest exact aliases**, confirmed one by one or per rule (user, 2026-11-14) — fast for many users, still exact and auditable |
 | D22 | First password | admin-set temporary password / one-time setup link | **One-time setup link** (72 h, single use, fragment, hash stored); the admin never knows the password (user, 2026-11-14) |
 | D23 | TOTP for password users | everyone / admin roles / none | **Required for any role above `internal-viewer` or any admin scope**, optional otherwise (user, 2026-11-14) |
 | D24 | Password sign-in once Entra is configured | stop at once / switch | **Admin switch, on by default**; bound users are always refused; access review flags enabled password users (user, 2026-11-14) |

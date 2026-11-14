@@ -649,6 +649,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 ### Phase 4R.4 — Management UI and writes (`feature/phase-4r-4-rbac-settings`)
 
 - [ ] Settings access sections (Design System — *Settings Page*); write routes with permission, origin, re-auth and `409`; structural write-route test updated; **Password users** section and routes (`/api/password-users`, reset, TOTP reset, `/api/account/password`, `/api/governance/password-sign-in`); sign-in form and `/account/setup` page; auth and deployment guides (Pre-SSO setup, enabling SSO later, turning password sign-in off)
+- [ ] Usage-identity mapping rules (Access Control — *Usage-identity mapping rules*, D27; amended 2026-11-14): rules editor in Settings (`GOVERNANCE`/`IDENTITY_MAP_RULES`, versioned, audited), suggested links for non-person usage keys, confirm one or all per rule, stored as exact aliases with `UsageKeyClaim` (`409` on duplicates); tests: `{name}-sso` → `{name}@company.com` suggests only existing identities, never auto-links, never grants access
 - [ ] Verify: write matrix and T3, T9–T11, T16, T22 (one `denied` per authorization refusal, none on `400`), T7 (switch), T23, T24 (e2e setup), T25, T28 pass; axe clean; seeded probe per role
 
 ### Phase 4R.5 — UI gating and copy (`feature/phase-4r-5-rbac-ui`)
@@ -669,6 +670,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 ### L1 — Secrets, connection and permissions (`feature/phase-l1-litellm-connection`)
 
 - [ ] `env.ts`: `LITELLM_SERVICE_KEY` (server-only, optional; missing → "not configured") and `LITELLM_ALLOWED_HOSTS`, with placeholders in `build:ci` and `.env.example` (no real values); `edition` derived from `APP_ENV`
+- [ ] Local development connection (LiteLLM spec — LD17; amended 2026-11-14): `.env.example` documents `LITELLM_ALLOWED_HOSTS=localhost:4000` and an empty `LITELLM_SERVICE_KEY` (value only in `.env.local`); connection test against the local LiteLLM; confirm a Management key honours `allowed_routes`; refresh `docs/litellm/openapi.json` from the live 1.109.1 instance before L2
 - [ ] `lib/litellm/client.ts` (`server-only`): base URL from `LiteLLMConnection`, host allowlist, `https` in prod, no userinfo/query/fragment, 10 s timeout, GET retries ≤ 2, writes never retried, sanitised error mapping (`LITELLM_UNAVAILABLE`); every LiteLLM route `403` in `open` mode
 - [ ] `/api/litellm/connection` (GET/PUT, test-before-save, versioned, audited) and `/api/litellm/connection/test`; Settings → LiteLLM panel (status, URL, edition, test; no key entry)
 - [ ] DashboardServiceStack: `LITELLM_SERVICE_KEY` in the task definition's `secrets` (`valueFrom` the parameter ARN); execution role `ssm:GetParameters` on that ARN and `kms:Decrypt` on the CMK with `kms:ViaService`; nothing added to the task role; `TaskSecurityGroupId` stack output for LiteLLM's ingress rule (no egress rule; same subnets, amended 2026-11-14); the connection test probes the three templated routes (LD4); synthesised and asserted, never deployed
@@ -689,6 +691,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 ### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)
 
 - [ ] Write routes for every allowlisted write (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list
+- [ ] Team members (LiteLLM spec — LD10, LD16; amended 2026-11-14): Leads create, update and delete members (`removeTeamMember` default on); the LiteLLM team join link is added as `inviteTeamMember` only after the operators confirm the endpoint and the snapshot is refreshed — until then the UI invites through `addTeamMember`
 - [ ] Verify: write matrix; LT5, LT9, LT10, LT13, LT16, LT18 (privileged member → `409`, no key or membership write); one audit record per success/failure, one `denied` per authorization refusal (incl. `409 PRIVILEGED_TARGET`) and none on other rejections; structural write-route test includes every LiteLLM write route; e2e probe
 
 ### L5 — Polish and verification (`feature/phase-l5-litellm-polish`)
@@ -793,6 +796,7 @@ Phase 4 (all sub-phases complete).
   - **Open (user, 2026-11-14; ask before Phase 6):** confirm company policy allows a role in the management account with `ce:GetCostAndUsage`. If it does not, Cost Explorer is unavailable and every day's cost becomes a list-price estimate from the price table (`costFinalized` never `true`); that is a System Architecture amendment before the collector is built
   - `ce:GetCostAndUsage`
   - Trust: `BedrockCollectorLambdaRole` in the observability account
+- [ ] Evaluate Bedrock **model invocation logs** as an attribution source (user sample 2026-11-14, `schemaType: ModelInvocationLog`): each record carries `identity.arn`, `modelId` (inference-profile ARN, e.g. `au.` profiles), input, output and cache token counts and `inferenceRegion` — compare with CloudTrail Lake for per-user attribution and cache-token pricing; adopting it is a System Architecture amendment
 - [ ] Create the GitHub Actions OIDC deploy role(s) — one in the observability account (collector SAM stack) and deploy permissions in the management account (`CostExplorerReadRole` stack); used by the CD `deploy` job, no static AWS keys in CI
 
 ### Tasks
