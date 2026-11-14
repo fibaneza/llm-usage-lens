@@ -11,6 +11,7 @@ report in `temp/`. You push.
 | `shared-contracts.md` | Defined once and used by both feature prompts: environments, roles, identity and usage-key format, audit log, combined Bedrock + LiteLLM totals, governance, platform (ECS, CDK), operations, the finance statement |
 | `rbac_prompt.md` | Role-based access from Entra ID (global `internal-admin`, `internal-org-admin`, `internal-auditor`, `internal-viewer`; scoped `internal-team-admin`; the legacy `Admin` alias only outside `APP_ENV=prod`), SSO group mapping, single-team affiliation and admin scopes, visibility and inheritance, the master user, dev-only local login, the audit log, plus the platform unit |
 | `litellm_prompt.md` | LiteLLM team and user administration through an allowlist gateway and a scoped service key in SSM, budgets, rate limits, keys, combined usage, self-service keys, the monthly statement. Its permissions follow the role model in `rbac_prompt.md` §1.1 |
+| `coordinator_prompt.md` | How one session coordinates the worker sessions that run the goals above: briefs, file ownership, milestones, the shared usage freeze, serialised merges into `main`, and the live state in `temp/coordinator/` that survives a context reset |
 
 ## Run order
 
