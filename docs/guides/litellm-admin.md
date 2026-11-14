@@ -49,8 +49,13 @@ dashboard, its CI or its AWS account. `$LITELLM` is the proxy base URL.
           "auto_create_key":false,"send_invite_email":false}'
    ```
 
-2. Create its key, with `allowed_routes` set to **exactly** the list in §3,
-   a `key_alias` and no `models`:
+2. Create its key, with `allowed_routes` set to **exactly** the list in §3
+   and a `key_alias`. The key must not be able to call any model (LiteLLM
+   spec LD18): `/models` also matches `/models/{model}:generateContent` as a
+   prefix, and a key with no `models` may call every model. L2 records here
+   the key setting verified to refuse inference while `GET /models` still
+   lists names; until then, do not hand the key to anything but the
+   dashboard:
 
    ```sh
    curl -sS -X POST "$LITELLM/key/generate" \
@@ -83,8 +88,7 @@ dashboard, its CI or its AWS account. `$LITELLM` is the proxy base URL.
 /team/member_add
 /team/member_update
 /team/member_delete
-/team/{team_id}/member/{user_id}/reset_spend
-/team/{team_id}/member/{user_id}/reset_budget
+/team/*            (temporary; covers /team/{team_id}/member/{user_id}/reset_spend and /reset_budget)
 /team/daily/activity/aggregated
 /user/new
 /user/info
@@ -97,12 +101,21 @@ dashboard, its CI or its AWS account. `$LITELLM` is the proxy base URL.
 /key/unblock
 /key/info
 /key/list
-/key/{key}/regenerate
+/key/*             (temporary; covers /key/{key}/regenerate)
 /spend/logs/v2
 /models
 /global/spend/report
 /audit
 ```
+
+**Why the two wildcards (temporary, 2026-11-15).** LiteLLM 1.109.1 matches
+`allowed_routes` only exactly, by prefix, by group or with a trailing `*`;
+`{team_id}` and `{key}` templates never match. `/team/*` and `/key/*` are
+the only way to allow the three templated operations, and they also allow
+hard-limit routes, so the dashboard's gateway guardrails refuse those
+(LiteLLM spec — *Gateway guardrails*) and the Settings → LiteLLM panel
+shows a warning while they are present. Replace them with the exact
+templated routes once LiteLLM supports them (future-improvements).
 
 ## 4. Store the key in SSM (user, by hand)
 

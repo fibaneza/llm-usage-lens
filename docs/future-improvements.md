@@ -247,6 +247,21 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 - **References:** [Platform spec — *Runtime*](specs/2026-11-10-platform.md),
   [Rule 50](../.claude/rules/50-security-and-secrets.md).
 
+### Exact templated `allowed_routes` for the LiteLLM service key
+
+- **Status:** Deferred (temporary wildcards in place since 2026-11-15).
+- **What:** Replace the service key's temporary `/team/*` and `/key/*` with
+  the three exact templated routes
+  (`/team/{team_id}/member/{user_id}/reset_spend`, `/reset_budget`,
+  `/key/{key}/regenerate`), so LiteLLM itself refuses hard-limit routes again.
+- **Why deferred:** LiteLLM 1.109.1 matches `allowed_routes` only exactly,
+  by prefix, by group or with a trailing `*`; templates never match. The
+  operations are needed, so the dashboard's gateway guardrails stand in.
+- **Adopt when:** LiteLLM (upstream or a company patch to its route checks)
+  matches templated or mid-path wildcard routes; then remove the wildcards,
+  the panel warning and the runbook note.
+- **References:** [LiteLLM spec — *Service key `allowed_routes`*, LD4, LT3](specs/2026-11-10-litellm.md).
+
 ### GitHub Advanced Security / CodeQL
 
 - **Status:** Deferred.
