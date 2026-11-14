@@ -311,6 +311,15 @@ export function sanitizeAuditSnapshot(
   return out;
 }
 
+// Access Control spec - "Visibility and inheritance" (organisation cap): who,
+// when and the works-council / data-protection reference (GOVERNANCE/PER_USER).
+export const PerUserApprovalSchema = z.object({
+  approvedBy: IdSchema,
+  approvedAt: Iso8601Schema,
+  reference: z.string().min(1),
+  version: VersionSchema,
+});
+
 export function isAdminScopeSuspended(
   scope: AdminScope,
   identity: Pick<IdentityRecord, "groupsOverage">,
@@ -318,6 +327,7 @@ export function isAdminScopeSuspended(
   return scope.source === "sso" && identity.groupsOverage === true;
 }
 
+export type PerUserApproval = z.infer<typeof PerUserApprovalSchema>;
 export type AccessSource = z.infer<typeof AccessSourceSchema>;
 export type MemberAffiliation = z.infer<typeof MemberAffiliationSchema>;
 export type AdminScope = z.infer<typeof AdminScopeSchema>;

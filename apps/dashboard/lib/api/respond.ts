@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { SpanStatusCode, trace } from "@opentelemetry/api";
 import type { ApiErrorCode, AuditAction } from "@llm-usage-lens/shared";
 import { ZodError } from "zod";
+import type { Session } from "next-auth";
 import type { ZodType, z } from "zod";
 
 import { auth } from "@/auth";
@@ -13,6 +14,10 @@ import { INTERNAL_ADMIN_ROLE, hasAdminRole } from "@/lib/auth/roles";
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes"; Rule 10.3,
 // Rule 50.4 (401 before any data access), Rule 50.6, Rule 60.18; System
 // Architecture — "Account-mutation role" (403 for the account write routes).
+
+// Out-of-scope and nonexistent details share one body: no id, no hint
+// (Access Control spec - Enforcement item 2).
+export const NOT_FOUND_MESSAGE = "Not found";
 
 export class NotFoundError extends Error {
   constructor(message: string) {
@@ -179,7 +184,11 @@ async function recordDeniedWrite(
 // `requireAdmin` rejects a signed-in non-admin with 403 right after the session
 // check, so the role is enforced before the handler parses input or reads data.
 export function withRoute(
-  handler: (request: Request, ctx: RouteContext) => Promise<Response>,
+  handler: (
+    request: Request,
+    ctx: RouteContext,
+    session: Session,
+  ) => Promise<Response>,
   options: RouteOptions = {},
 ) {
   return (request: Request, ctx: RouteContext): Promise<Response> =>
@@ -206,7 +215,7 @@ export function withRoute(
         if (WRITE_METHODS.has(request.method) && !isSameOrigin(request)) {
           return jsonError(403, "FORBIDDEN", "Cross-origin request rejected");
         }
-        return await handler(request, ctx);
+        return await handler(request, ctx, session);
       } catch (error) {
         if (isBadRequestError(error)) {
           return jsonError(400, "BAD_REQUEST", error.firstMessage);

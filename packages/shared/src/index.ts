@@ -174,6 +174,7 @@ export {
   TeamVisibilitySchema,
   UsageKeyClaimSchema,
   auditCategory,
+  PerUserApprovalSchema,
   isAdminScopeSuspended,
   sanitizeAuditSnapshot,
 } from "./schemas/access-control";
@@ -190,6 +191,7 @@ export type {
   MemberAffiliation,
   PasswordUser,
   PendingItem,
+  PerUserApproval,
   RoleGrant,
   TeamVisibility,
   UsageKeyClaim,
