@@ -577,9 +577,10 @@ From Rules 10, 20 and 50 and the data-model spec:
 ## 8. Verification
 
 **Gates on the working branch** (token economy, Rule 70.12, decided
-2026-11-14): while iterating, run only the affected tests. Run the full set
-below **once when the target is green** (it is the review's evidence) and
-again before the merge or T+55 **only if commits landed after it**. Read
+2026-11-14): on the branch, run only new and impacted tests (`vitest run --changed
+<merge-base>`) with typecheck, lint and format; that is the review's evidence.
+Run the full set below **once, on the `main` candidate** (the branch with
+`main` merged in, just before the fast-forward). Read
 exit codes and count lines only; open a log only to diagnose a failure.
 
 - `pnpm typecheck`, which includes `tsc -p tsconfig.scripts.json`

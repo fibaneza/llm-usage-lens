@@ -534,9 +534,9 @@ Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
 - **L1, L2 and L4 get a dedicated security pass** against the threat model,
   inside the unit's one review (Rule 70.12), not as a separate round.
 - **Token economy (Rule 70.12):** one review per unit when it is green, with
-  delta-scoped re-reviews; targeted test runs while iterating; full
-  `pnpm check` once when green and before the merge only if commits landed
-  after it; read results, never full logs.
+  delta-scoped re-reviews; targeted test runs while iterating; only new and impacted tests on the branch
+  (`vitest run --changed <merge-base>`); the full `pnpm check` once, on the
+  `main` candidate; read results, never full logs.
 
 ## 3. Correctness checklist (tests must assert these)
 

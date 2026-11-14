@@ -116,14 +116,26 @@ review = quality-reviewer + spec-guardian + ecc reviewers
       reviews only the blocker fixes (the diff since the last reviewed
       commit) against the blocker list, not the whole phase again. The
       3-round cap (rule 7) still applies.
-    - **Targeted tests while iterating.** Red and green iterations run only
-      the affected test files (`pnpm exec vitest run <paths>`, or
-      `--project unit` when no DynamoDB code changed) and the targeted e2e
-      spec (`pnpm test:e2e -- <spec>`).
-    - **Full gates at fixed points only:** `pnpm check` once when the phase
-      is green (the evidence for the review), and again before the merge
-      only if commits landed after it. `pnpm test:e2e` (full) runs once per
-      phase, and only when UI or auth changed.
+    - **Branches run only new and impacted tests** (amended 2026-11-14,
+      user). Iterations run the files being worked on
+      (`pnpm exec vitest run <paths>`); the phase's green gate — the
+      review's evidence — is `pnpm typecheck`, `pnpm lint`,
+      `pnpm format:check` and the impacted tests,
+      `pnpm exec vitest run --changed $(git merge-base main HEAD)` (Vitest
+      follows the import graph from every changed file), plus the targeted
+      e2e specs (`pnpm test:e2e -- <spec>`) when UI changed. A change to a
+      shared module (`packages/shared`, `lib/data/access/store.ts`,
+      `lib/api/respond.ts`, `auth.ts`, `env.ts`) or to test infrastructure
+      (`vitest.config.ts`, `test/**`, `e2e/support/**`) is impacted
+      everywhere, so `--changed` already widens to the full suite.
+    - **The full suite runs once, on the `main` candidate.** Before a phase
+      fast-forwards `main`, merge `main` into the branch and run the full
+      `pnpm check` (both Vitest projects and `build:ci`) and, when UI or
+      auth changed, the full `pnpm test:e2e` on that tree — exactly the tree
+      `main` will hold, so a regression is caught before it lands, never
+      after. CI repeats the full set on the user's push. A failure there goes
+      back into the loop on the branch; `main` is never committed to
+      directly (Rule 30.5).
     - **Results, not logs.** Every test, gate or build run is redirected to
       a file; agents and the orchestrator read only the exit code, the count
       lines (`Test Files`, `Tests`, Playwright passed/failed) and the names

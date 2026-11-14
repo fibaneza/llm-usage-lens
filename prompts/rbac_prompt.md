@@ -653,9 +653,9 @@ unit before any code.
 - **R3 and R4 add a dedicated security pass inside that one review.**
   quality-reviewer is briefed with the threat model and asked to try to
   break the policy.
-- **Token economy (Rule 70.12):** iterate with targeted test runs; full
-  `pnpm check` once when green and before the merge only if commits landed
-  after it; read results, never full logs.
+- **Token economy (Rule 70.12):** iterate with targeted test runs; only new and impacted tests on the branch
+  (`vitest run --changed <merge-base>`); the full `pnpm check` once, on the
+  `main` candidate; read results, never full logs.
 
 ## 3. Correctness checklist (tests must assert these)
 

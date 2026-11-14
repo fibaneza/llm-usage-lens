@@ -34,14 +34,16 @@ tdd-test-engineer's red report. It implements until the suite passes and the
 gates (`tsc`, `eslint`, `vitest`, plus the headless Playwright suite when the
 task touches UI) are green — without editing any test. If it
 disputes a test, re-dispatch the `tdd-test-engineer` for a ruling (UPHOLD /
-AMEND), then resume. While iterating, both agents run only the affected test
-files and read results, not logs (Rule 70.12).
+AMEND), then resume. Both agents run only new and impacted tests (the files
+they work on, then `vitest run --changed <merge-base>`) and read results, not
+logs; the full suite runs once, on the `main` candidate (Rule 70.12).
 
 ## Step 3 — Review (once per phase)
 
-Run this step **once per phase**, when the phase is green (Rule 70.12). First
-run `pnpm check` yourself and put its evidence (exit code and counts) in each
-brief. A rework pass after REQUEST CHANGES re-reviews only the blocker fixes,
+Run this step **once per phase**, when the phase is green (Rule 70.12). First run the
+branch gate yourself (typecheck, lint, format and the impacted tests) and put
+its evidence (exit codes and counts) in each brief. The full `pnpm check`
+runs later, once, on the `main` candidate. A rework pass after REQUEST CHANGES re-reviews only the blocker fixes,
 the diff since the last reviewed commit.
 
 In a **single message**, dispatch in parallel:
