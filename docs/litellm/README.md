@@ -7,12 +7,12 @@ version pin*).
 
 | Field | Value |
 |---|---|
-| Source | <https://docs.litellm.ai/openapi.json> |
-| Fetched | 2026-11-10 |
+| Source | the local LiteLLM 1.109.1 `http://localhost:4000/openapi.json` (previously <https://docs.litellm.ai/openapi.json>, 1.108.3) |
+| Fetched | 2026-11-15 |
 | `openapi` | `3.1.0` |
-| `info.version` | `1.108.3` |
-| Paths | 717 |
-| SHA-256 | `aed298fe64c20b0bd2ad3b637a3f513943152431de9a1c11025d3f5ce63d0dcc` |
+| `info.version` | `1.109.1` |
+| Paths | 729 |
+| SHA-256 | `b4c4e4648e8ecc477529f900f0fa2c30e6ba38ecd7089292b50d4212c5bc3ae5` |
 
 Verify: `shasum -a 256 docs/litellm/openapi.json`.
 
