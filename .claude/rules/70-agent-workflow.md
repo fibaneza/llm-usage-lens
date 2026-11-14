@@ -24,7 +24,13 @@ and security itself.
 
 ## Model routing
 
-Set the model explicitly on every dispatch; the agent's frontmatter is the fallback:
+Set the model explicitly on every dispatch; the agent's frontmatter is the fallback.
+**Name the model when you start** (user, 2026-11-15): every session — worker
+or coordinator — says which Claude model it will use when it starts a task,
+a gate run or an agent (for example "dispatching tdd-test-engineer on
+sonnet"), in its own output and progress log; it is not a separate message
+to the coordinator.
+
 
 | Model | Use for |
 |---|---|

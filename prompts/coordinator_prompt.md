@@ -52,6 +52,7 @@ never overrides a rule; it only adds coordination.
   4. the run folder `temp/run-<slug>/` and the report name;
   5. file ownership versus the other active goals;
   6. limits: max 2 concurrent agents per worker, models set explicitly
+     and named when each task or agent starts (Rule 70 *Model routing*)
      (sonnet for tests and code, opus for reviews, haiku for gate re-runs),
      the usage freeze, and Rule 70.12 (one review per phase, delta
      re-reviews, impacted tests on the branch, results not logs);
