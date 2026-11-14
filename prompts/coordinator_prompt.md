@@ -57,10 +57,11 @@ never overrides a rule; it only adds coordination.
      re-reviews, impacted tests on the branch, results not logs);
   7. the remaining steps in order;
   8. "send the coordinator a one-line status at each milestone. When the
-     phase review approves and the branch gate is green, commit everything,
-     leave the worktree clean, send 'ready to merge <unit> at <commit>', and
-     stop work on that branch. Never merge into `main` or delete the branch —
-     the coordinator does that".
+     branch gate is green (typecheck, lint, format, impacted tests), commit
+     everything, leave the worktree clean, send 'ready to merge <unit> at
+     <commit>', and stop work on that branch. Run no review fan-out and no
+     full suite yourself — the coordinator runs them once for the whole
+     batch (§4). Never merge into `main` or delete the branch".
 - **The `/goal` line is the user's to type** — a slash command cannot be sent
   by message. Give the user the exact `/goal` condition from the goal
   prompt's §6 whenever a worker starts a new goal.
@@ -116,46 +117,60 @@ never overrides a rule; it only adds coordination.
   `resets_at` (`CronCreate`, one-shot, session-only). On resume, re-read
   state (§0) before briefing — workers may have moved on.
 
-## 4. Merges into `main` (the coordinator's job, one at a time)
+## 4. Merges into `main` (the coordinator's job, batched)
+
+**One run per batch (decided 2026-11-15, user; Rule 70.12).** The
+coordinator waits until **every active goal** is ready to merge, merges them
+all into one candidate, and only then runs the full tests, the security
+review and the other reviews — once, on the combined tree. No per-branch
+full suite, no per-branch review.
 
 1. **Intake.** A worker reports "ready to merge <unit> at <commit>". Check
-   the phase review approved, the worktree is clean and the commit matches.
-   If another merge is in progress, queue it in `state.md`.
-2. **Build the `main` candidate** in the goal's worktree: `git merge main`
-   (resolve conflicts per §2a: keep what is on `main` plus the branch's new
-   lines; append-only files get both sides' lines).
-3. **Run the full gate** there (Rule 70.12), results only:
-   `pnpm check` (DynamoDB Local on `:8000`; run outside the sandbox when it
-   blocks the port or the pnpm store) and, when UI or auth changed,
-   `pnpm test:e2e`. Compare against `main`'s last full run to tell
-   regressions from pre-existing failures. Use a `haiku` agent to run and
-   summarise it when the coordinator's context is precious.
-4. **If it fails, fix it on the branch — never on `main`.** Dispatch the
-   Rule 70 loop with explicit models: `tdd-test-engineer` (sonnet) first for
-   a behavioural failure or a test ruling, then `typescript-developer`
-   (sonnet). Brief them in that worktree with the failing test names only.
-   After the fix, re-run the full gate; if the fix changed behaviour or
-   security-relevant code, run a delta review on opus (Rule 70.12). Cap at 3
-   rounds, then hand the open failures to the user. Tell the goal's worker
-   what was fixed.
-5. **Land it.** Tick the phase's satisfied task and Verify boxes in
-   `docs/specs/2026-05-15-implementation-phases.md` on the branch, then put
-   the tree onto `main` as one commit (Rule 31): `git commit-tree
-   "<branch>^{tree}" -p main` with a Conventional Commits subject, on a
-   temporary branch, and `git -C <primary checkout> merge --ff-only <it>`
-   (outside the sandbox when it blocks the primary checkout; if a
-   fast-forward half-applies, confirm the touched files equal the commit
-   before restoring them and retrying).
-6. **Clean up.** First copy the worktree's `temp/` (run reports, ledgers,
+   the worktree is clean and the commit matches; record it in the merge
+   queue in `state.md`. Start nothing until every active goal is in the
+   queue (or the user says to cut the batch short).
+2. **Build the batch candidate** on a temporary branch
+   `integration/<yyyymmdd>` in its own worktree from `main`: merge each
+   queued branch in turn (resolve conflicts per §2a: keep what is on
+   `main` plus each branch's new lines; append-only files get every side's
+   lines).
+3. **Review once.** One fan-out over `git diff main...integration/<date>`:
+   `quality-reviewer` (opus) covering every unit in the batch and every
+   dedicated security review those units require (4R.4, L2, L4, …), plus
+   `spec-guardian` when the batch changed `docs/specs/**` or
+   `.claude/rules/**`, and `playwright-ui-reviewer` when UI changed.
+4. **Test once.** On the same tree, results only: `pnpm check` (DynamoDB
+   Local on `:8000`; outside the sandbox when it blocks the port or the
+   pnpm store) and, when UI or auth changed, `pnpm test:e2e`. Use a `haiku`
+   agent to run and summarise it when the coordinator's context is
+   precious.
+5. **If either fails, fix it on the owning branch — never on `main`.**
+   Dispatch the Rule 70 loop with explicit models (`tdd-test-engineer`
+   then `typescript-developer`, sonnet) in that branch's worktree with the
+   failing test names or blockers only, re-merge it into the candidate, and
+   re-run only what the fix touches: a delta review of the fix, and the
+   impacted tests plus the gate's failed project. Cap at 3 rounds, then
+   hand the open failures to the user. Tell the goal's worker what was
+   fixed.
+6. **Land it.** Tick each unit's satisfied task and Verify boxes in
+   `docs/specs/2026-05-15-implementation-phases.md` on the candidate, then
+   put its tree onto `main` as one commit per unit when the units' diffs
+   separate cleanly, otherwise one commit naming every unit (Rule 31):
+   `git commit-tree "<branch>^{tree}" -p main` with a Conventional Commits
+   subject, on a temporary branch, and `git -C <primary checkout> merge
+   --ff-only <it>` (outside the sandbox when it blocks the primary
+   checkout; if a fast-forward half-applies, confirm the touched files
+   equal the commit before restoring them and retrying).
+7. **Clean up.** First copy the worktree's `temp/` (run reports, ledgers,
    progress logs) to the primary checkout's `temp/run-<slug>/`, because
    removing a worktree deletes its gitignored files. Then delete the
    temporary and goal branches (confirm `main` contains the tree first),
    remove the goal's worktree, `git worktree
    prune`, and delete a remote branch only if it was pushed (Rule 31 step
    7). Record the new `main` commit in `state.md` and `status.log`.
-7. **Next.** Tell the user, bring the other active branches up to date
+8. **Next.** Tell the user, bring the other active branches up to date
    (§2a), and assign the worker its next goal in a fresh worktree (§1).
-8. **Never push.** Pushing `main` is the user's action.
+9. **Never push.** Pushing `main` is the user's action.
 
 ## 5. Coordinator's own changes
 

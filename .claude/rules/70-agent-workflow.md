@@ -112,6 +112,13 @@ review = quality-reviewer + spec-guardian + ecc reviewers
       `.claude/rules/**`. Add `playwright-ui-reviewer` only when UI changed.
       A dedicated security review that a spec or prompt requires (4R.3,
       4R.4, L1, L2, L4) is part of this one review, not a separate round.
+    - **Batched under a coordinator (amended 2026-11-15, user).** When a
+      coordinator runs parallel goals (`prompts/coordinator_prompt.md` §4),
+      workers stop at a green branch gate with no review of their own; the
+      coordinator waits until every active goal is ready, merges them into
+      one candidate, and runs the review fan-out (covering each unit and
+      its required security review) and the full suite once on that tree.
+      Nothing reaches `main` before both pass.
     - **Re-reviews are delta-scoped.** After REQUEST CHANGES, the next pass
       reviews only the blocker fixes (the diff since the last reviewed
       commit) against the blocker list, not the whole phase again. The
