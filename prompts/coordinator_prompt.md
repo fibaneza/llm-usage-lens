@@ -85,6 +85,13 @@ never overrides a rule; it only adds coordination.
 - Log every worker message, one line each, to `temp/coordinator/status.log`
   (`<UTC> <worker>: <milestone>`), and update `state.md` (milestone, last
   commit, blockers). Relay a short summary to the user.
+- **Idle check (user, 2026-11-15).** While at least one goal is active (a
+  worker briefed, with no `ready` or `frozen` message since), a session-only
+  `CronCreate` job runs every 5 minutes. It checks only the active goals:
+  `ListAgents`, then each one's worktree `log -1` and `status`, then usage.
+  It nudges an idle, unchanged, silent worker once, and tells the user if
+  the worker stays idle. When no goal is active, the job deletes itself and
+  is created again with the next brief.
 - **Do not duplicate work.** The coordinator runs no agents on a goal while
   its worker is working on it. If a worker is stuck past its deadline,
   message it once; if it stays idle, tell the user.
