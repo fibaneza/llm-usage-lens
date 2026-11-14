@@ -1,0 +1,95 @@
+{
+  "operations": {
+    "getTeam": {
+      "enabled": true
+    },
+    "listProxyTeams": {
+      "enabled": true
+    },
+    "getTeamDailySpend": {
+      "enabled": true
+    },
+    "getUser": {
+      "enabled": true
+    },
+    "findUserByEmail": {
+      "enabled": true
+    },
+    "getUserDailySpend": {
+      "enabled": true
+    },
+    "listKeys": {
+      "enabled": true
+    },
+    "getKey": {
+      "enabled": true
+    },
+    "listSpendLogs": {
+      "enabled": true
+    },
+    "listProxyModels": {
+      "enabled": true
+    },
+    "listProxyAuditLog": {
+      "enabled": true
+    },
+    "getGlobalSpendReport": {
+      "enabled": true
+    },
+    "createTeam": {
+      "enabled": true
+    },
+    "setTeamBudget": {
+      "enabled": true
+    },
+    "setTeamLimits": {
+      "enabled": true
+    },
+    "setTeamModels": {
+      "enabled": true
+    },
+    "addTeamMember": {
+      "enabled": true
+    },
+    "removeTeamMember": {
+      "enabled": true
+    },
+    "setMemberBudget": {
+      "enabled": true
+    },
+    "setMemberLimits": {
+      "enabled": true
+    },
+    "resetMemberSpend": {
+      "enabled": false
+    },
+    "resetMemberBudget": {
+      "enabled": true
+    },
+    "disableMember": {
+      "enabled": true
+    },
+    "enableMember": {
+      "enabled": true
+    },
+    "generateMemberKey": {
+      "enabled": true
+    },
+    "updateMemberKey": {
+      "enabled": true
+    },
+    "blockKey": {
+      "enabled": true
+    },
+    "unblockKey": {
+      "enabled": true
+    },
+    "deleteKey": {
+      "enabled": false
+    },
+    "rotateKey": {
+      "enabled": true
+    }
+  },
+  "wildcardWarning": true
+}

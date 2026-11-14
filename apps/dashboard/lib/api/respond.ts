@@ -55,7 +55,9 @@ export class BadRequestError extends ZodError {
 // Access Control spec — Enforcement: every /api/* response is private, no-store.
 const NO_STORE = "private, no-store";
 
-export type RouteContext = { params: Promise<Record<string, string>> };
+export type RouteContext = {
+  params: Promise<Record<string, string | undefined>>;
+};
 
 export function jsonData<T>(data: T, init?: ResponseInit): Response {
   const headers = new Headers(init?.headers);

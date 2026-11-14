@@ -38,5 +38,7 @@ export const ConnectionTestResultSchema = z.strictObject({
     "not_configured",
   ]),
   message: z.string(),
+  // Gateway guardrails item 6: e.g. the temporary-wildcard notice.
+  warnings: z.array(z.string()).default([]),
 });
 export type ConnectionTestResult = z.infer<typeof ConnectionTestResultSchema>;

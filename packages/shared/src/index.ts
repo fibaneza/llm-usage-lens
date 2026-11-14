@@ -231,3 +231,17 @@ export type {
   LiteLLMConnection,
   LiteLLMConnectionStatus,
 } from "./schemas/litellm";
+
+export {
+  LITELLM_OPERATION_NAMES,
+  LiteLLMGatewayConfigSchema,
+  LiteLLMOperationNameSchema,
+  OperationTogglesSchema,
+  TeamLinkSchema,
+} from "./schemas/litellm-gateway";
+export type {
+  LiteLLMGatewayConfig,
+  LiteLLMOperationName,
+  OperationToggles,
+  TeamLink,
+} from "./schemas/litellm-gateway";
