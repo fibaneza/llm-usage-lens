@@ -1,0 +1,96 @@
+# POC: the dashboard image from ECR plus DynamoDB Local and DynamoDB Admin on
+# one EC2 host. See poc/README.md. Run from the directory holding this file and
+# its .env (Compose reads .env for the ${...} values below, and the app reads
+# it through env_file).
+#
+# LiteLLM is an external service and is deliberately not defined here.
+
+name: llm-usage-lens-poc
+
+services:
+  app:
+    # Built locally by poc/scripts/build-and-push.sh; never built on EC2.
+    image: ${ECR_REPOSITORY_URI:?Set ECR_REPOSITORY_URI in .env}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # The service name is one of the hostnames the app treats as DynamoDB
+      # Local (apps/dashboard/lib/dynamodb.ts), so no AWS credentials are used.
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+    ports:
+      # The container always listens on 3000 (apps/dashboard/Dockerfile).
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-3000}:3000"
+    depends_on:
+      dynamodb-local:
+        condition: service_healthy
+    healthcheck:
+      # GET /api/health needs no session and answers 200 while the process
+      # serves; the body reports "degraded" when DynamoDB is unreachable.
+      test:
+        ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - poc
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:${DYNAMODB_LOCAL_TAG:-latest}
+    restart: unless-stopped
+    # root so the process can write the named volume; same flags as the
+    # devcontainer (.devcontainer/docker-compose.yml).
+    user: root
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
+    volumes:
+      - dynamodb-data:/data
+    ports:
+      # Host loopback only: used by scripts/init-dynamodb.sh and by SSM port
+      # forwarding. Never reachable from the network.
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      # The image ships no curl or wget; any HTTP answer on 8000 means "up".
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8000'"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    networks:
+      - poc
+    logging: *logging
+
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin:${DYNAMODB_ADMIN_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DYNAMO_ENDPOINT: http://dynamodb-local:8000
+      AWS_REGION: ${AWS_REGION:-ap-southeast-2}
+      # Not real keys: DynamoDB Local accepts any value and -sharedDb ignores it.
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    ports:
+      # Administration UI: host loopback only, and the security group opens no
+      # port for it. Reach it through SSM port forwarding (README - Verify and
+      # troubleshoot).
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      dynamodb-local:
+        condition: service_healthy
+    networks:
+      - poc
+    logging: *logging
+
+networks:
+  poc:
+    name: llm-usage-lens-poc
+
+volumes:
+  # DynamoDB Local table data. Survives `docker compose down`; removed by
+  # `docker compose down -v`.
+  dynamodb-data:
