@@ -153,7 +153,7 @@ test.describe("settings LiteLLM base URL entry", () => {
     await openSettings(page);
     await page.getByLabel(/base url/i).fill(NEW_URL);
     await page.getByRole("button", { name: /^save/i }).click();
-    await expect(page.getByRole("alert")).toContainText(
+    await expect(page.locator("main").getByRole("alert")).toContainText(
       "Connection changed, reload",
     );
   });

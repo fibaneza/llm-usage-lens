@@ -43,7 +43,7 @@ export async function fetchApi<S extends z.ZodType>(
 
 export async function mutateApi<S extends z.ZodType>(
   path: string,
-  method: "POST" | "PATCH" | "DELETE",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   body: unknown,
   dataSchema: S,
 ): Promise<z.output<S>> {

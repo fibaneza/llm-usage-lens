@@ -71,16 +71,18 @@ export const PUT = withRoute(
     });
     if (!checked.ok) return jsonError(400, "BAD_REQUEST", checked.reason);
 
+    const session = await auth();
+    if (!session) return jsonError(401, "UNAUTHORIZED", "Sign in required");
+
     const test = await testLiteLLMConnection(checked.baseUrl);
     if (test.result !== "ok") {
       return jsonError(503, "LITELLM_UNAVAILABLE", test.message);
     }
 
-    const session = await auth();
     const saved = await putLiteLLMConnection(
       { baseUrl: checked.baseUrl, version: input.version },
       {
-        actor: session?.user?.oid ?? "unknown",
+        actor: session.user.oid,
         requestId: randomUUID(),
         now: new Date(),
         sequence: { next: 0 },
@@ -91,5 +93,11 @@ export const PUT = withRoute(
     }
     return jsonData(status(saved.value.baseUrl, saved.value.version));
   },
-  { requireAdmin: true },
+  {
+    requireAdmin: true,
+    denied: {
+      action: "litellm.connection.update",
+      pattern: "/api/litellm/connection",
+    },
+  },
 );

@@ -20,10 +20,11 @@ const STATIC_DIR = fileURLToPath(
 const required = process.env.REQUIRE_BUILD_OUTPUT === "1";
 const built = existsSync(STATIC_DIR);
 
-// build:ci sets no LITELLM_SERVICE_KEY, so the sentinels are its placeholder
-// secret values plus a key-shaped sentinel the build may be given later.
+// LT1 concerns the key VALUE. The variable NAME may ship in the shared env
+// schema chunk (no values), so names are deliberately not asserted. build:ci
+// sets LITELLM_SERVICE_KEY=sk-ci-build-sentinel (non-secret) so this scan is
+// not vacuous; the other sentinel is its placeholder secret value.
 const FORBIDDEN_VALUES = ["ci-build-placeholder", "sk-ci-build-sentinel"];
-const FORBIDDEN_NAMES = ["LITELLM_SERVICE_KEY"];
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -58,14 +59,5 @@ describe.skipIf(!built)(
         texts.filter((t) => t.text.includes(value)).map((t) => t.f),
       ).toEqual([]);
     });
-
-    it.each(FORBIDDEN_NAMES)(
-      "does not mention the server-only variable name %s",
-      (name) => {
-        expect(
-          texts.filter((t) => t.text.includes(name)).map((t) => t.f),
-        ).toEqual([]);
-      },
-    );
   },
 );

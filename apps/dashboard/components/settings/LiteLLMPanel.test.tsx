@@ -172,7 +172,7 @@ describe("LiteLLMPanel base URL entry", () => {
             url: String(input),
             body: JSON.parse(String(init?.body ?? "null")),
           });
-          return Promise.resolve(putResponse.clone());
+          return Promise.resolve(putResponse);
         }
         return Promise.resolve(apiResponse({ data: CONFIGURED }));
       }),

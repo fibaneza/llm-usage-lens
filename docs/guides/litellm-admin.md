@@ -120,7 +120,8 @@ aws ssm put-parameter --name /llm-usage-lens/<env>/litellm/service-key \
 
 ## 5. Configure the dashboard (user)
 
-1. Set `LITELLM_ALLOWED_HOSTS` in the deploy configuration to the LiteLLM
+1. Set the CDK context `litellmAllowedHosts` (it becomes the container
+   environment variable `LITELLM_ALLOWED_HOSTS`) to the LiteLLM
    hostname only (with `:port` if not 443).
 2. Ask the LiteLLM operators to allow the LiteLLM port on LiteLLM's
    security group from the dashboard task security group (stack output

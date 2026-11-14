@@ -80,12 +80,17 @@ describe("LiteLLM configuration files", () => {
     expect(example).not.toMatch(/LITELLM_MASTER/);
   });
 
-  it("build:ci passes a non-secret LITELLM_ALLOWED_HOSTS placeholder and no key value", () => {
+  it("build:ci passes a LITELLM_ALLOWED_HOSTS placeholder and only the known non-secret sentinel as the key", () => {
     const pkg = JSON.parse(
       readFileSync(join(ROOT, "package.json"), "utf8"),
     ) as { scripts: Record<string, string> };
     const buildCi = pkg.scripts["build:ci"] ?? "";
     expect(buildCi).toMatch(/LITELLM_ALLOWED_HOSTS=\S+/);
-    expect(buildCi).not.toMatch(/LITELLM_SERVICE_KEY=\S+/);
+    // LT1: the bundle scan (lib/litellm/bundle-output.test.ts) greps for this
+    // exact sentinel, so it must be set; any other value could be a real key.
+    const keys = [...buildCi.matchAll(/LITELLM_SERVICE_KEY=(\S*)/g)].map(
+      (m) => m[1],
+    );
+    expect(keys).toEqual(["sk-ci-build-sentinel"]);
   });
 });

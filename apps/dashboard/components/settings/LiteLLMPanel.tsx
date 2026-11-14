@@ -4,9 +4,11 @@ import {
   ConnectionTestResultSchema,
   LiteLLMConnectionStatusSchema,
 } from "@llm-usage-lens/shared";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchApi, mutateApi } from "@/lib/query/fetch-api";
 
@@ -26,6 +28,57 @@ function PanelSkeleton() {
       <Skeleton className="h-4 w-40" />
       <Skeleton className="h-4 w-48" />
     </div>
+  );
+}
+
+function BaseUrlForm({
+  stored,
+  version,
+}: {
+  stored: string | null;
+  version: number;
+}) {
+  const queryClient = useQueryClient();
+  const [value, setValue] = useState(stored ?? "");
+  const save = useMutation({
+    mutationFn: () =>
+      mutateApi(
+        "/api/litellm/connection",
+        "PUT",
+        { baseUrl: value, version: version === 0 ? null : version },
+        StatusSchema,
+      ),
+    onSuccess: (next) => queryClient.setQueryData(STATUS_KEY, next),
+  });
+  return (
+    <form
+      className="flex max-w-[72ch] flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save.mutate();
+      }}
+    >
+      <label htmlFor="litellm-base-url" className="text-sm font-medium">
+        Base URL
+      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          id="litellm-base-url"
+          type="url"
+          className="min-w-64 flex-1"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <Button type="submit" disabled={save.isPending}>
+          Save
+        </Button>
+      </div>
+      {save.isError ? (
+        <p role="alert" className="text-destructive text-sm">
+          {save.error.message}
+        </p>
+      ) : null}
+    </form>
   );
 }
 
@@ -75,6 +128,11 @@ export function LiteLLMPanel() {
           </span>
         </div>
       </div>
+      <BaseUrlForm
+        key={`${s.version}:${s.baseUrl ?? ""}`}
+        stored={s.baseUrl}
+        version={s.version}
+      />
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="button"

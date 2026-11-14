@@ -77,6 +77,7 @@ Pass with `-c key=value`; lists are comma-separated. Never commit real values
 | `masterUsername` | both | optional break-glass master user name; its hash and TOTP secret are hand-managed SSM SecureStrings under `/llm-usage-lens/<env>/auth/` |
 | `opsRoleArn` | both | `prod`: the break-glass permission set's role ARN (section 2; recommended — synth warns when unset); `dev`: unset or your usual admin role |
 | `dynamodbVpcEndpointId` | both | optional existing DynamoDB gateway endpoint, e.g. `vpce-00000000000000000` |
+| `litellmAllowedHosts` | both | optional LiteLLM hostname (with `:port` if not 443); becomes the non-secret `LITELLM_ALLOWED_HOSTS` container environment variable |
 | `listenerArn`, `listenerRulePriority`, `albSecurityGroupId` | import | listener ARN, unique priority agreed with the ALB owner, the ALB's security group |
 | `companyCidrs` | create | `10.0.0.0/8` (never `0.0.0.0/0`) |
 

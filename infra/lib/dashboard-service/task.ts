@@ -218,6 +218,9 @@ export function addDashboardTask(
       ...(inputs.masterUsername
         ? { AUTH_MASTER_USERNAME: inputs.masterUsername }
         : {}),
+      ...(inputs.litellmAllowedHosts
+        ? { LITELLM_ALLOWED_HOSTS: inputs.litellmAllowedHosts }
+        : {}),
       NODE_ENV: "production",
       NEXT_PUBLIC_APP_URL: `https://${inputs.dashboardHostname}`,
       AUTH_URL: `https://${inputs.dashboardHostname}`,

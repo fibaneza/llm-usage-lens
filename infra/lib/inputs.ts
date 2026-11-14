@@ -73,6 +73,9 @@ const BaseSchema = z
       .string()
       .regex(/^vpce-[0-9a-f]+$/)
       .optional(),
+    // Platform spec — "Inputs": non-secret LiteLLM gateway host allowlist
+    // (container environment LITELLM_ALLOWED_HOSTS); unset omits it.
+    litellmAllowedHosts: z.string().min(1).optional(),
   })
   .superRefine((v, ctx) => {
     if ((v.entraClientId === undefined) !== (v.entraIssuer === undefined)) {
@@ -118,6 +121,7 @@ export function parseAppInputs(context: Record<string, unknown>): AppInputs {
     "masterUsername",
     "opsRoleArn",
     "dynamodbVpcEndpointId",
+    "litellmAllowedHosts",
   ];
   const cleaned = Object.fromEntries(
     Object.entries(context).filter(
