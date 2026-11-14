@@ -122,7 +122,10 @@ type RawCallback = (params: Json) => Promise<Json | null> | Json | null;
 type Callback = (params: Json) => Promise<Json>;
 type Authorize = (credentials: Json, request: Request) => Promise<Json | null>;
 type CapturedConfig = {
-  providers: { type?: string; options?: { authorize?: Authorize } }[];
+  providers: {
+    type?: string;
+    options?: { id?: string; authorize?: Authorize };
+  }[];
   session?: { strategy?: string; maxAge?: number };
   callbacks?: {
     jwt?: RawCallback;
@@ -162,7 +165,9 @@ function callbackOf(config: CapturedConfig, name: "jwt" | "session"): Callback {
 }
 
 function authorizeOf(config: CapturedConfig): Authorize {
-  const provider = config.providers.find((p) => p.type === "credentials");
+  const provider = config.providers.find(
+    (p) => p.options?.id === DEV_LOGIN_PROVIDER_ID,
+  );
   const authorize = provider?.options?.authorize;
   if (typeof authorize !== "function") {
     throw new Error("auth.ts must register the dev-login credentials provider");
@@ -612,7 +617,9 @@ describe("auth.ts dev-only local login signs in with Admin", () => {
       NODE_ENV: "production",
       ...ENTRA,
     });
-    expect(config.providers.some((p) => p.type === "credentials")).toBe(false);
+    expect(
+      config.providers.some((p) => p.options?.id === DEV_LOGIN_PROVIDER_ID),
+    ).toBe(false);
   });
 });
 

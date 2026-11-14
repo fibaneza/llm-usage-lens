@@ -23,13 +23,15 @@ afterEach(() => {
 
 describe("SettingsPage", () => {
   it("passes isAdmin=true for a session with the Admin role", async () => {
-    auth.mockResolvedValue({ user: { roles: ["internal-admin"] } });
+    auth.mockResolvedValue({
+      user: { oid: "oid-test", roles: ["internal-admin"] },
+    });
     render(await SettingsPage());
     expect(screen.getByTestId("content")).toHaveTextContent("true");
   });
 
   it("passes isAdmin=false without the Admin role", async () => {
-    auth.mockResolvedValue({ user: { roles: ["Reader"] } });
+    auth.mockResolvedValue({ user: { oid: "oid-test", roles: ["Reader"] } });
     render(await SettingsPage());
     expect(screen.getByTestId("content")).toHaveTextContent("false");
   });

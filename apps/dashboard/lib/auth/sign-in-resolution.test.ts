@@ -20,6 +20,7 @@ import {
 const OID = "00000000-0000-4000-8000-000000000001";
 const TID = "00000000-0000-4000-8000-0000000000aa";
 const AT = "2026-11-12T01:02:03.000Z";
+const UPN = "jane.doe@example.com";
 
 const memberMap = (groupId: string, teamId: string): GroupMapping => ({
   groupId,
@@ -346,6 +347,37 @@ describe("resolveSignIn: case 6, groups overage (T8)", () => {
   it("a later sign-in with a full claim clears the flags", () => {
     const plan = resolveSignIn(input({ groups: ["g-1"], mappings }));
     expect(plan.flags).toEqual(NO_FLAGS);
+  });
+});
+
+describe("resolveSignIn: case 6, pending invites during overage", () => {
+  it("does not bind a pending admin-scope invite and leaves it pending", () => {
+    const item = pendingScope(UPN, "team", "t9");
+    const plan = resolveSignIn(
+      input({ upn: UPN, groupsOverage: true, pending: [item] }),
+    );
+    expect(plan.scopePuts).toEqual([]);
+    expect(plan.pendingDeletes).toEqual([]);
+    expect(plan.flags.groupsOverage).toBe(true);
+  });
+
+  it("still binds a pending member invite", () => {
+    const item = pendingAffiliation(UPN, "t1");
+    const plan = resolveSignIn(
+      input({ upn: UPN, groupsOverage: true, pending: [item] }),
+    );
+    expect(plan.affiliation).toMatchObject({ op: "put", teamId: "t1" });
+    expect(plan.pendingDeletes).toEqual([{ item, reason: "bound" }]);
+  });
+
+  it("with both invites, binds only the member invite", () => {
+    const member = pendingAffiliation(UPN, "t1");
+    const admin = pendingScope(UPN, "department", "d1");
+    const plan = resolveSignIn(
+      input({ upn: UPN, groupsOverage: true, pending: [member, admin] }),
+    );
+    expect(plan.scopePuts).toEqual([]);
+    expect(plan.pendingDeletes).toEqual([{ item: member, reason: "bound" }]);
   });
 });
 

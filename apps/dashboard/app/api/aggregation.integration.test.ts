@@ -62,7 +62,9 @@ const call = (handler: unknown, url: string, id = "x") =>
 
 function signedIn(on: boolean) {
   (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-    on ? { user: { name: "Test", email: "t@company.com" } } : null,
+    on
+      ? { user: { oid: "oid-test", name: "Test", email: "t@company.com" } }
+      : null,
   );
 }
 

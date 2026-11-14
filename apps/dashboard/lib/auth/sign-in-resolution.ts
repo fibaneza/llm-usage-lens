@@ -143,6 +143,7 @@ export function resolveSignIn(input: SignInResolutionInput): SignInPlan {
 
     for (const item of mine) {
       if (item.kind !== "adminScope") continue;
+      if (overage) continue;
       const ref: ScopeRef = {
         scopeType: item.scopeType,
         scopeId: item.scopeId,

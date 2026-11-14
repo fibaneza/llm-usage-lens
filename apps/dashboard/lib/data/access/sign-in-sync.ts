@@ -364,6 +364,7 @@ export async function applySignInResolution(input: {
   expectedTid: string;
   requestId: string;
   now: Date;
+  sequence?: { next: number };
 }): Promise<SignInPlan> {
   const { identity, expectedTid, requestId, now } = input;
   const inTenant = identity.tid === expectedTid;
@@ -371,7 +372,7 @@ export async function applySignInResolution(input: {
     actor: SYSTEM,
     requestId,
     now,
-    sequence: { next: 0 },
+    sequence: input.sequence ?? { next: 0 },
   };
 
   if (inTenant) {

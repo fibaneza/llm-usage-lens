@@ -128,7 +128,10 @@ team-role assignment. `member` targets must be teams.
    treated as case 2 plus a flag; SSO-sourced admin scopes are suspended
    until a sign-in with a full claim. v1 makes no Microsoft Graph call.
    **Amended R2 (2026-11-12):** the flag is `groupsOverage` on the identity
-   record. During overage no scope item is written or deleted; an
+   record. During overage no scope item is written or deleted — this
+   includes binding a pending admin-scope invite, which stays pending until
+   a sign-in with a full claim (pending member invites still bind; clarified
+   2026-11-14); an
    SSO-sourced scope counts as suspended while the flag is true (one
    predicate in `packages/shared`), which the policy module enforces from
    4R.3. Ambiguity (case 5) sets `ambiguousMembership` the same way.

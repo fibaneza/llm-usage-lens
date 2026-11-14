@@ -126,23 +126,49 @@ function setSession(session: unknown) {
 
 // Signed in, but not an Admin: every shape a non-admin session can take.
 const NON_ADMIN_SESSIONS: [string, unknown][] = [
-  ["no roles claim (token from before roles existed)", { user: { name: "M" } }],
-  ["an empty roles list", { user: { name: "M", roles: [] } }],
-  ["other roles only", { user: { name: "M", roles: ["Reader", "Auditor"] } }],
-  ["the role in the wrong case", { user: { name: "M", roles: ["admin"] } }],
-  ["a role that merely contains Admin", { user: { roles: ["SuperAdmin"] } }],
-  ["roles that is a string, not a list", { user: { roles: "Admin" } }],
+  [
+    "no roles claim (token from before roles existed)",
+    { user: { oid: "oid-test", name: "M" } },
+  ],
+  ["an empty roles list", { user: { oid: "oid-test", name: "M", roles: [] } }],
+  [
+    "other roles only",
+    { user: { oid: "oid-test", name: "M", roles: ["Reader", "Auditor"] } },
+  ],
+  [
+    "the role in the wrong case",
+    { user: { oid: "oid-test", name: "M", roles: ["admin"] } },
+  ],
+  [
+    "a role that merely contains Admin",
+    { user: { oid: "oid-test", roles: ["SuperAdmin"] } },
+  ],
+  [
+    "roles that is a string, not a list",
+    { user: { oid: "oid-test", roles: "Admin" } },
+  ],
   // Phase 4R.1: only effective internal-admin may write (Access Control
   // spec — Permission matrix; contract R1 decision 10).
-  ["internal-auditor", { user: { name: "M", roles: ["internal-auditor"] } }],
+  [
+    "internal-auditor",
+    { user: { oid: "oid-test", name: "M", roles: ["internal-auditor"] } },
+  ],
   [
     "internal-org-admin",
-    { user: { name: "M", roles: ["internal-org-admin"] } },
+    { user: { oid: "oid-test", name: "M", roles: ["internal-org-admin"] } },
   ],
-  ["internal-viewer", { user: { name: "M", roles: ["internal-viewer"] } }],
+  [
+    "internal-viewer",
+    { user: { oid: "oid-test", name: "M", roles: ["internal-viewer"] } },
+  ],
   [
     "internal-auditor and internal-org-admin together",
-    { user: { roles: ["internal-auditor", "internal-org-admin"] } },
+    {
+      user: {
+        oid: "oid-test",
+        roles: ["internal-auditor", "internal-org-admin"],
+      },
+    },
   ],
 ];
 
@@ -254,7 +280,9 @@ async function expectForbiddenWithoutTouchingTheTable(route: WriteRoute) {
   expect(await snapshotTable()).toEqual(before);
 }
 
-const ADMIN_SESSION = { user: { name: "A", roles: ["internal-admin"] } };
+const ADMIN_SESSION = {
+  user: { oid: "oid-test", name: "A", roles: ["internal-admin"] },
+};
 const CROSS_SITE_ORIGINS: [string, string | null][] = [
   ["no Origin header", null],
   ["a cross-site Origin", "https://evil.example.test"],
@@ -418,7 +446,9 @@ describe("every write route enforces the same-origin check", () => {
   it.each(eachWriteRoute)(
     "%s: a non-admin with a foreign Origin gets the permission 403, naming internal-admin",
     async (_label, route) => {
-      setSession({ user: { name: "M", roles: ["internal-viewer"] } });
+      setSession({
+        user: { oid: "oid-test", name: "M", roles: ["internal-viewer"] },
+      });
       const res = await call(
         route,
         "{}",
@@ -439,7 +469,7 @@ describe("every write route enforces the same-origin check", () => {
       expect((await call(route, "{}")).headers.get("cache-control")).toBe(
         "private, no-store",
       );
-      setSession({ user: { name: "M", roles: [] } });
+      setSession({ user: { oid: "oid-test", name: "M", roles: [] } });
       expect((await call(route, "{}")).headers.get("cache-control")).toBe(
         "private, no-store",
       );

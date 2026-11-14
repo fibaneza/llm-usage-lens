@@ -260,10 +260,54 @@ describe("applySignInResolution: SSO mappings (T8)", () => {
     });
   });
 
+  it("overage leaves a pending admin-scope invite pending (no adminscope.bind) while a pending member invite still binds", async () => {
+    await createPendingItem(
+      {
+        kind: "adminScope",
+        emailOrUpn: UPN,
+        scopeType: "team",
+        scopeId: "team-z",
+      },
+      setupCtx,
+    );
+    await pendingMember(UPN, "team-m");
+
+    await signIn({ groups: [], groupsOverage: true, requestId: "req-ovp" });
+
+    expect(ok(await listAdminScopes(OID_A, opts)).items).toEqual([]);
+    expect(await actionsOf("req-ovp")).not.toContain("adminscope.bind");
+    expect(await actionsOf("req-ovp")).toContain("affiliation.bind");
+    expect(await getAffiliation(OID_A)).toMatchObject({ teamId: "team-m" });
+    const pending = await listPendingFor([UPN]);
+    expect(pending).toEqual([
+      expect.objectContaining({ kind: "adminScope", scopeId: "team-z" }),
+    ]);
+  });
+
   it("overage on a first sign-in writes no scopes", async () => {
     await mapAdmin("g-a", "team", "team-b");
     await signIn({ groups: [], groupsOverage: true });
     expect(ok(await listAdminScopes(OID_A, opts)).items).toEqual([]);
+  });
+});
+
+describe("applySignInResolution: shared audit sequence", () => {
+  it("advances a supplied sequence by the number of records written, so a later record in the request does not collide", async () => {
+    await mapMember("g-m", "team-a");
+    const sequence = { next: 0 };
+    const identity = identityOf();
+    await upsertIdentity(identity, NOW);
+    await applySignInResolution({
+      identity,
+      groups: ["g-m"],
+      groupsOverage: false,
+      expectedTid: TID,
+      requestId: "req-seq",
+      now: NOW,
+      sequence,
+    });
+    expect(sequence.next).toBe((await syncRecords("req-seq")).length);
+    expect(sequence.next).toBeGreaterThan(1);
   });
 });
 

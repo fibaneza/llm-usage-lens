@@ -6,7 +6,7 @@ const SessionTokenSchema = z.object({
   oid: z.string().min(1),
   tid: z.string().min(1),
   roles: z.array(z.string()),
-  authMethod: z.enum(["entra", "master", "local"]),
+  authMethod: z.enum(["entra", "master", "local", "password"]),
 });
 
 export type SessionTokenClaims = z.infer<typeof SessionTokenSchema>;

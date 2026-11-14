@@ -56,7 +56,10 @@ beforeEach(async () => {
 
 const event = (
   action: SecurityEvent["action"],
-  extra: Partial<SecurityEvent> & { requestId?: string } = {},
+  extra: Partial<SecurityEvent> & {
+    requestId?: string;
+    sequence?: { next: number };
+  } = {},
 ) => ({
   action,
   result:
@@ -163,5 +166,21 @@ describe("recordSecurityEvent persistence failures", () => {
     faults.put = true;
     await recordSecurityEvent(event("auth.master.lockout"));
     expect(m.addEvent).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("recordSecurityEvent shared audit sequence", () => {
+  it("takes the supplied sequence index and advances it, so a second record at the same timestamp and request id does not collide", async () => {
+    const sequence = { next: 2 };
+    await recordSecurityEvent(
+      event("auth.signin.error", { requestId: "req-seq", sequence }),
+    );
+    expect(sequence.next).toBe(3);
+    await recordSecurityEvent(
+      event("auth.signin.error", { requestId: "req-seq", sequence }),
+    );
+    expect(sequence.next).toBe(4);
+    const records = await auditRecords();
+    expect(records.filter((r) => r.requestId === "req-seq")).toHaveLength(2);
   });
 });

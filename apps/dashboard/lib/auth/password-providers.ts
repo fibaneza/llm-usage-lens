@@ -2,9 +2,6 @@ import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 
-import { authorizePasswordUser } from "./password-credentials";
-import { completePasswordSetup } from "./password-setup";
-
 // Source: docs/specs/2026-11-10-access-control.md — "Password users" (Setup:
 // the Auth.js `password-setup` provider; Sign-in: the `password` provider).
 // Factories only; auth.ts registers them (R2b integration).
@@ -47,6 +44,8 @@ export function createPasswordProvider(): Provider {
     name: "Password",
     credentials: { email: {}, password: {}, totp: {} },
     authorize: async (credentials) => {
+      // Loaded on demand: the data layer is server-only and pulls the AWS SDK.
+      const { authorizePasswordUser } = await import("./password-credentials");
       const identity = await authorizePasswordUser(credentials);
       return identity ? toUser(identity) : null;
     },
@@ -62,6 +61,7 @@ export function createPasswordSetupProvider(): Provider {
       const parsed = SetupCredentialsSchema.safeParse(credentials);
       if (!parsed.success) return null;
       const { token, password, totpSecret, totpCode } = parsed.data;
+      const { completePasswordSetup } = await import("./password-setup");
       const result = await completePasswordSetup(
         {
           token,

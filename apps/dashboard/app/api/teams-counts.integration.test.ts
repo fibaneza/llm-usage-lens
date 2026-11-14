@@ -32,7 +32,7 @@ const idle = makeAccount(2, { teamId: "team-idle", teamName: "Idle" });
 beforeAll(ensureTestTable);
 beforeEach(async () => {
   (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-    user: { name: "Test", email: "t@company.com" },
+    user: { oid: "oid-test", name: "Test", email: "t@company.com" },
   });
   await clearTable();
   await loadFixtures({

@@ -186,7 +186,7 @@ export function withRoute(
     tracer.startActiveSpan("api.route", async (span) => {
       try {
         const session = await auth();
-        if (!session) {
+        if (typeof session?.user?.oid !== "string" || session.user.oid === "") {
           return jsonError(401, "UNAUTHORIZED", "Not authenticated");
         }
         if (options.requireAdmin && !hasAdminRole(session)) {

@@ -18,7 +18,7 @@ import {
 // Rule 60.18 (no console.log).
 
 const req = (url = "http://localhost/api/x") => new Request(url);
-const SESSION = { user: { name: "t" } };
+const SESSION = { user: { oid: "oid-1", name: "t" } };
 
 beforeEach(() => {
   auth.mockReset();
@@ -72,6 +72,25 @@ describe("parseSearchParams", () => {
     expect(() =>
       parseSearchParams(req("http://localhost/x?limit=abc"), schema),
     ).toThrow(z.ZodError);
+  });
+});
+
+describe("withRoute: session without user.oid is unauthenticated (Rule 10.3)", () => {
+  it.each([
+    ["no user", { expires: "E" }],
+    ["user without oid", { user: { name: "t" }, expires: "E" }],
+    ["empty oid", { user: { oid: "" }, expires: "E" }],
+  ])("returns 401 and skips the handler for %s", async (_n, session) => {
+    auth.mockResolvedValue(session);
+    const handler = vi.fn();
+    const res = await withRoute(handler)(req(), {
+      params: Promise.resolve({}),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({
+      error: { code: "UNAUTHORIZED", message: "Not authenticated" },
+    });
+    expect(handler).not.toHaveBeenCalled();
   });
 });
 

@@ -57,14 +57,14 @@ describe("GET /api/sync-status", () => {
   });
 
   it("returns the never-synced state as data (not an error) when no item exists", async () => {
-    auth.mockResolvedValue({ user: {} });
+    auth.mockResolvedValue({ user: { oid: "oid-test" } });
     const res = await call();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ data: { state: "never-synced" } });
   });
 
   it("returns the synced status, validated by the response schema", async () => {
-    auth.mockResolvedValue({ user: {} });
+    auth.mockResolvedValue({ user: { oid: "oid-test" } });
     await putRaw({ PK: "SYSTEM", SK: "SYNC#LATEST", ...STATUS });
     const res = await call();
     expect(res.status).toBe(200);

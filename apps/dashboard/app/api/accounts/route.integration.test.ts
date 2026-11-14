@@ -46,7 +46,7 @@ describe("GET /api/accounts", () => {
   });
 
   it("returns { data: [] } when there are no accounts", async () => {
-    auth.mockResolvedValue({ user: {} });
+    auth.mockResolvedValue({ user: { oid: "oid-test" } });
     const res = await call();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ data: [] });
@@ -55,9 +55,15 @@ describe("GET /api/accounts", () => {
   // Reading stays open to every signed-in member; only writes need Admin
   // (system-architecture spec — Authentication & Access).
   it.each([
-    ["no roles claim", { user: { name: "M" } }],
-    ["an empty roles list", { user: { name: "M", roles: [] } }],
-    ["other roles only", { user: { name: "M", roles: ["Reader"] } }],
+    ["no roles claim", { user: { oid: "oid-test", name: "M" } }],
+    [
+      "an empty roles list",
+      { user: { oid: "oid-test", name: "M", roles: [] } },
+    ],
+    [
+      "other roles only",
+      { user: { oid: "oid-test", name: "M", roles: ["Reader"] } },
+    ],
   ])(
     "lets a signed-in non-admin with %s read the list",
     async (_n, session) => {
@@ -73,7 +79,7 @@ describe("GET /api/accounts", () => {
   );
 
   it("returns every account as { data: AccountMeta[] } validated by the response schema", async () => {
-    auth.mockResolvedValue({ user: {} });
+    auth.mockResolvedValue({ user: { oid: "oid-test" } });
     const a = makeAccount(1);
     const b = makeAccount(2, { active: false });
     await loadFixtures({ accounts: [a, b] });

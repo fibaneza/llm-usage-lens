@@ -52,7 +52,7 @@ const legacyRollup = buildRollup({
 beforeAll(ensureTestTable);
 beforeEach(async () => {
   (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-    user: { name: "t", email: "t@company.com" },
+    user: { oid: "oid-test", name: "t", email: "t@company.com" },
   });
   await clearTable();
 });

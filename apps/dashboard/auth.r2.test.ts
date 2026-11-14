@@ -29,6 +29,22 @@ const m = vi.hoisted(() => ({
   parseSessionToken: vi.fn(),
   authorizeMasterUser: vi.fn(),
 }));
+const passwordFactories = vi.hoisted(() => ({
+  createPasswordProvider: vi.fn(() => ({
+    id: "password",
+    type: "credentials",
+  })),
+  createPasswordSetupProvider: vi.fn(() => ({
+    id: "password-setup",
+    type: "credentials",
+  })),
+}));
+vi.mock("@/lib/auth/password-providers", () => ({
+  PASSWORD_PROVIDER_ID: "password",
+  PASSWORD_SETUP_PROVIDER_ID: "password-setup",
+  createPasswordProvider: passwordFactories.createPasswordProvider,
+  createPasswordSetupProvider: passwordFactories.createPasswordSetupProvider,
+}));
 
 vi.mock("next-auth", () => ({
   default: (config: unknown) => {
@@ -383,5 +399,137 @@ describe("token and session fail closed (T1, T8)", () => {
     expect(cfg.callbacks.authorized({ auth: { user: { oid: "oid-1" } } })).toBe(
       true,
     );
+  });
+});
+
+describe("password providers (Access Control — Password users, D18, D25)", () => {
+  const passwordUser = {
+    oid: "password:ada@example.com",
+    tid: "password",
+    email: "ada@example.com",
+    authMethod: "password",
+  };
+
+  it("registers the password and password-setup providers", async () => {
+    const cfg = (await load({ ...MASTER })) as unknown as {
+      providers: { id?: string }[];
+    };
+    const ids = cfg.providers.map((p) => p.id);
+    expect(ids).toContain("password");
+    expect(ids).toContain("password-setup");
+    expect(passwordFactories.createPasswordProvider).toHaveBeenCalled();
+    expect(passwordFactories.createPasswordSetupProvider).toHaveBeenCalled();
+  });
+
+  it.each(["password", "password-setup"])(
+    "a %s sign-in records method password without the Entra sync",
+    async (provider) => {
+      const cfg = await load({ ...MASTER });
+      const ok = await cfg.callbacks.signIn({
+        user: passwordUser,
+        account: { provider },
+      });
+      expect(ok).toBe(true);
+      expect(m.upsertIdentity).toHaveBeenCalledTimes(1);
+      expect(m.recordSignIn).toHaveBeenCalledTimes(1);
+      expect(m.recordSignIn.mock.calls[0]?.[0]).toMatchObject({
+        oid: "password:ada@example.com",
+        method: "password",
+      });
+      expect(m.applySignInResolution).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["password", "password-setup"])(
+    "the %s sign-in fails when the user carries no oid",
+    async (provider) => {
+      const cfg = await load({ ...MASTER });
+      const ok = await cfg.callbacks.signIn({
+        user: { ...passwordUser, oid: undefined },
+        account: { provider },
+      });
+      expect(ok).toBe(false);
+    },
+  );
+
+  it("the jwt carries authMethod password and passes parseSessionToken", async () => {
+    const cfg = await load({ ...MASTER });
+    const token = await cfg.callbacks.jwt({
+      token: {},
+      account: { provider: "password" },
+      user: passwordUser,
+    });
+    expect(token).toMatchObject({
+      oid: "password:ada@example.com",
+      tid: "password",
+      authMethod: "password",
+    });
+    expect(realParseSessionToken(token as Rec)).not.toBeNull();
+  });
+
+  it("the session exposes authMethod password for such a token", async () => {
+    const cfg = await load({ ...MASTER });
+    const out = cfg.callbacks.session({
+      session: { user: { name: "Ada" }, expires: "E" },
+      token: {
+        oid: "password:ada@example.com",
+        tid: "password",
+        roles: [],
+        authMethod: "password",
+        signedInAt: NOW - 60,
+      },
+    });
+    expect(out.user).toMatchObject({ authMethod: "password" });
+  });
+
+  it("records password sign-out with the method", async () => {
+    const cfg = await load({ ...MASTER });
+    await cfg.events.signOut({
+      token: {
+        oid: "password:ada@example.com",
+        tid: "password",
+        roles: [],
+        authMethod: "password",
+      },
+    });
+    expect(m.recordSignOut.mock.calls[0]?.[0]).toMatchObject({
+      method: "password",
+    });
+  });
+});
+
+describe("auth.signin.error shares the request's audit sequence (D18)", () => {
+  it("passes one request id and one sequence object to the sync and to the error event", async () => {
+    m.applySignInResolution.mockRejectedValue(new Error("transaction failed"));
+    const cfg = await load(ENTRA);
+    await cfg.callbacks.signIn({
+      user: {},
+      account: entraAccount,
+      profile: entraProfile(),
+    });
+    const input = m.applySignInResolution.mock.calls[0]?.[0] as Rec;
+    const event = m.recordSecurityEvent.mock.calls[0]?.[0] as Rec;
+    expect(input.requestId).toBe(event.requestId);
+    expect(input.sequence).toEqual({ next: expect.any(Number) });
+    expect(event.sequence).toBe(input.sequence);
+  });
+
+  it("the error event is written after the records already written in that request", async () => {
+    m.applySignInResolution.mockImplementation(
+      async (input: { sequence: { next: number } }) => {
+        input.sequence.next = 3;
+        throw new Error("deliver failed");
+      },
+    );
+    const cfg = await load(ENTRA);
+    await cfg.callbacks.signIn({
+      user: {},
+      account: entraAccount,
+      profile: entraProfile(),
+    });
+    const event = m.recordSecurityEvent.mock.calls[0]?.[0] as {
+      sequence: { next: number };
+    };
+    expect(event.sequence.next).toBe(3);
   });
 });

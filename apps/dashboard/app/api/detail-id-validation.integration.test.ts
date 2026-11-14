@@ -102,7 +102,7 @@ const VALID_IDS: [string, string][] = [
 beforeAll(ensureTestTable);
 beforeEach(async () => {
   (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-    user: { name: "t", email: "t@company.com" },
+    user: { oid: "oid-test", name: "t", email: "t@company.com" },
   });
   for (const fn of Object.values(reads)) fn.mockClear();
   await clearTable();

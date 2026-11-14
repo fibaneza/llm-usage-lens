@@ -39,7 +39,10 @@ function emitTelemetry(event: SecurityEvent): void {
 // A master sign-in whose record cannot be stored rejects, so that sign-in
 // fails; other events record the exception and continue (T20).
 export async function recordSecurityEvent(
-  event: SecurityEvent & { requestId?: string },
+  event: SecurityEvent & {
+    requestId?: string;
+    sequence?: { next: number };
+  },
 ): Promise<void> {
   emitTelemetry(event);
   const record: AuditRecord = {
@@ -56,7 +59,8 @@ export async function recordSecurityEvent(
   const { deliverAuditLine } = await import("@/lib/data/access/audit-delivery");
   let failure: unknown;
   try {
-    await appendAuditRecord(record);
+    await appendAuditRecord(record, event.sequence?.next ?? 0);
+    if (event.sequence) event.sequence.next += 1;
   } catch (error) {
     failure = error;
   }

@@ -122,3 +122,43 @@ describe("access-control key builders leave the shared entry point", () => {
     expect(src).toMatch(/export const identPk/);
   });
 });
+
+// T29: the DynamoDB client and key builders are reachable only from the data
+// layer. Matches `@/lib/dynamodb` and relative paths ending in `lib/dynamodb`
+// or `/dynamodb` from a sibling of lib; @aws-sdk imports stay allowed in
+// app/api (Rule 10.5).
+export function importsDynamoClient(source: string): boolean {
+  return /(?:from\s*|import\s*\(?\s*|import\s+)["'](?:@\/lib\/dynamodb|(?:\.\.?\/)+(?:lib\/)?dynamodb)(?:\.[jt]s)?["']/.test(
+    source,
+  );
+}
+
+describe("no route, page, component, hook or auth.ts imports the DynamoDB client (T29)", () => {
+  it("guard self-check", () => {
+    expect(importsDynamoClient(`import { x } from "@/lib/dynamodb";`)).toBe(
+      true,
+    );
+    expect(importsDynamoClient(`import { x } from "../../lib/dynamodb";`)).toBe(
+      true,
+    );
+    expect(
+      importsDynamoClient(`const m = await import("@/lib/dynamodb");`),
+    ).toBe(true);
+    expect(
+      importsDynamoClient(`import { x } from "@/lib/data/identity";`),
+    ).toBe(false);
+    expect(
+      importsDynamoClient(
+        `import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";`,
+      ),
+    ).toBe(false);
+  });
+
+  it("none of app/**, components/**, hooks/** or auth.ts imports @/lib/dynamodb", () => {
+    const files = [...consumerFiles, "apps/dashboard/auth.ts"];
+    const offenders = files.filter((f) =>
+      importsDynamoClient(readFileSync(join(ROOT, f), "utf8")),
+    );
+    expect(offenders).toEqual([]);
+  });
+});

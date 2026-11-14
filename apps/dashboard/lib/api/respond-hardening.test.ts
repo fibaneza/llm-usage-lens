@@ -22,8 +22,12 @@ import {
 
 const ctx = { params: Promise.resolve({}) };
 const NO_STORE = "private, no-store";
-const ADMIN = { user: { name: "a", roles: [INTERNAL_ADMIN_ROLE] } };
-const VIEWER = { user: { name: "v", roles: ["internal-viewer"] } };
+const ADMIN = {
+  user: { oid: "oid-test", name: "a", roles: [INTERNAL_ADMIN_ROLE] },
+};
+const VIEWER = {
+  user: { oid: "oid-test", name: "v", roles: ["internal-viewer"] },
+};
 const HOST = "app.example.test";
 const URL_ = `http://${HOST}/api/x`;
 

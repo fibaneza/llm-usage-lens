@@ -48,7 +48,7 @@ function setSession(session: unknown) {
 }
 
 const adminSession = (roles: string[] = ["internal-admin"]) => ({
-  user: { name: "Test", email: "t@company.com", roles },
+  user: { oid: "oid-test", name: "Test", email: "t@company.com", roles },
 });
 
 // `signedIn(true)` is an Admin: the existing success paths below need the role.
@@ -58,12 +58,27 @@ function signedIn(on: boolean) {
 
 // Signed in, but not an Admin: every shape a non-admin session can take.
 const NON_ADMIN_SESSIONS: [string, unknown][] = [
-  ["no roles claim (token from before roles existed)", { user: { name: "M" } }],
-  ["an empty roles list", { user: { name: "M", roles: [] } }],
-  ["other roles only", { user: { name: "M", roles: ["Reader", "Auditor"] } }],
-  ["the role in the wrong case", { user: { name: "M", roles: ["admin"] } }],
-  ["a role that merely contains Admin", { user: { roles: ["SuperAdmin"] } }],
-  ["roles that is a string, not a list", { user: { roles: "Admin" } }],
+  [
+    "no roles claim (token from before roles existed)",
+    { user: { oid: "oid-test", name: "M" } },
+  ],
+  ["an empty roles list", { user: { oid: "oid-test", name: "M", roles: [] } }],
+  [
+    "other roles only",
+    { user: { oid: "oid-test", name: "M", roles: ["Reader", "Auditor"] } },
+  ],
+  [
+    "the role in the wrong case",
+    { user: { oid: "oid-test", name: "M", roles: ["admin"] } },
+  ],
+  [
+    "a role that merely contains Admin",
+    { user: { oid: "oid-test", roles: ["SuperAdmin"] } },
+  ],
+  [
+    "roles that is a string, not a list",
+    { user: { oid: "oid-test", roles: "Admin" } },
+  ],
 ];
 
 async function expectForbidden(res: Response) {
@@ -259,7 +274,9 @@ describe("account write routes require the Admin role", () => {
   // 403 precedes every DynamoDB call: had the handler touched the table first,
   // these would surface as 400 (already exists) / 404 (missing) instead.
   describe("the role check comes before any DynamoDB call", () => {
-    beforeEach(() => setSession({ user: { name: "M", roles: ["Reader"] } }));
+    beforeEach(() =>
+      setSession({ user: { oid: "oid-test", name: "M", roles: ["Reader"] } }),
+    );
 
     it("POST for an account that already exists is 403, not 400 already-exists", async () => {
       const res = await POST(
@@ -286,7 +303,9 @@ describe("account write routes require the Admin role", () => {
   // and before input parsing, so a non-admin gets 403, never 400/404". Every
   // request below would be a 400 for an Admin.
   describe("the role check comes before input parsing", () => {
-    beforeEach(() => setSession({ user: { name: "M", roles: ["Reader"] } }));
+    beforeEach(() =>
+      setSession({ user: { oid: "oid-test", name: "M", roles: ["Reader"] } }),
+    );
 
     it.each(NON_ADMIN_SESSIONS)(
       "POST with a body that is not JSON is 403, not 400 (signed in with %s)",
@@ -496,7 +515,9 @@ describe("account writes are same-origin only", () => {
   });
 
   it("the permission check still precedes the origin check", async () => {
-    setSession({ user: { name: "M", roles: ["internal-viewer"] } });
+    setSession({
+      user: { oid: "oid-test", name: "M", roles: ["internal-viewer"] },
+    });
     const res = await POST(json("POST", body, foreign));
     expect(res.status).toBe(403);
     expect((await res.json()).error.message).toBe(
@@ -505,7 +526,9 @@ describe("account writes are same-origin only", () => {
   });
 
   it("the 403 message names the internal-admin role", async () => {
-    setSession({ user: { name: "M", roles: ["internal-viewer"] } });
+    setSession({
+      user: { oid: "oid-test", name: "M", roles: ["internal-viewer"] },
+    });
     const res = await POST(json("POST", body));
     expect((await res.json()).error.message).toBe(
       "internal-admin role required",

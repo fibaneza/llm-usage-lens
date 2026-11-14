@@ -51,7 +51,7 @@ afterAll(() => {
 beforeEach(() => {
   recordedSpans.length = 0;
   auth.mockReset();
-  auth.mockResolvedValue({ user: { name: "t" } });
+  auth.mockResolvedValue({ user: { oid: "oid-test", name: "t" } });
 });
 
 describe("withRoute span", () => {

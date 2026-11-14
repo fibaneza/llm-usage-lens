@@ -17,6 +17,12 @@ import {
   authorizeMasterUser,
   type SignedInIdentity,
 } from "@/lib/auth/master-user";
+import {
+  PASSWORD_PROVIDER_ID,
+  PASSWORD_SETUP_PROVIDER_ID,
+  createPasswordProvider,
+  createPasswordSetupProvider,
+} from "@/lib/auth/password-providers";
 import { parseSessionToken } from "@/lib/auth/session-token";
 import { recordSecurityEvent } from "@/lib/auth/security-events";
 import {
@@ -68,7 +74,12 @@ const tenantId =
 const LOCAL_DEFAULT_EMAIL = "dev@localhost";
 
 function isAuthMethod(value: unknown): value is SignedInIdentity["authMethod"] {
-  return value === "entra" || value === "master" || value === "local";
+  return (
+    value === "entra" ||
+    value === "master" ||
+    value === "local" ||
+    value === "password"
+  );
 }
 
 function entraIdentity(profile: unknown): SignedInIdentity | null {
@@ -110,12 +121,17 @@ function identityFor(
   user: unknown,
 ): SignedInIdentity | null {
   return provider === DEV_LOGIN_PROVIDER_ID ||
-    provider === MASTER_USER_PROVIDER_ID
+    provider === MASTER_USER_PROVIDER_ID ||
+    provider === PASSWORD_PROVIDER_ID ||
+    provider === PASSWORD_SETUP_PROVIDER_ID
     ? credentialsIdentity(user)
     : entraIdentity(profile);
 }
 
-const providers: Provider[] = [];
+const providers: Provider[] = [
+  createPasswordProvider(),
+  createPasswordSetupProvider(),
+];
 if (enabledSignInProviders.entra) {
   providers.push(MicrosoftEntraID);
 }
@@ -191,6 +207,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const identity = identityFor(provider, profile, user);
       if (!identity) return false;
       const requestId = randomUUID();
+      const sequence = { next: 0 };
       const now = new Date();
       try {
         // Loaded on demand: the data layer is server-only and pulls the AWS SDK.
@@ -209,6 +226,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             expectedTid: tenantId,
             requestId,
             now,
+            sequence,
           });
         } else {
           const { recordSignIn } =
@@ -231,6 +249,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             oid: identity.oid,
             at: new Date().toISOString(),
             requestId,
+            sequence,
           });
         } catch (eventError) {
           span?.recordException(
