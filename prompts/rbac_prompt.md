@@ -644,12 +644,18 @@ unit before any code.
 - **Each code unit runs the Rule 70 loop:**
   1. tdd-test-engineer (sonnet) writes the failing tests.
   2. typescript-developer (sonnet) makes them pass.
-  3. Review on opus: quality-reviewer, spec-guardian, playwright-ui-reviewer
-     for UI changes, and ecc:security-reviewer for R1–R4 if installed.
-     Otherwise quality-reviewer covers security explicitly and the report says
-     so.
-- **R3 and R4 add a dedicated security review pass.** quality-reviewer is
-  briefed with the threat model and asked to try to break the policy.
+  3. Review on opus, **once per unit** when it is green (Rule 70.12):
+     quality-reviewer, plus spec-guardian only when the unit changed specs or
+     rules, playwright-ui-reviewer for UI changes, and ecc:security-reviewer
+     for R1–R4 if installed. Otherwise quality-reviewer covers security
+     explicitly and the report says so. Re-reviews after REQUEST CHANGES are
+     delta-scoped.
+- **R3 and R4 add a dedicated security pass inside that one review.**
+  quality-reviewer is briefed with the threat model and asked to try to
+  break the policy.
+- **Token economy (Rule 70.12):** iterate with targeted test runs; full
+  `pnpm check` once when green and before the merge only if commits landed
+  after it; read results, never full logs.
 
 ## 3. Correctness checklist (tests must assert these)
 

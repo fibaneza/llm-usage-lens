@@ -34,15 +34,23 @@ tdd-test-engineer's red report. It implements until the suite passes and the
 gates (`tsc`, `eslint`, `vitest`, plus the headless Playwright suite when the
 task touches UI) are green — without editing any test. If it
 disputes a test, re-dispatch the `tdd-test-engineer` for a ruling (UPHOLD /
-AMEND), then resume.
+AMEND), then resume. While iterating, both agents run only the affected test
+files and read results, not logs (Rule 70.12).
 
-## Step 3 — Review (parallel fan-out)
+## Step 3 — Review (once per phase)
+
+Run this step **once per phase**, when the phase is green (Rule 70.12). First
+run `pnpm check` yourself and put its evidence (exit code and counts) in each
+brief. A rework pass after REQUEST CHANGES re-reviews only the blocker fixes,
+the diff since the last reviewed commit.
 
 In a **single message**, dispatch in parallel:
 
-- `quality-reviewer` — holistic spec + rules + standards gatekeeper (always);
-  independently re-runs the gates read-only.
-- `spec-guardian` — independent spec audit (always).
+- `quality-reviewer` — holistic spec + rules + standards + security
+  gatekeeper (always). It re-runs only the gates the evidence does not
+  cover, and reads results, not logs.
+- `spec-guardian` — independent spec audit, only when the phase changed
+  `docs/specs/**` or `.claude/rules/**`.
 - `playwright-ui-reviewer` — when UI components or pages changed
   (`apps/dashboard/components/**`, `apps/dashboard/app/**`,
   `apps/dashboard/e2e/**`): runs the headless Playwright suite (the

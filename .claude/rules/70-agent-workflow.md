@@ -58,7 +58,9 @@ review = quality-reviewer + spec-guardian + ecc reviewers
    each other — the `/build-feature` command dispatches each agent and carries
    results between stages.
 2. **No stage is skipped.** Every change goes tdd-test-engineer →
-   typescript-developer → review, even on a one-line fix.
+   typescript-developer, even on a one-line fix, and every phase passes the
+   review before it reaches `main`. The review runs **once per phase**
+   (rule 12), not after every iteration, run or slice.
 3. **Tests lead, code follows.** The tdd-test-engineer derives a failing suite
    from the spec and task description *before* any production code exists.
    Failing gates at this stage are the expected **red** state, not a defect —
@@ -70,9 +72,11 @@ review = quality-reviewer + spec-guardian + ecc reviewers
    edits, weakens, or deletes a test — a test it believes is wrong goes back
    to the orchestrator, who re-dispatches the tdd-test-engineer to rule on it.
 5. **REQUEST CHANGES if** the gates are not green at review time **or** any
-   reviewer raises a BLOCKER. WARN and NIT findings do not block. The
-   quality-reviewer independently re-runs the gates (read-only) rather than
-   trusting reports.
+   reviewer raises a BLOCKER. WARN and NIT findings do not block. Gates are
+   never taken on trust: the orchestrator runs them itself on the commit
+   under review and hands the reviewer the evidence (exit codes and counts).
+   The reviewer re-runs only what that evidence does not cover, or a check
+   it doubts (rule 12).
 6. **Rework loops back to the top of the loop** with one consolidated,
    deduplicated blocker checklist: the tdd-test-engineer first encodes each
    behavioural blocker as a failing test, then the typescript-developer makes
@@ -96,6 +100,37 @@ review = quality-reviewer + spec-guardian + ecc reviewers
     dedicated port (3211) with a forged-session sign-in helper
     (`e2e/support/session.ts`); no agent passes `--headed`/`--ui` or adds a
     production auth bypass for testability.
+12. **Token economy (decided 2026-11-14, user).** Spend tokens where they
+    catch defects, never by lowering the bar:
+    - **One review per phase.** A phase or unit (for example 4R.3 or L1)
+      gets one review fan-out when its suite is green, before it merges into
+      `main`. Slices and iterations inside a phase get no review of their
+      own, and **nothing reaches `main` before that review approves.** The
+      review is `quality-reviewer` on opus, which also covers security and
+      TypeScript idiom when the `ecc:*` agents are unavailable. Add
+      `spec-guardian` only when the phase changed `docs/specs/**` or
+      `.claude/rules/**`. Add `playwright-ui-reviewer` only when UI changed.
+      A dedicated security review that a spec or prompt requires (4R.3,
+      4R.4, L1, L2, L4) is part of this one review, not a separate round.
+    - **Re-reviews are delta-scoped.** After REQUEST CHANGES, the next pass
+      reviews only the blocker fixes (the diff since the last reviewed
+      commit) against the blocker list, not the whole phase again. The
+      3-round cap (rule 7) still applies.
+    - **Targeted tests while iterating.** Red and green iterations run only
+      the affected test files (`pnpm exec vitest run <paths>`, or
+      `--project unit` when no DynamoDB code changed) and the targeted e2e
+      spec (`pnpm test:e2e -- <spec>`).
+    - **Full gates at fixed points only:** `pnpm check` once when the phase
+      is green (the evidence for the review), and again before the merge
+      only if commits landed after it. `pnpm test:e2e` (full) runs once per
+      phase, and only when UI or auth changed.
+    - **Results, not logs.** Every test, gate or build run is redirected to
+      a file; agents and the orchestrator read only the exit code, the count
+      lines (`Test Files`, `Tests`, Playwright passed/failed) and the names
+      of failing tests. They open more of the log only to diagnose a
+      specific failure. Every dispatch says so.
+    - **Cheapest adequate model** for gate re-runs and git summaries
+      (`haiku`); reviews stay on opus (Model routing above).
 
 ## When to use
 

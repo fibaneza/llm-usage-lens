@@ -576,8 +576,11 @@ From Rules 10, 20 and 50 and the data-model spec:
 
 ## 8. Verification
 
-**Gates on the working branch, after each barrier and once more before
-T+55:**
+**Gates on the working branch** (token economy, Rule 70.12, decided
+2026-11-14): while iterating, run only the affected tests. Run the full set
+below **once when the target is green** (it is the review's evidence) and
+again before the merge or T+55 **only if commits landed after it**. Read
+exit codes and count lines only; open a log only to diagnose a failure.
 
 - `pnpm typecheck`, which includes `tsc -p tsconfig.scripts.json`
 - `pnpm lint`
@@ -596,8 +599,7 @@ T+55:**
   bullet only per §9.
 
 **Status vocabulary:** `passed` | `failed` | `blocked` | `not run` |
-`incomplete-at-deadline` | `user action`. Each status cites its command and
-the tail of its output, saved under `temp/run/`. Compare against the T+10
+`incomplete-at-deadline` | `user action`. Each status cites its command, exit code and count lines, with the full output saved under `temp/run/` (read only on a failure). Compare against the T+10
 baseline to separate `pre-existing` failures from `regression`s.
 
 ## 9. Documentation updates (before the freeze only)

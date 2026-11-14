@@ -531,8 +531,12 @@ Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
   3. Review on opus: quality-reviewer, spec-guardian, playwright-ui-reviewer
      for UI changes, and ecc:security-reviewer if installed. Without it,
      quality-reviewer covers security explicitly.
-- **L1, L2 and L4 get a dedicated security review pass** against the threat
-  model.
+- **L1, L2 and L4 get a dedicated security pass** against the threat model,
+  inside the unit's one review (Rule 70.12), not as a separate round.
+- **Token economy (Rule 70.12):** one review per unit when it is green, with
+  delta-scoped re-reviews; targeted test runs while iterating; full
+  `pnpm check` once when green and before the merge only if commits landed
+  after it; read results, never full logs.
 
 ## 3. Correctness checklist (tests must assert these)
 
