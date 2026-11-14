@@ -77,7 +77,12 @@ const CREATE_BODY = {
   region: "ap-southeast-2",
 };
 const SESSION = {
-  user: { oid: "oid-test", name: "t", email: "t@company.com" },
+  user: {
+    oid: "oid-test",
+    name: "t",
+    email: "t@company.com",
+    roles: ["internal-admin"],
+  },
 };
 // Account writes need the Admin role (System Architecture — Authentication &
 // Access, Account-mutation role; Data Model — HTTP status codes: 403 for a

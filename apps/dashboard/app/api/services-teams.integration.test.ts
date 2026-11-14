@@ -41,7 +41,12 @@ const ledger = makeAccount(3, {
 beforeAll(ensureTestTable);
 beforeEach(async () => {
   (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-    user: { oid: "oid-test", name: "Test", email: "t@company.com" },
+    user: {
+      oid: "oid-test",
+      name: "Test",
+      email: "t@company.com",
+      roles: ["internal-admin"],
+    },
   });
   await clearTable();
   await loadFixtures({
