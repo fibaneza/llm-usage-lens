@@ -52,8 +52,8 @@ describe("GET /api/accounts", () => {
     expect(await res.json()).toEqual({ data: [] });
   });
 
-  // Reading stays open to every signed-in member; only writes need Admin
-  // (system-architecture spec — Authentication & Access).
+  // Reads are scoped (Access Control spec - Enforcement): a signed-in caller
+  // with no recognised role or affiliation is a viewer with an empty scope.
   it.each([
     ["no roles claim", { user: { oid: "oid-test", name: "M" } }],
     [
@@ -65,7 +65,7 @@ describe("GET /api/accounts", () => {
       { user: { oid: "oid-test", name: "M", roles: ["Reader"] } },
     ],
   ])(
-    "lets a signed-in non-admin with %s read the list",
+    "returns 200 with an empty list for a signed-in caller with %s and no affiliation",
     async (_n, session) => {
       auth.mockResolvedValue(session);
       const a = makeAccount(1);
@@ -74,12 +74,14 @@ describe("GET /api/accounts", () => {
       expect(res.status).toBe(200);
       const body = apiResponseSchema(AccountListSchema).parse(await res.json());
       if (!("data" in body)) throw new Error("expected data");
-      expect(body.data.map((x) => x.accountId)).toEqual([a.accountId]);
+      expect(body.data).toEqual([]);
     },
   );
 
   it("returns every account as { data: AccountMeta[] } validated by the response schema", async () => {
-    auth.mockResolvedValue({ user: { oid: "oid-test" } });
+    auth.mockResolvedValue({
+      user: { oid: "oid-test", roles: ["internal-admin"] },
+    });
     const a = makeAccount(1);
     const b = makeAccount(2, { active: false });
     await loadFixtures({ accounts: [a, b] });
