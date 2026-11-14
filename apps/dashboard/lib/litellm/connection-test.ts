@@ -1,7 +1,9 @@
 import "server-only";
 
+import { liteLLMEdition } from "@llm-usage-lens/shared";
 import type { ConnectionTestResult } from "@llm-usage-lens/shared";
 
+import { env } from "@/env";
 import { getLiteLLMConnection } from "@/lib/data/litellm/connection";
 
 import { LiteLLMError, callLiteLLM, isServiceKeyConfigured } from "./client";
@@ -12,10 +14,12 @@ import type { LiteLLMRequest } from "./client";
 // non-existent ids. An allowed route answers 404 or 4xx for the dummy id; 403
 // means the service key's allowed_routes is out of date. Stops after a 401.
 // Messages are fixed text: upstream text never reaches the caller (LT12).
+// Regenerate is Enterprise-only (Edition, LT15), so OSS never probes it:
+// LiteLLM OSS answers it with a 500 that would read as unhealthy.
 
 const NIL_ID = "00000000-0000-0000-0000-000000000000";
 
-const PROBES: LiteLLMRequest[] = [
+const BASE_PROBES: LiteLLMRequest[] = [
   { method: "GET", path: "/team/list" },
   {
     method: "POST",
@@ -27,8 +31,19 @@ const PROBES: LiteLLMRequest[] = [
     path: `/team/${NIL_ID}/member/${NIL_ID}/reset_budget`,
     body: {},
   },
-  { method: "POST", path: `/key/${NIL_ID}/regenerate`, body: {} },
 ];
+
+const REGENERATE_PROBE: LiteLLMRequest = {
+  method: "POST",
+  path: `/key/${NIL_ID}/regenerate`,
+  body: {},
+};
+
+function probesForEdition(): LiteLLMRequest[] {
+  return liteLLMEdition(env.APP_ENV) === "enterprise"
+    ? [...BASE_PROBES, REGENERATE_PROBE]
+    : BASE_PROBES;
+}
 
 const result = (
   r: ConnectionTestResult["result"],
@@ -45,7 +60,7 @@ export async function testLiteLLMConnection(
   if (baseUrl === undefined) {
     return result("not_configured", "No LiteLLM base URL is saved.");
   }
-  for (const probe of PROBES) {
+  for (const probe of probesForEdition()) {
     try {
       await callLiteLLM(probe, { baseUrl });
     } catch (error) {
