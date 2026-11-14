@@ -127,8 +127,11 @@ full suite, no per-branch review.
 
 1. **Intake.** A worker reports "ready to merge <unit> at <commit>". Check
    the worktree is clean and the commit matches; record it in the merge
-   queue in `state.md`. Start nothing until every active goal is in the
-   queue (or the user says to cut the batch short).
+   queue in `state.md`. **The batch run starts on one of two triggers:**
+   every active goal is in the queue, or the workers stop on a usage
+   freeze (§3). On a freeze, the batch is whatever is committed and ready
+   (an unfinished unit stays on its branch for the next batch), and the
+   run starts first thing after the reset, before any new brief.
 2. **Build the batch candidate** on a temporary branch
    `integration/<yyyymmdd>` in its own worktree from `main`: merge each
    queued branch in turn (resolve conflicts per §2a: keep what is on
