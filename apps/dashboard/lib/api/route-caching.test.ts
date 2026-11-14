@@ -90,6 +90,9 @@ const SESSION = {
 const ADMIN_SESSION = {
   user: { ...SESSION.user, roles: ["internal-admin"] },
 };
+const NON_ADMIN_SESSION = {
+  user: { ...SESSION.user, roles: ["internal-viewer"] },
+};
 const ctx = (id = acct(1)) => ({ params: Promise.resolve({ id }) });
 const get = (url: string) => new Request(`http://localhost${url}`);
 // Same-origin write (Access Control spec — Enforcement item 6): Origin's host
@@ -242,7 +245,7 @@ describe("account writes invalidate the accounts tag", () => {
   ])(
     "a signed-in non-admin %s is 403 and neither writes nor revalidates",
     async (_method, run) => {
-      auth.mockResolvedValue(SESSION);
+      auth.mockResolvedValue(NON_ADMIN_SESSION);
       await callGet(getAccounts, "/api/accounts");
       const res = await run();
       expect(res.status).toBe(403);

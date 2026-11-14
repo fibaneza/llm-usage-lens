@@ -43,8 +43,18 @@ type Handler = (
 ) => Promise<Response>;
 
 const RANGE = "dateFrom=2026-10-01&dateTo=2026-10-03";
-const acctA = makeAccount(1, { teamId: "team-a", teamName: "A" });
-const acctB = makeAccount(2, { teamId: "team-b", teamName: "B" });
+const acctA = makeAccount(1, {
+  teamId: "team-a",
+  teamName: "A",
+  departmentId: "dept-eng",
+  departmentName: "Engineering",
+});
+const acctB = makeAccount(2, {
+  teamId: "team-b",
+  teamName: "B",
+  departmentId: "dept-eng",
+  departmentName: "Engineering",
+});
 const acctC = makeAccount(3, {
   teamId: "team-c",
   teamName: "C",
@@ -66,6 +76,8 @@ function rollups(costC = 41) {
       accountId: acctA.accountId,
       teamId: "team-a",
       teamName: "A",
+      departmentId: "dept-eng",
+      departmentName: "Engineering",
       models: {
         "claude-sonnet": {
           cost: 11,
@@ -78,6 +90,8 @@ function rollups(costC = 41) {
       accountId: acctB.accountId,
       teamId: "team-b",
       teamName: "B",
+      departmentId: "dept-eng",
+      departmentName: "Engineering",
       models: {
         "claude-sonnet": { cost: 23, byUser: { "b1@company.com": 23 } },
       },
@@ -163,9 +177,10 @@ function signInAs(name: CallerName | "master" | null) {
 }
 
 async function get(handler: unknown, path: string, id?: string) {
+  const params: Record<string, string> = id === undefined ? {} : { id };
   const res = await (handler as Handler)(
     new Request(`http://localhost${path}`),
-    { params: Promise.resolve(id === undefined ? {} : { id }) },
+    { params: Promise.resolve(params) },
   );
   return { res, body: await res.json() };
 }
@@ -246,7 +261,7 @@ describe("lists contain only in-scope rows (role x route)", () => {
     ok(
       await removeMember(
         { oid: CALLERS.memberA.oid, teamId: "team-a", version: 1 },
-        ctxAt(),
+        ctxAt(undefined, "req-2"),
       ),
     );
     expect(await teamIds()).toEqual([]);
@@ -333,7 +348,7 @@ describe("404 parity for details (T15)", () => {
           userLevel: "own",
           version: null,
         },
-        ctxAt(),
+        ctxAt(undefined, "req-3"),
       ),
     );
     signInAs("memberA");
@@ -441,7 +456,7 @@ describe("department total cannot be reconstructed when hidden (T13)", () => {
           maxUserLevel: "own",
           version: null,
         },
-        ctxAt(),
+        ctxAt(undefined, "req-4"),
       ),
     );
     signInAs("memberA");
@@ -488,7 +503,7 @@ describe("caching cannot leak (T14)", () => {
           userLevel: "own",
           version: null,
         },
-        ctxAt(),
+        ctxAt(undefined, "req-5"),
       ),
     );
     expect(await teamIds()).toEqual([]);

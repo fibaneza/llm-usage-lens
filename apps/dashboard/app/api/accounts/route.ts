@@ -13,13 +13,26 @@ import {
   withRoute,
 } from "@/lib/api/respond";
 import { getAllAccountsCached } from "@/lib/api/cached-reads";
+import { scopeFor } from "@/lib/api/scoped-rollups";
+import { can } from "@/lib/auth/policy";
 import { createAccount } from "@/lib/data/account-meta";
 
 export const revalidate = 3600;
 
-export const GET = withRoute(async () =>
-  jsonData(AccountListSchema.parse(await getAllAccountsCached())),
-);
+export const GET = withRoute(async (_request, _ctx, session) => {
+  const accounts = AccountListSchema.parse(await getAllAccountsCached());
+  const scope = await scopeFor(session, accounts);
+  return jsonData(
+    accounts.filter((account) =>
+      can(scope, "read", {
+        kind: "team",
+        teamId: account.teamId,
+        departmentId: account.departmentId,
+        date: account.createdAt,
+      }),
+    ),
+  );
+});
 
 const createHandler = withRoute(
   async (request) => {
