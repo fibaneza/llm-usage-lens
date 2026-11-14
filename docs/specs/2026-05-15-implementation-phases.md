@@ -643,8 +643,8 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### Phase 4R.3 — Server-side scoping (`feature/phase-4r-3-rbac-scope`)
 
-- [ ] `resolveScope`/`can` with the evaluation order and inheritance caps; every read route and Server Component filtered; aggregates after filtering; `404` parity; `Cache-Control: private, no-store`; scoped CSV, search and command menu; `/api/me` and `/api/me/usage`
-- [ ] Verify: role × route matrix and leak tests (T5, T6, T12–T16) pass; seeded probe per role recorded in the run report
+- [x] `resolveScope`/`can` with the evaluation order and inheritance caps; every read route and Server Component filtered; aggregates after filtering; `404` parity; `Cache-Control: private, no-store`; scoped CSV, search and command menu; `/api/me` and `/api/me/usage`
+- [x] Verify: role × route matrix and leak tests (T5, T6, T12–T16) pass; seeded probe per role recorded in the run report
 
 ### Phase 4R.4 — Management UI and writes (`feature/phase-4r-4-rbac-settings`)
 

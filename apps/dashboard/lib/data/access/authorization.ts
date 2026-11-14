@@ -80,6 +80,9 @@ export async function loadAuthorization(
 
   const approvalRead =
     appEnv === "prod" ? getPerUserApproval() : Promise.resolve(null);
+  // Read for every caller, global readers included: it grants no scope, it only
+  // feeds own-usage matching (Access Control spec — Canonical usage identity).
+  const identityLinkRead = getIdentityLink(oid);
   const claimRoles = globalRolesOf(session, appEnv, []);
   // A session that already carries a global reader role needs no grant read.
   const roleGrants: RoleGrant[] =
@@ -90,13 +93,18 @@ export async function loadAuthorization(
   const approval = await approvalRead;
   const perUserApproved = appEnv !== "prod" || approval !== null;
   if (roles === null || isGlobalReader(roles)) {
-    return { ...base, roleGrants, perUserApproved };
+    return {
+      ...base,
+      roleGrants,
+      identityLink: await identityLinkRead,
+      perUserApproved,
+    };
   }
 
   const [affiliation, adminScopes, identityLink] = await Promise.all([
     getAffiliation(oid),
     queryByIdent(oid, "ADMINSCOPE#", AdminScopeSchema) as Promise<AdminScope[]>,
-    getIdentityLink(oid),
+    identityLinkRead,
   ]);
   const identityItem = adminScopes.some((s) => s.source === "sso")
     ? await getItem(identPk(oid), META_SK)

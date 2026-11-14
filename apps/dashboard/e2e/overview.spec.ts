@@ -1,6 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { INTERNAL_ADMIN_ROLE } from "../lib/auth/roles";
+
 import { collectConsoleErrors } from "./support/console-errors";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
@@ -459,8 +461,12 @@ test.describe("overview page", () => {
   });
 
   test("renders from the real /api/overview (DynamoDB Local) without errors", async ({
+    context,
     page,
   }) => {
+    // Overview rows are scoped by the caller (Access Control spec - Enforcement);
+    // a role-less session sees nothing, so read the seed as a global role.
+    await signInAsTestUser(context, { roles: [INTERNAL_ADMIN_ROLE] });
     const pageErrors: Error[] = [];
     page.on("pageerror", (error) => pageErrors.push(error));
     const consoleErrors = collectConsoleErrors(page);

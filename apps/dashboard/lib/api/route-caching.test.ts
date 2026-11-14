@@ -29,6 +29,9 @@ vi.mock("@/lib/data/account-meta", () => ({
 vi.mock("@/lib/data/sync-status", () => ({
   getSyncStatus: data.getSyncStatus,
 }));
+vi.mock("@/lib/data/access/identity-links", () => ({
+  getIdentityLink: vi.fn().mockResolvedValue(null),
+}));
 
 import { DELETE, PATCH } from "@/app/api/accounts/[id]/route";
 import { GET as getAccounts, POST } from "@/app/api/accounts/route";
