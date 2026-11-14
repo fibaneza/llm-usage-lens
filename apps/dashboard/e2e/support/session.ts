@@ -35,7 +35,7 @@ export async function signInAsTestUser(
   context: BrowserContext,
   {
     signedInAt = Math.floor(Date.now() / 1000),
-    roles,
+    roles = [],
     oid = "e2e-user",
     tid = "e2e-tenant",
     authMethod = "entra",
@@ -48,7 +48,7 @@ export async function signInAsTestUser(
       oid,
       tid,
       authMethod,
-      ...(roles ? { roles } : {}),
+      roles,
       ...(signedInAt === null ? {} : { signedInAt }),
     },
     secret: E2E_AUTH_SECRET,
