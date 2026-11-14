@@ -12,7 +12,11 @@ test.describe("unauthenticated requests through the proxy", () => {
   }) => {
     const response = await request.get("/api/overview", { maxRedirects: 0 });
     expect(response.status()).toBe(401);
-    expect(response.headers()["cache-control"]).toBe("private, no-store");
+    const headers = response.headers();
+    expect(headers["cache-control"]).toBe("private, no-store");
+    // next.config security headers reach the proxy's own response too.
+    expect(headers["x-frame-options"]).toBe("DENY");
+    expect(headers["x-content-type-options"]).toBe("nosniff");
     expect(await response.json()).toEqual({
       error: { code: "UNAUTHORIZED", message: "Not authenticated" },
     });
