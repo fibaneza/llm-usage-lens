@@ -87,13 +87,14 @@ describe.each(["import", "create"] as Mode[])(
         expect(e.AUTH_ACCESS_MODE).toBe("enforce");
       });
 
-      it("wires neither master secret and lists only the two original ARNs", () => {
+      it("wires neither master secret and lists only the two original ARNs plus the LiteLLM service key", () => {
         expect(Object.keys(secretMap(c)).sort()).toEqual([
           "AUTH_MICROSOFT_ENTRA_ID_SECRET",
           "AUTH_SECRET",
+          "LITELLM_SERVICE_KEY",
         ]);
         const all = executionSsmResources(t);
-        expect(resCount(t)).toBe(2);
+        expect(resCount(t)).toBe(3);
         expect(all).not.toContain(HASH);
         expect(all).not.toContain(TOTP);
       });
@@ -117,9 +118,9 @@ describe.each(["import", "create"] as Mode[])(
         expect(s).not.toHaveProperty("AUTH_MASTER_TOTP_SECRET");
       });
 
-      it("lists exactly three ARNs: no TOTP ARN", () => {
+      it("lists exactly four ARNs: no TOTP ARN", () => {
         const all = executionSsmResources(t);
-        expect(resCount(t)).toBe(3);
+        expect(resCount(t)).toBe(4);
         expect(all).toContain("/llm-usage-lens/dev/app/auth-secret");
         expect(all).toContain("/llm-usage-lens/dev/app/entra-client-secret");
         expect(all).toContain("/llm-usage-lens/dev/auth/master-password-hash");
@@ -150,10 +151,11 @@ describe.each(["import", "create"] as Mode[])(
         expect(names).not.toContain("AUTH_MASTER_TOTP_SECRET");
       });
 
-      it("lists exactly the four secret ARNs", () => {
+      it("lists exactly the five secret ARNs", () => {
         const all = executionSsmResources(t);
-        expect(resCount(t)).toBe(4);
+        expect(resCount(t)).toBe(5);
         for (const p of [
+          "/llm-usage-lens/prod/litellm/service-key",
           "/llm-usage-lens/prod/app/auth-secret",
           "/llm-usage-lens/prod/app/entra-client-secret",
           "/llm-usage-lens/prod/auth/master-password-hash",

@@ -166,7 +166,7 @@ describe.each(["import", "create"] as Mode[])(
         expect(str(entry?.Value)).toContain("kmskeyarn");
       });
 
-      it("injects exactly the two secrets from SSM and no secret as plain environment", () => {
+      it("injects exactly the three secrets from SSM and no secret as plain environment", () => {
         const [td] = Object.values(t.findResources("AWS::ECS::TaskDefinition"));
         const c = (
           (td?.Properties as Json).ContainerDefinitions as Json[]
@@ -175,6 +175,7 @@ describe.each(["import", "create"] as Mode[])(
         expect(sorted(secrets.map((s) => s.Name as string))).toEqual([
           "AUTH_MICROSOFT_ENTRA_ID_SECRET",
           "AUTH_SECRET",
+          "LITELLM_SERVICE_KEY",
         ]);
         const byName = Object.fromEntries(
           secrets.map((s) => [s.Name, str(s.ValueFrom)]),
@@ -372,14 +373,15 @@ describe.each(["import", "create"] as Mode[])(
         roleIdFromTaskDef(t, "ExecutionRoleArn"),
       );
 
-      it("reads only the two secret parameters", () => {
+      it("reads only the three secret parameters", () => {
         const ssm = stmts.filter((s) =>
           actionsOf(s).some((a) => a.startsWith("ssm:")),
         );
         expect(ssm).toHaveLength(1);
         expect(actionsOf(ssm[0] ?? {})).toEqual(["ssm:GetParameters"]);
         const res = resourcesOf(ssm[0] ?? {});
-        expect(res).toHaveLength(2);
+        expect(res).toHaveLength(3);
+        expect(str(res)).toContain("/llm-usage-lens/dev/litellm/service-key");
         expect(str(res)).toContain("/llm-usage-lens/dev/app/auth-secret");
         expect(str(res)).toContain(
           "/llm-usage-lens/dev/app/entra-client-secret",
