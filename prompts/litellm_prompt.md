@@ -443,8 +443,10 @@ Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
 
 - L0, the spec unit, is **done**. RBAC R0, RP and R1 are done; the next
   unit overall is RBAC R2 (`README.md`).
-- L1 and later need RBAC R1–R4 on `main`. R4 provides the Settings sections
-  the L1 panel extends, on top of the Phase 4.9 Settings shell.
+- L1 and L2 need RBAC R1–R2 on `main` and the Phase 4.9 Settings shell, and
+  may run in parallel with RBAC R3–R5 (user direction 2026-11-14; Rule 30).
+  The L1 Settings → LiteLLM panel is its own `internal-admin` section in the
+  existing shell. L3 needs R3; L4 needs R3 and R4.
 
 | Unit | Branch | Content | Depends on |
 |---|---|---|---|
@@ -686,8 +688,9 @@ The report adds:
 
 A run is **Completed** when all of these hold:
 
-1. Its Track B target, the first unit L0–L8 not done (with `rbac_prompt.md`
-   R1–R4 already merged for L1 onward), is done, reviewed (Rule 70 APPROVE,
+1. Its Track B target, the first unit L0–L8 not done (with its RBAC
+   dependency from §2 already merged: R1–R2 for L1–L2, R3 for L3, R3–R4 for L4
+   onward), is done, reviewed (Rule 70 APPROVE,
    every blocker resolved or recorded) and verified by the orchestrator's own
    gate runs. For L3–L5, the local end-to-end probe has passed too.
 2. Units after the target, and any `rbac_prompt.md` unit, are **out of scope

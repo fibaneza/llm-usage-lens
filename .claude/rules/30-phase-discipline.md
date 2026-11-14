@@ -21,6 +21,12 @@ The Phase 5 *UI refresh — fluid workspace* task may run before Phases 4R.2–4
 and the LiteLLM units at the user's direction (decided 2026-11-11;
 implementation-phases — *Phase 5*). The rest of Phase 5 keeps its place.
 
+LiteLLM units L1 and L2 may run in parallel with Phases 4R.3–4R.5 at the
+user's direction (decided 2026-11-14): they need only 4R.1–4R.2 and the
+Phase 4.9 Settings shell. L3 and later keep their dependencies (L3 needs
+4R.3; L4 needs 4R.3 and 4R.4). Parallel runs use separate worktrees with
+disjoint file ownership (implementation-phases — *LiteLLM units*).
+
 ## Rules
 
 1. **Do not start a phase whose dependencies are unmet.** Run `/phase-status`
