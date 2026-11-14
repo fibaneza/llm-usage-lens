@@ -65,6 +65,12 @@ generate-then-block (LiteLLM spec — `rotateKey`).
 
 ### The applied configuration
 
+The applied configuration is the list of 26 routes from [runbook §3](../guides/litellm-admin.md):
+
+```json
+["/team/new","/team/update","/team/info","/team/list","/team/member_add","/team/member_update","/team/member_delete","/team/*/member/*/reset_spend","/team/*/member/*/reset_budget","/team/daily/activity/aggregated","/user/new","/user/info","/user/list","/user/daily/activity","/key/generate","/key/update","/key/delete","/key/block","/key/unblock","/key/info","/key/list","/key/*/regenerate","/spend/logs/v2","/models","/global/spend/report","/audit"]
+```
+
 Decided on 2026-11-15 (LD4). The key carries the runbook §3 list, in which
 `/team/*` and `/key/*` replace the three templated entries for now:
 
