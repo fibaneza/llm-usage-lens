@@ -194,6 +194,7 @@ export const AUDIT_ACTIONS = [
   "accessreview.export",
   "auth.signin.success",
   "auth.signout",
+  "litellm.connection.update",
 ] as const;
 export const AuditActionSchema = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditActionSchema>;
@@ -294,6 +295,7 @@ const SNAPSHOT_KEYS: ReadonlySet<string> = new Set([
   "accountId",
   "active",
   "method",
+  "baseUrl",
 ]);
 
 export function sanitizeAuditSnapshot(

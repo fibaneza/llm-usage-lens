@@ -103,6 +103,14 @@ export function addDashboardTask(
   const masterHashArn = authSecretParamArn("master-password-hash");
   const masterTotpArn = authSecretParamArn("master-totp-secret");
   const masterEnabled = !!inputs.masterUsername;
+  // Hand-managed SecureString (LiteLLM spec — "Security architecture" item 3);
+  // read by the execution role only, injected as a container secret.
+  const litellmKeyArn = stack.formatArn({
+    service: "ssm",
+    resource: "parameter",
+    resourceName: `${prefix.slice(1)}/litellm/service-key`,
+    arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+  });
 
   // The fixed name lets the table resource policy and the CMK key policy name
   // the role without a cross-stack reference (Platform spec — "Data isolation").
@@ -175,6 +183,7 @@ export function addDashboardTask(
       actions: ["ssm:GetParameters"],
       resources: [
         authSecretArn,
+        litellmKeyArn,
         ...(entra ? [entraSecretArn] : []),
         ...(masterEnabled ? [masterHashArn] : []),
         ...(masterEnabled && prod ? [masterTotpArn] : []),
@@ -221,6 +230,7 @@ export function addDashboardTask(
     },
     secrets: {
       AUTH_SECRET: new ParameterSecret(authSecretArn),
+      LITELLM_SERVICE_KEY: new ParameterSecret(litellmKeyArn),
       ...(entra
         ? {
             AUTH_MICROSOFT_ENTRA_ID_SECRET: new ParameterSecret(entraSecretArn),
