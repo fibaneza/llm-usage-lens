@@ -4,10 +4,13 @@
 // role only, one parameter ARN, no ssm:PutParameter, TaskSecurityGroupId
 // output); decision LD6 (project CMK, kms:ViaService); threats LT1, LT2;
 // implementation-phases L1 Verify (CDK assertions). Rule 50.
-import type { Template } from "aws-cdk-lib/assertions";
+import { App } from "aws-cdk-lib";
+import { Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { actionsOf, synthApp } from "./support";
+import { DashboardServiceStack } from "../lib/dashboard-service-stack";
+import { parseAppInputs } from "../lib/inputs";
+import { ACCOUNT, REGION, actionsOf, contextFor, synthApp } from "./support";
 import type { Mode } from "./support";
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- CFN template JSON is untyped
@@ -131,6 +134,44 @@ describe.each(["import", "create"] as Mode[])(
         t.resourceCountIs("AWS::EC2::Subnet", 0);
         expect(str(t.toJSON())).not.toMatch(/litellmEgressCidrs/);
       });
+    });
+  },
+);
+
+// Source: docs/specs/2026-11-10-platform.md — Inputs (`litellmAllowedHosts`,
+// optional, non-secret, container `environment` LITELLM_ALLOWED_HOSTS; unset
+// omits it); LiteLLM spec LT6.
+function synthWith(mode: Mode, extra: Record<string, unknown> = {}): Template {
+  const app = new App();
+  const stack = new DashboardServiceStack(app, "App", {
+    inputs: parseAppInputs({ ...contextFor(mode, "dev"), ...extra }),
+    env: { account: ACCOUNT, region: REGION },
+  });
+  return Template.fromStack(stack);
+}
+
+describe.each(["import", "create"] as Mode[])(
+  "DashboardServiceStack litellmAllowedHosts (%s)",
+  (mode) => {
+    it("sets LITELLM_ALLOWED_HOSTS in environment (not secrets) from the context", () => {
+      const c = container(
+        synthWith(mode, {
+          litellmAllowedHosts: "litellm.example.internal:4000",
+        }),
+      );
+      const entry = ((c.Environment as Json[]) ?? []).find(
+        (e) => e.Name === "LITELLM_ALLOWED_HOSTS",
+      );
+      expect(entry?.Value).toBe("litellm.example.internal:4000");
+      const secretNames = ((c.Secrets as Json[]) ?? []).map((x) => x.Name);
+      expect(secretNames).not.toContain("LITELLM_ALLOWED_HOSTS");
+    });
+
+    it("omits LITELLM_ALLOWED_HOSTS when the input is unset", () => {
+      const names = (
+        (container(synthWith(mode)).Environment as Json[]) ?? []
+      ).map((e) => e.Name as string);
+      expect(names).not.toContain("LITELLM_ALLOWED_HOSTS");
     });
   },
 );

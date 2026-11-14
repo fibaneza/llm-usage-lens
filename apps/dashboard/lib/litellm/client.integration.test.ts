@@ -1,5 +1,12 @@
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import {
+  trace,
+  type Span,
+  type SpanContext,
+  type Tracer,
+  type TracerProvider,
+} from "@opentelemetry/api";
+import {
   afterEach,
   beforeAll,
   beforeEach,
@@ -346,5 +353,109 @@ describe("callLiteLLM — timeout and retries", () => {
       await assertion;
       expect(fake.calls).toHaveLength(1);
     }
+  });
+});
+
+// LT1 (span scan): neither the key nor an upstream body may reach telemetry.
+// The repo has no span exporter dependency, so a minimal recording
+// TracerProvider (@opentelemetry/api only) captures every span the client or
+// its caller starts: name, attributes, events, exceptions and status.
+describe("callLiteLLM — span scan (LT1)", () => {
+  type Recorded = { name: string; data: unknown[] };
+  let recorded: Recorded[];
+
+  function recordingTracer(): Tracer {
+    const start = (name: string): Span => {
+      const rec: Recorded = { name, data: [name] };
+      recorded.push(rec);
+      const ctx: SpanContext = {
+        traceId: "0".repeat(31) + "1",
+        spanId: "0".repeat(15) + "1",
+        traceFlags: 1,
+      };
+      const span: Span = {
+        spanContext: () => ctx,
+        setAttribute: (k, v) => (rec.data.push([k, v]), span),
+        setAttributes: (a) => (rec.data.push(a), span),
+        addEvent: (n, a) => (rec.data.push([n, a]), span),
+        addLink: (l) => (rec.data.push(l), span),
+        addLinks: (l) => (rec.data.push(l), span),
+        setStatus: (st) => (rec.data.push(st), span),
+        updateName: (n) => (rec.data.push(n), span),
+        end: () => undefined,
+        isRecording: () => true,
+        recordException: (e) => {
+          rec.data.push(
+            e instanceof Error
+              ? [e.name, e.message, e.stack, e.cause]
+              : String(e),
+          );
+        },
+      };
+      return span;
+    };
+    return {
+      startSpan: (name) => start(name),
+      startActiveSpan: ((name: string, ...args: unknown[]) => {
+        const fn = args[args.length - 1] as (span: Span) => unknown;
+        return fn(start(name));
+      }) as Tracer["startActiveSpan"],
+    };
+  }
+
+  beforeEach(() => {
+    recorded = [];
+    trace.disable();
+    const tracer = recordingTracer();
+    const provider: TracerProvider = { getTracer: () => tracer };
+    trace.setGlobalTracerProvider(provider);
+  });
+  afterEach(() => {
+    trace.disable();
+  });
+
+  async function traced<T>(run: () => Promise<T>) {
+    const tracer = trace.getTracer("litellm-span-scan");
+    return tracer.startActiveSpan("caller", async (span) => {
+      try {
+        return await run();
+      } catch (error) {
+        span.recordException(error as Error);
+        span.setStatus({ code: 2, message: String((error as Error).message) });
+        throw error;
+      } finally {
+        span.end();
+      }
+    });
+  }
+
+  const scan = () => JSON.stringify(recorded);
+
+  it("a successful call puts neither the key nor an upstream body in any span", async () => {
+    installFake(() => ({ status: 200, body: { ok: SENTINEL } }));
+    await storeConnection(BASE);
+    const { callLiteLLM } = await load();
+    await traced(() => callLiteLLM({ method: "GET", path: "/team/list" }));
+    expect(recorded.length).toBeGreaterThan(0);
+    expect(scan()).not.toContain(KEY);
+    expect(scan()).not.toContain(SENTINEL);
+  });
+
+  it("a failing call (5xx with a sentinel body, then 401) puts neither the key nor the body in any span, exception or status", async () => {
+    await storeConnection(BASE);
+    const { callLiteLLM } = await load();
+    for (const status of [500, 401]) {
+      installFake(() => ({ status, body: { detail: SENTINEL, echo: KEY } }));
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const failing = traced(() =>
+        callLiteLLM({ method: "POST", path: "/team/new", body: {} }),
+      ).catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(await failing).toBeInstanceOf(Error);
+      vi.useRealTimers();
+    }
+    expect(recorded.length).toBeGreaterThan(0);
+    expect(scan()).not.toContain(KEY);
+    expect(scan()).not.toContain(SENTINEL);
   });
 });

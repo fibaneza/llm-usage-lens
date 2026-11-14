@@ -108,6 +108,24 @@ async function auditActions() {
   );
 }
 
+// Rule 60.24: retry backoff must never be waited out. Fake only the timers,
+// then step them forward, yielding to real I/O (setImmediate) between steps.
+async function settleWithFakeBackoff<T>(pending: Promise<T>): Promise<T> {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+  vi.setSystemTime(new Date("2026-11-14T10:00:00.000Z"));
+  let done = false;
+  const tracked = pending.finally(() => {
+    done = true;
+  });
+  tracked.catch(() => {});
+  for (let i = 0; i < 2_000 && !done; i += 1) {
+    await vi.advanceTimersByTimeAsync(250);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  expect(done).toBe(true);
+  return tracked;
+}
+
 async function storedUrl(): Promise<string | undefined> {
   const { getLiteLLMConnection } =
     await import("@/lib/data/litellm/connection");
@@ -235,6 +253,36 @@ describe("PUT /api/litellm/connection", () => {
         "FORBIDDEN",
       );
       expect(fake.calls).toHaveLength(0);
+      expect(await storedUrl()).toBeUndefined();
+    },
+  );
+
+  // Source: Access Control spec D17 / T22 -- a refused write route appends one
+  // `denied` record via withRoute `denied: { action, pattern }` (as
+  // POST /api/accounts does); the fixed pattern, never the raw path.
+  it.each([
+    ["an Auditor", AUDITOR],
+    ["a viewer", VIEWER],
+  ])(
+    "writes exactly one denied audit record for %s (litellm.connection.update)",
+    async (_n, s) => {
+      authMock.mockResolvedValue(s);
+      const { PUT } = await load();
+      await expectError(
+        await PUT(put({ baseUrl: BASE_A, version: null }), ctx),
+        403,
+        "FORBIDDEN",
+      );
+      const records = await auditActions();
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        action: "litellm.connection.update",
+        actor: "oid-test",
+        result: "denied",
+        code: "FORBIDDEN",
+        route: { method: "PUT", pattern: "/api/litellm/connection" },
+      });
+      expect(JSON.stringify(records)).not.toContain(KEY);
       expect(await storedUrl()).toBeUndefined();
     },
   );
@@ -381,12 +429,13 @@ describe("PUT /api/litellm/connection", () => {
       installFake(handler);
       await storeConnection(BASE_A, 1);
       const { PUT } = await load();
-      const res = await PUT(put({ baseUrl: BASE_B, version: 1 }), ctx);
+      const res = await settleWithFakeBackoff(
+        PUT(put({ baseUrl: BASE_B, version: 1 }), ctx),
+      );
       await expectError(res, 503, "LITELLM_UNAVAILABLE");
       expect(await storedUrl()).toBe(BASE_A);
       expect(await auditActions()).toHaveLength(0);
     },
-    30_000,
   );
 
   it("does not save and calls nothing when the service key is not configured", async () => {
@@ -491,11 +540,11 @@ describe("POST /api/litellm/connection/test", () => {
     installFake(() => ({ status: 500, body: { detail: SENTINEL } }));
     await storeConnection();
     const { POST } = await load();
-    const res = await POST(post(), ctx);
+    const res = await settleWithFakeBackoff(POST(post(), ctx));
     expect(res.status).toBe(200);
     expect((await res.clone().json()).data.result).toBe("unreachable");
     await expectNoLeak(res);
-  }, 30_000);
+  });
 
   it("reports not_configured with no call when the service key is missing", async () => {
     await storeConnection();
