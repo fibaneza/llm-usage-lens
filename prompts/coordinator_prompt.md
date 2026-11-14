@@ -2,10 +2,13 @@
 
 One Claude session **coordinates** other Claude sessions ("workers") that each
 run a goal from `rbac_prompt.md`, `litellm_prompt.md` or `master_prompt.md`.
-The coordinator does no feature work itself. It assigns goals, keeps the
-parallel runs from colliding, serialises merges into `main`, relays status to
-the user, and keeps the state needed to carry on after a context reset or in
-a new session.
+The coordinator does no feature work itself. It assigns goals, **prevents
+conflicts between goals**, **owns every merge into `main`** — the full test
+run on the `main` candidate, fix agents when that run fails, and the clean-up
+of branches and worktrees afterwards — relays status to the user, and keeps
+the state needed to carry on after a context reset or in a new session
+(decided 2026-11-14, user). Workers never merge into `main`; they finish at
+"approved, ready to merge".
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
 `shared-contracts.md` → the goal prompt a worker runs → this file. This file
@@ -53,8 +56,11 @@ never overrides a rule; it only adds coordination.
      the usage freeze, and Rule 70.12 (one review per phase, delta
      re-reviews, impacted tests on the branch, results not logs);
   7. the remaining steps in order;
-  8. "send the coordinator a one-line status at each milestone, and ask
-     'ready to merge <unit>' and wait for 'go' before touching `main`".
+  8. "send the coordinator a one-line status at each milestone. When the
+     phase review approves and the branch gate is green, commit everything,
+     leave the worktree clean, send 'ready to merge <unit> at <commit>', and
+     stop work on that branch. Never merge into `main` or delete the branch —
+     the coordinator does that".
 - **The `/goal` line is the user's to type** — a slash command cannot be sent
   by message. Give the user the exact `/goal` condition from the goal
   prompt's §6 whenever a worker starts a new goal.
@@ -67,14 +73,37 @@ never overrides a rule; it only adds coordination.
 - Log every worker message, one line each, to `temp/coordinator/status.log`
   (`<UTC> <worker>: <milestone>`), and update `state.md` (milestone, last
   commit, blockers). Relay a short summary to the user.
-- **Do not duplicate work.** The coordinator runs no agents on a goal a worker
-  owns. If a worker is stuck past its deadline, message it once; if it stays
-  idle, tell the user.
-- **Arbitrate** when two goals need the same file: the first to merge keeps
-  its version; the second merges `main` into its branch and resolves.
+- **Do not duplicate work.** The coordinator runs no agents on a goal while
+  its worker is working on it. If a worker is stuck past its deadline,
+  message it once; if it stays idle, tell the user.
 - **Watch for drift:** if `main` moves unexpectedly (a user merge, for
-  example), inspect `git reflog show main`, record it, and tell both workers
-  to merge `main` before their final gate. Never rewrite `main`'s history.
+  example), inspect `git reflog show main`, record it, and tell the active
+  workers. Never rewrite `main`'s history.
+
+## 2a. Preventing conflicts between goals
+
+- **Ownership map.** `state.md` lists, per active goal, the paths it owns.
+  Before assigning a goal, compare its likely paths with every active goal's;
+  run two goals in parallel only when they do not overlap, or when the
+  overlap is limited to the **shared append-only files** below.
+- **Shared append-only files** (`env.ts`, `.env.example`, the root
+  `package.json` scripts, `pnpm-lock.yaml`, `packages/shared/src/index.ts`,
+  `packages/shared/src/schemas/access-control.ts` (audit actions) and
+  `schemas/api.ts` (error codes), `lib/api/respond.ts`,
+  `lib/data/access/keys.ts`, `infra/lib/dashboard-service/task.ts` (write
+  keys, env, secrets), the Settings page and
+  `docs/specs/2026-05-15-implementation-phases.md`): each goal only appends
+  its own lines and never reorders or rewrites another goal's. Count-style
+  tests on these (number of audit actions, error codes, write prefixes) are
+  expected to change at merge.
+- **Stay current.** After every merge into `main`, bring each other active
+  branch up to date: if its worker is idle and its worktree is clean, the
+  coordinator merges `main` into it in that worktree and runs the branch gate
+  there; otherwise it tells the worker to merge `main` at its next step.
+- **Early warning.** On each worker milestone, run
+  `git -C <worktree> diff --name-only main...HEAD` for the active goals and
+  compare. An overlap outside the shared list is raised with both workers
+  before either continues on that file.
 
 ## 3. Usage (one shared pool)
 
@@ -87,19 +116,43 @@ never overrides a rule; it only adds coordination.
   `resets_at` (`CronCreate`, one-shot, session-only). On resume, re-read
   state (§0) before briefing — workers may have moved on.
 
-## 4. Merges into `main` (serialised)
+## 4. Merges into `main` (the coordinator's job, one at a time)
 
-1. A worker asks "ready to merge <unit>". Check `state.md`: if another merge
-   is in progress, reply "wait" and queue it.
-2. Reply "go" only when its phase review approved and its last status says
-   the branch gate is green.
-3. The worker merges `main` into its branch, runs the **full** gate on that
-   `main` candidate (Rule 70.12: `pnpm check`, and the full e2e when UI or
-   auth changed), merges or fast-forwards `main`, ticks its boxes, and
-   reports the new `main` commit.
-4. Verify yourself: `git log --oneline -3 main` and that the worktree is
-   clean. Record it, then tell the next queued worker to merge `main` first.
-5. **Never push.** Pushing `main` is the user's action.
+1. **Intake.** A worker reports "ready to merge <unit> at <commit>". Check
+   the phase review approved, the worktree is clean and the commit matches.
+   If another merge is in progress, queue it in `state.md`.
+2. **Build the `main` candidate** in the goal's worktree: `git merge main`
+   (resolve conflicts per §2a: keep what is on `main` plus the branch's new
+   lines; append-only files get both sides' lines).
+3. **Run the full gate** there (Rule 70.12), results only:
+   `pnpm check` (DynamoDB Local on `:8000`; run outside the sandbox when it
+   blocks the port or the pnpm store) and, when UI or auth changed,
+   `pnpm test:e2e`. Compare against `main`'s last full run to tell
+   regressions from pre-existing failures. Use a `haiku` agent to run and
+   summarise it when the coordinator's context is precious.
+4. **If it fails, fix it on the branch — never on `main`.** Dispatch the
+   Rule 70 loop with explicit models: `tdd-test-engineer` (sonnet) first for
+   a behavioural failure or a test ruling, then `typescript-developer`
+   (sonnet). Brief them in that worktree with the failing test names only.
+   After the fix, re-run the full gate; if the fix changed behaviour or
+   security-relevant code, run a delta review on opus (Rule 70.12). Cap at 3
+   rounds, then hand the open failures to the user. Tell the goal's worker
+   what was fixed.
+5. **Land it.** Tick the phase's satisfied task and Verify boxes in
+   `docs/specs/2026-05-15-implementation-phases.md` on the branch, then put
+   the tree onto `main` as one commit (Rule 31): `git commit-tree
+   "<branch>^{tree}" -p main` with a Conventional Commits subject, on a
+   temporary branch, and `git -C <primary checkout> merge --ff-only <it>`
+   (outside the sandbox when it blocks the primary checkout; if a
+   fast-forward half-applies, confirm the touched files equal the commit
+   before restoring them and retrying).
+6. **Clean up.** Delete the temporary and goal branches (confirm `main`
+   contains the tree first), remove the goal's worktree, `git worktree
+   prune`, and delete a remote branch only if it was pushed (Rule 31 step
+   7). Record the new `main` commit in `state.md` and `status.log`.
+7. **Next.** Tell the user, bring the other active branches up to date
+   (§2a), and assign the worker its next goal in a fresh worktree (§1).
+8. **Never push.** Pushing `main` is the user's action.
 
 ## 5. Coordinator's own changes
 
@@ -119,6 +172,9 @@ main: <commit> (<n> ahead of origin/main) · usage 5h <x>% 7d <y>% · resets <ti
 
 | Worker (session) | Goal / unit | Prompt | Worktree | Branch | Base | Last milestone | Last commit | Open blockers |
 |---|---|---|---|---|---|---|---|---|
+
+Ownership (paths each goal owns; shared append-only files per §2a):
+- <goal>: <paths>
 
 Merge queue: <none | unit, unit>
 Pending for the user: <list>
