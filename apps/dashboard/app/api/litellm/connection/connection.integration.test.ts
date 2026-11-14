@@ -485,7 +485,7 @@ describe("POST /api/litellm/connection/test", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
-  it("reports ok, probing a read and the three templated routes (LD4) with the key, and is not audited", async () => {
+  it("reports ok on OSS (dev), probing a read and the two reset routes (LD4) with the key, and is not audited", async () => {
     await storeConnection();
     const { POST } = await load();
     const res = await POST(post(), ctx);
@@ -501,13 +501,68 @@ describe("POST /api/litellm/connection/test", () => {
     expect(
       paths.some((p) => /^\/team\/[^/]+\/member\/[^/]+\/reset_budget$/.test(p)),
     ).toBe(true);
-    expect(paths.some((p) => /^\/key\/[^/]+\/regenerate$/.test(p))).toBe(true);
+    expect(paths.some((p) => /regenerate/.test(p))).toBe(false);
     for (const call of fake.calls) {
       expect(call.host).toBe("litellm.test:4000");
       expect(call.headers.authorization).toBe(`Bearer ${KEY}`);
     }
     expect(await auditActions()).toHaveLength(0);
     expect(await storedUrl()).toBe(BASE_A);
+  });
+
+  // LT15 / Edition: Enterprise-only operations make no LiteLLM call on OSS.
+  it("makes no regenerate call when APP_ENV=dev (OSS), only /team/list and the two reset routes", async () => {
+    await storeConnection();
+    const { POST } = await load({ APP_ENV: "dev" });
+    const res = await POST(post(), ctx);
+    expect((await res.json()).data.result).toBe("ok");
+    const paths = fake.calls.map((c) => c.path);
+    expect(paths.some((p) => /regenerate/.test(p))).toBe(false);
+    expect(paths).toContain("/team/list");
+    expect(
+      paths.filter((p) => /reset_spend$|reset_budget$/.test(p)),
+    ).toHaveLength(2);
+  });
+
+  it("stays ok on OSS when LiteLLM would answer regenerate with a 500 Enterprise error", async () => {
+    installFake((call, n) =>
+      /regenerate/.test(call.path)
+        ? {
+            status: 500,
+            body: {
+              detail: "Regenerating Virtual Keys is an Enterprise feature",
+            },
+          }
+        : healthyHandler(call, n),
+    );
+    await storeConnection();
+    const { POST } = await load({ APP_ENV: "dev" });
+    const res = await POST(post(), ctx);
+    expect((await res.json()).data.result).toBe("ok");
+    expect(fake.calls.some((c) => /regenerate/.test(c.path))).toBe(false);
+  });
+
+  it("still probes regenerate when APP_ENV=prod (enterprise)", async () => {
+    await storeConnection("https://litellm.test:4000");
+    const { POST } = await load({ APP_ENV: "prod" });
+    const res = await POST(post(), ctx);
+    expect((await res.json()).data.result).toBe("ok");
+    expect(
+      fake.calls.some((c) => /^\/key\/[^/]+\/regenerate$/.test(c.path)),
+    ).toBe(true);
+  });
+
+  it("reports routes_out_of_date in prod when only the regenerate probe answers 403", async () => {
+    installFake((call, n) =>
+      /regenerate/.test(call.path)
+        ? { status: 403, body: { detail: SENTINEL } }
+        : healthyHandler(call, n),
+    );
+    await storeConnection("https://litellm.test:4000");
+    const { POST } = await load({ APP_ENV: "prod" });
+    const res = await POST(post(), ctx);
+    expect((await res.clone().json()).data.result).toBe("routes_out_of_date");
+    await expectNoLeak(res);
   });
 
   it("reports unauthorised with a 'rotate and redeploy' message and does not retry the 401", async () => {
