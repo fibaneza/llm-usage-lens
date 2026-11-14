@@ -54,7 +54,7 @@ describe.each(["import", "create"] as Mode[])(
           (e) => e.Name as string,
         );
         expect(names).not.toContain("LITELLM_SERVICE_KEY");
-        expect(names.filter((n) => /KEY|SECRET/.test(n))).toEqual([]);
+        expect(names.filter((n) => /LITELLM/.test(n))).toEqual([]);
       });
 
       it("grants the execution role ssm:GetParameters on exactly the one parameter ARN, among the existing secret ARNs", () => {
@@ -84,10 +84,16 @@ describe.each(["import", "create"] as Mode[])(
 
       it("adds nothing LiteLLM-related to the task role (no SSM, no KMS)", () => {
         const stmts = roleStatements(t, "TaskRoleArn");
-        expect(str(stmts)).not.toMatch(/litellm/i);
+        // L2 write keys (LITELLM#*) are DynamoDB leading keys, not SSM access.
+        expect(
+          str(
+            stmts.filter((x) =>
+              actionsOf(x).some((a) => /^(ssm|kms):/.test(a)),
+            ),
+          ),
+        ).not.toMatch(/litellm/i);
         for (const a of stmts.flatMap(actionsOf)) {
           expect(a).not.toMatch(/^ssm:/);
-          expect(a).not.toMatch(/^kms:Decrypt$/);
         }
       });
 

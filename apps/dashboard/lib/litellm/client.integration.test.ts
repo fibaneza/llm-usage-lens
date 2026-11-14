@@ -204,7 +204,7 @@ describe("callLiteLLM — failure mapping and sanitisation (LT1, LT12)", () => {
   it("maps a network failure to LITELLM_UNAVAILABLE 'unreachable' without leaking the key", async () => {
     installFake(() => "network-error");
     const { callLiteLLM } = await load();
-    vi.installFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const assertion = expect(
       callLiteLLM({ method: "POST", path: "/x", body: {} }, { baseUrl: BASE }),
     ).rejects.toMatchObject({
@@ -233,7 +233,7 @@ describe("callLiteLLM — failure mapping and sanitisation (LT1, LT12)", () => {
 
 describe("callLiteLLM — timeout and retries", () => {
   beforeEach(() => {
-    vi.installFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   });
 
   it("aborts a request after 10 s (not before) with detail 'timeout'", async () => {

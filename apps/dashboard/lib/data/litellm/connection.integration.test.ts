@@ -54,7 +54,10 @@ describe("putLiteLLMConnection", () => {
   it("updates with the current version and increments it", async () => {
     ok(await putLiteLLMConnection({ baseUrl: URL_A, version: null }, ctxAt()));
     const second = ok(
-      await putLiteLLMConnection({ baseUrl: URL_B, version: 1 }, ctxAt()),
+      await putLiteLLMConnection(
+        { baseUrl: URL_B, version: 1 },
+        ctxAt(NOW, "req-2"),
+      ),
     );
     expect(second).toMatchObject({ baseUrl: URL_B, version: 2 });
   });

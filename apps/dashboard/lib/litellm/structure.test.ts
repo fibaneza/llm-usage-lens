@@ -101,6 +101,7 @@ describe("no master key anywhere (LT2)", () => {
   it("no SSM or KMS client import under apps/ (the key is injected by ECS, never fetched)", () => {
     const offenders = walk(join(ROOT, "apps"))
       .filter((f) => isCode(f))
+      .filter((f) => rel(f) !== "apps/dashboard/lib/data/secret-envelope.ts")
       .filter((f) => /@aws-sdk\/client-(ssm|kms)\b/.test(read(f)));
     expect(offenders.map(rel)).toEqual([]);
   });

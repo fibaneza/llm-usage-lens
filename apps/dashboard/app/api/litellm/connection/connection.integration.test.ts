@@ -116,7 +116,10 @@ async function storedUrl(): Promise<string | undefined> {
 
 async function expectError(res: Response, status: number, code: string) {
   expect(res.status).toBe(status);
-  const raw = await res.json();
+  const text = await res.text();
+  expect(text).not.toContain(KEY);
+  expect(text).not.toContain(SENTINEL);
+  const raw = JSON.parse(text);
   const parsed = ApiErrorBodySchema.parse(raw);
   expect(parsed.error.code).toBe(code);
   ApiErrorCodeSchema.parse(parsed.error.code);
@@ -132,7 +135,7 @@ async function expectNoLeak(res: Response) {
 
 beforeAll(ensureTestTable);
 beforeEach(async () => {
-  vi.installFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-14T10:00:00.000Z"));
   authMock.mockResolvedValue(ADMIN);
   installFake();
@@ -380,7 +383,6 @@ describe("PUT /api/litellm/connection", () => {
       const { PUT } = await load();
       const res = await PUT(put({ baseUrl: BASE_B, version: 1 }), ctx);
       await expectError(res, 503, "LITELLM_UNAVAILABLE");
-      await expectNoLeak(res);
       expect(await storedUrl()).toBe(BASE_A);
       expect(await auditActions()).toHaveLength(0);
     },

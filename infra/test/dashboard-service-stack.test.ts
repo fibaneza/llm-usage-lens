@@ -295,7 +295,7 @@ describe.each(["import", "create"] as Mode[])(
       // Platform spec — Ownership: ACCT# (account CRUD) and IDENT# (the identity
       // record and master-user lockout counter written on every sign-in, Phase
       // 4R.1; added 2026-11-11, security review H2). Nothing else until 4R.2/L2.
-      it("writes: only on the table, restricted to the eleven Platform write prefixes", () => {
+      it("writes: only on the table, restricted to the twelve Platform write prefixes", () => {
         const write = stmts.find(
           (s) =>
             actionsOf(s).includes("dynamodb:PutItem") &&
@@ -316,6 +316,7 @@ describe.each(["import", "create"] as Mode[])(
               "GOVERNANCE",
               "GROUPMAP#*",
               "IDENT#*",
+              "LITELLM#*",
               "LOCALUSER#*",
               "PENDING#*",
               "SETUPLINK#*",
@@ -330,7 +331,7 @@ describe.each(["import", "create"] as Mode[])(
           write?.Condition?.["ForAllValues:StringLike"]?.[
             "dynamodb:LeadingKeys"
           ] ?? [];
-        for (const other of ["LITELLM#*", "AUDIT#*", "SYSTEM#*", "*"]) {
+        for (const other of ["AUDIT#*", "SYSTEM#*", "*"]) {
           expect(keys).not.toContain(other);
         }
         const res = resourcesOf(write ?? {});

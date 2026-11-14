@@ -16,13 +16,18 @@ import type { ApiErrorCode } from "./api";
 // account write route); Rule 20.11, Rule 10.4, Rule 60.22 (valid + invalid cases).
 
 describe("API_ERROR_CODES / ApiErrorCodeSchema", () => {
-  it("lists the five error codes in spec order", () => {
+  it("lists the ten error codes in spec order", () => {
     expect([...API_ERROR_CODES]).toEqual([
       "UNAUTHORIZED",
       "FORBIDDEN",
       "BAD_REQUEST",
       "NOT_FOUND",
       "INTERNAL",
+      "LITELLM_UNAVAILABLE",
+      "OPERATION_UNAVAILABLE",
+      "OPERATION_DISABLED",
+      "PRIVILEGED_TARGET",
+      "CONFLICT",
     ]);
   });
 
