@@ -153,3 +153,114 @@ describe("LiteLLMPanel", () => {
     expect(within(alert).getByText(/./)).toBeInTheDocument();
   });
 });
+
+// LiteLLM spec "Security architecture" item 7 (base URL "Admin-set in
+// Settings", test-before-save, versioned) and implementation-phases L1 (panel:
+// status, URL, edition, test; no key entry). The panel is mounted for admins
+// only, so it offers the URL form unconditionally.
+describe("LiteLLMPanel base URL entry", () => {
+  const NEW_URL = "https://litellm-b.example.internal";
+
+  function stubWithPut(putResponse: Response) {
+    const puts: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "PUT") {
+          puts.push({
+            url: String(input),
+            body: JSON.parse(String(init?.body ?? "null")),
+          });
+          return Promise.resolve(putResponse.clone());
+        }
+        return Promise.resolve(apiResponse({ data: CONFIGURED }));
+      }),
+    );
+    return puts;
+  }
+
+  async function enterAndSave(url: string) {
+    await screen.findByText("https://litellm.example.internal");
+    const input = screen.getByLabelText(/base url/i);
+    await userEvent.clear(input);
+    await userEvent.type(input, url);
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+  }
+
+  it("offers a labelled base URL input (prefilled with the stored URL) and a Save button", async () => {
+    stubLiteLLM(CONFIGURED);
+    renderWithProviders(<LiteLLMPanel />);
+    await screen.findByText("https://litellm.example.internal");
+    expect(screen.getByLabelText(/base url/i)).toHaveValue(
+      "https://litellm.example.internal",
+    );
+    expect(screen.getByRole("button", { name: /save/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/service key|api key|secret/i)).toBeNull();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
+  });
+
+  it("sends PUT /api/litellm/connection with the URL and the current version, and shows the new URL", async () => {
+    const saved = { ...CONFIGURED, baseUrl: NEW_URL, version: 4 };
+    const puts = stubWithPut(apiResponse({ data: saved }));
+    renderWithProviders(<LiteLLMPanel />);
+    await enterAndSave(NEW_URL);
+    expect(puts).toEqual([
+      {
+        url: "/api/litellm/connection",
+        body: { baseUrl: NEW_URL, version: 3 },
+      },
+    ]);
+    expect(await screen.findByText(NEW_URL)).toBeInTheDocument();
+  });
+
+  it("sends version null when nothing is stored yet", async () => {
+    const puts: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "PUT") {
+          puts.push(JSON.parse(String(init?.body)));
+          return Promise.resolve(
+            apiResponse({
+              data: { ...CONFIGURED, baseUrl: NEW_URL, version: 1 },
+            }),
+          );
+        }
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              baseUrl: null,
+              version: 0,
+              edition: "oss",
+              serviceKeyConfigured: true,
+            },
+          }),
+        );
+      }),
+    );
+    renderWithProviders(<LiteLLMPanel />);
+    await screen.findByText(/not configured/i);
+    await userEvent.type(screen.getByLabelText(/base url/i), NEW_URL);
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+    expect(await screen.findByText(NEW_URL)).toBeInTheDocument();
+    expect(puts).toEqual([{ baseUrl: NEW_URL, version: null }]);
+  });
+
+  it.each([
+    [400, "BAD_REQUEST", "Base URL host is not allowed"],
+    [409, "CONFLICT", "Connection changed, reload and retry"],
+    [503, "LITELLM_UNAVAILABLE", "LiteLLM unreachable"],
+  ])(
+    "shows the %i error message inline and keeps the stored URL",
+    async (status, code, message) => {
+      stubWithPut(apiResponse({ error: { code, message } }, status));
+      renderWithProviders(<LiteLLMPanel />);
+      await enterAndSave(NEW_URL);
+      expect(await screen.findByRole("alert")).toHaveTextContent(message);
+      expect(
+        screen.getByText("https://litellm.example.internal"),
+      ).toBeInTheDocument();
+    },
+  );
+});

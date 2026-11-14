@@ -77,3 +77,84 @@ test.describe("settings LiteLLM section", () => {
     ).toHaveCount(0);
   });
 });
+
+// docs/specs/2026-11-10-litellm.md -- "Security architecture" item 7 (base URL
+// Admin-set in Settings, versioned), implementation-phases L1.
+test.describe("settings LiteLLM base URL entry", () => {
+  const NEW_URL = "https://litellm-b.example.internal";
+
+  test("an admin saves a new base URL with the current version and sees it", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    let putBody: unknown;
+    await page.route(/\/api\/litellm\/connection$/, (route) => {
+      const req = route.request();
+      if (req.method() === "PUT") {
+        putBody = req.postDataJSON();
+        return route.fulfill({
+          json: {
+            data: {
+              baseUrl: NEW_URL,
+              version: 2,
+              edition: "oss",
+              serviceKeyConfigured: true,
+            },
+          },
+        });
+      }
+      return route.fulfill({
+        json: {
+          data: {
+            baseUrl: "https://litellm.example.internal",
+            version: 1,
+            edition: "oss",
+            serviceKeyConfigured: true,
+          },
+        },
+      });
+    });
+    await openSettings(page);
+
+    const input = page.getByLabel(/base url/i);
+    await expect(input).toHaveValue("https://litellm.example.internal");
+    await input.fill(NEW_URL);
+    await page.getByRole("button", { name: /^save/i }).click();
+    await expect(page.getByText(NEW_URL, { exact: true })).toBeVisible();
+    expect(putBody).toEqual({ baseUrl: NEW_URL, version: 1 });
+    await expect(page.getByLabel(/service key|api key|secret/i)).toHaveCount(0);
+  });
+
+  test("a rejected save shows the error inline", async ({ page, context }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.route(/\/api\/litellm\/connection$/, (route) => {
+      if (route.request().method() === "PUT") {
+        return route.fulfill({
+          status: 409,
+          json: {
+            error: { code: "CONFLICT", message: "Connection changed, reload" },
+          },
+        });
+      }
+      return route.fulfill({
+        json: {
+          data: {
+            baseUrl: "https://litellm.example.internal",
+            version: 1,
+            edition: "oss",
+            serviceKeyConfigured: true,
+          },
+        },
+      });
+    });
+    await openSettings(page);
+    await page.getByLabel(/base url/i).fill(NEW_URL);
+    await page.getByRole("button", { name: /^save/i }).click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Connection changed, reload",
+    );
+  });
+});

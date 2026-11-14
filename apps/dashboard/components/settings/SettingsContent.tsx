@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { AccountRegistry } from "@/components/settings/AccountRegistry";
 import { DataRetention } from "@/components/settings/DataRetention";
+import { LiteLLMPanel } from "@/components/settings/LiteLLMPanel";
 import { SyncStatusPanel } from "@/components/settings/SyncStatusPanel";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -42,6 +43,11 @@ export function SettingsContent({ isAdmin }: { isAdmin: boolean }) {
         <h2 className="text-base font-semibold">Sync status</h2>
         <SyncStatusPanel />
       </section>
+      {isAdmin ? (
+        <Section heading="LiteLLM" title="the LiteLLM connection">
+          <LiteLLMPanel />
+        </Section>
+      ) : null}
       <Section heading="Data retention" title="the data retention policy">
         <DataRetention />
       </Section>
