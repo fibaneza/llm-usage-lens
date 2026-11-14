@@ -41,6 +41,8 @@ export const env = createEnv({
       .optional(),
     TOTP_KMS_KEY_ID: z.string().min(1).optional(),
     AUDIT_LOG_GROUP_NAME: z.string().min(1).optional(),
+    LITELLM_SERVICE_KEY: z.string().min(1).optional(),
+    LITELLM_ALLOWED_HOSTS: z.string().optional(),
     NODE_ENV: z.enum(["development", "test", "production"]).optional(),
     NEXT_PHASE: z.string().optional(),
     AWS_REGION: z.string().default(COLLECTOR_REGION),

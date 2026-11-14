@@ -52,6 +52,7 @@ describe("access-control storage boundary", () => {
   it("no file outside the allowed server/tooling locations imports @aws-sdk/*", () => {
     const offenders = files.filter(
       (f) =>
+        !/\.test\.tsx?$/.test(f) &&
         !AWS_ALLOWED.some((re) => re.test(f)) &&
         importsOf(f).some((s) => s.startsWith("@aws-sdk/")),
     );

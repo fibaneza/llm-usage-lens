@@ -166,7 +166,7 @@ describe.each(["import", "create"] as Mode[])(
         expect(str(entry?.Value)).toContain("kmskeyarn");
       });
 
-      it("injects exactly the two secrets from SSM and no secret as plain environment", () => {
+      it("injects exactly the three secrets from SSM and no secret as plain environment", () => {
         const [td] = Object.values(t.findResources("AWS::ECS::TaskDefinition"));
         const c = (
           (td?.Properties as Json).ContainerDefinitions as Json[]
@@ -175,6 +175,7 @@ describe.each(["import", "create"] as Mode[])(
         expect(sorted(secrets.map((s) => s.Name as string))).toEqual([
           "AUTH_MICROSOFT_ENTRA_ID_SECRET",
           "AUTH_SECRET",
+          "LITELLM_SERVICE_KEY",
         ]);
         const byName = Object.fromEntries(
           secrets.map((s) => [s.Name, str(s.ValueFrom)]),
@@ -294,7 +295,7 @@ describe.each(["import", "create"] as Mode[])(
       // Platform spec — Ownership: ACCT# (account CRUD) and IDENT# (the identity
       // record and master-user lockout counter written on every sign-in, Phase
       // 4R.1; added 2026-11-11, security review H2). Nothing else until 4R.2/L2.
-      it("writes: only on the table, restricted to the eleven Platform write prefixes", () => {
+      it("writes: only on the table, restricted to the twelve Platform write prefixes", () => {
         const write = stmts.find(
           (s) =>
             actionsOf(s).includes("dynamodb:PutItem") &&
@@ -315,6 +316,7 @@ describe.each(["import", "create"] as Mode[])(
               "GOVERNANCE",
               "GROUPMAP#*",
               "IDENT#*",
+              "LITELLM#*",
               "LOCALUSER#*",
               "PENDING#*",
               "SETUPLINK#*",
@@ -329,7 +331,7 @@ describe.each(["import", "create"] as Mode[])(
           write?.Condition?.["ForAllValues:StringLike"]?.[
             "dynamodb:LeadingKeys"
           ] ?? [];
-        for (const other of ["LITELLM#*", "AUDIT#*", "SYSTEM#*", "*"]) {
+        for (const other of ["AUDIT#*", "SYSTEM#*", "*"]) {
           expect(keys).not.toContain(other);
         }
         const res = resourcesOf(write ?? {});
@@ -372,14 +374,15 @@ describe.each(["import", "create"] as Mode[])(
         roleIdFromTaskDef(t, "ExecutionRoleArn"),
       );
 
-      it("reads only the two secret parameters", () => {
+      it("reads only the three secret parameters", () => {
         const ssm = stmts.filter((s) =>
           actionsOf(s).some((a) => a.startsWith("ssm:")),
         );
         expect(ssm).toHaveLength(1);
         expect(actionsOf(ssm[0] ?? {})).toEqual(["ssm:GetParameters"]);
         const res = resourcesOf(ssm[0] ?? {});
-        expect(res).toHaveLength(2);
+        expect(res).toHaveLength(3);
+        expect(str(res)).toContain("/llm-usage-lens/dev/litellm/service-key");
         expect(str(res)).toContain("/llm-usage-lens/dev/app/auth-secret");
         expect(str(res)).toContain(
           "/llm-usage-lens/dev/app/entra-client-secret",

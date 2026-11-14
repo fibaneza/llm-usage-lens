@@ -219,3 +219,15 @@ export {
   visibilityPk,
 } from "./table";
 export type { ScopeType } from "./table";
+
+export {
+  ConnectionTestResultSchema,
+  LiteLLMConnectionSchema,
+  LiteLLMConnectionStatusSchema,
+  liteLLMEdition,
+} from "./schemas/litellm";
+export type {
+  ConnectionTestResult,
+  LiteLLMConnection,
+  LiteLLMConnectionStatus,
+} from "./schemas/litellm";

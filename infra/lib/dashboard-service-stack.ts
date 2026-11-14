@@ -1,4 +1,4 @@
-import { ArnFormat, Stack } from "aws-cdk-lib";
+import { ArnFormat, CfnOutput, Stack } from "aws-cdk-lib";
 import type { StackProps } from "aws-cdk-lib";
 import * as cwActions from "aws-cdk-lib/aws-cloudwatch-actions";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
@@ -97,6 +97,11 @@ export class DashboardServiceStack extends Stack {
     const taskSecurityGroup = new ec2.SecurityGroup(this, "TaskSg", {
       vpc,
       description: "LLM Usage Lens dashboard tasks",
+    });
+    // For the LiteLLM operator to allow-list (LiteLLM spec — "Cloud
+    // permissions"); no Export, nothing imports it.
+    new CfnOutput(this, "TaskSecurityGroupId", {
+      value: taskSecurityGroup.securityGroupId,
     });
     const service = new ecs.FargateService(this, "Service", {
       cluster,

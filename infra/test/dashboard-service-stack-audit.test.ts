@@ -15,6 +15,7 @@ const WRITE_PREFIXES = [
   "GOVERNANCE",
   "GROUPMAP#*",
   "IDENT#*",
+  "LITELLM#*",
   "LOCALUSER#*",
   "PENDING#*",
   "SETUPLINK#*",
@@ -50,7 +51,7 @@ describe.each<Mode>(["import", "create"])(
   (mode) => {
     const t = synthApp(mode, "dev");
 
-    it("T19: the write statement is limited to exactly the eleven key prefixes (Platform — Task role policy)", () => {
+    it("T19: the write statement is limited to exactly the twelve key prefixes (Platform — Task role policy)", () => {
       const write = writeStatements(t).filter((st) => !isAudit(st));
       expect(write).toHaveLength(1);
       expect([...leadingKeys(write[0] as Json)].sort()).toEqual(WRITE_PREFIXES);

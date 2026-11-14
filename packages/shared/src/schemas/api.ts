@@ -9,6 +9,11 @@ export const API_ERROR_CODES = [
   "BAD_REQUEST",
   "NOT_FOUND",
   "INTERNAL",
+  "LITELLM_UNAVAILABLE",
+  "OPERATION_UNAVAILABLE",
+  "OPERATION_DISABLED",
+  "PRIVILEGED_TARGET",
+  "CONFLICT",
 ] as const;
 
 export const ApiErrorCodeSchema = z.enum(API_ERROR_CODES);

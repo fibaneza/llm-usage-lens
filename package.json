@@ -15,7 +15,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:e2e": "pnpm --filter @llm-usage-lens/dashboard test:e2e",
-    "build:ci": "NEXT_TELEMETRY_DISABLED=1 APP_ENV=dev NEXT_PUBLIC_APP_URL=http://localhost:3000 AUTH_SECRET=ci-build-placeholder AUTH_MICROSOFT_ENTRA_ID_ID=ci-build-placeholder AUTH_MICROSOFT_ENTRA_ID_SECRET=ci-build-placeholder AUTH_MICROSOFT_ENTRA_ID_ISSUER=https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0 pnpm build",
+    "build:ci": "NEXT_TELEMETRY_DISABLED=1 APP_ENV=dev NEXT_PUBLIC_APP_URL=http://localhost:3000 AUTH_SECRET=ci-build-placeholder LITELLM_ALLOWED_HOSTS=localhost:4000 AUTH_MICROSOFT_ENTRA_ID_ID=ci-build-placeholder AUTH_MICROSOFT_ENTRA_ID_SECRET=ci-build-placeholder AUTH_MICROSOFT_ENTRA_ID_ISSUER=https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0 pnpm build",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && vitest run && pnpm build:ci",
     "prepare": "husky",
     "test:unit": "vitest run --project unit",
