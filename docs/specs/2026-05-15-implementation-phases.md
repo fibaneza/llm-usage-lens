@@ -681,8 +681,9 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [ ] `lib/litellm/` one typed function per allowlisted operation (fixed method and path, strict Zod builders, Zod-parsed responses); edition gate; `OperationToggles` (versioned, audited, defaults per the spec); `TeamLink` + `TeamLinkClaim`; `/api/litellm/toggles`, `/api/litellm/team-links` (the task role's `LITELLM#*` write key landed in L1)
 - [ ] Fake LiteLLM for both editions; contract test of every call against the snapshot
 - [ ] `litellm-changed-by` on every write call, built from the session (LiteLLM spec — *Audit*, LD14)
+- [ ] Gateway guardrails (LiteLLM spec — *Gateway guardrails*, LD4, LD18; decided 2026-11-15): one outbound choke point, path-parameter validation and encoding, hard-limit denylist test, exact bodies, wildcard warning on the panel; the runbook records the key setting that refuses inference (LD18)
 - [ ] Guardrail configuration (LiteLLM spec — *Guardrail configuration*, LD19; decided 2026-11-15): `apps/dashboard/config/litellm-gateway.json` + `LiteLLMGatewayConfigSchema` (startup validation, narrow only); read toggles; effective value + source per operation and the read-only guardrail summary on the Settings → LiteLLM panel; reset to file defaults (audited)
-- [ ] Verify: structural allowlist test; `allowed_routes` list = runbook = gateway paths; LT3, LT4, LT7, LT14, LT15, LT17, LT19; disabled operation (write or read) → `403 OPERATION_DISABLED` with no call; precedence UI > file > LD10; the config schema rejects an unknown operation, route or field and a widening value
+- [ ] Verify: structural allowlist test; `allowed_routes` list = runbook = gateway paths; LT3, LT4, LT7, LT14, LT15, LT17, LT19; disabled operation (write or read) → `403 OPERATION_DISABLED` with no call; precedence UI > file > LD10; the config schema rejects an unknown operation, route or field and any `enabled: true`; connection-test probes ignore read toggles
 
 ### L3 — Read views (`feature/phase-l3-litellm-views`)
 

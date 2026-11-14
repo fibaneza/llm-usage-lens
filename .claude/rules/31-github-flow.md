@@ -48,7 +48,8 @@ Never bypass the commit-msg hook (`--no-verify`) — Rule 50.5.
    directly in the primary checkout.
 2. **Commit with Conventional Commits** on the topic branch; hooks run
    (Rule 50.5).
-3. **Gate before merging** — on the topic branch run `pnpm check` (with
+3. **Gate before merging** — on the topic branch (or, under a
+   coordinator, once on the batch candidate — Rule 70.12) run `pnpm check` (with
    DynamoDB Local on `:8000`): `pnpm typecheck`, `pnpm lint`,
    `pnpm format:check`, `vitest run` (unit + integration) and the CI-env
    build (`pnpm build:ci`), stopping at the first failure. Not `pnpm ci` —

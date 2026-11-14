@@ -8,7 +8,8 @@ run on the `main` candidate, fix agents when that run fails, and the clean-up
 of branches and worktrees afterwards — relays status to the user, and keeps
 the state needed to carry on after a context reset or in a new session
 (decided 2026-11-14, user). Workers never merge into `main`; they finish at
-"approved, ready to merge".
+"ready to merge" with a green branch gate (the review is the
+coordinator's, §4).
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
 `shared-contracts.md` → the goal prompt a worker runs → this file. This file
@@ -155,16 +156,18 @@ full suite, no per-branch review.
    queued branch in turn (resolve conflicts per §2a: keep what is on
    `main` plus each branch's new lines; append-only files get every side's
    lines).
-3. **Review once.** One fan-out over `git diff main...integration/<date>`:
+3. **Test once.** On the same tree, results only: `pnpm check` (DynamoDB
+   Local on `:8000`; outside the sandbox when it blocks the port or the
+   pnpm store) and, when UI or auth changed, `pnpm test:e2e`. Use a `haiku`
+   agent to run and summarise it when the coordinator's context is
+   precious. Then run `/verify-phase <unit>` for each unit on the candidate
+   (Rule 30.3).
+4. **Review once**, handing the reviewers step 3's evidence (exit codes
+   and counts, Rule 70.5). One fan-out over `git diff main...integration/<date>`:
    `quality-reviewer` (opus) covering every unit in the batch and every
    dedicated security review those units require (4R.4, L2, L4, …), plus
    `spec-guardian` when the batch changed `docs/specs/**` or
    `.claude/rules/**`, and `playwright-ui-reviewer` when UI changed.
-4. **Test once.** On the same tree, results only: `pnpm check` (DynamoDB
-   Local on `:8000`; outside the sandbox when it blocks the port or the
-   pnpm store) and, when UI or auth changed, `pnpm test:e2e`. Use a `haiku`
-   agent to run and summarise it when the coordinator's context is
-   precious.
 5. **If either fails, fix it on the owning branch — never on `main`.**
    Dispatch the Rule 70 loop with explicit models (`tdd-test-engineer`
    then `typescript-developer`, sonnet) in that branch's worktree with the
@@ -175,8 +178,10 @@ full suite, no per-branch review.
    fixed.
 6. **Land it.** Tick each unit's satisfied task and Verify boxes in
    `docs/specs/2026-05-15-implementation-phases.md` on the candidate, then
-   put its tree onto `main` as one commit per unit when the units' diffs
-   separate cleanly, otherwise one commit naming every unit (Rule 31):
+   once the user has authorised the merge (Rule 70.9), put the tree onto
+   `main` as **one commit per unit** in queue order (Rule 30.4, Rule 31
+   step 4); if the units' diffs cannot be separated, stop and ask the
+   user. Each commit:
    `git commit-tree "<branch>^{tree}" -p main` with a Conventional Commits
    subject, on a temporary branch, and `git -C <primary checkout> merge
    --ff-only <it>` (outside the sandbox when it blocks the primary
