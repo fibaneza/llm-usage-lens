@@ -439,8 +439,12 @@ remains). The export is audited.
    invalidation is relied on. Every Route Handler response under `/api/*`
    sets `Cache-Control: private, no-store` (delivered 2026-11-11 with the
    security-review fixes, ahead of R3). Auth.js's own handler sets its own
-   headers; the proxy's sign-in redirect and the framework's `404`/`405`
-   for an unknown path or method carry no data.
+   headers. The proxy answers a logged-out `/api/*` request with the same
+   no-store JSON `401` `UNAUTHORIZED` as the route handlers (one shared
+   helper; amended 2026-11-15) and redirects only pages to sign-in; its
+   matcher skips exactly `/api/auth`, `/api/auth/*` and `/api/health`. That
+   redirect and the framework's `404`/`405` for an unknown path or method
+   carry no data.
 5. **Exports and search are scoped:** CSV, command menu, search, and links.
 6. **Writes.** Zod-validated; a body `teamId`/`departmentId` must equal the
    path (`400`). Optimistic concurrency via a `version` attribute and a

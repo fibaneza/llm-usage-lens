@@ -9,7 +9,12 @@ import type { Session } from "next-auth";
 import type { ZodType, z } from "zod";
 
 import { auth } from "@/auth";
-import { INTERNAL_ADMIN_ROLE, hasAdminRole } from "@/lib/auth/roles";
+import { unauthenticatedResponse } from "@/lib/api/unauthenticated";
+import {
+  INTERNAL_ADMIN_ROLE,
+  hasAdminRole,
+  hasGlobalRole,
+} from "@/lib/auth/roles";
 
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes"; Rule 10.3,
 // Rule 50.4 (401 before any data access), Rule 50.6, Rule 60.18; System
@@ -148,6 +153,10 @@ const tracer = trace.getTracer("bedrock-usage-dashboard");
 
 export type RouteOptions = {
   requireAdmin?: boolean;
+  // Read routes open to internal-admin and internal-auditor (Access Control
+  // spec - API routes (additions)). Enforced right after the session check,
+  // like `requireAdmin`; a refusal records no denied audit (D17: writes only).
+  requireAdminOrAuditor?: boolean;
   // The operation and fixed route pattern a `requireAdmin` refusal records
   // (Access Control spec - Audit log D17, T22); never the raw path.
   denied?: { action: AuditAction; pattern: string };
@@ -196,7 +205,7 @@ export function withRoute(
       try {
         const session = await auth();
         if (typeof session?.user?.oid !== "string" || session.user.oid === "") {
-          return jsonError(401, "UNAUTHORIZED", "Not authenticated");
+          return unauthenticatedResponse();
         }
         if (options.requireAdmin && !hasAdminRole(session)) {
           if (options.denied) {
@@ -210,6 +219,17 @@ export function withRoute(
             403,
             "FORBIDDEN",
             `${INTERNAL_ADMIN_ROLE} role required`,
+          );
+        }
+        if (
+          options.requireAdminOrAuditor &&
+          !hasAdminRole(session) &&
+          !hasGlobalRole(session, "internal-auditor")
+        ) {
+          return jsonError(
+            403,
+            "FORBIDDEN",
+            `${INTERNAL_ADMIN_ROLE} or internal-auditor role required`,
           );
         }
         if (WRITE_METHODS.has(request.method) && !isSameOrigin(request)) {
