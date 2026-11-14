@@ -31,7 +31,6 @@ a gate run or an agent (for example "dispatching tdd-test-engineer on
 sonnet"), in its own output and progress log; it is not a separate message
 to the coordinator.
 
-
 | Model | Use for |
 |---|---|
 | opus (`claude-opus-5-5`) | Reasoning, design, review verdicts, hard debugging |
@@ -121,9 +120,11 @@ review = quality-reviewer + spec-guardian + ecc reviewers
     - **Batched under a coordinator (amended 2026-11-15, user).** When a
       coordinator runs parallel goals (`prompts/coordinator_prompt.md` §4),
       workers stop at a green branch gate with no review of their own; the
-      coordinator waits until every active goal is ready, merges them into
+      coordinator waits until every active goal is ready (or the workers
+      stop on a usage freeze), merges them into
       one candidate, and runs the review fan-out (covering each unit and
-      its required security review) and the full suite once on that tree.
+      its required security review — the list in *One review per phase*)
+      and the full suite once on that tree, one squash commit per unit.
       Nothing reaches `main` before both pass.
     - **Re-reviews are delta-scoped.** After REQUEST CHANGES, the next pass
       reviews only the blocker fixes (the diff since the last reviewed
