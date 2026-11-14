@@ -1,0 +1,420 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  LLM Usage Lens POC - one EC2 instance (Amazon Linux 2023, Docker, Compose,
+  SSM Session Manager), its security group and IAM role, and a private ECR
+  repository. Uses an existing VPC and subnet, and optionally adds a listener
+  to an existing Application Load Balancer. Does not deploy or start the
+  application. Deleting this stack deletes the ECR repository and its images.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: Existing network }
+        Parameters: [VpcId, SubnetId]
+      - Label: { default: EC2 instance }
+        Parameters:
+          - InstanceName
+          - InstanceType
+          - InstanceArchitecture
+          - RootVolumeSizeGiB
+          - ComposeVersion
+      - Label: { default: Application access }
+        Parameters: [AppPort, AllowedInboundCidr]
+      - Label: { default: Existing Application Load Balancer (optional) }
+        Parameters:
+          - ExistingAlbArn
+          - ExistingAlbSecurityGroupId
+          - AlbListenerPort
+          - AlbCertificateArn
+      - Label: { default: ECR }
+        Parameters: [EcrRepositoryName, UntaggedImageRetentionDays]
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Existing VPC. The stack creates no network resources.
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: >-
+      Existing subnet in VpcId. It must give the instance outbound access to
+      Systems Manager, ECR, S3 and the external LiteLLM endpoint (internet
+      egress or VPC endpoints); see poc/README.md.
+  InstanceName:
+    Type: String
+    Default: llm-usage-lens-poc
+    MinLength: 1
+    MaxLength: 128
+    Description: Name tag of the EC2 instance.
+  InstanceType:
+    Type: String
+    Default: t4g.small
+    AllowedPattern: "^[a-z][a-z0-9-]*\\.[a-z0-9]+$"
+    ConstraintDescription: must be an EC2 instance type such as t4g.small or t3.small.
+    Description: >-
+      EC2 instance type. Its CPU architecture must match InstanceArchitecture
+      (t4g/c7g/m7g are arm64; t3/t3a/m6i are x86_64). 2 GiB of memory or more.
+  InstanceArchitecture:
+    Type: String
+    Default: arm64
+    AllowedValues: [arm64, x86_64]
+    Description: >-
+      CPU architecture of InstanceType. Selects the Amazon Linux 2023 AMI and
+      the image platform reported in the ImagePlatform output.
+  RootVolumeSizeGiB:
+    Type: Number
+    Default: 20
+    MinValue: 12
+    MaxValue: 200
+    Description: Size of the encrypted gp3 root volume, in GiB.
+  ComposeVersion:
+    Type: String
+    Default: v2.32.4
+    AllowedPattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    ConstraintDescription: must be a Docker Compose release tag such as v2.32.4.
+    Description: >-
+      Docker Compose release downloaded from GitHub when the Amazon Linux
+      repositories do not provide the Compose plugin package.
+  AppPort:
+    Type: Number
+    Default: 3000
+    MinValue: 1024
+    MaxValue: 65535
+    Description: >-
+      Host port the application is published on. Only used for the inbound
+      rule created when AllowedInboundCidr is set; must equal APP_PORT in the
+      instance's .env.
+  AllowedInboundCidr:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^([0-9]{1,3}\\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$"
+    ConstraintDescription: must be empty or an IPv4 CIDR such as 203.0.113.10/32.
+    Description: >-
+      Optional trusted IPv4 CIDR allowed to reach AppPort. Empty (default)
+      creates no inbound rule; reach the application through SSM port
+      forwarding. 0.0.0.0/0 is rejected.
+  ExistingAlbArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^arn:aws[a-z-]*:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:loadbalancer/app/[A-Za-z0-9-]+/[a-f0-9]+$"
+    ConstraintDescription: must be empty or the ARN of an Application Load Balancer.
+    Description: >-
+      Optional ARN of an existing Application Load Balancer in VpcId. When
+      set, the stack adds one listener and one target group to it and adds
+      one inbound rule to the instance's security group so the load balancer
+      can reach AppPort. The load balancer itself and its security group are
+      never created or modified. Empty (default) adds
+      nothing.
+  ExistingAlbSecurityGroupId:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^sg-[0-9a-f]{8,17}$"
+    ConstraintDescription: must be empty or a security group ID such as sg-0123456789abcdef0.
+    Description: >-
+      Security group already attached to the existing load balancer. Required
+      with ExistingAlbArn; it becomes the only source allowed to reach AppPort
+      through the load balancer.
+  AlbListenerPort:
+    Type: Number
+    Default: 443
+    MinValue: 1
+    MaxValue: 65535
+    Description: >-
+      Port of the listener added to the existing load balancer. It must be
+      free on that load balancer and already allowed inbound by its security
+      group.
+  AlbCertificateArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^arn:aws[a-z-]*:acm:[a-z0-9-]+:[0-9]{12}:certificate/[a-f0-9-]+$"
+    ConstraintDescription: must be empty or an ACM certificate ARN in this region.
+    Description: >-
+      ACM certificate for the listener. Set: the listener is HTTPS. Empty: the
+      listener is plain HTTP (use only on an internal load balancer).
+  EcrRepositoryName:
+    Type: String
+    Default: llm-usage-lens-poc
+    AllowedPattern: "^[a-z0-9]+(?:[._/-][a-z0-9]+)*$"
+    MinLength: 2
+    MaxLength: 256
+    ConstraintDescription: must be a valid lowercase ECR repository name.
+    Description: Name of the private ECR repository created by this stack.
+  UntaggedImageRetentionDays:
+    Type: Number
+    Default: 7
+    MinValue: 1
+    MaxValue: 365
+    Description: Days after which untagged images (superseded "latest" pushes) expire.
+
+Rules:
+  NoOpenInboundCidr:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AllowedInboundCidr, "0.0.0.0/0"]]
+        AssertDescription: AllowedInboundCidr must not be 0.0.0.0/0.
+  AlbNeedsItsSecurityGroup:
+    RuleCondition: !Not [!Equals [!Ref ExistingAlbArn, ""]]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ExistingAlbSecurityGroupId, ""]]
+        AssertDescription: ExistingAlbSecurityGroupId is required when ExistingAlbArn is set.
+
+Conditions:
+  HasInboundCidr: !Not [!Equals [!Ref AllowedInboundCidr, ""]]
+  IsArm64: !Equals [!Ref InstanceArchitecture, arm64]
+  HasAlb: !Not [!Equals [!Ref ExistingAlbArn, ""]]
+  HasAlbCertificate: !Not [!Equals [!Ref AlbCertificateArn, ""]]
+
+Resources:
+  # Deleting the stack deletes this repository AND every image in it
+  # (EmptyOnDelete). No Retain policy on purpose.
+  EcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref EcrRepositoryName
+      ImageTagMutability: MUTABLE
+      EmptyOnDelete: true
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: !Sub |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire untagged images ${UntaggedImageRetentionDays} days after push",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": ${UntaggedImageRetentionDays}
+                },
+                "action": { "type": "expire" }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Keep only the most recent image tagged latest",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["latest"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 1
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: LLM Usage Lens POC instance - Session Manager and ECR pull only.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ecr-pull
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: EcrAuthToken
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: EcrPullThisRepository
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: !GetAtt EcrRepository.Arn
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: LLM Usage Lens POC instance - no SSH, optional app port from one trusted CIDR
+      VpcId: !Ref VpcId
+      SecurityGroupIngress: !If
+        - HasInboundCidr
+        - - IpProtocol: tcp
+            FromPort: !Ref AppPort
+            ToPort: !Ref AppPort
+            CidrIp: !Ref AllowedInboundCidr
+            Description: Application port from the trusted CIDR
+        - !Ref AWS::NoValue
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          Description: Outbound to SSM, ECR, S3, package repositories and the external LiteLLM endpoint
+      Tags:
+        - Key: Name
+          Value: !Sub ${InstanceName}-sg
+
+  # Optional: publish the app through an EXISTING load balancer. Only the
+  # listener, the target group and one ingress rule on the instance's own
+  # security group are created. No new security group is needed: the rule
+  # below is all the load balancer requires to reach the instance. The load
+  # balancer and its security group are left as they are.
+  AlbToInstanceIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasAlb
+    Properties:
+      GroupId: !Ref InstanceSecurityGroup
+      IpProtocol: tcp
+      FromPort: !Ref AppPort
+      ToPort: !Ref AppPort
+      SourceSecurityGroupId: !Ref ExistingAlbSecurityGroupId
+      Description: Application port and health check from the existing load balancer
+
+  AlbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: HasAlb
+    Properties:
+      VpcId: !Ref VpcId
+      TargetType: instance
+      Protocol: HTTP
+      Port: !Ref AppPort
+      Targets:
+        - Id: !Ref Instance
+          Port: !Ref AppPort
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /api/health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: "200"
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "30"
+      Tags:
+        - Key: Name
+          Value: !Sub ${InstanceName}-tg
+
+  AlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasAlb
+    Properties:
+      LoadBalancerArn: !Ref ExistingAlbArn
+      Port: !Ref AlbListenerPort
+      Protocol: !If [HasAlbCertificate, HTTPS, HTTP]
+      SslPolicy: !If
+        - HasAlbCertificate
+        - ELBSecurityPolicy-TLS13-1-2-2021-06
+        - !Ref AWS::NoValue
+      Certificates: !If
+        - HasAlbCertificate
+        - - CertificateArn: !Ref AlbCertificateArn
+        - !Ref AWS::NoValue
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref AlbTargetGroup
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      # Latest Amazon Linux 2023 AMI for the chosen architecture. It is
+      # resolved on every stack operation: a later stack update can pick a
+      # newer AMI and replace the instance (and its root volume).
+      ImageId: !If
+        - IsArm64
+        - "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64}}"
+        - "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}"
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      IamInstanceProfile: !Ref InstanceProfile
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref RootVolumeSizeGiB
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Ref InstanceName
+      # Host prerequisites only: no credentials, no secrets, no image pull and
+      # no application start.
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+
+          dnf install -y docker
+          systemctl enable --now docker
+
+          # Preinstalled on Amazon Linux 2023 AMIs; this keeps it present and running.
+          dnf install -y amazon-ssm-agent
+          systemctl enable --now amazon-ssm-agent
+
+          if ! dnf install -y docker-compose-plugin; then
+            plugin_dir=/usr/libexec/docker/cli-plugins
+            asset="docker-compose-linux-$(uname -m)"
+            base="https://github.com/docker/compose/releases/download/${ComposeVersion}"
+            mkdir -p "$plugin_dir"
+            cd "$(mktemp -d)"
+            curl -fsSL --retry 5 -o "$asset" "$base/$asset"
+            curl -fsSL --retry 5 -o "$asset.sha256" "$base/$asset.sha256"
+            sha256sum -c "$asset.sha256"
+            install -m 0755 "$asset" "$plugin_dir/docker-compose"
+          fi
+          docker compose version
+
+          install -d -m 0750 /opt/llm-usage-lens-poc
+
+Outputs:
+  InstanceId:
+    Description: EC2 instance ID (Session Manager target).
+    Value: !Ref Instance
+  InstancePrivateIp:
+    Description: Private IPv4 address of the instance.
+    Value: !GetAtt Instance.PrivateIp
+  InstanceSecurityGroupId:
+    Description: Security group of the instance (allow it on the LiteLLM side if required).
+    Value: !Ref InstanceSecurityGroup
+  EcrRepositoryUri:
+    Description: ECR repository URI (without tag).
+    Value: !GetAtt EcrRepository.RepositoryUri
+  EcrRepositoryName:
+    Description: ECR repository name.
+    Value: !Ref EcrRepository
+  ImagePlatform:
+    Description: Docker platform the image must be built for.
+    Value: !Sub
+      - linux/${Arch}
+      - Arch: !If [IsArm64, arm64, amd64]
+  AppPort:
+    Description: Host port the application is published on.
+    Value: !Ref AppPort
+  AlbListenerArn:
+    Condition: HasAlb
+    Description: Listener added to the existing load balancer.
+    Value: !Ref AlbListener
+  AlbTargetGroupArn:
+    Condition: HasAlb
+    Description: Target group that forwards to the instance on AppPort.
+    Value: !Ref AlbTargetGroup
+  Region:
+    Description: AWS region of the stack.
+    Value: !Ref AWS::Region
+  AccountId:
+    Description: AWS account ID of the stack.
+    Value: !Ref AWS::AccountId
