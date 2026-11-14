@@ -33,6 +33,14 @@ const CONFIGURED: Status = {
   serviceKeyConfigured: true,
 };
 
+// L2 (LD19): the panel also reads GET /api/litellm/toggles.
+const TOGGLES = {
+  version: 0,
+  edition: "oss",
+  wildcardWarning: true,
+  operations: { createTeam: { enabled: true, source: "file" } },
+};
+
 function stubLiteLLM(status: Status, testData?: unknown) {
   const calls: Array<{ url: string; method: string }> = [];
   vi.stubGlobal(
@@ -41,6 +49,9 @@ function stubLiteLLM(status: Status, testData?: unknown) {
       const url = String(input);
       const method = (init?.method ?? "GET").toUpperCase();
       calls.push({ url, method });
+      if (url.includes("/api/litellm/toggles")) {
+        return Promise.resolve(apiResponse({ data: TOGGLES }));
+      }
       if (url.includes("/api/litellm/connection/test")) {
         return Promise.resolve(apiResponse({ data: testData }));
       }
@@ -174,6 +185,9 @@ describe("LiteLLMPanel base URL entry", () => {
           });
           return Promise.resolve(putResponse);
         }
+        if (String(input).includes("/api/litellm/toggles")) {
+          return Promise.resolve(apiResponse({ data: TOGGLES }));
+        }
         return Promise.resolve(apiResponse({ data: CONFIGURED }));
       }),
     );
@@ -219,6 +233,9 @@ describe("LiteLLMPanel base URL entry", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(_input).includes("/api/litellm/toggles")) {
+          return Promise.resolve(apiResponse({ data: TOGGLES }));
+        }
         if ((init?.method ?? "GET").toUpperCase() === "PUT") {
           puts.push(JSON.parse(String(init?.body)));
           return Promise.resolve(
