@@ -802,6 +802,11 @@ A run is **Completed** when all of these hold:
    (Rule 70 APPROVE, every blocker resolved or recorded with a reason) and
    verified by the orchestrator's own gate runs. For R3–R5, the per-role
    seeded probe has passed too.
+   **Under a coordinator** (`coordinator_prompt.md` §4, decided 2026-11-15,
+   user): the review and the full gate run once per batch and belong to the
+   coordinator, so a worker's run is complete at "ready to merge" with a
+   green branch gate (typecheck, lint, format, impacted tests) and every
+   red test from the run green.
 2. Units after the target are **out of scope for that run** and do not count
    against completion.
 3. The report exists by T+60, is marked on time, and lists every user action.
