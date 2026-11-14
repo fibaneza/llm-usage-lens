@@ -29,6 +29,7 @@ const WRITE_LEADING_KEYS = [
   "GOVERNANCE",
   "GROUPMAP#*",
   "IDENT#*",
+  "LITELLM#*",
   "LOCALUSER#*",
   "PENDING#*",
   "SETUPLINK#*",
