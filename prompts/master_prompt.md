@@ -685,6 +685,16 @@ the repository's actual final state.
 
 ## 11. Recommended next steps
 <!-- Ordered by impact and dependency. -->
+
+## 12. Expected time to finish
+<!-- Added 2026-11-15 (user): "how long is expected to finish?" Required in
+every report, Completed or not. -->
+- **Remaining work:** the unit's open task and Verify items, by slice.
+- **Estimate:** agents still needed (by model), 5-hour windows and weekly
+  points expected, from this run's measured burn (points per agent); and
+  the earliest wall-clock finish given `resets_at` (5-hour and weekly).
+- **Confidence and risks:** low / medium / high, and what would move it
+  (design gaps, disputes, the weekly limit).
 ```
 
 **Integrity.** Never invent test results, timings, usage readings, agent

@@ -43,7 +43,7 @@ never overrides a rule; it only adds coordination.
   `CI=true corepack pnpm install --offline --frozen-lockfile` inside it.
   Record goal, worker, worktree, branch and base commit in `state.md`.
 - **Brief by `SendMessage`** to the worker's session name, with
-  `notify_when_idle: true`. A brief always contains:
+  no idle subscription (idle notices cost tokens). A brief always contains:
   1. the goal prompt and target unit;
   2. the **absolute worktree path and branch** — the worker works there,
      whatever directory it started in (a worktree-isolated session switches
@@ -52,11 +52,19 @@ never overrides a rule; it only adds coordination.
   4. the run folder `temp/run-<slug>/` and the report name;
   5. file ownership versus the other active goals;
   6. limits: max 2 concurrent agents per worker, models set explicitly
+     and named when each task or agent starts (Rule 70 *Model routing*)
      (sonnet for tests and code, opus for reviews, haiku for gate re-runs),
      the usage freeze, and Rule 70.12 (one review per phase, delta
      re-reviews, impacted tests on the branch, results not logs);
   7. the remaining steps in order;
-  8. "send the coordinator a one-line status at each milestone. When the
+  8. "message the coordinator **only** with one of these one-line messages
+     (user, 2026-11-15: no acks, milestone updates, corrections or
+     closing notes):
+     - `ready to merge <unit> at <commit>`
+     - `frozen <unit> at <commit>, report <path>` (usage freeze or deadline)
+     - `blocked <unit>: <what is needed, from whom>`
+     - `overlap <unit>: <path> owned by another goal`
+     Everything else goes in the run's report and progress log. When the
      branch gate is green (typecheck, lint, format, impacted tests), commit
      everything, leave the worktree clean, send 'ready to merge <unit> at
      <commit>', and stop work on that branch. Run no review fan-out and no
@@ -71,9 +79,19 @@ never overrides a rule; it only adds coordination.
 
 ## 2. While workers run
 
+- **Workers are quiet** (user, 2026-11-15): they send only the four
+  messages in §1 item 8. The coordinator replies only when a reply changes
+  what the worker does, and never sends acks.
 - Log every worker message, one line each, to `temp/coordinator/status.log`
   (`<UTC> <worker>: <milestone>`), and update `state.md` (milestone, last
   commit, blockers). Relay a short summary to the user.
+- **Idle check (user, 2026-11-15).** While at least one goal is active (a
+  worker briefed, with no `ready` or `frozen` message since), a session-only
+  `CronCreate` job runs every 5 minutes. It checks only the active goals:
+  `ListAgents`, then each one's worktree `log -1` and `status`, then usage.
+  It nudges an idle, unchanged, silent worker once, and tells the user if
+  the worker stays idle. When no goal is active, the job deletes itself and
+  is created again with the next brief.
 - **Do not duplicate work.** The coordinator runs no agents on a goal while
   its worker is working on it. If a worker is stuck past its deadline,
   message it once; if it stays idle, tell the user.
@@ -101,7 +119,7 @@ never overrides a rule; it only adds coordination.
   branch up to date: if its worker is idle and its worktree is clean, the
   coordinator merges `main` into it in that worktree and runs the branch gate
   there; otherwise it tells the worker to merge `main` at its next step.
-- **Early warning.** On each worker milestone, run
+- **Early warning.** On each worker message and before each merge, run
   `git -C <worktree> diff --name-only main...HEAD` for the active goals and
   compare. An overlap outside the shared list is raised with both workers
   before either continues on that file.
@@ -109,7 +127,7 @@ never overrides a rule; it only adds coordination.
 ## 3. Usage (one shared pool)
 
 - All sessions draw on the same 5-hour and weekly limits. Read usage before
-  each brief and on each worker milestone.
+  each brief and on each worker message.
 - At **≥ 60 %** (caution) tell workers to stay at 2 agents and skip optional
   work. At **≥ 75 %** (freeze) tell every worker to start no new agents, let
   running ones finish, commit what passed, write its report and stop.
