@@ -389,17 +389,66 @@ describe("token and session fail closed (T1, T8)", () => {
     });
   });
 
+  const at = (path: string) => ({
+    nextUrl: new URL(`http://localhost${path}`),
+  });
+
   it("authorized requires a session user with an oid", async () => {
     const cfg = await load(ENTRA);
-    expect(cfg.callbacks.authorized({ auth: null })).toBe(false);
-    expect(cfg.callbacks.authorized({ auth: { user: {} } })).toBe(false);
-    expect(cfg.callbacks.authorized({ auth: { user: { oid: "" } } })).toBe(
+    const request = at("/dashboard");
+    expect(cfg.callbacks.authorized({ auth: null, request })).toBe(false);
+    expect(cfg.callbacks.authorized({ auth: { user: {} }, request })).toBe(
       false,
     );
-    expect(cfg.callbacks.authorized({ auth: { user: { oid: "oid-1" } } })).toBe(
-      true,
-    );
+    expect(
+      cfg.callbacks.authorized({ auth: { user: { oid: "" } }, request }),
+    ).toBe(false);
+    expect(
+      cfg.callbacks.authorized({ auth: { user: { oid: "oid-1" } }, request }),
+    ).toBe(true);
   });
+
+  // Rule 50.4 / Data Model "API Routes": a logged-out /api/* request gets the
+  // same 401 body and Cache-Control as withRoute, not a redirect to /sign-in.
+  it.each(["/api/overview", "/api/accounts/x", "/api/"])(
+    "authorized answers a logged-out %s with a no-store 401",
+    async (path) => {
+      const cfg = await load(ENTRA);
+      for (const auth of [null, { user: {} }, { user: { oid: "" } }]) {
+        const out = cfg.callbacks.authorized({
+          auth,
+          request: at(path),
+        }) as unknown;
+        expect(out).toBeInstanceOf(Response);
+        const res = out as Response;
+        expect(res.status).toBe(401);
+        expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+        await expect(res.json()).resolves.toEqual({
+          error: { code: "UNAUTHORIZED", message: "Not authenticated" },
+        });
+      }
+    },
+  );
+
+  it("authorized lets a signed-in /api/* request through", async () => {
+    const cfg = await load(ENTRA);
+    expect(
+      cfg.callbacks.authorized({
+        auth: { user: { oid: "oid-1" } },
+        request: at("/api/overview"),
+      }),
+    ).toBe(true);
+  });
+
+  it.each(["/apix", "/dashboard/api/x"])(
+    "authorized keeps the redirect (false) for non-API path %s",
+    async (path) => {
+      const cfg = await load(ENTRA);
+      expect(cfg.callbacks.authorized({ auth: null, request: at(path) })).toBe(
+        false,
+      );
+    },
+  );
 });
 
 describe("password providers (Access Control — Password users, D18, D25)", () => {

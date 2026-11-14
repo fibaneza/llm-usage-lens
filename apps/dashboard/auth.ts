@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { SpanStatusCode, trace } from "@opentelemetry/api";
+import type { ApiErrorCode } from "@llm-usage-lens/shared";
 import NextAuth from "next-auth";
 import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
@@ -72,6 +73,21 @@ const tenantId =
   )?.[1] ?? "";
 
 const LOCAL_DEFAULT_EMAIL = "dev@localhost";
+
+function isApiPath(pathname: string | undefined): boolean {
+  return pathname === "/api" || pathname?.startsWith("/api/") === true;
+}
+
+// Mirrors jsonError(401, "UNAUTHORIZED", "Not authenticated") in
+// lib/api/respond.ts, which cannot be imported here: it imports this module
+// and is server-only, while the proxy runs this callback.
+function unauthenticatedApiResponse(): Response {
+  const code: ApiErrorCode = "UNAUTHORIZED";
+  return Response.json(
+    { error: { code, message: "Not authenticated" } },
+    { status: 401, headers: { "Cache-Control": "private, no-store" } },
+  );
+}
 
 function isAuthMethod(value: unknown): value is SignedInIdentity["authMethod"] {
   return (
@@ -199,7 +215,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   callbacks: {
     // Gates the routes matched by proxy.ts.
-    authorized: ({ auth }) => !!auth?.user?.oid,
+    // A logged-out /api/* call gets the JSON 401 that withRoute returns, not a
+    // redirect to /sign-in (Data Model — "API Routes"; Rule 10.3, Rule 50.4).
+    // Pages keep the redirect. The proxy matcher already skips /api/auth/* and
+    // /api/health, and the route handlers keep their own checks.
+    authorized: ({ auth, request }) => {
+      if (auth?.user?.oid) return true;
+      return isApiPath(request?.nextUrl?.pathname)
+        ? unauthenticatedApiResponse()
+        : false;
+    },
     // Fail closed (Access Control spec — Threat model T1): a malformed token
     // or a failed identity upsert yields no session.
     signIn: async ({ user, account, profile }) => {
