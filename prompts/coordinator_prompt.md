@@ -146,8 +146,11 @@ never overrides a rule; it only adds coordination.
    (outside the sandbox when it blocks the primary checkout; if a
    fast-forward half-applies, confirm the touched files equal the commit
    before restoring them and retrying).
-6. **Clean up.** Delete the temporary and goal branches (confirm `main`
-   contains the tree first), remove the goal's worktree, `git worktree
+6. **Clean up.** First copy the worktree's `temp/` (run reports, ledgers,
+   progress logs) to the primary checkout's `temp/run-<slug>/`, because
+   removing a worktree deletes its gitignored files. Then delete the
+   temporary and goal branches (confirm `main` contains the tree first),
+   remove the goal's worktree, `git worktree
    prune`, and delete a remote branch only if it was pushed (Rule 31 step
    7). Record the new `main` commit in `state.md` and `status.log`.
 7. **Next.** Tell the user, bring the other active branches up to date
