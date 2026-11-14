@@ -182,3 +182,6 @@ playwright/.cache/
 
 # CDK synth output
 cdk.out/
+
+# others
+docs/todo.md

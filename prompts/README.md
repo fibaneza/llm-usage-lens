@@ -43,11 +43,11 @@ Spec units come before code.
 | 4 | **RP** platform | `rbac_prompt.md` | done (`3d3b0bf`) | `infra/` CDK: FoundationStack and DashboardServiceStack on ECS Fargate, ALB import or create, `GET /api/health`, alarms, CI deploy role. Synthesised, never deployed |
 | 5 | **R1** identity, roles and sign-in | `rbac_prompt.md` | done (`23bac5b`) | The role model, `oid`/`tid`, the identity record, session caps (8 h / 4 h / 1 h), the master user (Argon2id, TOTP in `prod`, lockout), dev login, the no-access page, `APP_ENV`, `AUTH_ACCESS_MODE` |
 | 6 | **R2** authorization data | `rbac_prompt.md` | done (`d7aa182`, `79bd4dc`, `7a50f5a`) | Split into R2a (access data layer and audit), R2b (sign-in resolution, password users and SSO binding) and R2c (pre-SSO platform, data isolation). The storage boundary, the audit log with `denied` records, password users with setup links and TOTP, the task-role policy, table and key policies |
-| 7 | **R3** server-side scoping | `rbac_prompt.md` | **in progress** (`feature/phase-4r-3-rbac-scope`) | The policy module (`resolveScope`, `can`); every route filtered; `/api/me`; leak tests |
-| 8 | **R4** management UI and writes | `rbac_prompt.md` | | Settings for members, admin scopes, group mappings, role grants, password users, identity links and mapping rules, visibility and caps, the per-user approval; audit log view; access review export |
+| 7 | **R3** server-side scoping | `rbac_prompt.md` | done (`b88c2cb`) | The policy module (`resolveScope`, `can`); every route filtered; `/api/me`; leak tests |
+| 8 | **R4** management UI and writes | `rbac_prompt.md` | ready | Settings for members, admin scopes, group mappings, role grants, password users, identity links and mapping rules, visibility and caps, the per-user approval; audit log view; access review export |
 | 9 | **R5** UI gating | `rbac_prompt.md` | | Scoped navigation; role-aware landing (*My usage*, *My teams*) |
-| 10 | **L1** connection | `litellm_prompt.md` | **in progress** (`feature/phase-l1-litellm-connection`), in parallel with R3 | Service key from SSM via ECS secrets, host allowlist, connection test, edition by env, the Settings → LiteLLM panel |
-| 11 | **L2** gateway | `litellm_prompt.md` | may run in parallel with R3–R5 | The typed allowlist gateway, operation toggles, team links, `litellm-changed-by` |
+| 10 | **L1** connection | `litellm_prompt.md` | done (`c82fb1e`) | Service key from SSM via ECS secrets, host allowlist, connection test, edition by env, the Settings → LiteLLM panel |
+| 11 | **L2** gateway | `litellm_prompt.md` | ready (may run parallel with R4) | The typed allowlist gateway, operation toggles, team links, `litellm-changed-by` |
 | 12 | **L3** read views | `litellm_prompt.md` | needs R3 | The LiteLLM page: spend, budgets, members, keys, model access, limits, LiteLLM audit view |
 | 13 | **L4** writes | `litellm_prompt.md` | needs R3 and R4 | Members (incl. remove), budgets, rate limits, keys, model access, enable and disable |
 | 14 | **L5** polish | `litellm_prompt.md` | | Accessibility, responsive layout, runbook, full role × operation matrix |
@@ -92,12 +92,15 @@ then the `/goal` line as a second message.
 
 ## Parallel runs (coordinator and workers)
 
-1. **Coordinator session.** Open Claude in the repository and say: "You are
-   the coordinator of the worker sessions. Follow
-   `prompts/coordinator_prompt.md` and resume from
-   `temp/coordinator/state.md`." It assigns goals, creates a fresh worktree
-   per goal, briefs the workers by message, watches usage, and **does every
-   merge into `main`** with the full test run and any fix agents.
+1. **Coordinator session.** Open Claude in the repository and say: 
+
+  ```text
+    You are the coordinator of the worker sessions. Follow `prompts/coordinator_prompt.md` and resume from `temp/coordinator/state.md`
+  ``` 
+  It assigns goals, creates a fresh worktree per goal, briefs the workers by 
+  message, watches usage, and **does every merge into `main`** with the full 
+  test run and any fix agents.
+   
 2. **Worker sessions** (for example `rbac_prompt` and `litellm_prompt`).
    Keep one session per prompt; the coordinator tells each which worktree and
    branch to use for its current goal, so the worktree can change from goal
