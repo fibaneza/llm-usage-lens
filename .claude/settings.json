@@ -108,7 +108,8 @@
       "Bash(shellcheck *)",
       "Bash(curl *)",
       "Bash(ps *)",
-      "Bash(kill *)"
+      "Bash(kill *)",
+      "Bash(sed -i*)"
     ],
     "ask": [
       "Bash(git push*)",
@@ -126,7 +127,6 @@
       "Bash(git restore*)",
       "Bash(git stash drop*)",
       "Bash(git branch -D*)",
-      "Bash(sed -i*)",
       "Bash(sam deploy*)"
     ],
     "deny": [
