@@ -80,6 +80,10 @@ never overrides a rule; it only adds coordination.
 
 ## 2. While workers run
 
+- **Decisions** (user, 2026-11-15): workers decide open items per
+  implementation-phases — *Decision policy* and list them in the report's
+  §7 *Decisions taken*; at each merge intake the coordinator relays that
+  list to the user, who may overturn any of them.
 - **Workers are quiet** (user, 2026-11-15): they send only the four
   messages in §1 item 8. The coordinator replies only when a reply changes
   what the worker does, and never sends acks.

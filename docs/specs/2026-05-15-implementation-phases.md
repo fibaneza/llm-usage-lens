@@ -718,6 +718,28 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ---
 
+## Decision policy (decided 2026-11-15, user)
+
+When a unit meets an open decision — a spec gap, an ambiguity, a choice
+between designs — the agent **decides it** with common industry practice and
+the project's existing patterns and recommendations (OWASP, WCAG, the AWS
+and Next.js guidance the specs cite, the nearest precedent in the specs),
+then keeps working. It does not stop to ask. For each decision it:
+
+1. records it where it belongs — a spec line or decision row marked
+   "(agent decision, <date>: <one-line reason>)" (Rule 00.2), with tests
+   when it changes behaviour;
+2. lists it in the run report under §7 *Decisions taken* (decision,
+   options considered, reason, reversibility);
+3. the coordinator relays the list to the user at the next status, who may
+   overturn any of them.
+
+**Still the user's:** pushing, deploying, AWS/Entra/LiteLLM production
+configuration, secrets, legal or privacy wording, switching production to
+`enforce`, anything irreversible or outward-facing, and any choice that
+weakens a security control, a threat-model mitigation or the test bar
+(those are recorded as user actions, never decided by the agent).
+
 ## Maintenance — test consolidation (queued 2026-11-15, user)
 
 Runs as its own `chore/test-consolidation` branch once 4R.4 has landed and

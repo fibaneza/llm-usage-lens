@@ -95,7 +95,9 @@ dependency order across the tracks below. Track B is the main deliverable.
 - **Spec gate.** Read the target's task list and Verify bullets. Every task
   must trace to them. If a task depends on an unadopted spec proposal (for
   example the optional rollup `date` attribute), do not implement around
-  it. Record it as an open decision.
+  it. Decide it per implementation-phases — *Decision policy* (common
+  practice, recorded in the spec and the report); only the policy's
+  user-only items are recorded as open decisions.
 - **Branch.** Use `feature/phase-<n>-<slug>` (Rule 30), one sub-phase per
   branch.
 
@@ -662,8 +664,8 @@ the repository's actual final state.
 
 ## 5. Spec/rule conflicts found
 ## 6. Proposed spec changes (not applied)
-## 7. Open decisions and unresolved items
-<!-- For each item: description, impact or severity, why it is unresolved, the decision needed, and the next action. List work stopped by the freeze separately. -->
+## 7. Decisions taken, open decisions and unresolved items
+<!-- First "Decisions taken" (Decision policy): decision, options, reason, reversibility, where recorded. Then, for each open item: description, impact or severity, why it is unresolved, the decision needed, and the next action. List work stopped by the freeze separately. -->
 
 ## 8. User actions required
 <!-- The §12 user-only steps this run leaves, in order (e.g. push main, confirm CI, adopt spec proposal X). -->
@@ -747,8 +749,9 @@ when any of these happens:
 - **A usage freeze (§2).** Consolidate and write the report immediately; the
   freeze rules forbid further work.
 - **The T+60 deadline.** After T+55, only the report may be written.
-- **A missing dependency or user decision.** The run records it as a user
-  action and stops.
+- **A missing dependency or a user-only decision** (implementation-phases —
+  *Decision policy*). The run records it as a user action and stops; any
+  other decision is taken and reported, not a reason to stop.
 
 In each of these cases, the run is finished once the report exists and lists
 the reason.

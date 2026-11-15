@@ -30,5 +30,9 @@ cite it in your response.
    spec section it comes from (e.g. "per Data Model spec — Access Patterns").
 2. **Specs lead, code follows.** If reality and the spec disagree, surface the
    conflict and propose updating one of them — never silently diverge.
-3. **No duplication in `.claude/`.** Rules in this directory summarise the
+3. **Open decisions are decided, not parked (2026-11-15, user).** Decide
+   with common practice and the specs' precedents, record the decision in
+   the spec as an agent decision with its reason, and report it — except
+   the user-only items in implementation-phases — *Decision policy*.
+4. **No duplication in `.claude/`.** Rules in this directory summarise the
    spec; they do not replace it.
