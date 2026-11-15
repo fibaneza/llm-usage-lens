@@ -16,6 +16,8 @@ import {
 } from "./keys";
 import type { AccessResult, AuditContext, Page } from "./result";
 
+export { GOVERNANCE_PK } from "./keys";
+
 export const NOW = new Date("2026-11-14T10:00:00.000Z");
 export const DAY = "2026-11-14";
 export const ACTOR = "00000000-0000-4000-8000-0000000000aa";

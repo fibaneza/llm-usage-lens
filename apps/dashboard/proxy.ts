@@ -5,5 +5,5 @@ export { auth as proxy } from "@/auth";
 // /api/health, the one route served without a session (Access Control spec —
 // "API routes"; Rule 10.3 exception).
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/((?!auth|health$).*)"],
+  matcher: ["/dashboard/:path*", "/api/((?!auth(?:/|$)|health$).*)"],
 };

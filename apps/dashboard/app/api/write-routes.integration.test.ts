@@ -378,6 +378,64 @@ describe("write route discovery (the structural test is not vacuous)", () => {
   });
 });
 
+// Access Control spec - "Enforcement" item 6: this test "enumerates every write
+// route with its required permission". Every write method added by 4R.4 slice 1
+// is listed here with the single role that may call it (T3, T4); a new write
+// route under these paths that is not listed fails the check below.
+const ACCESS_CONTROL_WRITE_ROUTES = [
+  { label: "POST group-mappings/route.ts", permission: "internal-admin" },
+  {
+    label: "PATCH group-mappings/[groupId]/route.ts",
+    permission: "internal-admin",
+  },
+  {
+    label: "DELETE group-mappings/[groupId]/route.ts",
+    permission: "internal-admin",
+  },
+  {
+    label: "PUT governance/password-sign-in/route.ts",
+    permission: "internal-admin",
+  },
+] as const;
+
+describe("4R.4 slice 1 write routes are enumerated with their permission", () => {
+  it("every listed method exists", () => {
+    expect(writeRoutes.map(label)).toEqual(
+      expect.arrayContaining(ACCESS_CONTROL_WRITE_ROUTES.map((r) => r.label)),
+    );
+  });
+
+  it("the governance, group-mapping and role-grant routes expose no unlisted write method", () => {
+    const listed = new Set<string>(
+      ACCESS_CONTROL_WRITE_ROUTES.map((r) => r.label),
+    );
+    const found = writeRoutes
+      .map(label)
+      .filter((l) => /(group-mappings|governance|role-grants)\//.test(l));
+    expect(found.filter((l) => !listed.has(l))).toEqual([]);
+  });
+
+  it.each(ACCESS_CONTROL_WRITE_ROUTES.map((r) => [r.label, r] as const))(
+    "%s: only internal-admin passes the gate; auditor, org-admin and viewer get 403",
+    async (name, entry) => {
+      const route = writeRoutes.find((r) => label(r) === name);
+      expect(route, `${name} must exist`).toBeDefined();
+      expect(entry.permission).toBe("internal-admin");
+      for (const roles of [
+        ["internal-auditor"],
+        ["internal-org-admin"],
+        ["internal-viewer"],
+      ]) {
+        setSession({ user: { oid: "oid-test", roles } });
+        await expectError(await call(route!, "{}"), 403, "FORBIDDEN");
+      }
+      setSession(ADMIN_SESSION);
+      const res = await call(route!, "{}");
+      expect([401, 403]).not.toContain(res.status);
+    },
+  );
+});
+
 const eachWriteRoute = writeRoutes.map(
   (route) => [label(route), route] as const,
 );

@@ -26,11 +26,19 @@ describe("proxy matcher", () => {
     "/api/overview",
     "/api/accounts/x",
     "/dashboard/x",
+    // Only /api/auth and /api/auth/* are Auth.js's; look-alikes stay
+    // protected (4R.4 follow-up from fix/api-unauthenticated-401).
+    "/api/authorization",
+    "/api/authx",
+    "/api/auth-tokens",
   ])("still protects %s", (path) => {
     expect(matches(path)).toBe(true);
   });
 
-  it("does not match Auth.js routes", () => {
-    expect(matches("/api/auth/signin")).toBe(false);
-  });
+  it.each(["/api/auth", "/api/auth/signin", "/api/auth/callback/x"])(
+    "does not match the Auth.js route %s",
+    (path) => {
+      expect(matches(path)).toBe(false);
+    },
+  );
 });
