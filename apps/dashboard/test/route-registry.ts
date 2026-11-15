@@ -11,12 +11,7 @@
 //
 // ADDING A ROUTE: register every exported method. The suite's parity check
 // fails on an unregistered route file and on a stale entry. Entries are
-// compared against the route files on THIS branch's disk, so routes that exist
-// only on other branches are not listed here yet. When these land, the merge
-// adds `frozen: true` entries for them:
-//   - GET  access/pending/route.ts, GET access/stale/route.ts (4R.4 fix)
-//   - GET  litellm/org/route.ts, GET litellm/users/route.ts,
-//     GET litellm/users/[litellmUserId]/route.ts (LiteLLM L3 org/users views)
+// compared against the route files on THIS branch's disk.
 // Frozen entries (`frozen: true`) are routes whose own test file or route file
 // is on the frozen list: the suite gives them only today's sweep parity
 // (401, 403 before parsing, Origin 403, no-store) and no new assertion.
@@ -260,6 +255,8 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   // ---- core reads ----
   read("access-review/route.ts"),
   read("access/org-units/route.ts", { frozen: true }),
+  read("access/pending/route.ts", { frozen: true }),
+  read("access/stale/route.ts", { frozen: true }),
   read("accounts/route.ts"),
   read("audit/route.ts", { badQuery: "day=not-a-day" }),
   read("departments/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
@@ -305,6 +302,20 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   read("litellm/audit/route.ts", { family: "litellm" }),
   read("litellm/connection/route.ts", { family: "litellm" }),
   read("litellm/me/route.ts", { family: "litellm", frozen: true }),
+  read("litellm/org/route.ts", {
+    family: "litellm",
+    frozen: true,
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
+  read("litellm/users/route.ts", { family: "litellm", frozen: true }),
+  read("litellm/users/[litellmUserId]/route.ts", {
+    family: "litellm",
+    frozen: true,
+    validParams: { litellmUserId: "lu-1" },
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
   read("litellm/models/route.ts", { family: "litellm" }),
   read("litellm/team-links/route.ts", { family: "litellm" }),
   read("litellm/team-links/[teamId]/route.ts", {
