@@ -25,7 +25,6 @@ function stubFetch() {
             data: {
               version: 0,
               edition: "oss",
-              wildcardWarning: true,
               operations: { createTeam: { enabled: true, source: "file" } },
             },
           }),

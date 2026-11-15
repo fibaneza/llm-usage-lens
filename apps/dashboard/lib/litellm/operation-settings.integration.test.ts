@@ -12,13 +12,12 @@ import { resolveOperationSettings } from "./operation-settings";
 // L2 Verify ("precedence UI > file > LD10").
 //
 // Contract: resolveOperationSettings({ file, saved }) is pure.
-//   file:  the parsed config { operations: { [op]: { enabled } }, wildcardWarning } | null
+//   file:  the parsed config { operations: { [op]: { enabled: false } } } | null
 //   saved: the stored toggles { [op]: boolean } (OperationToggles.toggles) | null
 //   returns Record<operation, { enabled: boolean; source: "ui" | "file" | "spec" }>
 // for every operation in LITELLM_OPERATION_NAMES.
-const file = (operations: Record<string, { enabled: boolean }>) => ({
+const file = (operations: Record<string, { enabled: false }>) => ({
   operations,
-  wildcardWarning: true,
 });
 
 describe("resolveOperationSettings", () => {
@@ -53,12 +52,12 @@ describe("resolveOperationSettings", () => {
     const r = resolveOperationSettings({
       file: file({
         createTeam: { enabled: false },
-        resetMemberSpend: { enabled: true },
+        getTeam: { enabled: false },
       }),
       saved: null,
     });
     expect(r.createTeam).toEqual({ enabled: false, source: "file" });
-    expect(r.resetMemberSpend).toEqual({ enabled: true, source: "file" });
+    expect(r.getTeam).toEqual({ enabled: false, source: "file" });
   });
 
   it("an operation missing from the file falls back to LD10 ('spec')", () => {
@@ -70,16 +69,14 @@ describe("resolveOperationSettings", () => {
     expect(r.blockKey).toEqual({ enabled: true, source: "spec" });
   });
 
-  it("a saved value wins over the file in both directions, source 'ui'", () => {
+  it("a saved value wins over the file (and over LD10), source 'ui'", () => {
     const r = resolveOperationSettings({
-      file: file({
-        createTeam: { enabled: false },
-        deleteKey: { enabled: true },
-      }),
-      saved: { createTeam: true, deleteKey: false },
+      file: file({ createTeam: { enabled: false } }),
+      saved: { createTeam: true, deleteKey: true, blockKey: false },
     });
     expect(r.createTeam).toEqual({ enabled: true, source: "ui" });
-    expect(r.deleteKey).toEqual({ enabled: false, source: "ui" });
+    expect(r.deleteKey).toEqual({ enabled: true, source: "ui" });
+    expect(r.blockKey).toEqual({ enabled: false, source: "ui" });
   });
 
   it("a saved value wins over LD10 when there is no file entry", () => {

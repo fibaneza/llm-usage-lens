@@ -19,7 +19,7 @@ import { LiteLLMPanel } from "./LiteLLMPanel";
 // Contract for the developer (component):
 //   <LiteLLMPanel canEdit?: boolean />   canEdit defaults to true (the panel
 //   is mounted for Admins); canEdit={false} renders values read-only.
-//   Calls: GET /api/litellm/toggles -> { version, edition, wildcardWarning,
+//   Calls: GET /api/litellm/toggles -> { version, edition,
 //     operations: { [op]: { enabled, source } } }
 //   PUT /api/litellm/toggles { version, toggles: { [op]: boolean } } (only the
 //     changed operation) or { version, reset: true }; the response has the GET
@@ -32,7 +32,8 @@ import { LiteLLMPanel } from "./LiteLLMPanel";
 //   "Confirm reset" with buttons "Confirm reset" and "Cancel" (no
 //   window.confirm). Region "Enforced in code" lists the read-only guardrails.
 //   Wildcard warning: data-testid="litellm-wildcard-warning", from
-//   ConnectionTestResult.warnings, hidden when toggles.wildcardWarning is false.
+//   ConnectionTestResult.warnings; always shown when the test returns it
+//   (code-only, LD19 amended 2026-11-15; no toggles field gates it).
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -79,7 +80,6 @@ type Ops = Record<string, { enabled: boolean; source: Source }>;
 type Toggles = {
   version: number;
   edition: "oss" | "enterprise";
-  wildcardWarning: boolean;
   operations: Ops;
 };
 
@@ -96,7 +96,6 @@ function toggles(
   return {
     version: over.version ?? 5,
     edition: over.edition ?? "oss",
-    wildcardWarning: over.wildcardWarning ?? true,
     operations,
   };
 }
@@ -429,15 +428,18 @@ describe("LiteLLMPanel wildcard warning", () => {
     expect(w).toHaveTextContent("/key/*");
   });
 
-  it("is hidden when the config sets wildcardWarning off", async () => {
+  it("is shown whenever the test returns it: the toggles payload has no wildcardWarning field", async () => {
+    const t = toggles();
+    expect(t).not.toHaveProperty("wildcardWarning");
     stub({
-      toggles: toggles({ wildcardWarning: false }),
+      toggles: t,
       test: { result: "ok", message: "Connection ok", warnings: [WILDCARD] },
     });
     renderWithProviders(<LiteLLMPanel />);
     await runTest();
-    expect(await screen.findByText("Connection ok")).toBeInTheDocument();
-    expect(screen.queryByTestId("litellm-wildcard-warning")).toBeNull();
+    expect(
+      await screen.findByTestId("litellm-wildcard-warning"),
+    ).toBeInTheDocument();
   });
 });
 

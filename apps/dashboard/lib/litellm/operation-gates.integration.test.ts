@@ -57,7 +57,6 @@ async function load(
     vi.doMock("@/lib/litellm/gateway-config", () => ({
       loadGatewayConfig: () => ({
         operations: fileOperations,
-        wildcardWarning: true,
       }),
     }));
   }
@@ -296,24 +295,16 @@ describe("config file layer and precedence UI > file > LD10", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
-  it("a file entry enabled:true enables a default-off operation", async () => {
-    const ops = await load({}, { deleteKey: { enabled: true } });
-    await ops.deleteKey!({ tokenId: TOKEN_A }, CTX);
-    expect(fake.calls).toHaveLength(1);
-  });
-
-  it("a saved UI value overrides the file in both directions", async () => {
-    await storeToggles({ createTeam: true, deleteKey: false });
-    const ops = await load(
-      {},
-      { createTeam: { enabled: false }, deleteKey: { enabled: true } },
-    );
+  it("a saved UI value overrides the file and LD10 (the only way to switch a default-off operation on)", async () => {
+    await storeToggles({ createTeam: true, deleteKey: true, blockKey: false });
+    const ops = await load({}, { createTeam: { enabled: false } });
     await ops.createTeam!({ teamAlias: "A", dashboardTeamId: "team-a" }, CTX);
-    expect(fake.calls).toHaveLength(1);
+    await ops.deleteKey!({ tokenId: TOKEN_A }, CTX);
+    expect(fake.calls).toHaveLength(2);
     await expect(
-      ops.deleteKey!({ tokenId: TOKEN_A }, CTX),
+      ops.blockKey!({ tokenId: TOKEN_A }, CTX),
     ).rejects.toMatchObject(DISABLED);
-    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls).toHaveLength(2);
   });
 
   it("an operation absent from both layers follows LD10", async () => {

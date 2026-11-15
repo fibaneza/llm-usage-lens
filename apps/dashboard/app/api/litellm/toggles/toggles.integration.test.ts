@@ -32,7 +32,7 @@ import {
 //
 // Contract for the developer:
 //   GET  -> data = { version: number (0 when never saved), edition,
-//                    wildcardWarning: boolean,
+//                    (no wildcardWarning: code-only, LD19 amended),
 //                    operations: { [op]: { enabled: boolean, source: "ui"|"file"|"spec" } } }
 //   PUT  body { version: number|null, toggles: { [op]: boolean } }   (merge into the saved map)
 //        or   { version: number, reset: true }                        (clears saved values)
@@ -163,7 +163,7 @@ describe("GET /api/litellm/toggles", () => {
       const data = (await res.clone().json()).data;
       expect(data.version).toBe(0);
       expect(data.edition).toBe("oss");
-      expect(typeof data.wildcardWarning).toBe("boolean");
+      expect(data).not.toHaveProperty("wildcardWarning");
       expect(Object.keys(data.operations).sort()).toEqual(
         [...LITELLM_OPERATION_NAMES].sort(),
       );

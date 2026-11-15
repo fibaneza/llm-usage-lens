@@ -11,10 +11,11 @@ import {
 } from "../index";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Guardrail configuration"
-// (LD19: the config file holds only per-operation `enabled` defaults and
-// `wildcardWarning`, keyed by allowlisted operation name; an unknown
-// operation, an unknown field or an invalid value fails startup; nothing
-// configurable can name a route or body field or widen), "Allowlist (the
+// (LD19, amended 2026-11-15: the config file holds only per-operation
+// `enabled: false` defaults, keyed by allowlisted operation name; `true`, an
+// unknown operation, an unknown field (including `wildcardWarning`, which is
+// code-only) or an invalid value fails startup; nothing configurable can name
+// a route or body field or widen), "Allowlist (the
 // gateway)" (operation names), implementation-phases L2 Verify ("the config
 // schema rejects an unknown operation, route or field and a widening value");
 // Rule 60.19.
@@ -24,7 +25,6 @@ const CONFIG_PATH = join(ROOT, "apps/dashboard/config/litellm-gateway.json");
 const parse = (v: unknown) => LiteLLMGatewayConfigSchema.safeParse(v);
 const ok = {
   operations: { resetMemberSpend: { enabled: false } },
-  wildcardWarning: true,
 };
 
 describe("LITELLM_OPERATION_NAMES", () => {
@@ -67,12 +67,26 @@ describe("LITELLM_OPERATION_NAMES", () => {
 });
 
 describe("LiteLLMGatewayConfigSchema", () => {
-  it("accepts per-operation enabled defaults and the wildcard warning", () => {
+  it("accepts per-operation enabled:false defaults", () => {
     expect(parse(ok).success).toBe(true);
   });
 
+  it("rejects a wildcardWarning field as unknown (the warning is code-only)", () => {
+    expect(parse({ ...ok, wildcardWarning: true }).success).toBe(false);
+    expect(parse({ ...ok, wildcardWarning: false }).success).toBe(false);
+  });
+
+  it.each(["createTeam", "resetMemberSpend", "deleteKey", "getTeam"])(
+    "rejects enabled:true for %s: the file can only switch an operation off",
+    (op) => {
+      expect(parse({ operations: { [op]: { enabled: true } } }).success).toBe(
+        false,
+      );
+    },
+  );
+
   it("accepts an empty operations map (the spec defaults then apply)", () => {
-    expect(parse({ operations: {}, wildcardWarning: true }).success).toBe(true);
+    expect(parse({ operations: {} }).success).toBe(true);
   });
 
   it("accepts a read operation (reads gain a toggle, LD19)", () => {
@@ -82,20 +96,23 @@ describe("LiteLLMGatewayConfigSchema", () => {
   });
 
   it.each([
-    ["an unknown operation", { deleteTeam: { enabled: true } }],
-    ["a route used as an operation key", { "/team/delete": { enabled: true } }],
-    ["an operation name in the wrong case", { getteam: { enabled: true } }],
+    ["an unknown operation", { deleteTeam: { enabled: false } }],
+    [
+      "a route used as an operation key",
+      { "/team/delete": { enabled: false } },
+    ],
+    ["an operation name in the wrong case", { getteam: { enabled: false } }],
   ])("rejects %s", (_n, operations) => {
     expect(parse({ ...ok, operations }).success).toBe(false);
   });
 
   it.each([
-    ["a route", { enabled: true, route: "/team/delete" }],
-    ["a routes list", { enabled: true, routes: ["/team/delete"] }],
-    ["allowedRoutes", { enabled: true, allowedRoutes: ["/*"] }],
-    ["a method", { enabled: true, method: "DELETE" }],
-    ["a body field", { enabled: true, bodyFields: ["allowed_routes"] }],
-    ["a body", { enabled: true, body: { user_role: "proxy_admin" } }],
+    ["a route", { enabled: false, route: "/team/delete" }],
+    ["a routes list", { enabled: false, routes: ["/team/delete"] }],
+    ["allowedRoutes", { enabled: false, allowedRoutes: ["/*"] }],
+    ["a method", { enabled: false, method: "DELETE" }],
+    ["a body field", { enabled: false, bodyFields: ["allowed_routes"] }],
+    ["a body", { enabled: false, body: { user_role: "proxy_admin" } }],
   ])("rejects an operation entry carrying %s", (_n, entry) => {
     expect(parse({ ...ok, operations: { createTeam: entry } }).success).toBe(
       false,
@@ -125,10 +142,6 @@ describe("LiteLLMGatewayConfigSchema", () => {
     expect(
       parse({ ...ok, operations: { deleteKey: { enabled } } }).success,
     ).toBe(false);
-  });
-
-  it("rejects a non-boolean wildcardWarning", () => {
-    expect(parse({ ...ok, wildcardWarning: "yes" }).success).toBe(false);
   });
 
   it("rejects a non-object document", () => {
@@ -169,12 +182,13 @@ describe("apps/dashboard/config/litellm-gateway.json", () => {
     expect(parse(json).success).toBe(true);
   });
 
-  it("holds no secrets and only the two documented settings", () => {
+  it("holds no secrets, no wildcardWarning, and only `enabled: false` entries", () => {
     const json = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as Record<
       string,
       unknown
     >;
-    expect(Object.keys(json).sort()).toEqual(["operations", "wildcardWarning"]);
-    expect(json.wildcardWarning).toBe(true);
+    expect(Object.keys(json)).toEqual(["operations"]);
+    const ops = json.operations as Record<string, { enabled: unknown }>;
+    for (const v of Object.values(ops)) expect(v).toEqual({ enabled: false });
   });
 });

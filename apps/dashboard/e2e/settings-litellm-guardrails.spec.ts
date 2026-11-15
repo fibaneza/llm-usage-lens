@@ -24,7 +24,6 @@ function createFakeToggles() {
   const view = () => ({
     version,
     edition: "oss",
-    wildcardWarning: true,
     operations: Object.fromEntries(
       Object.entries(defaults).map(([op, def]) => [
         op,

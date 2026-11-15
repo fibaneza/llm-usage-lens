@@ -37,7 +37,6 @@ const CONFIGURED: Status = {
 const TOGGLES = {
   version: 0,
   edition: "oss",
-  wildcardWarning: true,
   operations: { createTeam: { enabled: true, source: "file" } },
 };
 

@@ -5,8 +5,8 @@ import { createFakeLiteLLM, healthyHandler } from "@/test/fake-litellm";
 // Source: docs/specs/2026-11-10-litellm.md — "Gateway guardrails" item 6
 // ("The connection test reports 'service key uses temporary wildcards
 // (`/team/*`, `/key/*`)' as a warning on the Settings -> LiteLLM panel while
-// either wildcard is present"), "Guardrail configuration" (`wildcardWarning`,
-// default on, from the config file), decision LD4, threat LT3; the probes
+// either wildcard is present"), "Guardrail configuration" (amended 2026-11-15:
+// the warning is code-only, never in the config file, always reported), decision LD4, threat LT3; the probes
 // still run through the single choke point (item 1).
 //
 // Contract: ConnectionTestResult gains `warnings: string[]` (empty when none).
@@ -15,7 +15,7 @@ let fake: ReturnType<typeof createFakeLiteLLM>;
 
 async function load(opts: {
   allowedRoutes?: string[];
-  wildcardWarning?: boolean;
+  fileOperations?: Record<string, { enabled: false }>;
 }) {
   vi.resetModules();
   vi.doUnmock("@/lib/litellm/allowlist");
@@ -26,12 +26,9 @@ async function load(opts: {
       LITELLM_SERVICE_KEY_ALLOWED_ROUTES: opts.allowedRoutes,
     }));
   }
-  if (opts.wildcardWarning !== undefined) {
+  if (opts.fileOperations !== undefined) {
     vi.doMock("@/lib/litellm/gateway-config", () => ({
-      loadGatewayConfig: () => ({
-        operations: {},
-        wildcardWarning: opts.wildcardWarning,
-      }),
+      loadGatewayConfig: () => ({ operations: opts.fileOperations }),
     }));
   }
   vi.stubEnv("APP_ENV", "dev");
@@ -83,10 +80,25 @@ describe("testLiteLLMConnection — temporary wildcard warning (LD4, LT3)", () =
     expect(r.warnings).toEqual([]);
   });
 
-  it("reports no warning when the config file turns wildcardWarning off", async () => {
-    const { testLiteLLMConnection } = await load({ wildcardWarning: false });
+  it("always reports the warning: it is code-only and no config file content switches it off", async () => {
+    const { testLiteLLMConnection } = await load({ fileOperations: {} });
     const r = await testLiteLLMConnection(BASE);
-    expect(r.warnings).toEqual([]);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain("/team/*");
+  });
+
+  it("the probes (including listProxyTeams) ignore read toggles: a disabled read never breaks the check", async () => {
+    const { testLiteLLMConnection } = await load({
+      fileOperations: {
+        listProxyTeams: { enabled: false },
+        getTeam: { enabled: false },
+        getUser: { enabled: false },
+        listKeys: { enabled: false },
+      },
+    });
+    const r = await testLiteLLMConnection(BASE);
+    expect(r.result).toBe("ok");
+    expect(fake.calls[0]?.path).toBe("/team/list");
   });
 
   it("the warning is also present when the test is not ok (unreachable)", async () => {
