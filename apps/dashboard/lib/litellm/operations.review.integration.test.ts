@@ -11,6 +11,7 @@ import {
 
 import { createFakeLiteLLM } from "@/test/fake-litellm";
 import {
+  NEW_TOKEN,
   OTHER_TEAM_ID,
   OTHER_USER_ID,
   TEAM_ID,
@@ -92,6 +93,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const ROTATE_BASE = {
+  litellmTeamId: TEAM_ID,
+  litellmUserId: USER_ID,
+  dashboardTeamId: "team-a",
+};
 const ROTATE = {
   tokenId: TOKEN_A,
   litellmTeamId: TEAM_ID,
@@ -101,7 +107,11 @@ const ROTATE = {
 
 describe("OSS rotateKey carries the old key's models exactly (LT4, LT14)", () => {
   it("the new key's models are the old key's list, in order", async () => {
-    install({ keyInfo: { models: ["claude-sonnet", "claude-haiku"] } });
+    install({
+      keyInfo: { models: ["claude-sonnet", "claude-haiku"] },
+      teamModels: ["claude-sonnet", "claude-haiku"],
+      proxyModels: ["claude-sonnet", "claude-haiku"],
+    });
     const ops = await load();
     await ops.rotateKey!(ROTATE, CTX);
     const generate = writes().find((c) => c.path === "/key/generate")!;
@@ -156,12 +166,22 @@ describe("OSS rotateKey carries expiry and blocked state, and checks ownership",
     expect((generate.body as { duration?: unknown }).duration).toBeUndefined();
   });
 
-  it("a blocked old key yields a blocked new key", async () => {
+  it("a blocked old key: generate (no `blocked` in the body), block the new key, then block the old key (rotateKey row, LT4)", async () => {
     install({ keyInfo: { models: ["claude-sonnet"], blocked: true } });
     const ops = await load();
     await ops.rotateKey!(ROTATE, CTX);
-    const generate = writes().find((c) => c.path === "/key/generate")!;
-    expect((generate.body as { blocked?: unknown }).blocked).toBe(true);
+    const sequence = writes().map((c) => [
+      c.path,
+      (c.body as { key?: string }).key,
+    ]);
+    expect(sequence).toEqual([
+      ["/key/generate", undefined],
+      ["/key/block", NEW_TOKEN],
+      ["/key/block", TOKEN_A],
+    ]);
+    expect("blocked" in (writes()[0]!.body as Record<string, unknown>)).toBe(
+      false,
+    );
   });
 
   it("an unblocked old key does not mark the new key blocked", async () => {
@@ -183,10 +203,91 @@ describe("OSS rotateKey carries expiry and blocked state, and checks ownership",
     async (_n, owner) => {
       install({ keyInfo: { models: ["claude-sonnet"], ...owner } });
       const ops = await load();
-      await expect(ops.rotateKey!(ROTATE, CTX)).rejects.toBeDefined();
+      await expect(ops.rotateKey!(ROTATE, CTX)).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
       expect(writes()).toHaveLength(0);
     },
   );
+});
+
+// rotateKey row (spec audit 2026-11-15): expiry is the remaining life rounded
+// DOWN to the duration unit, capped at the ceiling; no expiry stays none.
+describe("OSS rotateKey expiry rounds down and is capped (rotateKey row)", () => {
+  const duration = async (expires: string) => {
+    install({ keyInfo: { models: ["claude-sonnet"], expires } });
+    const ops = await load();
+    await ops.rotateKey!(ROTATE, CTX);
+    return (
+      writes().find((c) => c.path === "/key/generate")!.body as {
+        duration?: string;
+      }
+    ).duration;
+  };
+
+  it.each([
+    [
+      "30 days 12 hours left is 30d, not 31d",
+      "2026-12-14T22:00:00.000Z",
+      "30d",
+    ],
+    ["1 hour 30 minutes left is 1h, not 2h", "2026-11-14T11:30:00.000Z", "1h"],
+  ])("%s", async (_n, expires, expected) => {
+    const got = await duration(expires);
+    expect(got).toBe(expected);
+  });
+
+  it("a life beyond the 4-digit duration ceiling is capped at 9999d", async () => {
+    expect(await duration("2100-01-01T00:00:00.000Z")).toBe("9999d");
+  });
+});
+
+// rotateKey row: the copied models are re-checked against the current team
+// models and /models (LT14); a mismatch is 409 CONFLICT with no write.
+describe("OSS rotateKey re-checks the copied models (LT14)", () => {
+  it.each([
+    [
+      "a model the team no longer has",
+      {
+        teamModels: ["claude-sonnet"],
+        proxyModels: ["claude-sonnet", "claude-opus"],
+      },
+    ],
+    [
+      "a model the proxy no longer lists",
+      {
+        teamModels: ["claude-sonnet", "claude-opus"],
+        proxyModels: ["claude-sonnet"],
+      },
+    ],
+  ])(
+    "refuses with 409 CONFLICT and no write when the old key has %s",
+    async (_n, drift) => {
+      install({
+        keyInfo: { models: ["claude-sonnet", "claude-opus"] },
+        ...drift,
+      });
+      const ops = await load();
+      await expect(ops.rotateKey!(ROTATE, CTX)).rejects.toMatchObject({
+        code: "CONFLICT",
+      });
+      expect(writes()).toHaveLength(0);
+    },
+  );
+});
+
+// Writes table + LT4: `blocked` is no field of the /key/generate builder.
+describe("generateMemberKey does not accept `blocked` (LT4)", () => {
+  it("rejects it with no call", async () => {
+    const ops = await load();
+    await expect(
+      ops.generateMemberKey!(
+        { ...ROTATE_BASE, models: ["claude-sonnet"], blocked: true },
+        CTX,
+      ),
+    ).rejects.toThrow();
+    expect(fake.calls).toHaveLength(0);
+  });
 });
 
 describe("gate order is toggle -> edition -> input validation (Security architecture item 2)", () => {

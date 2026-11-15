@@ -249,7 +249,9 @@ describe("UsageKeyClaimSchema", () => {
 
 describe("audit schemas", () => {
   it("lists every audited action", () => {
-    expect(AUDIT_ACTIONS).toHaveLength(44);
+    // LD15: viewing the LiteLLM audit is itself audited.
+    expect(AUDIT_ACTIONS).toHaveLength(45);
+    expect(AUDIT_ACTIONS).toContain("litellm.audit.view");
     expect(AUDIT_ACTIONS).toContain("auth.signin.success");
     expect(AUDIT_ACTIONS).toContain("auth.signout");
     expect(AUDIT_ACTIONS).toContain("affiliation.move");

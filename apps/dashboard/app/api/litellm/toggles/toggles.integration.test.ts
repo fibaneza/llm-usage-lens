@@ -266,6 +266,36 @@ describe("PUT /api/litellm/toggles", () => {
     expect(await stored()).toBeUndefined();
   });
 
+  // Rule 10.3 (a refusal comes before input parsing) + L2 carry-over: the
+  // body peek that picks the denied action reads a bounded prefix only.
+  it("a refused write with an oversized streaming body still yields one 403 and one denied record, reading a bounded prefix", async () => {
+    authMock.mockResolvedValue(AUDITOR);
+    const CHUNK = 16 * 1024;
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= 400 * CHUNK) return controller.close();
+        pulled += CHUNK;
+        controller.enqueue(new Uint8Array(CHUNK).fill(120));
+      },
+    });
+    const request = new Request(URL_, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...SAME_ORIGIN },
+      body,
+      duplex: "half",
+    } as RequestInit);
+    const { PUT } = await load();
+    await expectError(await PUT(request, ctx), 403, "FORBIDDEN");
+    expect(pulled).toBeLessThanOrEqual(256 * 1024);
+    const records = await auditActions();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      action: "litellm.toggles.update",
+      result: "denied",
+    });
+  });
+
   it("returns 403 for a cross-origin write", async () => {
     const { PUT } = await load();
     await expectError(

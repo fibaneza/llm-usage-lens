@@ -28,6 +28,10 @@ export type GatewayFakeOptions = {
   // Fields merged over the GET /key/info `info` object (models, expires,
   // blocked, team_id, user_id, limits), so rotation tests control the old key.
   keyInfo?: Record<string, unknown>;
+  // The team's `models` on GET /team/info and the names GET /models lists
+  // (default ["claude-sonnet"] for both), so rotation tests can drift them.
+  teamModels?: string[];
+  proxyModels?: string[];
 };
 
 const DEFAULT_KEYS = [
@@ -53,7 +57,7 @@ export function gatewayHandler(opts: GatewayFakeOptions = {}): FakeHandler {
               team_alias: "Alpha",
               max_budget: 100,
               spend: 12.5,
-              models: ["claude-sonnet"],
+              models: opts.teamModels ?? ["claude-sonnet"],
               members_with_roles: [
                 { user_id: USER_ID, user_email: USER_ID, role: "user" },
               ],
@@ -136,7 +140,12 @@ export function gatewayHandler(opts: GatewayFakeOptions = {}): FakeHandler {
       case "GET /models":
         return {
           status: 200,
-          body: { data: [{ id: "claude-sonnet", object: "model" }] },
+          body: {
+            data: (opts.proxyModels ?? ["claude-sonnet"]).map((id) => ({
+              id,
+              object: "model",
+            })),
+          },
         };
       case "GET /audit":
         return {

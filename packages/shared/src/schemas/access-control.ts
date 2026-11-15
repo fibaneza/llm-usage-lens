@@ -199,6 +199,7 @@ export const AUDIT_ACTIONS = [
   "litellm.toggles.reset",
   "litellm.teamlink.link",
   "litellm.teamlink.unlink",
+  "litellm.audit.view",
 ] as const;
 export const AuditActionSchema = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditActionSchema>;

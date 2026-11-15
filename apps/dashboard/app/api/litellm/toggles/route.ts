@@ -64,17 +64,43 @@ function view(saved: OperationToggles | null): OperationTogglesView {
 }
 
 export const GET = withRoute(async (_request, _ctx, session) => {
-  const refused = openModeRefusal() ?? adminOrAuditorRefusal(session);
+  const refused = openModeRefusal() ?? (await adminOrAuditorRefusal(session));
   if (refused) return refused;
   return jsonData(view(await getOperationToggles()));
 });
+
+// Only a bounded prefix of the body is read, then the stream is cancelled, so a
+// refused oversized upload cannot cost memory or bandwidth (Rule 10.3). The
+// bound sits under the 256 KiB ceiling to leave room for stream read-ahead.
+const PEEK_LIMIT_BYTES = 128 * 1024;
+
+async function peekBody(request: Request): Promise<string> {
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+  const decoder = new TextDecoder();
+  let text = "";
+  let read = 0;
+  while (read < PEEK_LIMIT_BYTES) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    const room = PEEK_LIMIT_BYTES - read;
+    const part = value.length > room ? value.subarray(0, room) : value;
+    text += decoder.decode(part, { stream: true });
+    read += part.length;
+  }
+  // The body is a tee of the request's: its cancellation settles only when the
+  // other branch is cancelled too, so it is not awaited, and a failure to
+  // cancel changes nothing about the refusal.
+  reader.cancel().catch(() => undefined);
+  return text;
+}
 
 // A non-validating peek at the raw body, only to pick which action a refusal
 // records; the body is never parsed with the schema before the 403 (Rule 10.3).
 async function deniedRecord(request: Request) {
   let reset = false;
   try {
-    const raw: unknown = await request.json();
+    const raw: unknown = JSON.parse(await peekBody(request));
     reset =
       typeof raw === "object" &&
       raw !== null &&

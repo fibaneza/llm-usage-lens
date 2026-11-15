@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { NAV_GROUPS } from "@/lib/nav";
 import { AppSidebar } from "./AppSidebar";
 
 const mockUsePathname = vi.fn<() => string>();
@@ -272,5 +273,27 @@ describe("AppSidebar - rail toggle accessible name (desktop, 1440px)", () => {
     expect(brand).toHaveAttribute("href", "/dashboard");
     expect(brand).toHaveTextContent("LLM Usage Lens");
     expect(screen.queryByText("Bedrock Cost")).not.toBeInTheDocument();
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md -- Page and Settings and LD9: a
+// "LiteLLM" rail item at /dashboard/litellm in a new "Gateway" group placed
+// after Attribution; the top-bar heading is "LiteLLM usage & administration".
+describe("AppSidebar - Gateway group (LD9)", () => {
+  it("renders a LiteLLM link to /dashboard/litellm under a Gateway label", () => {
+    renderSidebar("/dashboard");
+
+    expect(screen.getByText("Gateway")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "LiteLLM" })).toHaveAttribute(
+      "href",
+      "/dashboard/litellm",
+    );
+  });
+
+  it("orders the Gateway group directly after Attribution with the page title", () => {
+    const labels = NAV_GROUPS.map((group) => group.label);
+    expect(labels.indexOf("Gateway")).toBe(labels.indexOf("Attribution") + 1);
+    const item = NAV_GROUPS.find((g) => g.label === "Gateway")?.items[0];
+    expect(item?.pageTitle).toBe("LiteLLM usage & administration");
   });
 });

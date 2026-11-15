@@ -687,8 +687,8 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### L3 — Read views (`feature/phase-l3-litellm-views`)
 
-- [ ] Scoped read routes (`/api/litellm/me`, `/teams/[teamId]`, members, keys metadata, spend logs, models); `/dashboard/litellm` with *My usage*, *Team spend & budgets*, *Members*, *Keys*, *Model access* (read), *LiteLLM audit* (`/api/litellm/audit`, Admin and Auditor, audited view; LD15), each in its own Suspense + ErrorBoundary; "LiteLLM-reported" labels; outage and "not connected" states; nav item
-- [ ] Verify: role × read matrix (unauthenticated, no role, Viewer own/other, Lead own/other/department incl. moved team, Auditor, Admin) with `404` parity; LT8 labels; LT20; outage leaves other pages working; e2e probe (fake unless a non-production LiteLLM is provided)
+- [x] Scoped read routes (`/api/litellm/me`, `/teams/[teamId]`, members, keys metadata, spend logs, models); `/dashboard/litellm` with *My usage*, *Team spend & budgets*, *Members*, *Keys*, *Model access* (read), *LiteLLM audit* (`/api/litellm/audit`, Admin and Auditor, audited view; LD15), each in its own Suspense + ErrorBoundary; "LiteLLM-reported" labels; outage and "not connected" states; nav item
+- [ ] Verify (landed without the phase review, user one-off skip 2026-11-15; e2e probe ran against stubs only): role × read matrix (unauthenticated, no role, Viewer own/other, Lead own/other/department incl. moved team, Auditor, Admin) with `404` parity; LT8 labels; LT20; outage leaves other pages working; e2e probe (fake unless a non-production LiteLLM is provided)
 
 ### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)
 

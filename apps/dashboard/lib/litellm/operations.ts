@@ -894,7 +894,6 @@ const GenerateKeyInput = z.strictObject({
   litellmUserId: LiteLLMId,
   dashboardTeamId: DashboardTeamId,
   duration: Duration.optional(),
-  blocked: z.literal(true).optional(),
   ...KeySettings,
 });
 type GenerateKey = z.output<typeof GenerateKeyInput>;
@@ -912,7 +911,6 @@ async function generateKey(i: GenerateKey, actor: LiteLLMActor) {
       tpm_limit: i.tpmLimit,
       max_parallel_requests: i.maxParallelRequests,
       duration: i.duration,
-      blocked: i.blocked,
       key_alias: i.keyAlias,
       metadata: metadata(i.dashboardTeamId, { createdByOid: actor.oid }),
     },
@@ -993,19 +991,31 @@ export async function deleteKey(
 }
 
 // The old key's remaining lifetime as a whole-day (else hour, else minute)
-// duration, rounded up and capped at the schema's four digits. An expiry that
-// has passed or cannot be read is contract drift: a new key must not outlive
-// the old one's intent.
+// duration, rounded DOWN to the unit so the new key never outlives the old one,
+// and capped at the schema's four digits. An expiry that has passed, ends
+// within the minute or cannot be read is contract drift.
 function remainingDuration(expires: string | null | undefined) {
   if (expires == null) return undefined;
   const left = Date.parse(expires) - Date.now();
-  if (!Number.isFinite(left) || left <= 0)
+  if (!Number.isFinite(left) || left < 60_000) {
     throw new LiteLLMError("contract_drift");
-  const days = Math.ceil(left / DAY_MS);
-  if (days >= 1 && left >= DAY_MS) return `${Math.min(days, 9999)}d`;
-  const hours = Math.ceil(left / 3_600_000);
-  if (left >= 3_600_000) return `${hours}h`;
-  return `${Math.ceil(left / 60_000)}m`;
+  }
+  if (left >= DAY_MS) return `${Math.min(Math.floor(left / DAY_MS), 9999)}d`;
+  if (left >= 3_600_000) return `${Math.floor(left / 3_600_000)}h`;
+  return `${Math.floor(left / 60_000)}m`;
+}
+
+// A rotation the current state of the old key or its team does not allow.
+// Callers map `code` to the HTTP status; no write has happened.
+export class LiteLLMKeyRefused extends Error {
+  constructor(readonly code: "CONFLICT" | "NOT_FOUND") {
+    super(
+      code === "CONFLICT"
+        ? "The key's models are no longer available to its team"
+        : "The key was not found for this team and person",
+    );
+    this.name = "LiteLLMKeyRefused";
+  }
 }
 
 const RotateKeyInput = z.strictObject({
@@ -1035,11 +1045,28 @@ export async function rotateKey(
   // the old one. Spec: the `rotateKey` row (OSS carry-over, 2026-11-15).
   const old = (await readKey(i.tokenId)).info;
   if (old.team_id !== i.litellmTeamId || old.user_id !== i.litellmUserId) {
-    throw new LiteLLMError("contract_drift");
+    throw new LiteLLMKeyRefused("NOT_FOUND");
   }
   const models = old.models ?? [];
   if (!Models.safeParse(models).success && models.length > 0) {
     throw new LiteLLMError("contract_drift");
+  }
+  if (models.length > 0) {
+    // LT14: the copied models must still be allowed to the team and listed by
+    // the proxy; checked with reads that bypass the read toggles, as a
+    // rotation is one write operation.
+    const [team, listed] = await Promise.all([
+      read("/team/info", { team_id: i.litellmTeamId }, TeamInfoResponse),
+      read("/models", { return_wildcard_routes: false }, ModelsResponse),
+    ]);
+    const teamModels = team.team_info.models ?? [];
+    const proxyModels = new Set(listed.data.map((m) => m.id));
+    const stale = models.some(
+      (m) =>
+        !proxyModels.has(m) ||
+        (teamModels.length > 0 && !teamModels.includes(m)),
+    );
+    if (stale) throw new LiteLLMKeyRefused("CONFLICT");
   }
   const duration = remainingDuration(old.expires);
   const issued = await generateKey(
@@ -1059,10 +1086,12 @@ export async function rotateKey(
         ? { maxParallelRequests: old.max_parallel_requests }
         : {}),
       ...(duration !== undefined ? { duration } : {}),
-      ...(old.blocked === true ? { blocked: true } : {}),
     }),
     actor,
   );
+  // `blocked` is no field of /key/generate (LT4): a blocked old key's state is
+  // carried by blocking the new key before the old one.
+  if (old.blocked === true) await blockToken(issued.tokenId, actor);
   await blockToken(i.tokenId, actor);
   return issued;
 }

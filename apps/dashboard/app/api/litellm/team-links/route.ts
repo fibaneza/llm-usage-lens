@@ -12,7 +12,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export const GET = withRoute(async (_request, _ctx, session) => {
-  const refused = openModeRefusal() ?? adminOrAuditorRefusal(session);
+  const refused = openModeRefusal() ?? (await adminOrAuditorRefusal(session));
   if (refused) return refused;
   return jsonData({ items: await listTeamLinks() });
 });

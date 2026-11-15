@@ -476,6 +476,20 @@ describe("LiteLLMPanel guardrail summary (not configurable)", () => {
   });
 });
 
+// Source: LiteLLM spec LD18 -- the inference refusal is verified by L2 and the
+// runbook, not yet by an automated check, so the list marks it "pending".
+describe("LiteLLMPanel guardrail summary - LD18 item", () => {
+  it("marks the inference refusal item as pending", async () => {
+    stub({});
+    renderWithProviders(<LiteLLMPanel />);
+    await ready();
+    const region = screen.getByRole("region", { name: /enforced in code/i });
+    expect(within(region).getByText(/inference/i)).toHaveTextContent(
+      /pending/i,
+    );
+  });
+});
+
 describe("LiteLLMPanel wildcard warning", () => {
   async function runTest() {
     await ready();

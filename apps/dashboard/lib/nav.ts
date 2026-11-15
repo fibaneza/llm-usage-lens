@@ -1,6 +1,7 @@
 import {
   Boxes,
   Building2,
+  Cable,
   LayoutDashboard,
   Settings,
   Trophy,
@@ -73,6 +74,17 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         pageTitle: "User breakdown",
         href: "/dashboard/users",
         icon: User,
+      },
+    ],
+  },
+  {
+    label: "Gateway",
+    items: [
+      {
+        title: "LiteLLM",
+        pageTitle: "LiteLLM usage & administration",
+        href: "/dashboard/litellm",
+        icon: Cable,
       },
     ],
   },

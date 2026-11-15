@@ -60,7 +60,7 @@ const auditContext = (actor: string) => ({
 const notFound = () => jsonError(404, "NOT_FOUND", NOT_FOUND_MESSAGE);
 
 export const GET = withRoute(async (_request, ctx, session) => {
-  const refused = openModeRefusal() ?? adminOrAuditorRefusal(session);
+  const refused = openModeRefusal() ?? (await adminOrAuditorRefusal(session));
   if (refused) return refused;
   const link = await getTeamLink(await teamIdOf(ctx));
   return link ? jsonData(link) : notFound();

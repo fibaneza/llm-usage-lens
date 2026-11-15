@@ -241,6 +241,20 @@ describe("authorisation (every method)", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
+  it("a stored internal-admin grant opens reads for a session whose claim lacks the role (Rule 50.4, route-guard)", async () => {
+    const { grantRole } = await import("@/lib/data/access/role-grants");
+    const { ctxAt, ok } = await import("@/lib/data/access/access-test-support");
+    authMock.mockResolvedValue({ user: { oid: "oid-granted" } });
+    ok(
+      await grantRole(
+        { oid: "oid-granted", role: "internal-admin", reason: "test" },
+        ctxAt(),
+      ),
+    );
+    const h = await load();
+    expect((await h.LIST(get(LIST_URL), ctxFor())).status).toBe(200);
+  });
+
   it("an Auditor may read but every write is 403 FORBIDDEN with one denied audit record each (D17), and nothing stored", async () => {
     const h = await load();
     await link(h, "team-a", TEAM_ID);

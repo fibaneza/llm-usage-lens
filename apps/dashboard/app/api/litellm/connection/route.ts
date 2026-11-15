@@ -14,7 +14,6 @@ import {
   parseJsonBody,
   withRoute,
 } from "@/lib/api/respond";
-import { hasAdminRole, hasGlobalRole } from "@/lib/auth/roles";
 import {
   getLiteLLMConnection,
   putLiteLLMConnection,
@@ -25,7 +24,10 @@ import {
 } from "@/lib/litellm/client";
 import { validateLiteLLMBaseUrl } from "@/lib/litellm/base-url";
 import { testLiteLLMConnection } from "@/lib/litellm/connection-test";
-import { openModeRefusal } from "@/lib/litellm/route-guard";
+import {
+  adminOrAuditorRefusal,
+  openModeRefusal,
+} from "@/lib/litellm/route-guard";
 
 // Source: docs/specs/2026-11-10-litellm.md — "API routes" (GET Admin +
 // Auditor, PUT Admin) and "Security architecture" items 5-8: the candidate URL
@@ -50,10 +52,8 @@ function status(baseUrl: string | null, version: number) {
 export const GET = withRoute(async () => {
   const refused = openModeRefusal();
   if (refused) return refused;
-  const session = await auth();
-  if (!hasAdminRole(session) && !hasGlobalRole(session, "internal-auditor")) {
-    return jsonError(403, "FORBIDDEN", "Admin or Auditor role required");
-  }
+  const forbidden = await adminOrAuditorRefusal(await auth());
+  if (forbidden) return forbidden;
   const connection = await getLiteLLMConnection();
   return jsonData(
     status(connection?.baseUrl ?? null, connection?.version ?? 0),

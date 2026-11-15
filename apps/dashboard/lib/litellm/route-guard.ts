@@ -4,7 +4,10 @@ import type { Session } from "next-auth";
 
 import { env } from "@/env";
 import { jsonError } from "@/lib/api/respond";
-import { hasAdminRole, hasGlobalRole } from "@/lib/auth/roles";
+import { globalRolesOf } from "@/lib/auth/policy";
+import type { ResolveScopeInput } from "@/lib/auth/policy";
+import type { GlobalRole } from "@/lib/auth/roles";
+import { loadAuthorization } from "@/lib/data/access/authorization";
 
 import { LiteLLMError } from "./client";
 import { LiteLLMOperationRefused } from "./gateway";
@@ -36,11 +39,33 @@ export function liteLLMErrorResponse(error: unknown): Response | null {
   return null;
 }
 
-// Admin or Auditor (the read side of every Settings → LiteLLM route).
-export function adminOrAuditorRefusal(
+// Authorization is read per request, never cached (Rule 60.10).
+export async function authorizationFor(
   session: Session | null,
-): Response | null {
-  return hasAdminRole(session) || hasGlobalRole(session, "internal-auditor")
+): Promise<ResolveScopeInput> {
+  return loadAuthorization({
+    appEnv: env.APP_ENV === "prod" ? "prod" : "dev",
+    session,
+    teamIds: [],
+    departmentIds: [],
+  });
+}
+
+// Global roles = session claim plus stored role grants (Rule 50.4; Access
+// Control spec - Roles). `null` fails closed.
+export async function globalRolesFor(
+  session: Session | null,
+): Promise<GlobalRole[] | null> {
+  const input = await authorizationFor(session);
+  return globalRolesOf(session, input.appEnv, input.roleGrants);
+}
+
+// Admin or Auditor (the read side of every Settings -> LiteLLM route).
+export async function adminOrAuditorRefusal(
+  session: Session | null,
+): Promise<Response | null> {
+  const roles = await globalRolesFor(session);
+  return roles?.some((r) => r === "internal-admin" || r === "internal-auditor")
     ? null
     : jsonError(403, "FORBIDDEN", "Admin or Auditor role required");
 }

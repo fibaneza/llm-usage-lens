@@ -18,7 +18,8 @@ import {
   ensureTestTable,
   testDoc,
 } from "@/test/test-support";
-import { dumpTable } from "@/lib/data/access/access-test-support";
+import { ctxAt, dumpTable, ok } from "@/lib/data/access/access-test-support";
+import { grantRole } from "@/lib/data/access/role-grants";
 
 // Source: docs/specs/2026-11-10-litellm.md — "API routes" (/api/litellm/
 // connection GET Admin+Auditor, PUT Admin; /connection/test POST Admin, not
@@ -204,6 +205,18 @@ describe("GET /api/litellm/connection", () => {
       expect(fake.calls).toHaveLength(0);
     },
   );
+
+  it("a stored internal-admin grant opens GET for a session whose claim lacks the role (Rule 50.4)", async () => {
+    authMock.mockResolvedValue({ user: { oid: "oid-granted" } });
+    ok(
+      await grantRole(
+        { oid: "oid-granted", role: "internal-admin", reason: "test" },
+        ctxAt(),
+      ),
+    );
+    const { GET } = await load();
+    expect((await GET(get(), ctx)).status).toBe(200);
+  });
 
   it("reports 'never configured' (baseUrl null, version 0) and serviceKeyConfigured false, without failing", async () => {
     const { GET } = await load({ LITELLM_SERVICE_KEY: "" });
