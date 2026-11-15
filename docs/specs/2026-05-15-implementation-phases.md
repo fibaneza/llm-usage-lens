@@ -692,13 +692,13 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)
 
-- [ ] Write routes for every allowlisted write (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list
+- [ ] Write routes for every allowlisted write (workflow pilot candidate — *Workflow pilots*) (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list
 - [ ] Team members (LiteLLM spec — LD10, LD16; amended 2026-11-14): Leads create, update and delete members (`removeTeamMember` default on); the LiteLLM team join link is added as `inviteTeamMember` only after the operators confirm the endpoint and the snapshot is refreshed — until then the UI invites through `addTeamMember`
 - [ ] Verify: write matrix; LT5, LT9, LT10, LT13, LT16, LT18 (privileged member → `409`, no key or membership write); one audit record per success/failure, one `denied` per authorization refusal (incl. `409 PRIVILEGED_TARGET`) and none on other rejections; structural write-route test includes every LiteLLM write route; e2e probe
 
 ### L5 — Polish and verification (`feature/phase-l5-litellm-polish`)
 
-- [ ] Accessibility (Phase 5 floor), responsive layout, runbook completed, full role × operation matrix against the fake (and a non-production LiteLLM when provided)
+- [ ] Accessibility (Phase 5 floor), responsive layout, runbook completed, full role × operation matrix (workflow pilot candidate — *Workflow pilots*) against the fake (and a non-production LiteLLM when provided)
 - [ ] Verify: axe clean; matrix green; e2e probe
 
 ### L6 — Combined usage and *My usage* (`feature/phase-l6-litellm-combined`)
@@ -718,6 +718,28 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ---
 
+## Workflow pilots (decided 2026-11-15, user)
+
+Claude Code workflows (multi-agent orchestration; [Dynamic workflows guide](../guides/dynamic-workflows.md))
+are planned only where a unit has many independent pieces against one test
+bar. Every pilot keeps the rules: one branch and one squash commit per unit
+(Rule 30.4), Rule 70 roles (tdd-test-engineer writes tests, typescript-developer
+writes code, reviewers read only), at most 5 agents, the user's opt-in per run,
+and the 5-hour freeze. A workflow speeds up building inside a unit; it never
+merges or gates.
+
+| Where | Fan-out | Fit |
+|---|---|---|
+| Coordinator merge review (every merge, from the next one) | reviewers in parallel (quality, spec, UI), then one adversarial check per BLOCKER before it is reported | high — first pilot |
+| L4 write routes | one slice per route group (members, budgets/limits, keys, team), all against the structural write-route test and the write matrix | high |
+| L5 role × operation matrix | one agent per role row against the fake LiteLLM | high |
+| Phase 5 polish | one agent per page: ErrorBoundary per section, axe fixes, breakpoints, empty states | high (guide §4.1) |
+| 4R.4 Settings access sections, L3 page sections | one agent per section once its routes exist | medium — only if a run is short of time |
+| Phase 6 collector | the three source adapters (Cost Explorer, CloudTrail Lake, CloudWatch) against fixtures; the merge stays serial | medium |
+| 4R.5, L6–L8, Phase 1-style bootstraps | — | none: small or sequential |
+
+---
+
 ## Phase 5 — Polish & Accessibility
 
 **Goal:** Production-quality error handling, accessibility compliance, and responsive verification across all pages.
@@ -733,7 +755,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
   - User menu shows the role label(s) and the sign-in method, from the label maps in `lib/auth/roles.ts`
   - Sidebar brand reads "LLM Usage Lens"
   - `e2e/responsive.spec.ts` also covers 1920: no horizontal scroll; the content container's width equals the `SidebarInset` width and its left and right padding is 32px
-- [ ] Add `ErrorBoundary` per section on every page (one chart failing doesn't crash the page)
+- [ ] Add `ErrorBoundary` per section on every page (one chart failing doesn't crash the page) (workflow pilot candidate, one agent per page — *Workflow pilots*)
 - [ ] Accessibility audit
   > Smoke-level a11y is enforced continuously before Phase 5:
   > `apps/dashboard/e2e/accessibility.spec.ts` fails the suite on any

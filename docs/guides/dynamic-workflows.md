@@ -100,7 +100,10 @@ force — the workflow accelerates the *building*, not the *gating*.
 
 ## 7. Status and next step
 
-Not adopted in v1. The feature is research-preview maturity and most of the build is
+**Amended 2026-11-15 (user):** pilots are planned, task by task, in the
+implementation-phases spec — *Workflow pilots* (coordinator merge review
+first, then L4, L5 and Phase 5), under the §6 guardrail. Previously:
+not adopted in v1. The feature is research-preview maturity and most of the build is
 below its scale threshold (§2). The natural point to evaluate a pilot is **Phase 5**,
 on the cross-cutting accessibility/error-boundary pass (§4.1).
 

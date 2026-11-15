@@ -158,6 +158,15 @@ review = quality-reviewer + spec-guardian + ecc reviewers
     - **Cheapest adequate model** for gate re-runs and git summaries
       (`haiku`); reviews stay on opus (Model routing above).
 
+## Workflows (pilot, decided 2026-11-15, user)
+
+A Claude Code workflow may run a unit's work or the coordinator's merge
+review only where the implementation-phases spec lists it (*Workflow
+pilots*), with the user's opt-in per run. Its agents keep the roles in
+rule 8, the unit keeps one branch and one squash commit (Rule 30.4), it
+runs at most 5 agents, and it stops at the 5-hour freeze. It never merges
+or skips the review.
+
 ## When to use
 
 - **Use the loop** for any feature, page, Route Handler, or non-trivial fix —
