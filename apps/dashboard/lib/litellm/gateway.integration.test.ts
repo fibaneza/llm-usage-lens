@@ -83,6 +83,8 @@ describe("callAllowlisted — an allowed route", () => {
   });
 
   it("fills {key} with the token hash for regenerate (Enterprise)", async () => {
+    fake = createFakeLiteLLM(gatewayHandler({ edition: "enterprise" }));
+    vi.stubGlobal("fetch", fake.fetch);
     const { callAllowlisted } = await load({
       APP_ENV: "prod",
       LITELLM_ALLOWED_HOSTS: "litellm.test",

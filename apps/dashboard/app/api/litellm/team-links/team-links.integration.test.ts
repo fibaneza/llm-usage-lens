@@ -233,7 +233,11 @@ describe("authorisation (every method)", () => {
       403,
       "FORBIDDEN",
     );
-    const records = (await auditActions()).slice(before);
+    // Audit listing order is by timestamp then random request id, and the
+    // clock is frozen, so select the new records by content, not position.
+    const all = await auditActions();
+    expect(all).toHaveLength(before + 2);
+    const records = all.filter((r) => r.result === "denied");
     expect(records).toHaveLength(2);
     expect(records.map((r) => r.action).sort()).toEqual([
       "litellm.teamlink.link",
@@ -304,8 +308,8 @@ describe("PUT /api/litellm/team-links/[teamId] (linkTeam)", () => {
     expect(l).toMatchObject({
       litellmTeamId: TEAM_ID,
       version: 1,
-      GSI1pk: "LITELLM#TEAMLINKS",
-      GSI1sk: "TEAM#team-a",
+      gsi1pk: "LITELLM#TEAMLINKS",
+      gsi1sk: "TEAM#team-a",
     });
     const c = await claimItem(TEAM_ID);
     expect(c).toMatchObject({ teamId: "team-a", version: 1 });
@@ -478,7 +482,7 @@ describe("DELETE /api/litellm/team-links/[teamId] (unlinkTeam)", () => {
     expect((await res.json()).data).toEqual({ teamId: "team-a" });
     expect(await linkItem("team-a")).toBeUndefined();
     expect(await claimItem(TEAM_ID)).toBeUndefined();
-    const actions = (await auditActions()).map((r) => r.action);
+    const actions = (await auditActions()).map((r) => r.action).sort();
     expect(actions).toEqual([
       "litellm.teamlink.link",
       "litellm.teamlink.unlink",

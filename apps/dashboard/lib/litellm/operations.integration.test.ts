@@ -80,6 +80,9 @@ type Ops = Record<string, (input?: unknown, ctx?: unknown) => Promise<unknown>>;
 
 async function load(env: Record<string, string> = {}): Promise<{ ops: Ops }> {
   vi.resetModules();
+  // Security architecture item 7: APP_ENV=prod requires an https base URL,
+  // so prod (Enterprise) cases store an https connection on the allowed host.
+  if (env.APP_ENV === "prod") await storeConnection("https://litellm.test");
   const vars = {
     APP_ENV: "dev",
     AUTH_ACCESS_MODE: "enforce",
@@ -92,14 +95,14 @@ async function load(env: Record<string, string> = {}): Promise<{ ops: Ops }> {
   return { ops: mod };
 }
 
-async function storeConnection() {
+async function storeConnection(baseUrl: string = BASE) {
   await testDoc().send(
     new PutCommand({
       TableName: TEST_TABLE_NAME,
       Item: {
         PK: "LITELLM#CONFIG",
         SK: "CONNECTION",
-        baseUrl: BASE,
+        baseUrl,
         version: 1,
         updatedAt: "2026-11-14T10:00:00.000Z",
       },
@@ -380,7 +383,7 @@ const CASES: Case[] = [
   {
     name: "getGlobalSpendReport",
     write: false,
-    env: { APP_ENV: "prod", LITELLM_ALLOWED_HOSTS: "litellm.test:4000" },
+    env: { APP_ENV: "prod", LITELLM_ALLOWED_HOSTS: "litellm.test" },
     fake: { edition: "enterprise" },
     run: (o) => o.getGlobalSpendReport!({ startDate: D1, endDate: D2 }),
     calls: [
@@ -847,7 +850,7 @@ const CASES: Case[] = [
   {
     name: "rotateKey (Enterprise: regenerate with exactly { grace_period })",
     write: true,
-    env: { APP_ENV: "prod", LITELLM_ALLOWED_HOSTS: "litellm.test:4000" },
+    env: { APP_ENV: "prod", LITELLM_ALLOWED_HOSTS: "litellm.test" },
     fake: { edition: "enterprise" },
     run: (o) =>
       o.rotateKey!(
@@ -1092,7 +1095,7 @@ describe("bodies never carry what must not be sent (guardrail 4, LT4)", () => {
     install({ edition: "enterprise" });
     const { ops } = await load({
       APP_ENV: "prod",
-      LITELLM_ALLOWED_HOSTS: "litellm.test:4000",
+      LITELLM_ALLOWED_HOSTS: "litellm.test",
     });
     await ops.rotateKey!(
       {

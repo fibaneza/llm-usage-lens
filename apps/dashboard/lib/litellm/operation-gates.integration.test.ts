@@ -47,6 +47,11 @@ async function load(
   fileOperations?: Record<string, { enabled: boolean }>,
 ): Promise<Ops> {
   vi.resetModules();
+  // Security architecture item 7: APP_ENV=prod requires an https base URL.
+  if (env.APP_ENV === "prod") {
+    await storeConnection("https://litellm.test");
+    env = { LITELLM_ALLOWED_HOSTS: "litellm.test", ...env };
+  }
   vi.doUnmock("@/lib/litellm/gateway-config");
   if (fileOperations) {
     vi.doMock("@/lib/litellm/gateway-config", () => ({
@@ -75,9 +80,9 @@ async function put(sk: string, item: Record<string, unknown>) {
     }),
   );
 }
-const storeConnection = () =>
+const storeConnection = (baseUrl: string = BASE) =>
   put("CONNECTION", {
-    baseUrl: BASE,
+    baseUrl,
     version: 1,
     updatedAt: "2026-11-14T10:00:00.000Z",
   });

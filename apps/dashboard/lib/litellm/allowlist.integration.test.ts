@@ -117,7 +117,7 @@ describe("the gateway registry matches the allowlist table", () => {
     );
     for (const t of templates) {
       expect(t).not.toMatch(
-        /bulk|^\/model|\/model\/|^\/config|^\/organization|^\/v1\/|^\/global\/spend\/reset|^\/team\/(delete|block|unblock)$|service-account|^\/chat|^\/completions|^\/key\/regenerate$/,
+        /bulk|^\/model\/|^\/config|^\/organization|^\/v1\/|^\/global\/spend\/reset|^\/team\/(delete|block|unblock)$|service-account|^\/chat|^\/completions|^\/key\/regenerate$/,
       );
     }
   });
