@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "node ../../scripts/e2e-lock.mjs playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1168.0",

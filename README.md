@@ -133,6 +133,8 @@ Dashboard environment variables live in `apps/dashboard/` and follow this preced
 | `pnpm test` | Runs both Vitest projects (requires DynamoDB Local) |
 | `pnpm test:e2e` | Runs headless Playwright end-to-end tests in `apps/dashboard/e2e` |
 
+`pnpm test:e2e` takes a cross-worktree lock (`scripts/e2e-lock.mjs`, a directory `e2e-run.lock` in the git common dir) because every worktree's run shares port 3211 and the `bedrock-usage` table. A second run waits and polls every 15 s. A lock is taken over only when its owner pid is dead or it is older than `E2E_LOCK_STALE_MIN` (default 45). After `E2E_LOCK_WAIT_MIN` (default 60) minutes of waiting it exits with code 75. `E2E_LOCK_OWNER` labels the holder; `E2E_LOCK=off` skips the lock.
+
 ### Git Hooks & CI
 
 - **Pre-commit:** Scans staged files with Gitleaks for secrets, then runs `lint-staged` (ESLint `--fix` + Prettier).
