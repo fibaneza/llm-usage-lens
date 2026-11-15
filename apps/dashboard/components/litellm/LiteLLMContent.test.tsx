@@ -59,6 +59,7 @@ const MEMBERS = {
   connected: true,
   items: [
     {
+      userId: "u-ada",
       oid: "oid-ada",
       name: "Ada Lovelace",
       email: "ada@example.test",
