@@ -131,6 +131,11 @@ never overrides a rule; it only adds coordination.
   typecheck plus the tests the conflict touched; otherwise it tells the
   worker to merge `main` at its next step. A new goal never starts from a
   stale branch.
+  Propagation covers only branches with **work in progress**: their own
+  commits not yet on `main`, or uncommitted changes (user, 2026-11-16).
+  Finished branches (landed, or ready and waiting for clean-up) are removed,
+  not updated, and empty branches get the latest `main` when their goal
+  starts.
 - **Run in order.** `state.md` keeps one **goal queue** per session (what
   runs now, what follows, and what it waits for). The coordinator starts the
   next goal only when its dependencies are on `main`, and lands finished
