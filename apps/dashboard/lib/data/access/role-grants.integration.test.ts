@@ -137,6 +137,36 @@ describe("grantRole", () => {
 });
 
 describe("revokeRole", () => {
+  // F5 hardening (run-r4b decisions): real DynamoDB cancels one of two
+  // transactions that touch the same items at once with reason
+  // TransactionConflict. Like a failed ConditionCheck it is a CONFLICT the
+  // client retries, not a 500 with a `failed` record.
+  it.each([
+    ["the grant item", 0],
+    ["the audit record item", -1],
+  ])(
+    "F5: a TransactionConflict on %s returns CONFLICT, writes no failed or success record, and the grant stays",
+    async (_name, at) => {
+      const grant = ok(
+        await grantRole(
+          { oid: OID_A, role: "internal-admin", reason: "x" },
+          ctx,
+        ),
+      );
+      const before = await auditRecords();
+      faults.transactConflictAt = at;
+      expect(
+        await revokeRole(
+          { oid: OID_A, role: "internal-admin", version: grant.version },
+          ctxAt(NOW, "req-2"),
+        ),
+      ).toEqual({ ok: false, code: "CONFLICT" });
+      faults.transactConflictAt = null;
+      expect(await auditRecords()).toEqual(before);
+      expect(ok(await listRoleGrants(opts)).items).toHaveLength(1);
+    },
+  );
+
   it("removes the grant and writes one role.revoke security record", async () => {
     const grant = ok(
       await grantRole({ oid: OID_A, role: "internal-admin", reason: "x" }, ctx),

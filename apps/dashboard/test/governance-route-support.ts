@@ -21,12 +21,22 @@ export const SESSIONS = {
 } as const;
 export type Caller = keyof typeof SESSIONS;
 
-export function signInAs(caller: Caller | null): void {
+// The session signed in just now, so a route behind the recent-authentication
+// gate (Access Control spec - D28, 900 s; F3 extends it to the password-user
+// and password-sign-in writes) passes; `authTime` overrides it for a stale case.
+export function signInAs(
+  caller: Caller | null,
+  options: { authTime?: number } = {},
+): void {
   vi.mocked(auth).mockResolvedValue(
     (caller === null
       ? null
       : {
-          user: { ...SESSIONS[caller], roles: [...SESSIONS[caller].roles] },
+          user: {
+            ...SESSIONS[caller],
+            roles: [...SESSIONS[caller].roles],
+            authTime: options.authTime ?? Math.floor(Date.now() / 1000),
+          },
         }) as never,
   );
 }

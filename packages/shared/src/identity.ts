@@ -12,7 +12,7 @@ export const IdentityRecordSchema = z.object({
   displayName: z.string().optional(),
   lastSignInAt: Iso8601Schema,
   lastSeenRoles: z.array(z.string()),
-  authMethod: z.enum(["entra", "master", "local"]),
+  authMethod: z.enum(["entra", "master", "local", "password"]),
   version: z.number().int().min(0),
   ambiguousMembership: z.boolean().optional(),
   groupsOverage: z.boolean().optional(),

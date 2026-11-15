@@ -121,3 +121,20 @@ describe("UserMenu identity and sign out (unchanged)", () => {
     expect(screen.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
   });
 });
+
+// F9 (temp/run-r4b/decisions.md): the Account page (/dashboard/account) is
+// reached from the user menu, for every sign-in method (non-password users see
+// their method there).
+describe("UserMenu account link", () => {
+  it.each(["entra", "password"])(
+    "links a %s user to the Account page",
+    async (authMethod) => {
+      await openMenu(makeUser({ roles: ["internal-viewer"], authMethod }));
+
+      expect(screen.getByRole("menuitem", { name: "Account" })).toHaveAttribute(
+        "href",
+        "/dashboard/account",
+      );
+    },
+  );
+});

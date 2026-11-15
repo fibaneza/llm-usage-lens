@@ -649,8 +649,8 @@ the `auth.signin.error` record; `withRoute` treats a session without
 ### Phase 4R.4 — Management UI and writes (`feature/phase-4r-4-rbac-settings`)
 
 - [ ] Settings access sections (Design System — *Settings Page*); write routes with permission, origin, re-auth and `409`; structural write-route test updated; **Password users** section and routes (`/api/password-users`, reset, TOTP reset, `/api/account/password`, `/api/governance/password-sign-in`); sign-in form and `/account/setup` page; auth and deployment guides (Pre-SSO setup, enabling SSO later, turning password sign-in off)
-- [ ] Usage-identity mapping rules (Access Control — *Usage-identity mapping rules*, D27; amended 2026-11-14): rules editor in Settings (`GOVERNANCE`/`IDENTITY_MAP_RULES`, versioned, audited), suggested links for non-person usage keys, confirm one or all per rule, stored as exact aliases with `UsageKeyClaim` (`409` on duplicates); tests: `{name}-sso` → `{name}@company.com` suggests only existing identities, never auto-links, never grants access
-- [ ] Verify: write matrix and T3, T9–T11, T16, T22 (one `denied` per authorization refusal, none on `400`), T7 (switch), T23, T24 (e2e setup), T25, T28 pass; axe clean; seeded probe per role
+- [x] Usage-identity mapping rules (Access Control — *Usage-identity mapping rules*, D27; amended 2026-11-14): rules editor in Settings (`GOVERNANCE`/`IDENTITY_MAP_RULES`, versioned, audited), suggested links for non-person usage keys, confirm one or all per rule, stored as exact aliases with `UsageKeyClaim` (`409` on duplicates); tests: `{name}-sso` → `{name}@company.com` suggests only existing identities, never auto-links, never grants access
+- [ ] Verify (landed before its review blockers were fixed, user direction 2026-11-15; fix list temp/run-r4b/review-blockers.md on a fix/ branch): write matrix and T3, T9–T11, T16, T22 (one `denied` per authorization refusal, none on `400`), T7 (switch), T23, T24 (e2e setup), T25, T28 pass; axe clean; seeded probe per role
 
 ### Phase 4R.5 — UI gating and copy (`feature/phase-4r-5-rbac-ui`)
 

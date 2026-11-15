@@ -1,0 +1,37 @@
+import type { ReactNode } from "react";
+
+import { SectionBoundary } from "@/components/display/SectionBoundary";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// One Settings access section: anchor by slug, an h2, and its own boundary so a
+// failing section never breaks the others (Rule 40.4, 60.12).
+export function AccessSection({
+  slug,
+  heading,
+  title,
+  description,
+  children,
+}: {
+  slug: string;
+  heading: string;
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section id={slug} className="flex scroll-mt-20 flex-col gap-3">
+      <div className="flex max-w-[72ch] flex-col gap-1">
+        <h2 className="text-base font-semibold">{heading}</h2>
+        {description ? (
+          <p className="text-muted-foreground text-sm">{description}</p>
+        ) : null}
+      </div>
+      <SectionBoundary
+        title={title}
+        fallback={<Skeleton className="h-40 w-full" />}
+      >
+        {children}
+      </SectionBoundary>
+    </section>
+  );
+}

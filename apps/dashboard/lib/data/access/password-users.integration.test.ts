@@ -1,8 +1,14 @@
 import { createHash } from "node:crypto";
 
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import {
+  TEST_TABLE_NAME,
+  clearTable,
+  ensureTestTable,
+  testDoc,
+} from "@/test/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
   import("./access-test-support").then((m) => m.faultyDynamodb()),
@@ -10,6 +16,12 @@ vi.mock("@/lib/dynamodb", () =>
 
 import { NOW, dumpTable, auditRecords, ctxAt, ok } from "./access-test-support";
 import { putIdentityLink } from "./identity-links";
+import {
+  changePasswordWrite,
+  completePasswordSetupWrite,
+  getPasswordCredential,
+  resetPasswordUserTotp,
+} from "./password-credentials-store";
 import {
   createPasswordUser,
   deletePasswordUser,
@@ -19,7 +31,10 @@ import {
   getPasswordUser,
   issueSetupLink,
   setPasswordSignIn,
+  sha256Hex,
+  userKey,
 } from "./password-users";
+import type { AccessResult } from "./result";
 
 // Source: docs/specs/2026-11-10-access-control.md — "Password users"
 // (Accounts, Identity, Setup D22, Alongside Entra D24), "SSO reference and
@@ -277,6 +292,174 @@ describe("password sign-in switch (D24, T28)", () => {
       category: "change",
       result: "success",
       target: { id: "PASSWORD_SIGNIN" },
+    });
+  });
+});
+
+// F7 / D29 (temp/run-r4b/decisions.md; Access Control spec - "Password users",
+// Credential version): `credentialVersion` on the LOCALUSER item reads 0 while
+// absent, and each of these raises it by exactly 1 so older sessions stop
+// matching: completing setup, an own password change, an admin reset link and
+// an admin TOTP reset (usually a lost or compromised device) and a disable; a
+// delete removes the user. A re-enable does not raise it. Read uncached through
+// getPasswordCredential (Rule 60.10). Each write is still one audit record.
+describe("credentialVersion (F7)", () => {
+  const EMAIL = "alice@example.com";
+  const HASH = "$argon2id$v=19$SENTINEL-HASH";
+  const version = async () =>
+    (await getPasswordCredential(EMAIL))?.credentialVersion;
+
+  async function activeUser() {
+    const { setupToken } = ok(await create(EMAIL));
+    ok(
+      await completePasswordSetupWrite(
+        {
+          email: EMAIL,
+          tokenHash: sha256Hex(setupToken),
+          passwordHash: HASH,
+        },
+        ctxAt(NOW, "req-setup"),
+      ),
+    );
+  }
+  const dropAttribute = (names: string) =>
+    testDoc().send(
+      new UpdateCommand({
+        TableName: TEST_TABLE_NAME,
+        Key: userKey(EMAIL),
+        UpdateExpression: `REMOVE ${names}`,
+      }),
+    );
+  const updates = async () =>
+    (await auditRecords()).filter((r) => r.action === "localuser.update");
+
+  it("reads 0 for a user who has not completed setup (the attribute is absent)", async () => {
+    ok(await create(EMAIL));
+    expect(await version()).toBe(0);
+  });
+
+  it("completing setup raises it by 1", async () => {
+    await activeUser();
+    expect(await version()).toBe(1);
+  });
+
+  it("an item stored without the attribute reads 0, and the first change makes it 1", async () => {
+    await activeUser();
+    await dropAttribute("credentialVersion");
+    expect(await version()).toBe(0);
+    ok(await changePasswordWrite({ email: EMAIL, passwordHash: HASH }, ctx));
+    expect(await version()).toBe(1);
+  });
+
+  const CHANGES: [string, () => Promise<unknown>][] = [
+    [
+      "an own password change",
+      () => changePasswordWrite({ email: EMAIL, passwordHash: HASH }, ctx),
+    ],
+    ["an admin reset link", () => issueSetupLink(EMAIL, ctx)],
+    ["an admin TOTP reset", () => resetPasswordUserTotp(EMAIL, ctx)],
+    ["a disable", () => disablePasswordUser(EMAIL, ctx)],
+  ];
+
+  it.each(CHANGES)(
+    "%s raises it by exactly 1 and writes one audit record",
+    async (_n, change) => {
+      await activeUser();
+      const before = await version();
+      const auditBefore = (await updates()).length;
+      ok((await change()) as AccessResult<unknown>);
+      expect(await version()).toBe((before ?? 0) + 1);
+      expect((await updates()).length - auditBefore).toBe(1);
+    },
+  );
+
+  it("raises it again on each further change", async () => {
+    await activeUser();
+    ok(await changePasswordWrite({ email: EMAIL, passwordHash: HASH }, ctx));
+    ok(await issueSetupLink(EMAIL, ctx));
+    ok(await resetPasswordUserTotp(EMAIL, ctx));
+    ok(await disablePasswordUser(EMAIL, ctx));
+    expect(await version()).toBe(5);
+  });
+
+  it("re-enabling does not raise it", async () => {
+    await activeUser();
+    ok(await disablePasswordUser(EMAIL, ctx));
+    const afterDisable = await version();
+    ok(await enablePasswordUser(EMAIL, ctx));
+    expect(await version()).toBe(afterDisable);
+  });
+
+  it("a delete removes the credential, so an old session has nothing to match", async () => {
+    await activeUser();
+    ok(await deletePasswordUser(EMAIL, ctx));
+    expect(await getPasswordCredential(EMAIL)).toBeNull();
+  });
+
+  it("a refused own change (user disabled meanwhile) leaves the version alone", async () => {
+    await activeUser();
+    ok(await disablePasswordUser(EMAIL, ctx));
+    const before = await version();
+    const refused = await changePasswordWrite(
+      { email: EMAIL, passwordHash: HASH },
+      ctx,
+    );
+    expect(refused.ok).toBe(false);
+    expect(await version()).toBe(before);
+  });
+
+  describe("self-change marker (re-keys the changing session only)", () => {
+    const marker = async () =>
+      (await getPasswordCredential(EMAIL))?.selfChangeSignedInAt;
+
+    it("an own change stores the session's signedInAt", async () => {
+      await activeUser();
+      ok(
+        await changePasswordWrite(
+          { email: EMAIL, passwordHash: HASH, signedInAt: 1_793_000_000 },
+          ctx,
+        ),
+      );
+      expect(await marker()).toBe(1_793_000_000);
+    });
+
+    it("an own change without a signedInAt stores no marker", async () => {
+      await activeUser();
+      ok(await changePasswordWrite({ email: EMAIL, passwordHash: HASH }, ctx));
+      expect(await marker()).toBeUndefined();
+    });
+
+    it.each([
+      ["an admin reset link", () => issueSetupLink(EMAIL, ctx)],
+      ["an admin TOTP reset", () => resetPasswordUserTotp(EMAIL, ctx)],
+      ["a disable", () => disablePasswordUser(EMAIL, ctx)],
+    ])("%s clears it", async (_n, change) => {
+      await activeUser();
+      ok(
+        await changePasswordWrite(
+          { email: EMAIL, passwordHash: HASH, signedInAt: 1_793_000_000 },
+          ctx,
+        ),
+      );
+      ok((await change()) as AccessResult<unknown>);
+      expect(await marker()).toBeUndefined();
+    });
+
+    it("a later own change by another session replaces it", async () => {
+      await activeUser();
+      ok(
+        await changePasswordWrite(
+          { email: EMAIL, passwordHash: HASH, signedInAt: 1_793_000_000 },
+          ctx,
+        ),
+      );
+      ok(
+        await changePasswordWrite(
+          { email: EMAIL, passwordHash: HASH, signedInAt: 1_793_000_500 },
+          ctx,
+        ),
+      );
+      expect(await marker()).toBe(1_793_000_500);
     });
   });
 });

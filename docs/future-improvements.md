@@ -230,6 +230,30 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ---
 
+## Access control
+
+### Pending and stale access lists
+
+- **Status:** Deferred (decided 2026-11-15, orchestrator, user delegated;
+  Access Control D34).
+- **What:** A Settings list of pending member affiliations and admin scopes
+  not bound after 30 days, and affiliations, admin scopes and in-app grants
+  whose user has not signed in for 90 days (D2), with a scoped read route
+  (for example `GET /api/access/stale`, filtered by the management-read rule
+  and paginated with the opaque cursor) and bulk removal.
+- **Why deferred:** Not in the 4R.4 brief. The quarterly access review
+  already flags stale items, and a removal goes through the existing member
+  and admin-scope routes.
+- **Adopt when:** the quarterly access review finds stale items that an
+  admin has to clean up one by one, **or** pending invitations pile up
+  unbound, **or** a scoped admin asks to see their own stale items (the
+  access review is `internal-admin`/`internal-auditor` only).
+- **References:** [Access Control spec](specs/2026-11-10-access-control.md) —
+  *Membership, admin scopes and lifecycle* (*Leaver*), *Access review*, D2,
+  D34; [Design System](specs/2026-05-15-design-system.md) — *Settings Page*.
+
+---
+
 ## Security & CI
 
 ### Script and style Content Security Policy

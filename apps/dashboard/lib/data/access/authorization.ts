@@ -5,6 +5,7 @@ import {
   AdminScopeSchema,
   IdentityRecordSchema,
   RoleGrantSchema,
+  isAdminScopeSuspended,
 } from "@llm-usage-lens/shared";
 import type { AdminScope, RoleGrant } from "@llm-usage-lens/shared";
 import type { z } from "zod";
@@ -15,6 +16,8 @@ import {
   isGlobalReader,
 } from "@/lib/auth/policy";
 import type { PolicySession, ResolveScopeInput } from "@/lib/auth/policy";
+import { isMatrixWriter } from "@/lib/auth/write-policy";
+import type { WriteActor } from "@/lib/auth/write-policy";
 import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 
 import { getAffiliation } from "./affiliations";
@@ -125,5 +128,52 @@ export async function loadAuthorization(
     identityLink,
     visibility,
     perUserApproved,
+  };
+}
+
+// The caller's roles and live admin scopes for the matrix writes (Access
+// Control spec - "Permission matrix"; Enforcement item 4: read per request,
+// never cached). Roles are the claim plus in-app grants; scopes are read for
+// everyone who is not already a global writer, auditors included, because the
+// permissions are a union. Null when the session names no valid identity.
+export async function loadWriteActor(request: {
+  appEnv: "dev" | "prod";
+  session: PolicySession;
+}): Promise<WriteActor | null> {
+  const { appEnv, session } = request;
+  if (!hasSessionIdentity(session)) return null;
+  const oid = String(session?.user?.oid);
+  const none = new Set<string>();
+
+  const claimRoles = globalRolesOf(session, appEnv, []);
+  if (claimRoles === null) return null;
+  if (isMatrixWriter(claimRoles)) {
+    return { oid, roles: claimRoles, teamScopes: none, departmentScopes: none };
+  }
+  const grants = await queryByIdent(oid, "ROLEGRANT#", RoleGrantSchema);
+  const roles = globalRolesOf(session, appEnv, grants) ?? claimRoles;
+  if (isMatrixWriter(roles)) {
+    return { oid, roles, teamScopes: none, departmentScopes: none };
+  }
+
+  const scopes = (await queryByIdent(
+    oid,
+    "ADMINSCOPE#",
+    AdminScopeSchema,
+  )) as AdminScope[];
+  const identityItem = scopes.some((s) => s.source === "sso")
+    ? await getItem(identPk(oid), META_SK)
+    : null;
+  const identity = identityItem ? IdentityRecordSchema.parse(identityItem) : {};
+  const live = scopes.filter((s) => !isAdminScopeSuspended(s, identity));
+  return {
+    oid,
+    roles,
+    teamScopes: new Set(
+      live.filter((s) => s.scopeType === "team").map((s) => s.scopeId),
+    ),
+    departmentScopes: new Set(
+      live.filter((s) => s.scopeType === "department").map((s) => s.scopeId),
+    ),
   };
 }

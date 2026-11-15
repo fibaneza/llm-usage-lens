@@ -62,7 +62,14 @@ export async function grantRole(
 }
 
 export async function revokeRole(
-  input: { oid: string; role: GrantableRole; version: number },
+  input: {
+    oid: string;
+    role: GrantableRole;
+    version: number;
+    // F5: another internal-admin grant that must still exist when the delete
+    // commits, checked in the same transaction (no read-then-write gap).
+    otherAdminOid?: string;
+  },
   ctx: AuditContext,
 ): Promise<AccessResult<void>> {
   const Key = { PK: identPk(input.oid), SK: roleGrantSk(input.role) };
@@ -80,6 +87,20 @@ export async function revokeRole(
           ExpressionAttributeValues: { ":v": input.version },
         },
       },
+      ...(input.otherAdminOid
+        ? [
+            {
+              ConditionCheck: {
+                TableName: getTableName(),
+                Key: {
+                  PK: identPk(input.otherAdminOid),
+                  SK: roleGrantSk("internal-admin"),
+                },
+                ConditionExpression: "attribute_exists(PK)",
+              },
+            },
+          ]
+        : []),
     ],
     audit: {
       action: "role.revoke",

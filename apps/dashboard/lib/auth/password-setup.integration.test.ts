@@ -21,6 +21,7 @@ import {
   issueSetupLink,
   setPasswordSignIn,
 } from "@/lib/data/access/password-users";
+import { getPasswordCredential } from "@/lib/data/access/password-credentials-store";
 import { grantRole } from "@/lib/data/access/role-grants";
 import { clearTable, ensureTestTable } from "@/test/test-support";
 
@@ -84,6 +85,20 @@ describe("completePasswordSetup", { timeout: 30_000 }, () => {
         deps,
       ),
     ).toMatchObject({ oid: user.oid });
+  });
+
+  it("returns the credentialVersion the setup produced, matching the store (F7)", async () => {
+    const { setupToken } = await newUser();
+    const result = await completePasswordSetup(
+      { token: setupToken, password: GOOD_PASSWORD },
+      deps,
+    );
+    const stored = (await getPasswordCredential(EMAIL))?.credentialVersion;
+    expect(stored).toBe(1);
+    expect(result).toMatchObject({
+      ok: true,
+      identity: { credentialVersion: stored },
+    });
   });
 
   it("is single use: the same token fails the second time", async () => {

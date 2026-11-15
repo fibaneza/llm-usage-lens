@@ -14,6 +14,11 @@ export const API_ERROR_CODES = [
   "OPERATION_DISABLED",
   "PRIVILEGED_TARGET",
   "CONFLICT",
+  "MANAGED_BY_SSO",
+  "ALREADY_AFFILIATED",
+  "REAUTH_REQUIRED",
+  "SSO_BOUND",
+  "WEAK_PASSWORD",
 ] as const;
 
 export const ApiErrorCodeSchema = z.enum(API_ERROR_CODES);

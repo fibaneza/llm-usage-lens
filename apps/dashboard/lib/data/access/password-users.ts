@@ -2,10 +2,19 @@ import "server-only";
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
-import { PasswordUserSchema } from "@llm-usage-lens/shared";
-import type { PasswordUser } from "@llm-usage-lens/shared";
+import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  GSI1_NAME,
+  PasswordUserListItemSchema,
+  PasswordUserSchema,
+} from "@llm-usage-lens/shared";
+import type {
+  PasswordUser,
+  PasswordUserListItem,
+} from "@llm-usage-lens/shared";
+import { z } from "zod";
 
-import { getTableName } from "@/lib/dynamodb";
+import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 
 import type { TransactItem } from "./audit";
 import {
@@ -17,10 +26,13 @@ import {
   localUserPk,
   setupLinkPk,
   ssoExpectPk,
+  identPk,
+  roleGrantSk,
   ssoRefPk,
   usageKeyPk,
 } from "./keys";
-import type { AccessResult, AuditContext } from "./result";
+import { queryPage } from "./paging";
+import type { AccessResult, AuditContext, ListOptions, Page } from "./result";
 import { commitAudited, getItem } from "./store";
 
 // Source: docs/specs/2026-11-10-access-control.md — "Password users"
@@ -60,6 +72,124 @@ export async function getPasswordUser(
   const key = userKey(email);
   const item = await getItem(key.PK, key.SK);
   return item ? toPasswordUser(item) : null;
+}
+
+// The list row is derived from the stored item; the hash and the TOTP
+// ciphertext are read only to compute `pending-setup` and `totpEnrolled` and
+// never leave this schema (spec - API routes (additions), Passwords, TOTP D23).
+const ListRowSchema = z
+  .object({
+    email: z.string(),
+    displayName: z.string(),
+    status: z.enum(["enabled", "disabled", "sso-bound"]),
+    version: z.number(),
+    createdAt: z.string(),
+    passwordHash: z.string().optional(),
+    totpCipher: z.string().optional(),
+  })
+  .transform(
+    (r): PasswordUserListItem => ({
+      email: r.email,
+      displayName: r.displayName,
+      status:
+        r.status === "enabled" && !r.passwordHash ? "pending-setup" : r.status,
+      totpEnrolled: r.totpCipher !== undefined,
+      createdAt: r.createdAt,
+      version: r.version,
+    }),
+  )
+  .pipe(PasswordUserListItemSchema);
+
+export function listPasswordUsers(
+  options: ListOptions,
+): Promise<AccessResult<Page<PasswordUserListItem>>> {
+  return queryPage({
+    schema: ListRowSchema,
+    options,
+    index: "GSI1",
+    partition: LOCALUSERS_GSI1PK,
+  });
+}
+
+export async function getPasswordUserListItem(
+  email: string,
+): Promise<PasswordUserListItem | null> {
+  const key = userKey(email);
+  const item = await getItem(key.PK, key.SK);
+  return item ? ListRowSchema.parse(item) : null;
+}
+
+export type OtherPasswordAdmin = { email: string; oid: string };
+
+// Spec - Password users, Accounts: the last enabled password internal-admin
+// cannot be disabled or deleted while Entra is not configured. Read live from
+// the store; the caller decides whether Entra is configured. Returns
+// `{ protected: false }` when the target is not an enabled admin, otherwise the
+// lowest-email other enabled admin (null when the target is the only one). The
+// write then re-checks that admin inside its transaction (F5).
+export async function passwordAdminGuard(
+  emailInput: string,
+): Promise<
+  { protected: false } | { protected: true; other: OtherPasswordAdmin | null }
+> {
+  const email = emailInput.toLowerCase();
+  const enabled: OtherPasswordAdmin[] = [];
+  let startKey: Record<string, unknown> | undefined;
+  do {
+    const page = await getDocumentClient().send(
+      new QueryCommand({
+        TableName: getTableName(),
+        IndexName: GSI1_NAME,
+        KeyConditionExpression: "gsi1pk = :pk",
+        FilterExpression: "#s = :enabled",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":pk": LOCALUSERS_GSI1PK,
+          ":enabled": "enabled",
+        },
+        ExclusiveStartKey: startKey,
+      }),
+    );
+    for (const item of page.Items ?? []) {
+      enabled.push({ email: String(item.email), oid: String(item.oid) });
+    }
+    startKey = page.LastEvaluatedKey;
+  } while (startKey);
+  if (!enabled.some((u) => u.email === email)) return { protected: false };
+  const holders = await Promise.all(
+    enabled.map(async (u) =>
+      (await getItem(identPk(u.oid), roleGrantSk("internal-admin"))) ? u : null,
+    ),
+  );
+  const admins = holders.filter((u) => u !== null);
+  if (!admins.some((u) => u.email === email)) return { protected: false };
+  const others = admins
+    .filter((u) => u.email !== email)
+    .sort((x, y) => (x.email < y.email ? -1 : 1));
+  return { protected: true, other: others[0] ?? null };
+}
+
+// A ConditionCheck pair: the other admin is still enabled and still holds
+// internal-admin when this write commits.
+function otherAdminChecks(other: OtherPasswordAdmin): TransactItem[] {
+  return [
+    {
+      ConditionCheck: {
+        TableName: getTableName(),
+        Key: userKey(other.email),
+        ConditionExpression: "#s = :enabled",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: { ":enabled": "enabled" },
+      },
+    },
+    {
+      ConditionCheck: {
+        TableName: getTableName(),
+        Key: { PK: identPk(other.oid), SK: roleGrantSk("internal-admin") },
+        ConditionExpression: "attribute_exists(PK)",
+      },
+    },
+  ];
 }
 
 type NewSetup = { token: string; hash: string; expiresAt: string };
@@ -181,11 +311,16 @@ async function setStatus(
   emailInput: string,
   status: "enabled" | "disabled",
   ctx: AuditContext,
+  expectedVersion?: number,
+  otherAdmin?: OtherPasswordAdmin,
 ): Promise<AccessResult<void>> {
   const email = emailInput.toLowerCase();
   const loaded = await loadMutable(email);
   if (!loaded.ok) return loaded;
   const version = Number(loaded.item.version);
+  if (expectedVersion !== undefined && expectedVersion !== version) {
+    return { ok: false, code: "CONFLICT" };
+  }
   const oid = String(loaded.item.oid);
   const result = await commitAudited({
     items: [
@@ -196,7 +331,7 @@ async function setStatus(
           UpdateExpression:
             status === "enabled"
               ? "SET #s = :s, version = :next, updatedAt = :now, failedAttempts = :zero REMOVE lockedUntil"
-              : "SET #s = :s, version = :next, updatedAt = :now",
+              : "SET #s = :s, version = :next, updatedAt = :now ADD credentialVersion :one REMOVE selfChangeSignedInAt",
           ConditionExpression: "version = :v",
           ExpressionAttributeNames: { "#s": "status" },
           ExpressionAttributeValues: {
@@ -204,10 +339,11 @@ async function setStatus(
             ":v": version,
             ":next": version + 1,
             ":now": ctx.now.toISOString(),
-            ...(status === "enabled" ? { ":zero": 0 } : {}),
+            ...(status === "enabled" ? { ":zero": 0 } : { ":one": 1 }),
           },
         },
       },
+      ...(otherAdmin ? otherAdminChecks(otherAdmin) : []),
     ],
     audit: {
       action: "localuser.update",
@@ -220,11 +356,18 @@ async function setStatus(
   return result.ok ? { ok: true, value: undefined } : result;
 }
 
-export const disablePasswordUser = (email: string, ctx: AuditContext) =>
-  setStatus(email, "disabled", ctx);
+export const disablePasswordUser = (
+  email: string,
+  ctx: AuditContext,
+  expectedVersion?: number,
+  otherAdmin?: OtherPasswordAdmin,
+) => setStatus(email, "disabled", ctx, expectedVersion, otherAdmin);
 
-export const enablePasswordUser = (email: string, ctx: AuditContext) =>
-  setStatus(email, "enabled", ctx);
+export const enablePasswordUser = (
+  email: string,
+  ctx: AuditContext,
+  expectedVersion?: number,
+) => setStatus(email, "enabled", ctx, expectedVersion);
 
 export async function issueSetupLink(
   emailInput: string,
@@ -243,7 +386,7 @@ export async function issueSetupLink(
           TableName: getTableName(),
           Key: userKey(email),
           UpdateExpression:
-            "SET setupTokenHash = :h, setupExpiresAt = :e, version = :next, updatedAt = :now",
+            "SET setupTokenHash = :h, setupExpiresAt = :e, version = :next, updatedAt = :now ADD credentialVersion :one REMOVE selfChangeSignedInAt",
           ConditionExpression: "version = :v",
           ExpressionAttributeValues: {
             ":h": setup.hash,
@@ -251,6 +394,7 @@ export async function issueSetupLink(
             ":v": version,
             ":next": version + 1,
             ":now": ctx.now.toISOString(),
+            ":one": 1,
           },
         },
       },
@@ -280,6 +424,7 @@ export async function issueSetupLink(
 export async function deletePasswordUser(
   emailInput: string,
   ctx: AuditContext,
+  otherAdmin?: OtherPasswordAdmin,
 ): Promise<AccessResult<void>> {
   const email = emailInput.toLowerCase();
   const key = userKey(email);
@@ -318,6 +463,7 @@ export async function deletePasswordUser(
         },
       },
       ...keys.map(drop),
+      ...(otherAdmin ? otherAdminChecks(otherAdmin) : []),
     ],
     audit: {
       action: "localuser.delete",
@@ -340,7 +486,7 @@ export async function getPasswordSignIn(): Promise<{
 }
 
 export async function setPasswordSignIn(
-  input: { enabled: boolean; entraConfigured: boolean },
+  input: { enabled: boolean; entraConfigured: boolean; version?: number },
   ctx: AuditContext,
 ): Promise<AccessResult<{ enabled: boolean; version: number }>> {
   if (!input.enabled && !input.entraConfigured) {
@@ -350,6 +496,9 @@ export async function setPasswordSignIn(
   const before = current
     ? { enabled: current.enabled === true, version: Number(current.version) }
     : { enabled: true, version: 0 };
+  if (input.version !== undefined && input.version !== before.version) {
+    return { ok: false, code: "CONFLICT" };
+  }
   const value = { enabled: input.enabled, version: before.version + 1 };
   const result = await commitAudited({
     items: [

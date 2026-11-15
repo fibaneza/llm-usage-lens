@@ -24,6 +24,9 @@ vi.mock("next-auth/providers/credentials", () => ({
 vi.mock("next-auth/providers/microsoft-entra-id", () => ({
   default: { type: "oidc", id: "microsoft-entra-id" },
 }));
+// F7: the per-request credential-version check reads the stored credential.
+const passwordStore = vi.hoisted(() => ({ getPasswordCredential: vi.fn() }));
+vi.mock("@/lib/data/access/password-credentials-store", () => passwordStore);
 
 const ENTRA = {
   AUTH_MICROSOFT_ENTRA_ID_ID: "client-id",
@@ -1231,4 +1234,271 @@ describe("auth.ts per-session lifetime caps", () => {
       ).toBeNull();
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// F7 (temp/run-r4b/decisions.md) / D29, T34 - docs/specs/2026-11-10-access-control.md,
+// "Password users" (Credential version): a password session carries the
+// user's `credentialVersion` from sign-in and is checked against the stored
+// value on every request, uncached (Rule 60.10, ASVS 3.3). A lower token
+// version, or a missing, disabled, sso-bound or different user, ends the session: the jwt
+// callback returns null (Auth.js then clears it). Entra, master and dev-login
+// sessions never read the store. The session that changed its own password is
+// re-keyed by a server-side marker (`selfChangeSignedInAt`, written by
+// changePasswordWrite) matching its own `signedInAt`; no client `update`
+// payload is ever consulted (T31 pattern).
+// ---------------------------------------------------------------------------
+describe("auth.ts password sessions follow the stored credentialVersion (F7)", () => {
+  const NOW = new Date("2026-11-15T00:00:00.000Z");
+  const NOW_S = NOW.getTime() / 1000;
+  beforeEach(() => {
+    vi.resetModules();
+    passwordStore.getPasswordCredential.mockReset();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  const load = async () => {
+    const config = await loadWithConfig({ NODE_ENV: "development", ...ENTRA });
+    return {
+      jwt: rawCallbackOf(config, "jwt"),
+      session: rawCallbackOf(config, "session"),
+    };
+  };
+  const passwordToken = (over: Json = {}): Json => ({
+    sub: "local:abc",
+    oid: "local:abc",
+    tid: "local",
+    email: "ada@example.com",
+    roles: [],
+    authMethod: "password",
+    signedInAt: NOW_S - 60,
+    credentialVersion: 2,
+    ...over,
+  });
+  const stored = (over: Json = {}) => ({
+    email: "ada@example.com",
+    oid: "local:abc",
+    displayName: "Ada",
+    status: "enabled",
+    passwordHash: "hash",
+    credentialVersion: 2,
+    ...over,
+  });
+  const signIn = (user: Json = {}) => ({
+    token: { sub: "local:abc" },
+    account: { provider: "password" },
+    profile: undefined,
+    user: {
+      id: "local:abc",
+      oid: "local:abc",
+      tid: "local",
+      email: "ada@example.com",
+      name: "Ada",
+      roles: [],
+      authMethod: "password",
+      credentialVersion: 2,
+      ...user,
+    },
+  });
+  // Fail closed: a rejected read must not yield a token either.
+  const outcome = async (run: () => unknown) =>
+    Promise.resolve(run()).catch(() => null);
+
+  it("a password sign-in copies credentialVersion and the email into the token, without a store read", async () => {
+    const { jwt } = await load();
+    const token = await jwt(signIn({ credentialVersion: 5 }));
+    expect(token).toMatchObject({
+      authMethod: "password",
+      credentialVersion: 5,
+      email: "ada@example.com",
+    });
+    expect(passwordStore.getPasswordCredential).not.toHaveBeenCalled();
+  });
+
+  it("a new password sign-in replaces the version of an older token", async () => {
+    const { jwt } = await load();
+    const token = await jwt({
+      ...signIn({ credentialVersion: 4 }),
+      token: passwordToken({ credentialVersion: 1 }),
+    });
+    expect(token?.credentialVersion).toBe(4);
+  });
+
+  it("keeps a session whose token version equals the stored one, reading the store each request", async () => {
+    passwordStore.getPasswordCredential.mockResolvedValue(stored());
+    const { jwt } = await load();
+    expect(await jwt({ token: passwordToken() })).not.toBeNull();
+    expect(await jwt({ token: passwordToken() })).not.toBeNull();
+    expect(passwordStore.getPasswordCredential).toHaveBeenCalledTimes(2);
+    expect(passwordStore.getPasswordCredential).toHaveBeenCalledWith(
+      "ada@example.com",
+    );
+  });
+
+  it.each([
+    [
+      "a higher stored version (password changed or reset)",
+      stored({ credentialVersion: 3 }),
+    ],
+    ["a user who no longer exists (deleted)", null],
+    ["a disabled user", stored({ status: "disabled" })],
+    ["a user now bound to SSO", stored({ status: "sso-bound" })],
+    [
+      "a different identity under the same email",
+      stored({ oid: "local:other" }),
+    ],
+  ])("ends the session on %s", async (_n, credential) => {
+    passwordStore.getPasswordCredential.mockResolvedValue(credential);
+    const { jwt } = await load();
+    expect(await jwt({ token: passwordToken() })).toBeNull();
+  });
+
+  it("ends a password session whose token has no email (the lookup key)", async () => {
+    passwordStore.getPasswordCredential.mockResolvedValue(stored());
+    const { jwt } = await load();
+    expect(
+      await jwt({ token: passwordToken({ email: undefined }) }),
+    ).toBeNull();
+  });
+
+  // Absent = 0 on both sides (spec - Credential version), so a session from
+  // before the rollout lives until its user's first credential change.
+  it("treats a token without credentialVersion as 0: kept while the item has none, ended after the first change", async () => {
+    const { jwt } = await load();
+    passwordStore.getPasswordCredential.mockResolvedValue(
+      stored({ credentialVersion: 0 }),
+    );
+    expect(
+      await jwt({ token: passwordToken({ credentialVersion: undefined }) }),
+    ).not.toBeNull();
+    passwordStore.getPasswordCredential.mockResolvedValue(
+      stored({ credentialVersion: 1 }),
+    );
+    expect(
+      await jwt({ token: passwordToken({ credentialVersion: undefined }) }),
+    ).toBeNull();
+  });
+
+  it("never returns a token when the store read fails", async () => {
+    passwordStore.getPasswordCredential.mockRejectedValue(new Error("down"));
+    const { jwt } = await load();
+    expect(await outcome(() => jwt({ token: passwordToken() }))).toBeNull();
+  });
+
+  it.each([
+    ["entra", { authMethod: "entra", oid: "oid-1", tid: ENTRA_TID }],
+    ["master", { authMethod: "master", oid: "master:root", tid: "local" }],
+    [
+      "local",
+      { authMethod: "local", oid: "local:dev@localhost", tid: "local" },
+    ],
+  ])("a %s session never triggers the credential read", async (_n, patch) => {
+    const { jwt } = await load();
+    const token = await jwt({
+      token: passwordToken({ ...patch, credentialVersion: undefined }),
+    });
+    expect(token).not.toBeNull();
+    expect(passwordStore.getPasswordCredential).not.toHaveBeenCalled();
+  });
+
+  describe("an update trigger never sets or rescues the version (T31 pattern)", () => {
+    const FORGED: [string, unknown][] = [
+      ["top-level credentialVersion", { credentialVersion: 99 }],
+      ["user.credentialVersion", { user: { credentialVersion: 99 } }],
+      ["a nested token", { token: { credentialVersion: 99 } }],
+      ["null", null],
+    ];
+
+    it.each(FORGED)(
+      "leaves token.credentialVersion unchanged when the client sends %s",
+      async (_n, session) => {
+        passwordStore.getPasswordCredential.mockResolvedValue(stored());
+        const { jwt } = await load();
+        const token = await jwt({
+          token: passwordToken(),
+          session,
+          trigger: "update",
+        });
+        expect(token?.credentialVersion).toBe(2);
+      },
+    );
+
+    it.each(FORGED)(
+      "does not rescue a revoked session when the client sends %s",
+      async (_n, session) => {
+        passwordStore.getPasswordCredential.mockResolvedValue(
+          stored({ credentialVersion: 3 }),
+        );
+        const { jwt } = await load();
+        const token = await jwt({
+          token: passwordToken(),
+          session,
+          trigger: "update",
+        });
+        expect(token).toBeNull();
+      },
+    );
+  });
+
+  describe("the session that changed its own password stays signed in", () => {
+    it("takes the stored version when the store names this session's signedInAt", async () => {
+      passwordStore.getPasswordCredential.mockResolvedValue(
+        stored({ credentialVersion: 3, selfChangeSignedInAt: NOW_S - 60 }),
+      );
+      const { jwt } = await load();
+      const token = await jwt({ token: passwordToken() });
+      expect(token?.credentialVersion).toBe(3);
+    });
+
+    it("keeps the new version on later requests", async () => {
+      passwordStore.getPasswordCredential.mockResolvedValue(
+        stored({ credentialVersion: 3, selfChangeSignedInAt: NOW_S - 60 }),
+      );
+      const { jwt } = await load();
+      const token = await jwt({ token: passwordToken() });
+      expect(await jwt({ token: token as Json })).not.toBeNull();
+    });
+
+    it("ends another session of the same user (a different signedInAt)", async () => {
+      passwordStore.getPasswordCredential.mockResolvedValue(
+        stored({ credentialVersion: 3, selfChangeSignedInAt: NOW_S - 60 }),
+      );
+      const { jwt } = await load();
+      expect(
+        await jwt({ token: passwordToken({ signedInAt: NOW_S - 600 }) }),
+      ).toBeNull();
+    });
+
+    it("ends the session once a later reset has cleared the marker", async () => {
+      passwordStore.getPasswordCredential.mockResolvedValue(
+        stored({ credentialVersion: 4 }),
+      );
+      const { jwt } = await load();
+      expect(
+        await jwt({ token: passwordToken({ credentialVersion: 3 }) }),
+      ).toBeNull();
+    });
+  });
+
+  describe("session callback", () => {
+    const sessionArg = (token: Json) => ({
+      session: { user: { name: "Ada" }, expires: "2099-01-01T00:00:00.000Z" },
+      token,
+    });
+
+    it("exposes signedInAt (the route passes it to changeOwnPassword) and never credentialVersion", async () => {
+      const { session } = await load();
+      const out = (await session(sessionArg(passwordToken()))) as {
+        user: Json;
+      };
+      expect(out.user.signedInAt).toBe(NOW_S - 60);
+      expect(out.user).not.toHaveProperty("credentialVersion");
+    });
+  });
 });

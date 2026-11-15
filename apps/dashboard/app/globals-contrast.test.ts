@@ -128,3 +128,34 @@ describe("avatar token contrast (white initials, WCAG AA 4.5:1)", () => {
     for (const hex of avatar) expect(reserved).not.toContain(hex);
   });
 });
+
+// Design System - Destructive and secondary (changed 2026-11-15, F13): the
+// fills carry white button text and are also used as text on the page and
+// card, so each reaches 4.5:1 on white and on --color-background.
+describe("destructive and secondary tokens (WCAG AA 4.5:1)", () => {
+  it.each([
+    ["destructive", "#BE123C"],
+    ["secondary", "#4338CA"],
+  ])("--color-%s is %s", (name, hex) => {
+    expect(token(name).toLowerCase()).toBe(hex.toLowerCase());
+  });
+
+  it.each(["destructive", "secondary"])(
+    "%s against white and the page background",
+    (name) => {
+      expect(contrast(token(name), "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(token(name), token("background"))).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    },
+  );
+
+  it.each(["destructive", "secondary"])(
+    "%s-foreground on the %s fill",
+    (name) => {
+      expect(
+        contrast(token(`${name}-foreground`), token(name)),
+      ).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+});

@@ -36,7 +36,7 @@ import { GET as getApproval } from "./governance/per-user-approval/route";
 // Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)"
 // (/api/governance/password-sign-in GET internal-admin or internal-auditor,
 // PUT internal-admin; /api/governance/per-user-approval GET admin or auditor,
-// PUT is a later slice), "Password users" D24 (the switch cannot be turned off
+// PUT ships in slice 3, see governance-approval.integration.test.ts), "Password users" D24 (the switch cannot be turned off
 // while Entra is not configured: 409 CONFLICT), "Enforcement" items 2, 4, 6,
 // "Audit log" (governance.passwordsignin.update: one success record; a 409 or
 // 400 writes none; one `denied` record per authorization refusal, D17/T22),
@@ -133,7 +133,7 @@ describe("PUT /api/governance/password-sign-in", () => {
 
   it("turns the switch off when Entra is configured: new state returned, one governance.passwordsignin.update success record", async () => {
     configureEntra(true);
-    const data = await expectData(await put({ enabled: false }));
+    const data = await expectData(await put({ enabled: false, version: 0 }));
     expect(data).toEqual({ enabled: false, version: 1 });
     expect(await getPasswordSignIn()).toEqual({ enabled: false, version: 1 });
     const records = await auditToday();
@@ -147,22 +147,60 @@ describe("PUT /api/governance/password-sign-in", () => {
 
   it("turns the switch back on, bumping the version", async () => {
     configureEntra(true);
-    await expectData(await put({ enabled: false }));
-    expect(await expectData(await put({ enabled: true }))).toEqual({
+    await expectData(await put({ enabled: false, version: 0 }));
+    expect(await expectData(await put({ enabled: true, version: 1 }))).toEqual({
       enabled: true,
       version: 2,
     });
   });
 
   it("409 CONFLICT when turning it off while Entra is not configured (D24); state unchanged, nothing audited", async () => {
-    await expectError(await put({ enabled: false }), 409, "CONFLICT");
+    await expectError(
+      await put({ enabled: false, version: 0 }),
+      409,
+      "CONFLICT",
+    );
     expect(await getPasswordSignIn()).toEqual({ enabled: true, version: 0 });
     expect(await auditToday()).toEqual([]);
     expect(await deniedToday()).toEqual([]);
   });
 
+  // Review warning (slice 1): the switch is versioned like every other write
+  // (Access Control spec D24, "Enforcement" item 6: optimistic concurrency via
+  // `version`, stale -> 409 CONFLICT).
+  it("409 CONFLICT for a stale version; the switch is unchanged and no update is audited", async () => {
+    configureEntra(true);
+    await expectData(await put({ enabled: false, version: 0 }));
+    const audit0 = (await auditToday()).length;
+    await expectError(
+      await put({ enabled: true, version: 0 }),
+      409,
+      "CONFLICT",
+    );
+    await expectError(
+      await put({ enabled: true, version: 7 }),
+      409,
+      "CONFLICT",
+    );
+    expect(await getPasswordSignIn()).toEqual({ enabled: false, version: 1 });
+    expect(await auditToday()).toHaveLength(audit0);
+  });
+
+  it("409 CONFLICT when replaying the same version after a successful update", async () => {
+    configureEntra(true);
+    await expectData(await put({ enabled: false, version: 0 }));
+    await expectError(
+      await put({ enabled: false, version: 0 }),
+      409,
+      "CONFLICT",
+    );
+    expect(await getPasswordSignIn()).toEqual({ enabled: false, version: 1 });
+  });
+
   it("turning it on while Entra is not configured is allowed", async () => {
-    expect(await expectData(await put({ enabled: true }))).toMatchObject({
+    expect(
+      await expectData(await put({ enabled: true, version: 0 })),
+    ).toMatchObject({
       enabled: true,
     });
   });
@@ -170,7 +208,11 @@ describe("PUT /api/governance/password-sign-in", () => {
   it("401 without a session, nothing written", async () => {
     signInAs(null);
     configureEntra(true);
-    await expectError(await put({ enabled: false }), 401, "UNAUTHORIZED");
+    await expectError(
+      await put({ enabled: false, version: 0 }),
+      401,
+      "UNAUTHORIZED",
+    );
     expect(await nonAuditItems()).toEqual([]);
   });
 
@@ -182,7 +224,7 @@ describe("PUT /api/governance/password-sign-in", () => {
       for (const call of [
         { body: "{not json" },
         { body: {} },
-        { contentType: "text/plain", body: { enabled: false } },
+        { contentType: "text/plain", body: { enabled: false, version: 0 } },
       ]) {
         resetDeniedAudit();
         await expectError(
@@ -194,7 +236,11 @@ describe("PUT /api/governance/password-sign-in", () => {
       expect(await nonAuditItems()).toEqual([]);
       resetDeniedAudit();
       const audit0 = (await auditToday()).length;
-      await expectError(await put({ enabled: false }), 403, "FORBIDDEN");
+      await expectError(
+        await put({ enabled: false, version: 0 }),
+        403,
+        "FORBIDDEN",
+      );
       expect(await auditToday()).toHaveLength(audit0 + 1);
       const denied = (await deniedToday()).at(-1);
       expect(denied).toMatchObject({
@@ -212,7 +258,7 @@ describe("PUT /api/governance/password-sign-in", () => {
     configureEntra(true);
     for (const origin of [null, "https://evil.example.test", "null"]) {
       await expectError(
-        await put({ enabled: false }, { origin }),
+        await put({ enabled: false, version: 0 }, { origin }),
         403,
         "FORBIDDEN",
       );
@@ -221,13 +267,24 @@ describe("PUT /api/governance/password-sign-in", () => {
   });
 
   it.each([
-    ["no Content-Type", { contentType: null, body: { enabled: false } }],
-    ["text/plain", { contentType: "text/plain", body: { enabled: false } }],
+    [
+      "no Content-Type",
+      { contentType: null, body: { enabled: false, version: 0 } },
+    ],
+    [
+      "text/plain",
+      { contentType: "text/plain", body: { enabled: false, version: 0 } },
+    ],
     ["invalid JSON", { body: "{not json" }],
     ["an empty object", { body: {} }],
-    ["a string flag", { body: { enabled: "false" } }],
-    ["a null flag", { body: { enabled: null } }],
-    ["a numeric flag", { body: { enabled: 0 } }],
+    ["a string flag", { body: { enabled: "false", version: 0 } }],
+    ["a null flag", { body: { enabled: null, version: 0 } }],
+    ["a numeric flag", { body: { enabled: 0, version: 0 } }],
+    ["a missing version", { body: { enabled: false } }],
+    ["a string version", { body: { enabled: false, version: "0" } }],
+    ["a fractional version", { body: { enabled: false, version: 0.5 } }],
+    ["a negative version", { body: { enabled: false, version: -1 } }],
+    ["a null version", { body: { enabled: false, version: null } }],
   ])(
     "400 BAD_REQUEST for %s; state unchanged, no audit record of any kind",
     async (_name, call) => {
@@ -305,11 +362,13 @@ describe("GET /api/governance/per-user-approval", () => {
     },
   );
 
-  it("is GET only in this slice: the setter (PUT) ships later", () => {
+  // 4R.4 slice 3 adds the PUT; the spec defines no withdrawal, so there is no
+  // DELETE (or POST/PATCH) on this route.
+  it("exports GET and PUT only: no withdrawal is defined by the spec", () => {
     expect(
-      Object.keys(perUserRoute).filter((k) =>
-        /^(POST|PUT|PATCH|DELETE)$/.test(k),
-      ),
-    ).toEqual([]);
+      Object.keys(perUserRoute)
+        .filter((k) => /^(GET|POST|PUT|PATCH|DELETE)$/.test(k))
+        .sort(),
+    ).toEqual(["GET", "PUT"]);
   });
 });

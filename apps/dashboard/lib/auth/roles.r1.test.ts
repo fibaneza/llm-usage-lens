@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   GLOBAL_ROLES,
   INTERNAL_ADMIN_ROLE,
+  INTERNAL_AUDITOR_ROLE,
   hasAdminRole,
   hasGlobalRole,
   resolveGlobalRoles,
@@ -28,6 +29,13 @@ describe("role constants", () => {
       ].sort(),
     );
     expect(INTERNAL_ADMIN_ROLE).toBe("internal-admin");
+  });
+
+  // Rule 50.3: role names live in lib/auth, never as literals in routes
+  // (4R.4 slice-1 review warning: respond.ts used a literal).
+  it("exports INTERNAL_AUDITOR_ROLE as one of the global roles", () => {
+    expect(INTERNAL_AUDITOR_ROLE).toBe("internal-auditor");
+    expect(GLOBAL_ROLES).toContain(INTERNAL_AUDITOR_ROLE);
   });
 });
 

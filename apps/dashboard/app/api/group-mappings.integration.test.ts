@@ -328,6 +328,10 @@ describe("POST /api/group-mappings", () => {
       { ...mapping("g-1"), target: { type: "org", id: "x" } },
     ],
     ["a non-object body", "[]"],
+    [
+      "a target id over 128 characters (slice-1 review warning)",
+      { ...mapping("g-1"), target: { type: "team", id: "t".repeat(129) } },
+    ],
   ])(
     "400 BAD_REQUEST for %s; nothing stored, no audit record",
     async (_name, body) => {
@@ -485,6 +489,10 @@ describe("PATCH /api/group-mappings/[groupId]", () => {
     ["a non-integer version", { version: 1.5 }],
     ["a negative version", { version: -1 }],
     ["a string version", { version: "1" }],
+    [
+      "a target id over 128 characters (slice-1 review warning)",
+      { target: { type: "team", id: "t".repeat(129) } },
+    ],
   ])("400 BAD_REQUEST for %s; no update audited", async (_name, override) => {
     await seed("g-1");
     await expectError(

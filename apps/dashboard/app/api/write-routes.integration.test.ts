@@ -280,8 +280,16 @@ async function expectForbiddenWithoutTouchingTheTable(route: WriteRoute) {
   expect(await snapshotTable()).toEqual(before);
 }
 
+// A fresh sign-in time keeps the re-auth routes (Recent authentication, D28)
+// from answering REAUTH_REQUIRED where a test means to pass the role and
+// origin gates.
 const ADMIN_SESSION = {
-  user: { oid: "oid-test", name: "A", roles: ["internal-admin"] },
+  user: {
+    oid: "oid-test",
+    name: "A",
+    roles: ["internal-admin"],
+    authTime: Math.floor(Date.now() / 1000),
+  },
 };
 const CROSS_SITE_ORIGINS: [string, string | null][] = [
   ["no Origin header", null],
@@ -396,22 +404,69 @@ const ACCESS_CONTROL_WRITE_ROUTES = [
     label: "PUT governance/password-sign-in/route.ts",
     permission: "internal-admin",
   },
+  // 4R.4 slice 2: password-user management (Access Control spec - "Password
+  // users", "API routes (additions)"; contract-slice2.md).
+  { label: "POST password-users/route.ts", permission: "internal-admin" },
+  {
+    label: "PATCH password-users/[email]/route.ts",
+    permission: "internal-admin",
+  },
+  {
+    label: "DELETE password-users/[email]/route.ts",
+    permission: "internal-admin",
+  },
+  {
+    label: "POST password-users/[email]/reset/route.ts",
+    permission: "internal-admin",
+  },
+  {
+    label: "POST password-users/[email]/totp-reset/route.ts",
+    permission: "internal-admin",
+  },
+  // 4R.4 slice 3: the per-user approval setter (Access Control spec - "API
+  // routes (additions)"; contract-slice3.md).
+  {
+    label: "PUT governance/per-user-approval/route.ts",
+    permission: "internal-admin",
+  },
+  // 4R.4 slice 4: identity links (Access Control spec - "API routes
+  // (additions)": /api/identities/[oid]/links PUT is internal-admin only).
+  {
+    label: "PUT identities/[oid]/links/route.ts",
+    permission: "internal-admin",
+  },
+  // 4R.4 step 7 (D27): the usage-identity mapping rules, one governance item
+  // (Access Control spec - "Usage-identity mapping rules"; route derived, see
+  // identity-map-rules.integration.test.ts).
+  {
+    label: "PUT governance/identity-map-rules/route.ts",
+    permission: "internal-admin",
+  },
+  // 4R.4 slice 4: in-app global-role grants, internal-admin plus recent
+  // authentication (Access Control spec - "API routes (additions)", D28).
+  { label: "POST role-grants/route.ts", permission: "internal-admin" },
+  {
+    label: "DELETE role-grants/[oid]/[role]/route.ts",
+    permission: "internal-admin",
+  },
 ] as const;
 
-describe("4R.4 slice 1 write routes are enumerated with their permission", () => {
+describe("4R.4 slice 1 and 2 write routes are enumerated with their permission", () => {
   it("every listed method exists", () => {
     expect(writeRoutes.map(label)).toEqual(
       expect.arrayContaining(ACCESS_CONTROL_WRITE_ROUTES.map((r) => r.label)),
     );
   });
 
-  it("the governance, group-mapping and role-grant routes expose no unlisted write method", () => {
+  it("the governance, group-mapping, role-grant and password-user routes expose no unlisted write method", () => {
     const listed = new Set<string>(
       ACCESS_CONTROL_WRITE_ROUTES.map((r) => r.label),
     );
     const found = writeRoutes
       .map(label)
-      .filter((l) => /(group-mappings|governance|role-grants)\//.test(l));
+      .filter((l) =>
+        /(group-mappings|governance|role-grants|password-users)\//.test(l),
+      );
     expect(found.filter((l) => !listed.has(l))).toEqual([]);
   });
 
@@ -436,9 +491,38 @@ describe("4R.4 slice 1 write routes are enumerated with their permission", () =>
   );
 });
 
-const eachWriteRoute = writeRoutes.map(
-  (route) => [label(route), route] as const,
-);
+// 4R.4 slice 4: the members, admin-scope, visibility and move writes are open to
+// more than internal-admin (internal-org-admin and scoped internal-team-admin;
+// Access Control spec - "Permission matrix"), so the admin-only sweeps below
+// skip them; the block at the end of this file enumerates them with their own
+// permission checks.
+const MATRIX_WRITE_ROUTES = [
+  "POST teams/[id]/members/route.ts",
+  "DELETE teams/[id]/members/[oid]/route.ts",
+  "POST teams/[id]/admins/route.ts",
+  "DELETE teams/[id]/admins/[oid]/route.ts",
+  "POST departments/[id]/admins/route.ts",
+  "DELETE departments/[id]/admins/[oid]/route.ts",
+  "PUT teams/[id]/visibility/route.ts",
+  "PUT departments/[id]/visibility/route.ts",
+  "POST affiliations/[oid]/move/route.ts",
+] as const;
+
+// 4R.5 step 5: the one write route that is not an admin or matrix write is a
+// password user changing their own password (Access Control spec - "API routes
+// (additions)": /api/account/password POST, "the signed-in password user").
+// It has no role gate, so the admin-only sweeps skip it; the block at the end of
+// this file enumerates it with its own gate, and account-password.integration
+// .test.ts covers its behaviour.
+const SELF_SERVICE_WRITE_ROUTES = ["POST account/password/route.ts"] as const;
+
+const eachWriteRoute = writeRoutes
+  .filter(
+    (route) =>
+      !(MATRIX_WRITE_ROUTES as readonly string[]).includes(label(route)) &&
+      !(SELF_SERVICE_WRITE_ROUTES as readonly string[]).includes(label(route)),
+  )
+  .map((route) => [label(route), route] as const);
 
 describe("every write route requires the Admin role", () => {
   it.each(eachWriteRoute)(
@@ -631,4 +715,374 @@ describe("the structural checks catch a route that is not gated", () => {
       expectForbiddenWithoutTouchingTheTable(writesBeforeForbidding),
     ).rejects.toThrow(/deeply equal/);
   });
+});
+
+// Access Control spec - "Recent authentication" (D28) and "API routes
+// (additions)": the writes marked re-auth need a sign-in within 900 s, checked
+// after the session, role and origin checks and before input parsing; every
+// other write route is not gated by it. T30. F3 (run-r4b decisions, 2026-11-15)
+// extends the list to the credential- and sign-in-affecting admin writes
+// (password users, the password sign-in switch); PATCH, group mappings,
+// memberships, visibility and links stay ungated.
+const REAUTH_ROUTES = [
+  "POST role-grants/route.ts",
+  "DELETE role-grants/[oid]/[role]/route.ts",
+  "POST password-users/route.ts",
+  "POST password-users/[email]/reset/route.ts",
+  "POST password-users/[email]/totp-reset/route.ts",
+  "DELETE password-users/[email]/route.ts",
+  "PUT governance/password-sign-in/route.ts",
+] as const;
+
+const STALE_ADMIN_SESSIONS: [string, unknown][] = [
+  [
+    "a stale authTime",
+    {
+      user: {
+        oid: "oid-test",
+        roles: ["internal-admin"],
+        authTime: Math.floor(Date.now() / 1000) - 901,
+      },
+    },
+  ],
+  ["no authTime", { user: { oid: "oid-test", roles: ["internal-admin"] } }],
+];
+
+describe("recent-authentication routes are enumerated", () => {
+  it("lists the re-auth routes, and they exist", () => {
+    expect(writeRoutes.map(label)).toEqual(
+      expect.arrayContaining([...REAUTH_ROUTES]),
+    );
+  });
+
+  it.each(REAUTH_ROUTES.map((name) => [name] as const))(
+    "%s: an internal-admin with a stale or missing authTime gets 403 REAUTH_REQUIRED, no-store, before parsing, and the table is untouched",
+    async (name) => {
+      const route = writeRoutes.find((r) => label(r) === name);
+      expect(route, `${name} must exist`).toBeDefined();
+      const before = await snapshotTable();
+      for (const [sessionName, session] of STALE_ADMIN_SESSIONS) {
+        for (const [bodyName, body] of BODIES) {
+          setSession(session);
+          const res = await call(route!, body);
+          expect(
+            res.headers.get("cache-control"),
+            `${name} with ${sessionName}, sent ${bodyName}`,
+          ).toBe("private, no-store");
+          await expectError(res, 403, "REAUTH_REQUIRED");
+        }
+      }
+      expect(await snapshotTable()).toEqual(before);
+    },
+  );
+
+  it.each(REAUTH_ROUTES.map((name) => [name] as const))(
+    "%s: the role and origin checks still come first (a stale non-admin and a stale cross-origin admin get FORBIDDEN)",
+    async (name) => {
+      const route = writeRoutes.find((r) => label(r) === name);
+      expect(route, `${name} must exist`).toBeDefined();
+      setSession({ user: { oid: "oid-test", roles: ["internal-viewer"] } });
+      await expectError(await call(route!, "{}"), 403, "FORBIDDEN");
+      setSession(STALE_ADMIN_SESSIONS[0]![1]);
+      await expectError(
+        await call(route!, "{}", route!.params, "https://evil.example.test"),
+        403,
+        "FORBIDDEN",
+      );
+    },
+  );
+
+  it("no other write route answers REAUTH_REQUIRED to an internal-admin with no authTime", async () => {
+    const others = writeRoutes.filter(
+      (route) => !(REAUTH_ROUTES as readonly string[]).includes(label(route)),
+    );
+    expect(others.length).toBeGreaterThan(0);
+    for (const route of others) {
+      setSession({ user: { oid: "oid-test", roles: ["internal-admin"] } });
+      const res = await call(route, "{}");
+      const text = await res.text();
+      expect(text, label(route)).not.toContain("REAUTH_REQUIRED");
+    }
+  });
+});
+
+// 4R.4 slice 4: the matrix write routes (Access Control spec - "Permission
+// matrix", "Enforcement" items 2, 4, 6, T3). Unlike the admin-only routes above,
+// internal-admin and internal-org-admin may call every one of them (a scoped
+// internal-team-admin some of them, covered by the per-route suites), so the
+// generic gate is: no session 401; no write permission at all 403 before
+// parsing and before any DynamoDB call; a missing or foreign Origin 403 even for
+// the permitted roles; and every response private, no-store.
+describe("4R.4 slice 4 matrix write routes are enumerated", () => {
+  it("every listed method exists", () => {
+    expect(writeRoutes.map(label)).toEqual(
+      expect.arrayContaining([...MATRIX_WRITE_ROUTES]),
+    );
+  });
+
+  it("the team, department and affiliation routes expose no unlisted write method", () => {
+    const listed = new Set<string>(MATRIX_WRITE_ROUTES);
+    const found = writeRoutes
+      .map(label)
+      .filter((l) => /^[A-Z]+ (teams|departments|affiliations)\//.test(l));
+    expect(found.filter((l) => !listed.has(l))).toEqual([]);
+  });
+});
+
+const MATRIX_ROUTES = writeRoutes
+  .filter((route) =>
+    (MATRIX_WRITE_ROUTES as readonly string[]).includes(label(route)),
+  )
+  .map((route) => [label(route), route] as const);
+
+// The sessions of NON_ADMIN_SESSIONS that hold no write permission anywhere:
+// internal-org-admin may write the matrix routes.
+const NON_WRITER_SESSIONS = NON_ADMIN_SESSIONS.filter(
+  ([name]) => !name.includes("internal-org-admin"),
+);
+const MATRIX_WRITERS: [string, unknown][] = [
+  ["internal-admin", ADMIN_SESSION],
+  [
+    "internal-org-admin",
+    { user: { oid: "oid-test", name: "O", roles: ["internal-org-admin"] } },
+  ],
+];
+
+// The first refusal per actor and action correctly writes a `denied` audit
+// record (Access Control spec - Audit log, D17), so the "table untouched" checks
+// of the matrix sweep compare everything except the AUDIT# rows.
+async function snapshotWithoutAudit() {
+  return (await snapshotTable()).filter(
+    (item) => !String(item.PK).startsWith("AUDIT#"),
+  );
+}
+
+describe("every matrix write route enforces session, permission and origin", () => {
+  it.each(MATRIX_ROUTES)(
+    "%s: no session gets 401 UNAUTHORIZED and the table is untouched",
+    async (_label, route) => {
+      await expectUnauthorizedWithoutSession(route);
+    },
+  );
+
+  it.each(MATRIX_ROUTES)(
+    "%s: a signed-in caller with no write permission gets 403 FORBIDDEN, never 400/404, for every body, before any DynamoDB call",
+    async (name, route) => {
+      const before = await snapshotWithoutAudit();
+      const realParams = Object.fromEntries(
+        Object.entries(route.params).map(([param, value]) => [
+          param,
+          Array.isArray(value) ? [existing.accountId] : existing.accountId,
+        ]),
+      );
+      for (const [sessionName, session] of NON_WRITER_SESSIONS) {
+        for (const [bodyName, body] of [
+          ...BODIES,
+          ["a plausible body", JSON.stringify({ oid: "someone", version: 1 })],
+        ] as [string, string][]) {
+          for (const params of [route.params, realParams]) {
+            setSession(session);
+            const res = await call(route, body, params);
+            expect(
+              res.status,
+              `${name} signed in with ${sessionName}, sent ${bodyName}`,
+            ).toBe(403);
+            await expectError(res, 403, "FORBIDDEN");
+          }
+        }
+      }
+      expect(await snapshotWithoutAudit()).toEqual(before);
+      // Denied records are asserted per route in the route suites: the
+      // per-minute suppression (D17) makes them order-dependent in this sweep.
+    },
+  );
+
+  it.each(MATRIX_ROUTES)(
+    "%s: a permitted role with a missing or foreign Origin gets 403 FORBIDDEN before parsing, and the table is untouched",
+    async (name, route) => {
+      const before = await snapshotWithoutAudit();
+      for (const [roleName, session] of MATRIX_WRITERS) {
+        for (const [originName, origin] of CROSS_SITE_ORIGINS) {
+          for (const [bodyName, body] of BODIES) {
+            setSession(session);
+            const res = await call(route, body, route.params, origin);
+            expect(
+              res.status,
+              `${name} as ${roleName} with ${originName}, sent ${bodyName}`,
+            ).toBe(403);
+            await expectError(res, 403, "FORBIDDEN");
+          }
+        }
+      }
+      expect(await snapshotWithoutAudit()).toEqual(before);
+    },
+  );
+
+  it.each(MATRIX_ROUTES)(
+    "%s: a same-origin internal-admin or internal-org-admin write is not stopped by the session, role or origin gate",
+    async (name, route) => {
+      for (const [roleName, session] of MATRIX_WRITERS) {
+        setSession(session);
+        const res = await call(route, "{}");
+        expect(res.status, `${name} as ${roleName}`).not.toBe(401);
+        expect(res.status, `${name} as ${roleName}`).not.toBe(403);
+      }
+    },
+  );
+
+  it.each(MATRIX_ROUTES)(
+    "%s: 401, 403 and 400 responses carry Cache-Control: private, no-store",
+    async (_label, route) => {
+      setSession(null);
+      expect((await call(route, "{}")).headers.get("cache-control")).toBe(
+        "private, no-store",
+      );
+      setSession({ user: { oid: "oid-test", name: "M", roles: [] } });
+      expect((await call(route, "{}")).headers.get("cache-control")).toBe(
+        "private, no-store",
+      );
+      setSession(ADMIN_SESSION);
+      const res = await call(route, "{not json");
+      expect(res.headers.get("cache-control")).toBe("private, no-store");
+    },
+  );
+});
+
+// Self-service write routes: no role, but the session must be a password user's
+// own (authMethod "password"); Entra, master and dev-login sessions get 403
+// FORBIDDEN even with the admin role, and the same-origin check applies to all.
+describe("self-service write routes are enumerated and gated", () => {
+  const SELF_ROUTES = writeRoutes
+    .filter((route) =>
+      (SELF_SERVICE_WRITE_ROUTES as readonly string[]).includes(label(route)),
+    )
+    .map((route) => [label(route), route] as const);
+
+  const PASSWORD_SESSION = {
+    user: {
+      oid: "local:00000000-0000-4000-8000-000000000001",
+      tid: "local",
+      email: "alice@example.com",
+      roles: [],
+      authMethod: "password",
+    },
+  };
+
+  it("every listed method exists", () => {
+    expect(writeRoutes.map(label)).toEqual(
+      expect.arrayContaining([...SELF_SERVICE_WRITE_ROUTES]),
+    );
+  });
+
+  it("the account routes expose no unlisted write method", () => {
+    const listed = new Set<string>(SELF_SERVICE_WRITE_ROUTES);
+    const found = writeRoutes
+      .map(label)
+      .filter((l) => /^[A-Z]+ account\//.test(l));
+    expect(found.filter((l) => !listed.has(l))).toEqual([]);
+  });
+
+  it.each(SELF_ROUTES)(
+    "%s: no session gets 401 UNAUTHORIZED, even with a foreign Origin, and the table is untouched",
+    async (_label, route) => {
+      const before = await snapshotTable();
+      setSession(null);
+      await expectError(await call(route, "{}"), 401, "UNAUTHORIZED");
+      await expectError(
+        await call(
+          route,
+          "{not json",
+          route.params,
+          "https://evil.example.test",
+        ),
+        401,
+        "UNAUTHORIZED",
+      );
+      expect(await snapshotTable()).toEqual(before);
+    },
+  );
+
+  it.each(SELF_ROUTES)(
+    "%s: a session that is not a password user's (any role, including internal-admin) gets 403 FORBIDDEN before parsing",
+    async (_label, route) => {
+      const sessions: unknown[] = [
+        ...NON_ADMIN_SESSIONS.map(([, session]) => session),
+        ADMIN_SESSION,
+        {
+          user: {
+            oid: "oid-test",
+            roles: ["internal-admin"],
+            authMethod: "entra",
+          },
+        },
+        {
+          user: {
+            oid: "master:",
+            roles: ["internal-admin"],
+            authMethod: "master",
+          },
+        },
+        {
+          user: {
+            oid: "local:dev@localhost",
+            roles: ["internal-admin"],
+            authMethod: "local",
+          },
+        },
+      ];
+      for (const session of sessions) {
+        for (const [, sent] of BODIES) {
+          setSession(session);
+          await expectError(await call(route, sent), 403, "FORBIDDEN");
+        }
+      }
+    },
+  );
+
+  it.each(SELF_ROUTES)(
+    "%s: a password user with a missing or foreign Origin gets 403 FORBIDDEN before parsing, and the table is untouched",
+    async (_label, route) => {
+      const before = await snapshotTable();
+      for (const [, origin] of CROSS_SITE_ORIGINS) {
+        for (const [, sent] of BODIES) {
+          setSession(PASSWORD_SESSION);
+          await expectError(
+            await call(route, sent, route.params, origin),
+            403,
+            "FORBIDDEN",
+          );
+        }
+      }
+      expect(await snapshotTable()).toEqual(before);
+    },
+  );
+
+  it.each(SELF_ROUTES)(
+    "%s: a same-origin password user is not stopped by the session, role or origin gate, and a bad body is 400 BAD_REQUEST",
+    async (_label, route) => {
+      setSession(PASSWORD_SESSION);
+      await expectError(await call(route, "{not json"), 400, "BAD_REQUEST");
+      setSession(PASSWORD_SESSION);
+      const res = await call(route, "{}");
+      expect([401, 403]).not.toContain(res.status);
+    },
+  );
+
+  it.each(SELF_ROUTES)(
+    "%s: 401, 403 and 400 responses carry Cache-Control: private, no-store",
+    async (_label, route) => {
+      setSession(null);
+      expect((await call(route, "{}")).headers.get("cache-control")).toBe(
+        "private, no-store",
+      );
+      setSession(ADMIN_SESSION);
+      expect((await call(route, "{}")).headers.get("cache-control")).toBe(
+        "private, no-store",
+      );
+      setSession(PASSWORD_SESSION);
+      expect(
+        (await call(route, "{not json")).headers.get("cache-control"),
+      ).toBe("private, no-store");
+    },
+  );
 });

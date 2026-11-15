@@ -1,6 +1,6 @@
 import "server-only";
 
-import { IdentityLinkSchema } from "@llm-usage-lens/shared";
+import { IdentityLinkSchema, runBounded } from "@llm-usage-lens/shared";
 import type { IdentityLink } from "@llm-usage-lens/shared";
 
 import { getTableName } from "@/lib/dynamodb";
@@ -10,6 +10,8 @@ import type { AccessResult, AuditContext } from "./result";
 import type { TransactItem } from "./audit";
 import { commitAudited, getItem } from "./store";
 
+const CLAIM_READ_CONCURRENCY = 10;
+
 // Source: docs/specs/2026-11-10-access-control.md — "Data model additions"
 // (IdentityLink; a usage key is unique to one person, claimed in the same
 // TransactWriteItems); contract R2 §4 (duplicate claim = CONFLICT).
@@ -18,6 +20,15 @@ export async function getIdentityLink(
 ): Promise<IdentityLink | null> {
   const item = await getItem(identPk(oid), LINK_SK);
   return item ? IdentityLinkSchema.parse(item) : null;
+}
+
+// The subset of `keys` that some person already claims (USAGEKEY# owner item).
+export async function getClaimedKeys(keys: string[]): Promise<string[]> {
+  const claimed: string[] = [];
+  await runBounded(keys, CLAIM_READ_CONCURRENCY, async (key) => {
+    if (await getItem(usageKeyPk(key), OWNER_SK)) claimed.push(key);
+  });
+  return claimed;
 }
 
 const snapshot = (

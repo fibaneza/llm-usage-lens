@@ -34,6 +34,10 @@ import {
   enablePasswordUser,
   setPasswordSignIn,
 } from "@/lib/data/access/password-users";
+import {
+  changePasswordWrite,
+  getPasswordCredential,
+} from "@/lib/data/access/password-credentials-store";
 import { grantRole } from "@/lib/data/access/role-grants";
 import { clearTable, ensureTestTable } from "@/test/test-support";
 
@@ -99,6 +103,23 @@ describe("authorizePasswordUser", { timeout: 60_000 }, () => {
       email,
       authMethod: "password",
     });
+  });
+
+  // F7 (temp/run-r4b/decisions.md): the identity carries the stored
+  // credentialVersion so the session can be matched against it per request.
+  it("returns the stored credentialVersion, which an own password change raises (F7)", async () => {
+    const { email } = await activeUser();
+    const first = await authorizePasswordUser(
+      { email, password: GOOD_PASSWORD },
+      at(MIN),
+    );
+    expect(first?.credentialVersion).toBe(
+      (await getPasswordCredential(email))?.credentialVersion,
+    );
+    ok(await changePasswordWrite({ email, passwordHash: "x" }, ctx));
+    expect((await getPasswordCredential(email))?.credentialVersion).toBe(
+      (first?.credentialVersion ?? 0) + 1,
+    );
   });
 
   it("returns null for a wrong password, a malformed payload and an empty password", async () => {

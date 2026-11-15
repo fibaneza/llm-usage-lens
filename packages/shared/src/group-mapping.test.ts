@@ -57,4 +57,26 @@ describe("GroupMappingInputSchema", () => {
       false,
     );
   });
+
+  // 4R.4 slice-1 review warning: target.id was unbounded. 128 matches the
+  // group id bound on the routes (GroupIdSchema) and is far above any team or
+  // department id.
+  it("bounds target.id at 128 characters", () => {
+    const withId = (id: string, type = "team") => ({
+      ...ok("member"),
+      target: { type, id },
+    });
+    expect(
+      GroupMappingInputSchema.safeParse(withId("t".repeat(128))).success,
+    ).toBe(true);
+    expect(
+      GroupMappingInputSchema.safeParse(withId("t".repeat(129))).success,
+    ).toBe(false);
+    expect(
+      GroupMappingInputSchema.safeParse({
+        ...ok("internal-team-admin", "department"),
+        target: { type: "department", id: "d".repeat(129) },
+      }).success,
+    ).toBe(false);
+  });
 });

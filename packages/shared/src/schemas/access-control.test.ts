@@ -249,8 +249,8 @@ describe("UsageKeyClaimSchema", () => {
 
 describe("audit schemas", () => {
   it("lists every audited action", () => {
-    // LD15: viewing the LiteLLM audit is itself audited.
-    expect(AUDIT_ACTIONS).toHaveLength(45);
+    // LD15: viewing the LiteLLM audit is itself audited; D27 adds the mapping-rules action.
+    expect(AUDIT_ACTIONS).toHaveLength(46);
     expect(AUDIT_ACTIONS).toContain("litellm.audit.view");
     expect(AUDIT_ACTIONS).toContain("auth.signin.success");
     expect(AUDIT_ACTIONS).toContain("auth.signout");
@@ -260,6 +260,7 @@ describe("audit schemas", () => {
     expect(AUDIT_ACTIONS).toContain("litellm.toggles.reset");
     expect(AUDIT_ACTIONS).toContain("litellm.teamlink.link");
     expect(AUDIT_ACTIONS).toContain("litellm.teamlink.unlink");
+    expect(AUDIT_ACTIONS).toContain("identity.map.update");
     expect(new Set(AUDIT_ACTIONS).size).toBe(AUDIT_ACTIONS.length);
   });
   it("AuditActionSchema accepts known and rejects unknown actions", () => {

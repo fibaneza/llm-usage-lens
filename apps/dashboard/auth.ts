@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import { SpanStatusCode, trace } from "@opentelemetry/api";
-import NextAuth from "next-auth";
+import NextAuth, { AuthError } from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
@@ -103,8 +104,11 @@ function entraIdentity(profile: unknown): SignedInIdentity | null {
   };
 }
 
+// Password users also carry their credential version (D29).
+type CredentialsIdentity = SignedInIdentity & { credentialVersion?: number };
+
 // Credentials providers carry their identity on the `authorize()` user.
-function credentialsIdentity(user: unknown): SignedInIdentity | null {
+function credentialsIdentity(user: unknown): CredentialsIdentity | null {
   if (typeof user !== "object" || user === null) return null;
   const u = user as Record<string, unknown>;
   if (typeof u.oid !== "string" || typeof u.tid !== "string") return null;
@@ -117,14 +121,32 @@ function credentialsIdentity(user: unknown): SignedInIdentity | null {
     ...(typeof u.name === "string" ? { displayName: u.name } : {}),
     roles,
     authMethod: u.authMethod,
+    ...(typeof u.credentialVersion === "number"
+      ? { credentialVersion: u.credentialVersion }
+      : {}),
   };
+}
+
+function authTimeFor(
+  provider: string,
+  profile: unknown,
+  nowSeconds: number,
+): number | undefined {
+  if (provider !== "microsoft-entra-id") return nowSeconds;
+  const claim =
+    typeof profile === "object" && profile !== null
+      ? (profile as Record<string, unknown>).auth_time
+      : undefined;
+  return typeof claim === "number" && Number.isInteger(claim)
+    ? claim
+    : undefined;
 }
 
 function identityFor(
   provider: string,
   profile: unknown,
   user: unknown,
-): SignedInIdentity | null {
+): CredentialsIdentity | null {
   return provider === DEV_LOGIN_PROVIDER_ID ||
     provider === MASTER_USER_PROVIDER_ID ||
     provider === PASSWORD_PROVIDER_ID ||
@@ -186,6 +208,41 @@ if (
       },
     }),
   );
+}
+
+// Fail closed: a missing or disabled user, another oid, a lower token version
+// or a failed read ends the session. The session that changed its own password
+// is re-keyed by the server-side marker matching its own signedInAt; nothing
+// the client sends is read (T31 pattern, T34).
+async function followCredentialVersion(token: JWT): Promise<JWT | null> {
+  if (typeof token.email !== "string" || token.email === "") return null;
+  try {
+    const { getPasswordCredential } =
+      await import("@/lib/data/access/password-credentials-store");
+    const credential = await getPasswordCredential(token.email);
+    if (
+      !credential ||
+      credential.status !== "enabled" ||
+      credential.oid !== token.oid
+    ) {
+      return null;
+    }
+    let version =
+      typeof token.credentialVersion === "number" ? token.credentialVersion : 0;
+    if (
+      credential.selfChangeSignedInAt === token.signedInAt &&
+      credential.credentialVersion > version
+    ) {
+      version = credential.credentialVersion;
+      token.credentialVersion = version;
+    }
+    return version < credential.credentialVersion ? null : token;
+  } catch (error) {
+    trace
+      .getActiveSpan()
+      ?.recordException(error instanceof Error ? error : String(error));
+    return null;
+  }
 }
 
 // Auth.js is the identity-provider abstraction (Rule 50.3). Switching providers
@@ -282,7 +339,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // an `update` is never merged, so identity and roles change only at
     // sign-in. iat/exp/jti are re-issued per request, so they are never used
     // as the sign-in time.
-    jwt: ({ token, account, profile, user }) => {
+    // A password session is also checked against the stored credential version
+    // on every call, uncached (Access Control spec - Password users, D29, T34).
+    jwt: async ({ token, account, profile, user }) => {
       const nowSeconds = Math.floor(Date.now() / 1000);
       if (account) {
         const identity = identityFor(account.provider, profile, user);
@@ -292,6 +351,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.roles = identity.roles;
         token.authMethod = identity.authMethod;
         token.signedInAt = nowSeconds;
+        if (String(identity.authMethod) === "password") {
+          token.credentialVersion = identity.credentialVersion ?? 0;
+          if (identity.email) token.email = identity.email;
+        } else {
+          delete token.credentialVersion;
+        }
+        // Entra reports when the user last authenticated; an SSO session
+        // reused without a prompt keeps its old time. Without a valid integer
+        // the claim is left out and a step-up is needed (D28, T31, T32).
+        const authTime = authTimeFor(account.provider, profile, nowSeconds);
+        if (authTime === undefined) delete token.authTime;
+        else token.authTime = authTime;
         return parseSessionToken(token) ? token : null;
       }
       if (!parseSessionToken(token)) return null;
@@ -300,21 +371,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         authMethod:
           typeof token.authMethod === "string" ? token.authMethod : "",
       });
-      return isWithinSessionLifetime(token.signedInAt, nowSeconds, cap)
-        ? token
-        : null;
+      if (!isWithinSessionLifetime(token.signedInAt, nowSeconds, cap)) {
+        return null;
+      }
+      return token.authMethod === "password"
+        ? await followCredentialVersion(token)
+        : token;
     },
     session: ({ session, token }) => {
       const claims = parseSessionToken(token);
       if (!claims) return { expires: session.expires } as typeof session;
+      // authTime comes from the token only; an incoming value is dropped.
+      const incoming: Record<string, unknown> = { ...session.user };
+      delete incoming.authTime;
+      delete incoming.signedInAt;
       return {
         ...session,
         user: {
-          ...session.user,
+          ...incoming,
           oid: claims.oid,
           tid: claims.tid,
           roles: parseRoles(claims.roles),
           authMethod: claims.authMethod,
+          ...(claims.authTime !== undefined
+            ? { authTime: claims.authTime }
+            : {}),
+          ...(typeof token.signedInAt === "number"
+            ? { signedInAt: token.signedInAt }
+            : {}),
         },
       };
     },
@@ -367,4 +451,38 @@ export async function signInWithMasterUser(formData: FormData) {
     totp: formData.get("totp"),
     redirectTo: "/dashboard",
   });
+}
+
+// Source: docs/specs/2026-11-10-access-control.md - "Password users" (Setup
+// D22). The token travels in the URL fragment, so the page reaches the server
+// only through these two actions. Read-only: shows whose account the link is
+// for and whether TOTP enrolment is mandatory; null is the one generic answer.
+export async function previewPasswordSetupLink(token: string) {
+  "use server";
+  if (typeof token !== "string") return null;
+  const { previewPasswordSetup } = await import("@/lib/auth/password-setup");
+  return previewPasswordSetup(token);
+}
+
+// A refused setup is the one generic `{ ok: false }`; success redirects.
+export async function signInWithPasswordSetup(
+  formData: FormData,
+): Promise<{ ok: false } | void> {
+  "use server";
+  const text = (name: string) => {
+    const value = formData.get(name);
+    return typeof value === "string" ? value : "";
+  };
+  try {
+    await signIn(PASSWORD_SETUP_PROVIDER_ID, {
+      token: text("token"),
+      password: text("password"),
+      totpSecret: text("totpSecret"),
+      totpCode: text("totpCode"),
+      redirectTo: "/dashboard",
+    });
+  } catch (error) {
+    if (error instanceof AuthError) return { ok: false };
+    throw error;
+  }
 }

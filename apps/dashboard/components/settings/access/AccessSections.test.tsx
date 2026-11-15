@@ -1,0 +1,356 @@
+import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  ALICE,
+  BOB,
+  fail,
+  groupMappingItem,
+  memberItem,
+  ok,
+  page,
+  passwordUserItem,
+  roleGrantItem,
+  ORG_UNITS,
+  departmentsRoute,
+  stubAccessApi,
+  teamsRoute,
+  type RouteTable,
+} from "@/test/access-ui-stubs";
+import {
+  ADMIN,
+  AUDITOR,
+  DEPT_ADMIN,
+  ORG_ADMIN,
+  PLAIN_VIEWER,
+  TEAM_ADMIN,
+} from "@/test/access-viewers";
+import { NEVER } from "@/test/api-stubs";
+import { renderWithProviders } from "@/test/render-providers";
+
+import { AccessSections } from "./AccessSections";
+import type { AccessViewer, StepUpActions } from "./types";
+
+// Source: docs/specs/2026-11-10-access-control.md - "Permission matrix",
+// "API routes (additions)" (reads: internal-admin and internal-auditor on the
+// admin-only sections); design-system "Settings Page" ("Sections a caller
+// cannot use are not rendered"); Rules 40.4 / 60.12 (each page section in its
+// own Suspense + ErrorBoundary with a Skeleton fallback; one failing section
+// never breaks the others), 10.3 / 50.3 (roles resolved on the server and
+// passed down; the write routes enforce them again). "Recent authentication"
+// (redirectTo is the fixed `/dashboard/settings#role-grants`: the Role grants section
+// owns the `role-grants` anchor).
+//
+// Module under test: `components/settings/access/AccessSections.tsx`
+//   <AccessSections viewer={AccessViewer} stepUp={StepUpActions} />
+// Composes the ten sections, each `<section id="<slug>">` holding an `<h2>`
+// and its own SectionBoundary. Slugs: members, team-admins, visibility,
+// group-mappings, role-grants, identity-links, password-users,
+// per-user-approval, audit-log, access-review. Which sections render, and
+// whether they are editable, comes from `accessCapabilities(viewer)`.
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+const stepUp: StepUpActions = {
+  entra: async () => undefined,
+  credentials: async () => undefined,
+};
+
+const HEADINGS = {
+  members: "Members",
+  "team-admins": "Team admins",
+  visibility: "Visibility",
+  "group-mappings": "Group mappings",
+  "role-grants": "Role grants",
+  "identity-links": "Identity links",
+  "password-users": "Password users",
+  "per-user-approval": "Per-user approval",
+  "audit-log": "Audit log",
+  "access-review": "Access review",
+} as const;
+type Slug = keyof typeof HEADINGS;
+const ALL = Object.keys(HEADINGS) as Slug[];
+const MATRIX: Slug[] = ["members", "team-admins", "visibility"];
+const CONFIG: Slug[] = ALL.filter((s) => !MATRIX.includes(s));
+
+function baseRoutes(): RouteTable {
+  return {
+    "GET /api/access/org-units": ORG_UNITS,
+    "GET /api/teams": teamsRoute(),
+    "GET /api/departments": departmentsRoute(),
+    "GET /api/identities": page([ALICE, BOB]),
+    "GET /api/teams/team-pay/members": page([memberItem()]),
+    "GET /api/teams/team-pay/admins": page([]),
+    "GET /api/teams/team-pay/visibility": {
+      teamId: "team-pay",
+      teamLevel: "visible",
+      userLevel: "own",
+      version: 0,
+      updatedAt: "2026-11-10T09:00:00.000Z",
+    },
+    "GET /api/group-mappings": page([groupMappingItem()]),
+    "GET /api/role-grants": page([roleGrantItem()]),
+    "GET /api/identities/oid-alice/links": {
+      oid: "oid-alice",
+      usageIdentities: [],
+      aliases: [],
+      version: 0,
+      updatedAt: "1970-01-01T00:00:00.000Z",
+    },
+    "GET /api/password-users": page([passwordUserItem()]),
+    "GET /api/governance/password-sign-in": { enabled: true, version: 1 },
+    "GET /api/governance/per-user-approval": { approved: false },
+    "GET /api/audit": page([]),
+  };
+}
+
+function renderSections(viewer: AccessViewer) {
+  return renderWithProviders(
+    <AccessSections viewer={viewer} stepUp={stepUp} />,
+  );
+}
+
+function headingOf(slug: Slug) {
+  return screen.queryByRole("heading", { level: 2, name: HEADINGS[slug] });
+}
+
+describe("AccessSections - role gating", () => {
+  it.each([
+    ["internal-admin", ADMIN, ALL],
+    ["internal-org-admin", ORG_ADMIN, MATRIX],
+    ["internal-auditor", AUDITOR, CONFIG.filter((s) => s !== "members")],
+    ["a team-scope admin", TEAM_ADMIN, MATRIX],
+    ["a department-scope admin", DEPT_ADMIN, MATRIX],
+    ["a plain viewer", PLAIN_VIEWER, []],
+  ] as const)(
+    "%s sees exactly the permitted sections",
+    async (_n, viewer, shown) => {
+      stubAccessApi(baseRoutes());
+      renderSections(viewer);
+      for (const slug of ALL) {
+        if ((shown as readonly Slug[]).includes(slug)) {
+          expect(
+            await screen.findByRole("heading", {
+              level: 2,
+              name: HEADINGS[slug],
+            }),
+          ).toBeInTheDocument();
+        } else {
+          expect(headingOf(slug)).not.toBeInTheDocument();
+        }
+      }
+    },
+  );
+
+  it("does not fetch data for a section the viewer cannot see", async () => {
+    const api = stubAccessApi(baseRoutes());
+    renderSections(AUDITOR);
+    await screen.findByRole("heading", { level: 2, name: "Audit log" });
+    expect(api.calls.filter((c) => c.path.startsWith("/api/teams/"))).toEqual(
+      [],
+    );
+  });
+
+  it("anchors each section by its slug, including #role-grants for the step-up redirect", async () => {
+    stubAccessApi(baseRoutes());
+    renderSections(ADMIN);
+    await screen.findByRole("heading", { level: 2, name: "Role grants" });
+    for (const slug of ALL) {
+      const anchor = document.getElementById(slug);
+      expect(anchor?.tagName).toBe("SECTION");
+      expect(
+        within(anchor as HTMLElement).getByRole("heading", { level: 2 }),
+      ).toHaveTextContent(HEADINGS[slug]);
+    }
+  });
+
+  it("gives an auditor the configuration sections read-only", async () => {
+    stubAccessApi(baseRoutes());
+    renderSections(AUDITOR);
+    await screen.findByRole("row", { name: /Alice Adams/ });
+    for (const name of [
+      /add mapping/i,
+      /^grant role$/i,
+      /create password user/i,
+      /record approval/i,
+      /save links/i,
+    ]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it("gives an internal-admin the write controls", async () => {
+    stubAccessApi(baseRoutes());
+    renderSections(ADMIN);
+    for (const name of [
+      /add mapping/i,
+      /^grant role$/i,
+      /create password user/i,
+      /record approval/i,
+      /save links/i,
+    ]) {
+      expect(await screen.findByRole("button", { name })).toBeInTheDocument();
+    }
+  });
+});
+
+// D27 editors (Access Control - Usage-identity mapping rules): placed as a
+// SIBLING of the Identity links section inside AccessSections, in its own
+// `<section id="identity-mapping">` with an `<h2>` "Identity mapping", wrapping
+// <IdentityMapRulesEditor isAdmin> and <IdentityLinkSuggestions isAdmin>
+// (components/settings/). Visible exactly when Identity links is; isAdmin is
+// true only for an internal-admin (the auditor gets them read-only).
+describe("AccessSections - identity mapping editors (D27)", () => {
+  function withMapRoutes(): RouteTable {
+    return {
+      ...baseRoutes(),
+      "GET /api/governance/identity-map-rules": { rules: [], version: 0 },
+      "GET /api/governance/identity-map-rules/suggestions": { items: [] },
+    };
+  }
+
+  it.each([
+    ["internal-admin", ADMIN, true],
+    ["internal-auditor", AUDITOR, false],
+  ] as const)(
+    "%s sees both editors beside Identity links",
+    async (_n, viewer, canEdit) => {
+      stubAccessApi(withMapRoutes());
+      renderSections(viewer);
+      const section = await screen.findByRole("heading", {
+        level: 2,
+        name: "Identity mapping",
+      });
+      const wrapper = document.getElementById(
+        "identity-mapping",
+      ) as HTMLElement;
+      expect(wrapper.tagName).toBe("SECTION");
+      expect(wrapper).toContainElement(section);
+      expect(
+        await within(wrapper).findByRole("heading", {
+          name: /usage-identity mapping rules/i,
+        }),
+      ).toBeInTheDocument();
+      expect(
+        within(wrapper).getByRole("heading", { name: /suggested links/i }),
+      ).toBeInTheDocument();
+      expect(document.getElementById("identity-links")).not.toContainElement(
+        wrapper,
+      );
+      expect(
+        Boolean(within(wrapper).queryByRole("button", { name: /add rule/i })),
+      ).toBe(canEdit);
+    },
+  );
+
+  it.each([
+    ["internal-org-admin", ORG_ADMIN],
+    ["a team-scope admin", TEAM_ADMIN],
+    ["a plain viewer", PLAIN_VIEWER],
+  ] as const)("%s sees neither editor", async (_n, viewer) => {
+    const api = stubAccessApi(withMapRoutes());
+    renderSections(viewer);
+    await vi.waitFor(() => expect(api.calls.length).toBeGreaterThanOrEqual(0));
+    expect(
+      screen.queryByRole("heading", { name: "Identity mapping" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /suggested links/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      api.calls.filter((c) => c.path.includes("identity-map-rules")),
+    ).toEqual([]);
+  });
+});
+
+describe("AccessSections - one failure never breaks the others (Rule 40.4)", () => {
+  it.each([
+    ["members", "GET /api/teams/team-pay/members", /couldn't load .*members/i],
+    [
+      "team-admins",
+      "GET /api/teams/team-pay/admins",
+      /couldn't load .*team admins/i,
+    ],
+    [
+      "visibility",
+      "GET /api/teams/team-pay/visibility",
+      /couldn't load .*visibility/i,
+    ],
+    [
+      "group-mappings",
+      "GET /api/group-mappings",
+      /couldn't load .*group mappings/i,
+    ],
+    ["role-grants", "GET /api/role-grants", /couldn't load .*role grants/i],
+    [
+      "identity-links",
+      "GET /api/identities/oid-alice/links",
+      /couldn't load .*identity links/i,
+    ],
+    [
+      "password-users",
+      "GET /api/password-users",
+      /couldn't load .*password users/i,
+    ],
+    [
+      "per-user-approval",
+      "GET /api/governance/per-user-approval",
+      /couldn't load .*approval/i,
+    ],
+    ["audit-log", "GET /api/audit", /couldn't load .*audit log/i],
+  ] as const)(
+    "%s: a failing request shows that section's alert and Retry, and every other section still renders",
+    async (slug, endpoint, message) => {
+      stubAccessApi({
+        ...baseRoutes(),
+        [endpoint]: () => fail(500, "INTERNAL"),
+      });
+      renderSections(ADMIN);
+      const alert = await screen.findByText(message);
+      const failed = document.getElementById(slug) as HTMLElement;
+      expect(failed).toContainElement(alert);
+      expect(
+        within(failed).getByRole("button", { name: "Retry" }),
+      ).toBeInTheDocument();
+      for (const other of ALL.filter((s) => s !== slug)) {
+        expect(
+          within(document.getElementById(other) as HTMLElement).queryByText(
+            /couldn't load/i,
+          ),
+        ).not.toBeInTheDocument();
+        expect(headingOf(other)).toBeInTheDocument();
+      }
+    },
+  );
+
+  it("Retry refetches the failed section", async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    stubAccessApi({
+      ...baseRoutes(),
+      "GET /api/group-mappings": () =>
+        ++calls === 1 ? fail(500, "INTERNAL") : ok(page([groupMappingItem()])),
+    });
+    renderSections(ADMIN);
+    await user.click(
+      await within(
+        document.getElementById("group-mappings") ?? document.body,
+      ).findByRole("button", { name: "Retry" }),
+    );
+    expect(
+      await screen.findByRole("row", { name: /11111111/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a Skeleton in every visible section while data loads", () => {
+    vi.stubGlobal("fetch", vi.fn(NEVER));
+    renderSections(ADMIN);
+    for (const slug of ALL.filter((s) => s !== "access-review")) {
+      const section = document.getElementById(slug) as HTMLElement;
+      expect(section.querySelector('[data-slot="skeleton"]')).not.toBeNull();
+    }
+  });
+});

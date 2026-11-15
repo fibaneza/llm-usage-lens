@@ -158,8 +158,45 @@ Decided 2026-11-10 — [Access Control spec](../specs/2026-11-10-access-control.
 2. **Groups claim:** Token configuration → add groups claim → **Groups assigned to the application**, emitted as object IDs in the ID token.
 3. **Security groups** (placeholders): `llm-usage-lens-admins`, `-org-admins`, `-auditors`, `-users`, plus one group per team or department that should map automatically. Membership must be **direct** (nested groups are not honoured).
 4. **Enterprise application:** assign the groups to their app roles (needs Entra ID **P1/P2**; without it assign users directly); set **"Assignment required?" = Yes**; assign the team groups (Default Access) so they appear in the `groups` claim.
-5. **Conditional Access:** require MFA or a compliant device for both app registrations.
-6. **Group mappings:** as `internal-admin`, map each team/department group object ID to its team or department and to `member` or `internal-team-admin` in Settings.
+5. **`auth_time` optional claim (required for re-authentication, D28):** Token configuration → **Add optional claim** → token type **ID** → `auth_time` → Add (accept the prompt to turn on the Microsoft Graph `profile` permission if shown). The app uses it to tell a fresh sign-in from one satisfied by an existing SSO session ([Access Control spec](../specs/2026-11-10-access-control.md) — *Recent authentication*). **Confirm it in your tenant** (decode a test ID token and check for an integer `auth_time`): without it every Entra role-grant write fails closed with `403 REAUTH_REQUIRED`, and the step-up cannot clear it.
+6. **Conditional Access (user action):** require MFA or a compliant device for both app registrations. The app does not enforce this; Entra does.
+7. **Group mappings:** as `internal-admin`, create them in Settings (see *Group mappings* below).
+
+### Group mappings
+
+Settings → **Group mappings** (`internal-admin` only; audited). Each mapping ties one Entra group **object ID** to a team or department and to `member` or `internal-team-admin`; the schema rejects a mapping to a global role.
+
+1. In the Entra portal open the group → copy its **Object ID**.
+2. In Settings → Group mappings add a mapping: paste the object ID, choose the team or department and the role.
+3. The mapping applies at the user's next sign-in (the `groups` claim is read at sign-in).
+
+Real group object IDs are entered in the UI only; never put them in a commit, doc, test or `.env.example`.
+
+### Password users
+
+Password users sign in with email and password (and TOTP when required) instead of Entra, for example in Pre-SSO `prod` ([Access Control spec](../specs/2026-11-10-access-control.md) — *Password users*, *Pre-SSO mode*). Only an `internal-admin` manages them, in Settings → **Password users**.
+
+1. **Create.** Enter the work email, a display name and optionally the SSO reference. The app returns a **one-time setup link** `https://<host>/account/setup#<token>`, shown exactly once; copy it immediately and send it over a private channel. It is valid for 72 hours and single-use.
+2. **Set up.** The person opens the link at `/account/setup`, sets a password (12-128 characters, no composition rules, common passwords rejected) and, when TOTP is required, scans the shown secret into an authenticator app and enters a code. A session starts on success. TOTP is required for any global role other than `internal-viewer` and for any admin scope.
+3. **Change.** A signed-in password user opens **Account** from the user menu (`/dashboard/account`) and enters the current password, the new password twice and, when enrolled, a TOTP code. Their other sessions end on their next request; the session that made the change stays signed in. Entra, master-user and dev-login sessions see their sign-in method there and no form. There is no self-service reset.
+4. **Reset.** A forgotten password is an admin **reset**: it issues a new one-time setup link, invalidates the old one and ends the user's open sessions.
+5. **TOTP reset.** An admin **TOTP reset** forces re-enrolment at the user's next sign-in. A user who needs TOTP (after a new role or admin scope) but never enrolled cannot get a session from password sign-in: issue a **reset** link; its setup flow sets a new password and enrols TOTP.
+6. **Disable / enable.** A disabled user is refused with the generic sign-in error and their open sessions end on their next request; enabling restores access. Delete removes the user and ends their sessions the same way. The last enabled password `internal-admin` cannot be disabled or deleted while Entra is not configured; two admins removing each other at the same moment cannot both succeed (one gets a conflict).
+7. **Password sign-in switch.** Settings → password sign-in (`internal-admin`, audited) turns password sign-in off for everyone. It is on by default and cannot be turned off while Entra is not configured. Once Entra is configured and everyone is bound, turn it off; the access review lists every enabled password user until then.
+
+Create, reset, TOTP reset, delete and the password sign-in switch need a sign-in within the last 15 minutes, like role grants (next section); the step-up returns to the Password users section.
+
+Five consecutive failed password sign-ins lock the user for 15 minutes.
+
+### Re-authentication for sensitive admin writes (D28, D33)
+
+Granting or revoking `internal-admin` or `internal-org-admin` (with a written reason), and creating, resetting, TOTP-resetting or deleting a password user or changing the password sign-in switch, need a sign-in within the last 15 minutes. If the last sign-in is older, the dialog shows **"Confirm it's you"** and does not send the write; the step-up returns to the section that started it (Role grants or Password users):
+
+- **Entra:** a button that starts a fresh Entra sign-in (login prompt forced, `max_age` 900). It is a real sign-in: the session is replaced and the 8 h (4 h for global admins) cap restarts.
+- **Password user or master user:** re-enter the password (and TOTP when enrolled). The identifier comes from the session, so the step-up cannot switch identity.
+- **Dev login:** choose the dev login again.
+
+After the step-up the admin submits the write again. If the dialog reports "Your sign-in could not be confirmed as recent" straight after a step-up, check the `auth_time` claim (*Entra portal steps*, item 5).
 
 ### Master user and break-glass
 
@@ -178,18 +215,62 @@ Decided 2026-11-10 — [Access Control spec](../specs/2026-11-10-access-control.
 4. Record the works-council / data-protection approval in Settings before enabling per-user views in `prod`.
 5. Remove the legacy `Admin` app role.
 
-### Acceptance checklist (one test user per case)
+### Manual acceptance checklist (one test user per case)
 
-- [ ] No mapped group → *My usage* and "Ask your team lead for access"; no team data
-- [ ] Member of one team → that team only, per visibility
-- [ ] Two member-mapped groups → no team, flagged as ambiguous
-- [ ] `internal-team-admin` on two teams → both teams, nothing else; can promote within them, not on themselves
-- [ ] Department-scope `internal-team-admin` → the department's teams; can move members between them
-- [ ] `internal-org-admin` → every team; no configuration; cannot grant global roles
-- [ ] `internal-auditor` → everything read-only; every write `403`; audit view itself audited
-- [ ] `internal-admin` → grant `internal-org-admin` (re-auth and reason required; audited; alarm fires)
-- [ ] Master user → TOTP required; 5 failures lock out; session ends after 1 hour
+Run in `dev` with `AUTH_ACCESS_MODE=open`, then again with `enforce`. Create one test user per case (Entra users for the Entra cases, password users for the password case). Tick each line only when both the "must" and "must not" halves hold. Real IDs stay out of notes you commit.
+
+**Entra and configuration prerequisites**
+
+- [ ] `auth_time` optional ID claim present in a decoded test ID token
+- [ ] App roles created; "Assignment required?" = Yes; groups assigned; Conditional Access applied
+- [ ] Group mappings created in Settings with real object IDs (none committed)
+
+**No role and member**
+
+- [ ] User with no mapped group: *My usage* and "Ask your team lead for access"; no team data; no Settings write controls
+- [ ] Member of one team: that team only, per its visibility; Settings read-free of admin sections; every write `403`
+- [ ] Member of two member-mapped groups: no team, flagged as ambiguous
+
+**Team and department admins**
+
+- [ ] `internal-team-admin`, team scope (two teams): both teams and nothing else; can add and remove members and set visibility there; can promote a member within them but not themselves; out-of-scope team returns the same not-found as a missing one
+- [ ] `internal-team-admin`, department scope: the department's teams; can move members between them and set the department cap; no other department visible
+
+**Global roles**
+
+- [ ] `internal-org-admin`: every team and department; members, admins, moves and visibility work; no Group mappings, Password users, approval or switch controls; granting a global role is refused
+- [ ] `internal-auditor`: everything readable, including Audit log and Access review; every write `403`; no key values or secrets shown; opening the audit log and exporting the access review CSV each create an audit record
+- [ ] `internal-viewer`: own usage and the member team as visibility allows; nothing writable
+- [ ] `internal-admin`: all Settings sections and every write succeed
+
+**Re-authentication and role grants**
+
+- [ ] `internal-admin` signed in over 15 minutes ago: granting `internal-org-admin` shows "Confirm it's you" and writes nothing
+- [ ] After the step-up (Entra button, or password and TOTP) the grant succeeds with a reason; one `role.grant` audit record; the security alarm fires
+- [ ] Revoking the grant behaves the same (`role.revoke`); revoking the last `internal-admin` is refused (`409`)
+- [ ] Entra without `auth_time` emitted: the grant stays `REAUTH_REQUIRED` after the step-up (expected failure mode; confirms the claim is needed)
+
+**Password user**
+
+- [ ] Admin creates the user; setup link shown once and not recoverable on reload; link works once, a second use gives a generic error
+- [ ] User sets a password at `/account/setup` (TOTP enrolled when required) and is signed in
+- [ ] Admin reset issues a new link and the old one stops working; TOTP reset forces re-enrolment at next sign-in
+- [ ] Disabled user is refused with the generic error; re-enabled user signs in; 5 wrong passwords lock for 15 minutes
+- [ ] With the password sign-in switch off (Entra configured), the password user is refused
+
+**Master user**
+
+- [ ] TOTP required (`prod`); 5 failures lock out for 15 minutes; session ends after 1 hour; always `internal-admin`; cannot be demoted or deleted; listed in the access review
+
+**Membership changes**
+
 - [ ] Removing a member takes effect on their next request
+
+**Password-user sessions and TOTP enrolment (decided 2026-11-15; spec: *Password users*, D29, D31)**
+
+- [ ] A password change on the Account page ends the user's other sessions on their next request (they land on sign-in) and keeps the changing session signed in
+- [ ] An admin reset, disable or delete ends the user's open sessions on their next request
+- [ ] A password user who needs TOTP but never enrolled gets no session; an admin reset link lets them set a password and enrol TOTP
 
 ---
 

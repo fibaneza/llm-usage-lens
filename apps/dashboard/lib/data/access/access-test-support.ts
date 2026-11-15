@@ -2,6 +2,7 @@
 // production code). Rule 60.22: tests run against DynamoDB Local, no mocks of
 // the data layer; the only injected behaviour is a client wrapper that fails a
 // chosen command so the `failed` audit path can be exercised.
+import { TransactionCanceledException } from "@aws-sdk/client-dynamodb";
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { vi } from "vitest";
 
@@ -106,11 +107,21 @@ export async function seedSsoAdminScope(
 
 // Fault injection: set a flag, the next matching command throws. Used from
 // `vi.mock("@/lib/dynamodb", () => import("./access-test-support").then(m => m.faultyDynamodb()))`.
-export const faults = { transact: false, put: false };
+// `transactConflictAt` makes the next TransactWriteCommand fail the way real
+// DynamoDB does when two transactions touch the same items at once: a
+// TransactionCanceledException whose CancellationReasons carry
+// "TransactionConflict" at that item index (-1 = the last item, the audit
+// record) and "None" elsewhere.
+export const faults: {
+  transact: boolean;
+  put: boolean;
+  transactConflictAt: number | null;
+} = { transact: false, put: false, transactConflictAt: null };
 
 export function resetFaults(): void {
   faults.transact = false;
   faults.put = false;
+  faults.transactConflictAt = null;
 }
 
 export async function faultyDynamodb() {
@@ -127,6 +138,28 @@ export async function faultyDynamodb() {
               const name = command.constructor.name;
               if (faults.transact && name === "TransactWriteCommand") {
                 throw new Error("injected transaction failure");
+              }
+              if (
+                faults.transactConflictAt !== null &&
+                name === "TransactWriteCommand"
+              ) {
+                const count = (
+                  command as unknown as { input: { TransactItems: unknown[] } }
+                ).input.TransactItems.length;
+                const at =
+                  faults.transactConflictAt < 0
+                    ? count - 1
+                    : faults.transactConflictAt;
+                throw new TransactionCanceledException({
+                  message:
+                    "Transaction cancelled, please refer cancellation reasons for specific reasons",
+                  $metadata: {},
+                  CancellationReasons: Array.from({ length: count }, (_, i) =>
+                    i === at
+                      ? { Code: "TransactionConflict" }
+                      : { Code: "None" },
+                  ),
+                });
               }
               if (faults.put && name === "PutCommand") {
                 throw new Error("injected put failure");

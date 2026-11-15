@@ -10,8 +10,10 @@ import type { ZodType, z } from "zod";
 
 import { auth } from "@/auth";
 import { unauthenticatedResponse } from "@/lib/api/unauthenticated";
+import { hasRecentAuth } from "@/lib/auth/recent-auth";
 import {
   INTERNAL_ADMIN_ROLE,
+  INTERNAL_AUDITOR_ROLE,
   hasAdminRole,
   hasGlobalRole,
 } from "@/lib/auth/roles";
@@ -159,21 +161,30 @@ export type RouteOptions = {
   // spec - API routes (additions)). Enforced right after the session check,
   // like `requireAdmin`; a refusal records no denied audit (D17: writes only).
   requireAdminOrAuditor?: boolean;
+  // Needs a sign-in within the last 15 minutes (Access Control spec - Recent
+  // authentication, D28): 403 REAUTH_REQUIRED after the session, role and
+  // origin checks and before parsing. Records no denied audit.
+  requireRecentAuth?: boolean;
   // The operation and fixed route pattern a `requireAdmin` refusal records
   // (Access Control spec - Audit log D17, T22); never the raw path.
   // May be a function of the request when one route records different actions
   // (toggles update vs reset); it must read the request without validating it.
   denied?: DeniedRecord | ((request: Request) => Promise<DeniedRecord>);
+  // A permission the route decides itself (the matrix writes, which depend on
+  // the caller's scopes): false is a 403 with the `denied` record, right after
+  // the session check and before the origin check and any parsing.
+  permit?: (request: Request, session: Session) => Promise<boolean>;
 };
 
 type DeniedRecord = { action: AuditAction; pattern: string };
 
 // Best-effort: a failed record write never changes the response (D17). The
 // request id is generated here, never taken from a header.
-async function recordDeniedWrite(
+export async function recordDeniedWrite(
   request: Request,
   actor: string,
   denied: NonNullable<RouteOptions["denied"]>,
+  code: "FORBIDDEN" | "NOT_FOUND" = "FORBIDDEN",
 ): Promise<void> {
   try {
     const record =
@@ -183,7 +194,7 @@ async function recordDeniedWrite(
       actor,
       action: record.action,
       requestId: randomUUID(),
-      code: "FORBIDDEN",
+      code,
       route: { method: request.method, pattern: record.pattern },
     });
   } catch (error) {
@@ -229,19 +240,35 @@ export function withRoute(
             `${INTERNAL_ADMIN_ROLE} role required`,
           );
         }
+        if (options.permit && !(await options.permit(request, session))) {
+          if (options.denied) {
+            await recordDeniedWrite(request, session.user.oid, options.denied);
+          }
+          return jsonError(403, "FORBIDDEN", "Insufficient permission");
+        }
         if (
           options.requireAdminOrAuditor &&
           !hasAdminRole(session) &&
-          !hasGlobalRole(session, "internal-auditor")
+          !hasGlobalRole(session, INTERNAL_AUDITOR_ROLE)
         ) {
           return jsonError(
             403,
             "FORBIDDEN",
-            `${INTERNAL_ADMIN_ROLE} or internal-auditor role required`,
+            `${INTERNAL_ADMIN_ROLE} or ${INTERNAL_AUDITOR_ROLE} role required`,
           );
         }
         if (WRITE_METHODS.has(request.method) && !isSameOrigin(request)) {
           return jsonError(403, "FORBIDDEN", "Cross-origin request rejected");
+        }
+        if (
+          options.requireRecentAuth &&
+          !hasRecentAuth(session.user.authTime, Math.floor(Date.now() / 1000))
+        ) {
+          return jsonError(
+            403,
+            "REAUTH_REQUIRED",
+            "Re-authentication required",
+          );
         }
         return await handler(request, ctx, session);
       } catch (error) {

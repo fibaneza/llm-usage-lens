@@ -3,6 +3,11 @@
 import type { ReactNode } from "react";
 
 import { SectionBoundary } from "@/components/display/SectionBoundary";
+import { AccessSections } from "@/components/settings/access/AccessSections";
+import type {
+  AccessViewer,
+  StepUpActions,
+} from "@/components/settings/access/types";
 import { AccountRegistry } from "@/components/settings/AccountRegistry";
 import { DataRetention } from "@/components/settings/DataRetention";
 import { LiteLLMPanel } from "@/components/settings/LiteLLMPanel";
@@ -31,9 +36,16 @@ function Section({
   );
 }
 
-// Phase 4.9 body: three independent sections, each in its own boundary so one
-// failure never breaks the page (Rule 40.4, 60.12).
-export function SettingsContent({ isAdmin }: { isAdmin: boolean }) {
+// Phase 4.9 body: independent sections, each in its own boundary so one failure
+// never breaks the page (Rule 40.4, 60.12). The access sections (Phase 4R.4)
+// render below them for a viewer the server resolved.
+export function SettingsContent({
+  isAdmin,
+  access,
+}: {
+  isAdmin: boolean;
+  access?: { viewer: AccessViewer; stepUp: StepUpActions };
+}) {
   return (
     <div className="flex flex-col gap-8">
       <Section heading="Account registry" title="the account registry">
@@ -51,6 +63,9 @@ export function SettingsContent({ isAdmin }: { isAdmin: boolean }) {
       <Section heading="Data retention" title="the data retention policy">
         <DataRetention />
       </Section>
+      {access ? (
+        <AccessSections viewer={access.viewer} stepUp={access.stepUp} />
+      ) : null}
     </div>
   );
 }

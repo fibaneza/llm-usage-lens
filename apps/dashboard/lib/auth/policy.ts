@@ -12,7 +12,11 @@ import type {
   TeamVisibility,
 } from "@llm-usage-lens/shared";
 
-import { isGlobalRole, resolveGlobalRoles } from "./roles";
+import {
+  INTERNAL_AUDITOR_ROLE,
+  isGlobalRole,
+  resolveGlobalRoles,
+} from "./roles";
 import type { GlobalRole } from "./roles";
 
 // Source: docs/specs/2026-11-10-access-control.md - "Visibility and
@@ -82,7 +86,7 @@ export type Resource =
 const GLOBAL_READER_ROLES: readonly GlobalRole[] = [
   "internal-admin",
   "internal-org-admin",
-  "internal-auditor",
+  INTERNAL_AUDITOR_ROLE,
 ];
 
 export function globalRolesOf(

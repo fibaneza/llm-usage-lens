@@ -25,6 +25,9 @@ export type PasswordCredential = {
   passwordHash?: string;
   totpCipher?: string;
   totpLastStep?: number;
+  // Spec - Password users, Credential version (D29): absent reads as 0.
+  credentialVersion: number;
+  selfChangeSignedInAt?: number;
 };
 
 const str = (v: unknown): string | undefined =>
@@ -42,6 +45,11 @@ function toCredential(item: Record<string, unknown>): PasswordCredential {
     ...(totpCipher ? { totpCipher } : {}),
     ...(typeof item.totpLastStep === "number"
       ? { totpLastStep: item.totpLastStep }
+      : {}),
+    credentialVersion:
+      typeof item.credentialVersion === "number" ? item.credentialVersion : 0,
+    ...(typeof item.selfChangeSignedInAt === "number"
+      ? { selfChangeSignedInAt: item.selfChangeSignedInAt }
       : {}),
   };
 }
@@ -88,7 +96,7 @@ export async function completePasswordSetupWrite(
           Key: userKey(input.email),
           UpdateExpression: `SET passwordHash = :p, updatedAt = :now${
             input.totp ? ", totpCipher = :c, totpLastStep = :s" : ""
-          }, failedAttempts = :zero ADD version :one REMOVE setupTokenHash, setupExpiresAt, lockedUntil`,
+          }, failedAttempts = :zero ADD version :one, credentialVersion :one REMOVE setupTokenHash, setupExpiresAt, lockedUntil, selfChangeSignedInAt`,
           ConditionExpression: "setupTokenHash = :h",
           ExpressionAttributeValues: {
             ":p": input.passwordHash,
@@ -113,6 +121,92 @@ export async function completePasswordSetupWrite(
     audit: {
       action: "localuser.update",
       target: { type: "identity", id: ctx.actor },
+    },
+    ctx,
+  });
+  return result.ok ? { ok: true, value: undefined } : result;
+}
+
+// Spec - Password users (Passwords): a signed-in password user changes their
+// own password. The condition keeps a user disabled or bound to Entra since the
+// check from being written; success also clears the failure count (Sign-in).
+export async function changePasswordWrite(
+  input: { email: string; passwordHash: string; signedInAt?: number },
+  ctx: AuditContext,
+): Promise<AccessResult<void>> {
+  const result = await commitAudited({
+    items: [
+      {
+        Update: {
+          TableName: getTableName(),
+          Key: userKey(input.email),
+          UpdateExpression: `SET passwordHash = :p, updatedAt = :now, failedAttempts = :zero${
+            input.signedInAt !== undefined
+              ? ", selfChangeSignedInAt = :sia"
+              : ""
+          } ADD version :one, credentialVersion :one REMOVE lockedUntil${
+            input.signedInAt === undefined ? ", selfChangeSignedInAt" : ""
+          }`,
+          ConditionExpression:
+            "attribute_exists(PK) AND #s = :enabled AND attribute_exists(passwordHash)",
+          ExpressionAttributeNames: { "#s": "status" },
+          ExpressionAttributeValues: {
+            ":p": input.passwordHash,
+            ":now": ctx.now.toISOString(),
+            ":zero": 0,
+            ":one": 1,
+            ":enabled": "enabled",
+            ...(input.signedInAt !== undefined
+              ? { ":sia": input.signedInAt }
+              : {}),
+          },
+        },
+      },
+    ],
+    audit: {
+      action: "localuser.update",
+      target: { type: "identity", id: ctx.actor },
+    },
+    ctx,
+  });
+  return result.ok ? { ok: true, value: undefined } : result;
+}
+
+// Spec - Password users, TOTP D23: an admin reset clears the enrolment so the
+// user re-enrols at the next sign-in; the password hash is kept.
+export async function resetPasswordUserTotp(
+  emailInput: string,
+  ctx: AuditContext,
+): Promise<AccessResult<void>> {
+  const email = emailInput.toLowerCase();
+  const key = userKey(email);
+  const item = await getItem(key.PK, key.SK);
+  if (!item) return { ok: false, code: "NOT_FOUND" };
+  if (item.status === "sso-bound") return { ok: false, code: "CONFLICT" };
+  const version = Number(item.version);
+  const result = await commitAudited({
+    items: [
+      {
+        Update: {
+          TableName: getTableName(),
+          Key: key,
+          UpdateExpression:
+            "SET version = :next, updatedAt = :now ADD credentialVersion :one REMOVE totpCipher, totpLastStep, selfChangeSignedInAt",
+          ConditionExpression: "version = :v",
+          ExpressionAttributeValues: {
+            ":v": version,
+            ":next": version + 1,
+            ":now": ctx.now.toISOString(),
+            ":one": 1,
+          },
+        },
+      },
+    ],
+    audit: {
+      action: "localuser.update",
+      target: { type: "identity", id: String(item.oid) },
+      before: { version },
+      after: { version: version + 1 },
     },
     ctx,
   });

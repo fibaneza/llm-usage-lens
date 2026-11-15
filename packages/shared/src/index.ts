@@ -155,6 +155,7 @@ export type { CanonicalUsageIdentity } from "./usage-identity";
 export {
   AUDIT_ACTIONS,
   AccessSourceSchema,
+  AdminScopeRowSchema,
   AdminScopeSchema,
   AuditActionSchema,
   AuditItemSchema,
@@ -167,6 +168,10 @@ export {
   IdentityLinkSchema,
   LocalUserSchema,
   MemberAffiliationSchema,
+  MemberRowSchema,
+  OrgUnitsSchema,
+  PasswordUserInputSchema,
+  PasswordUserListItemSchema,
   PasswordUserSchema,
   PendingItemSchema,
   RoleGrantSchema,
@@ -181,6 +186,9 @@ export {
 export type {
   AccessSource,
   AdminScope,
+  AdminScopeRow,
+  MemberRow,
+  OrgUnits,
   AuditAction,
   AuditRecord,
   AuditSnapshot,
@@ -190,6 +198,8 @@ export type {
   LocalUser,
   MemberAffiliation,
   PasswordUser,
+  PasswordUserInput,
+  PasswordUserListItem,
   PendingItem,
   PerUserApproval,
   RoleGrant,
@@ -257,3 +267,18 @@ export {
   LiteLLMSpendLogsResponseSchema,
   LiteLLMTeamDetailResponseSchema,
 } from "./schemas/litellm-views";
+
+export {
+  IdentityMapRuleListSchema,
+  IdentityMapRuleSchema,
+  IdentityMapRulesInputSchema,
+  IdentityMapRulesSchema,
+  MAX_IDENTITY_MAP_RULES,
+  mapUsageKeyToEmail,
+  suggestIdentityLinks,
+} from "./identity-map-rules";
+export type {
+  IdentityLinkSuggestion,
+  IdentityMapRule,
+  IdentityMapRules,
+} from "./identity-map-rules";

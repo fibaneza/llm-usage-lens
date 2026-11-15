@@ -43,4 +43,42 @@ describe("parseSessionToken", () => {
   it("rejects an empty token", () => {
     expect(parseSessionToken({})).toBeNull();
   });
+
+  // F7 / D29 (Access Control spec - "Password users", Credential version):
+  // the per-user credential version rides in the token and is compared with
+  // the stored one (absent = 0); a malformed value fails closed, never coerced.
+  it.each([0, 3])(
+    "keeps a non-negative integer credentialVersion (%i)",
+    (v) => {
+      expect(
+        parseSessionToken({
+          ...valid,
+          authMethod: "password",
+          credentialVersion: v,
+        }),
+      ).toMatchObject({ credentialVersion: v });
+    },
+  );
+
+  it("accepts a token without credentialVersion (non-password sessions have none)", () => {
+    expect(parseSessionToken(valid)).not.toBeNull();
+  });
+
+  it.each([
+    ["a negative number", -1],
+    ["a fraction", 1.5],
+    ["a numeric string", "2"],
+    ["null", null],
+  ])(
+    "rejects a token whose credentialVersion is %s",
+    (_name, credentialVersion) => {
+      expect(
+        parseSessionToken({
+          ...valid,
+          authMethod: "password",
+          credentialVersion,
+        }),
+      ).toBeNull();
+    },
+  );
 });

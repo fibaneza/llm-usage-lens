@@ -17,7 +17,7 @@ export const GroupMappingBaseSchema = z.object({
   groupId: z.string().min(1),
   target: z.object({
     type: z.enum(["team", "department"]),
-    id: z.string().min(1),
+    id: z.string().min(1).max(128),
   }),
   scopedRole: z.enum(["internal-team-admin", "member"]),
 });

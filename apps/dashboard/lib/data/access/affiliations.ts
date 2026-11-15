@@ -137,7 +137,15 @@ export async function moveMember(
     input.fromTeamId,
     input.version,
   );
-  if (!verdict.ok) return verdict;
+  if (!verdict.ok) {
+    // A replay: the member already sits in the destination team.
+    if (verdict.code === "NOT_FOUND") {
+      const now = await getAffiliation(input.oid);
+      if (now?.teamId === input.toTeamId)
+        return { ok: false, code: "CONFLICT" };
+    }
+    return verdict;
+  }
   const { current } = verdict;
   const scopeKey = {
     PK: identPk(input.oid),

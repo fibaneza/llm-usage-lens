@@ -69,13 +69,11 @@ edition, audit retention, identity links.
   write.
 - **In-app global-role grants** (`internal-admin`, `internal-org-admin`):
   only an `internal-admin` makes or revokes one (others `403`); each needs a
-  sign-in within the last 15 minutes — the ID token's `auth_time`, obtained
-  by a step-up sign-in with `max_age=900` and `prompt=login` (the master
-  user re-enters password and TOTP) — else `403 REAUTH_REQUIRED`, and a
-  written reason; each is audited (`role.grant` / `role.revoke`) and emits an id-only
+  sign-in within the last 15 minutes (*Recent authentication*, D28) — else
+  `403 REAUTH_REQUIRED` — and a written reason; each is audited (`role.grant` / `role.revoke`) and emits an id-only
   security event the DashboardServiceStack alarms on; the access review shows each grant's
-  source (`entra` | `app` | `master`). The last `internal-admin` cannot be
-  revoked (`409`). Removing the Entra role does not remove an in-app grant;
+  source (`entra` | `app` | `master`). The last in-app `internal-admin` cannot be
+  revoked (`409`; atomic, *Enforcement* item 8). Removing the Entra role does not remove an in-app grant;
   the access review flags it.
 - **Group mappings never target a global role** (rejected by the schema).
 - **Migration.** The legacy value `Admin` is an alias of `internal-admin`
@@ -216,7 +214,9 @@ v1's dev-only stored local users.
   role grants (D15); the member team and admin scopes are ordinary UI-sourced
   items under the user's identity, managed as for Entra users (*Permission
   matrix*). The last enabled password `internal-admin` is protected (`409`)
-  while Entra is not configured.
+  while Entra is not configured (atomic, *Enforcement* item 8).
+  Credential-affecting writes need recent authentication (create, reset,
+  TOTP reset, delete; *Recent authentication*).
 - **Identity.** Each password user gets an identity `oid` `local:<uuid>`
   (random, namespaced; never collides with Entra or `master:`), `tid`
   `local`, and `authMethod: password`.
@@ -233,13 +233,35 @@ v1's dev-only stored local users.
   returned by any API or logged. 12–128 characters, no composition rules,
   rejected when in a bundled common-password list; **no periodic rotation**
   (NIST SP 800-63B). A signed-in password user may change their own
-  password with the current one (and TOTP when enrolled); a forgotten
-  password is an admin reset (no self-service reset: there is no email
-  service).
+  password with the current one (and TOTP when enrolled) on the **Account
+  page** `/dashboard/account` (D30): current password, new password,
+  confirmation and a TOTP code when enrolled, posted to `POST
+  /api/account/password`; other sign-in methods see their method and no
+  form. A forgotten password is an admin reset (no self-service reset:
+  there is no email service).
+- **Credential version (D29).** The `LOCALUSER` item carries an integer
+  `credentialVersion` (absent = `0`), copied into the JWT at sign-in
+  (`password` and `password-setup`). For every request of a password session
+  the session check reads the item (uncached, Rule 60.10) and ends the
+  session (`401`; pages redirect to sign-in) when the item is missing, not
+  `active`, or its `credentialVersion` is higher than the token's. An own
+  password change, an admin reset, an admin TOTP reset, a disable and a
+  delete increment it in the same transaction as the change, so every other
+  session of that user ends on its next request (a TOTP reset usually
+  follows a lost or compromised device). The session that changed its own
+  password keeps going without the client's help: the change stores a
+  marker `selfChangeSignedInAt` equal to that session's `signedInAt`, and the
+  session check adopts the stored version only when the marker matches the
+  token's own `signedInAt`. No `update` payload is ever read. Any other
+  increment clears the marker. Residual risk: another session of the same
+  user that signed in within the same second as the changer.
 - **TOTP (D23).** **Required** when the user holds any global role other
   than `internal-viewer` or any admin scope; optional otherwise. A grant
   that makes it required takes effect at the next sign-in, which requires
-  enrolment before a session is issued. The secret is envelope-encrypted
+  enrolment before a session is issued. A user who needs TOTP but never
+  enrolled gets no session from the password sign-in; the enrolment path is an
+  admin-issued **reset** link, whose setup flow enrols TOTP when required
+  (D31; no separate enrolment route). The secret is envelope-encrypted
   with a CMK data key before it is stored and never returned; the last used
   time step is stored and a reused code is refused.
 - **Sign-in.** Email + password (+ TOTP) through the Auth.js `password`
@@ -362,9 +384,11 @@ MANAGED_BY_SSO`). Adding a user who already has a member team returns `409
 ALREADY_AFFILIATED` — use move.
 
 **Leaver.** A user disabled in Entra cannot sign in, so their items grant
-nothing. Settings lists **stale** items: pending not bound after 30 days;
+nothing. **Stale** items are pending items not bound after 30 days, and
 affiliations, admin scopes and in-app grants whose user has not signed in
-for 90 days (decision D2).
+for 90 days (decision D2); the access review flags them. A Settings list of
+pending and stale items (and its route) is deferred (D34;
+`docs/future-improvements.md` — *Pending and stale access lists*).
 
 **Permission matrix:**
 
@@ -388,10 +412,13 @@ their own usage and **never grant access**.
 Bedrock callers sign in with a session name that is not an email — for
 example the identity ARN
 `arn:aws:sts::000000000000:assumed-role/AWSReservedSSO_<set>_<id>/jane-sso`
-canonicalises to the non-person key `jane-sso`, while the person's
+is not an email, so `byUser` keeps it as the raw non-person key (the whole
+value, *Canonical usage identity*), while the person's
 dashboard and LiteLLM identity is `jane@company.com`. An `internal-admin`
 defines **mapping rules** in Settings: a pattern with one `{name}`
-placeholder over the session name (e.g. `{name}-sso`) and a template for the
+placeholder over the **session name** — the substring after the last `/`
+or `:` of the key, here `jane-sso` (amended 2026-11-15, D35) — (e.g.
+`{name}-sso`) and a template for the
 email (e.g. `{name}@company.com`). Rules are stored in one
 `GOVERNANCE`/`IDENTITY_MAP_RULES` item (versioned, audited; no new key
 prefix). The Identity links section then **suggests** a link for each
@@ -406,8 +433,9 @@ and never map to a person automatically.
 **Canonical usage identity.** One function in `packages/shared` (dashboard
 on read now; collector in Phase 6): take the substring after the **last** `/`
 or `:` of CloudTrail `userIdentity.arn`/`principalId`, trim, lower-case,
-accept only a syntactically valid email; otherwise keep the raw key with
-`kind: "non-person"`. Example: `…:assumed-role/AWSReservedSSO_X_Y/Jane.Doe@Company.com`
+accept only a syntactically valid email; otherwise keep the raw key — the
+whole original value, not the substring — with `kind: "non-person"`
+(D35); a confirmed D27 alias is that raw key. Example: `…:assumed-role/AWSReservedSSO_X_Y/Jane.Doe@Company.com`
 and `AROAEXAMPLE:jane.doe@company.com` → `jane.doe@company.com`. A usage key
 belongs to a person when it equals their canonical email or is in their
 `usageIdentities[]`/`aliases[]`; never fuzzy.
@@ -456,12 +484,115 @@ remains). The export is audited.
    application/json`, else `400`. Both were delivered 2026-11-11 with the
    security-review fixes, ahead of R4 (user direction); Auth.js's own
    handler keeps its CSRF token instead. `write-routes.integration.test.ts` enumerates every write route
-   with its required permission. **No rate limiting** of dashboard routes
+   with its required permission. A route that needs recent authentication
+   checks it next, after the same-origin check and before input parsing
+   (*Recent authentication*). **No rate limiting** of dashboard routes
    (internal, VPN-only; request/token limits are LiteLLM's), except the
    master-user lockout.
 7. **Observability.** Policy denials (403/404) are a metric with no personal
    data; tokens, claims and session contents are never logged. Write
    denials additionally produce a `denied` audit record (*Audit log*, D17).
+8. **Last-admin invariants are atomic (D32).** Revoking an in-app
+   `internal-admin` grant, and disabling or deleting a password user who
+   holds `internal-admin` while Entra is not configured, is one
+   `TransactWriteItems`: the change, its audit record, and a
+   `ConditionCheck` that **another** enabled admin still exists. The other
+   admin is picked from a read of the candidates and the check names its
+   items: for a revoke, another identity's `ROLEGRANT#internal-admin` item
+   exists; for a disable or delete, another password user's `LOCALUSER`
+   item is `active` and that user's `ROLEGRANT#internal-admin` item exists
+   (the master user is not counted). Two concurrent removals of the last two
+   admins each check an item the other changes, so the transactions conflict
+   or the second one's condition fails: at least one returns `409`
+   `CONFLICT` and writes no `success` record. No candidate → `409` without a
+   write. A read-then-write check alone is not enough (TOCTOU, T33).
+
+## Recent authentication
+
+Amended 2026-11-15 (D28; open questions resolved by D33). A write marked
+**re-auth** in *API routes (additions)* needs a sign-in within the last
+**15 minutes** (`REAUTH_MAX_AGE_SECONDS = 900`). The list is the global-role
+writes and the credential- and sign-in-affecting admin writes (D33):
+
+| Route | Settings section (step-up return) |
+|---|---|
+| `POST /api/role-grants`, `DELETE /api/role-grants/[oid]/[role]` | `#role-grants` |
+| `POST /api/password-users`, `DELETE /api/password-users/[email]`, `POST /api/password-users/[email]/reset`, `POST /api/password-users/[email]/totp-reset`, `PUT /api/governance/password-sign-in` | `#password-users` |
+
+Not re-auth: group mappings (they never grant a global role), memberships,
+admin scopes, visibility, identity links and mapping rules, password-user
+`PATCH` (enable or disable), the per-user
+approval, and the own password change (it already requires the current
+password).
+
+- **What is measured.** `authTime` (Unix seconds) is when the person last
+  proved a credential: for Entra, the verified ID token's `auth_time` claim
+  (an optional claim the app registration must emit; auth guide); for the
+  master user, password users, `password-setup` and the dev login, the time
+  the `jwt` callback runs for that sign-in (the `authorize()` check has just
+  passed). It is not `signedInAt`, `iat` or the callback time of an Entra
+  sign-in: Entra can satisfy a sign-in from an existing SSO session, and only
+  `auth_time` tells the two apart.
+- **Where it lives.** A JWT field set **only** in the `jwt` callback branch
+  that has `account` (a sign-in), never from an `update` payload, a request
+  parameter or a cookie, and copied read-only to `session.user.authTime`.
+  An Entra token without a valid integer `auth_time` gets no `authTime`: the
+  session is still issued, but every re-auth write needs a step-up. The
+  session token schema keeps it optional, so sessions issued before this
+  change stay valid.
+- **The check.** A pure `hasRecentAuth(authTime, nowSeconds)` in
+  `lib/auth/recent-auth.ts` is true only for a finite number with
+  `now − 900 ≤ authTime ≤ now + 60` (the session clock-skew allowance).
+  `withRoute(..., { requireAdmin: true, requireRecentAuth: true })` applies
+  it after the session (`401`), the role (`403 FORBIDDEN`) and the
+  same-origin (`403 FORBIDDEN`) checks and before input parsing or any
+  DynamoDB call, returning `403` with `{ error: { code: "REAUTH_REQUIRED",
+  message: "Re-authentication required" } }` — `403`, not `401`, because
+  the session stays valid and the client must not treat it as signed out.
+  The body is the same for every target, so it reveals nothing about one.
+  Reads are never gated.
+- **Audit.** `REAUTH_REQUIRED` is not an authorization refusal (the caller
+  holds the permission), so it writes **no** `denied` record (D17; kept by
+  D33: a challenge is not a refusal, and recording each would only add
+  alarm noise); it increments an id-free `ReauthRequired` metric. The step-up is an ordinary
+  sign-in and is audited as one (`auth.signin.success`, D18; failures and
+  lockouts as today).
+- **Step-up.** A step-up is a full sign-in through the existing providers
+  (no provider bypass, no new Route Handler): it replaces the session,
+  re-runs sign-in synchronisation, and restarts the session cap (accepted,
+  D33: a new authentication issues a new session with its own cap). Server
+  Actions beside the sign-in actions in `auth.ts`, each refusing a caller
+  with no session or of another `authMethod`:
+  - **Entra:** `signIn("microsoft-entra-id", { redirectTo }, { prompt:
+    "login", max_age: "900" })` — Auth.js v5 passes the third argument as
+    authorization parameters. Only the step-up sends them; the ordinary
+    sign-in keeps SSO. The request parameters are not trusted (they pass
+    through a query string): the server check reads only `auth_time`.
+  - **Password users and the master user:** the person re-enters the
+    password, plus TOTP when enrolled (always for these roles, D23, and for
+    the master user in `prod`). The action takes the identifier from the
+    session (the session email; `AUTH_MASTER_USERNAME`), never from the
+    form, so a step-up cannot switch identity, and calls the `password` or
+    master provider — lockout, generic errors, timing-equal paths and TOTP
+    reuse refusal apply unchanged. A failed step-up returns one generic
+    error to the form and leaves the current session as it was.
+  - **Dev login:** choosing the dev login again.
+  - `redirectTo` is the Settings section that started the step-up, chosen
+    from a fixed allowlist of exactly two values:
+    `/dashboard/settings#role-grants` and
+    `/dashboard/settings#password-users` (the table above; D33). The
+    action takes a section key (`role-grants` | `password-users`), never a
+    URL; any other value is refused. There is no return-URL parameter.
+- **UI.** On `REAUTH_REQUIRED` the dialog that sent the write (Role grants,
+  or a Password users action or the password sign-in switch) shows "Confirm
+  it's you" with the control for `session.user.authMethod` (a button for Entra;
+  password and TOTP fields otherwise). It never replays the write: after the
+  step-up the admin submits again. The unsent draft (its non-secret fields,
+  e.g. target, role, reason; never a password, code or setup link) may be kept in `sessionStorage` and restored once, never in the
+  URL. A second `REAUTH_REQUIRED` straight after a step-up shows an error
+  ("Your sign-in could not be confirmed as recent") instead of starting
+  another step-up. The UI may read `session.user.authTime` to ask first; the
+  server check is the control.
 
 ## Audit log
 
@@ -477,9 +608,13 @@ remains). The export is audited.
 - **Semantics:** a successful write → exactly one `success`; a write that
   passed authorization but failed downstream → exactly one `failed`; a write
   refused by **authorization** → exactly one `denied` (below); any other
-  rejection (`400`, `401`, `403 OPERATION_DISABLED`/`OPERATION_UNAVAILABLE`,
+  rejection (`400`, `401`, `403 OPERATION_DISABLED`/`OPERATION_UNAVAILABLE`/`REAUTH_REQUIRED`,
   `404` for a target that does not exist, `409` version or
-  `MANAGED_BY_SSO` conflicts) → none. Audit-log views and access-review
+  `MANAGED_BY_SSO` conflicts) → none. `POST /api/account/password` from a
+  session whose `authMethod` is not `password` is an authorization refusal:
+  `403 FORBIDDEN` before parsing, with one `denied` record (action
+  `localuser.update`, `route: { method: "POST", pattern:
+  "/api/account/password" }`; D17; amended 2026-11-15, D36). Audit-log views and access-review
   exports are themselves audited.
 - **Denied attempts (D17, (user) 2026-11-14):** a write refused with
   `403 FORBIDDEN`, with the `404` returned for an existing but out-of-scope
@@ -563,7 +698,10 @@ The role literals the shared schemas need (grantable and local-user roles)
 live in `packages/shared` beside the group-mapping schema; the role *check*
 stays in `lib/auth/` (Rule 50.3).
 
-Every mutable item carries `version`. Access patterns: caller's items
+Every mutable item carries `version`; the `PasswordUser` item also carries
+`credentialVersion` (D29; incremented by an own password change, a reset, a
+TOTP reset, a disable and a delete) and, after an own change,
+`selfChangeSignedInAt`. Access patterns: caller's items
 `Query PK=IDENT#{oid}`; a team's members/admins `Query GSI1` (paginated,
 Rule 20.6); bind `Query PK=PENDING#{upn}`; visibility
 `BatchGetItem`; audit by day `Query PK=AUDIT#{day}`; access review `Query
@@ -611,22 +749,33 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/teams/[id]/visibility`, `/api/departments/[id]/visibility` | GET, PUT | Read in scope; write per matrix |
 | `/api/teams/[id]/members` | GET, POST | Per matrix |
 | `/api/teams/[id]/members/[oid]` | DELETE | Per matrix |
-| `/api/teams/[id]/admins`, `/api/departments/[id]/admins` | GET, POST | Per matrix |
-| `/api/teams/[id]/admins/[oid]`, `/api/departments/[id]/admins/[oid]` | DELETE | Per matrix |
+| `/api/teams/[id]/admins`, `/api/departments/[id]/admins` | GET, POST | Per matrix || `/api/teams/[id]/admins/[oid]`, `/api/departments/[id]/admins/[oid]` | DELETE | Per matrix |
 | `/api/affiliations/[oid]/move` | POST `{ fromTeamId, toTeamId, version }` | Per matrix |
-| `/api/role-grants` | GET, POST | `internal-admin` (GET also `internal-auditor`) |
-| `/api/role-grants/[oid]/[role]` | DELETE | `internal-admin` |
+| `/api/access/org-units` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor` (all), a department-scope admin (its departments and their teams), a team-scope admin (its teams, `departments: []`); everyone else `403` (D37): `{ data: { teams: [{ id, name, departmentId }], departments: [{ id, name }] } }` from the account registry (every `AccountMeta` item, active or not, deduplicated by id; sorted by name), not from rollups; scope read per request. Feeds the Settings access pickers |
+| `/api/role-grants` | GET, POST | `internal-admin` (GET also `internal-auditor`); POST **re-auth** |
+| `/api/role-grants/[oid]/[role]` | DELETE | `internal-admin`; **re-auth** |
 | `/api/group-mappings`, `/api/group-mappings/[groupId]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`) |
-| `/api/identities`, `/api/identities/[oid]/links` | GET, PUT | `internal-admin` (GET also `internal-auditor`) |
-| `/api/password-users`, `/api/password-users/[email]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`); POST returns the setup link once |
-| `/api/password-users/[email]/reset`, `/api/password-users/[email]/totp-reset` | POST | `internal-admin` (new setup link once; TOTP re-enrolment at next sign-in) |
-| `/api/account/password` | POST | The signed-in password user (own password; current password and TOTP required) |
-| `/api/governance/password-sign-in` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` |
+| `/api/identities`, `/api/identities/[oid]/links` | GET, PUT | `internal-admin` (GET also `internal-auditor`); never opened to scoped admins (D37) |
+| `/api/governance/identity-map-rules` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` (versioned, audited; D27) |
+| `/api/governance/identity-map-rules/suggestions` | GET | `internal-admin`/`internal-auditor`; read-only, not audited; confirming a suggestion is `PUT /api/identities/[oid]/links` (D27) |
+| `/api/password-users`, `/api/password-users/[email]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`); POST returns the setup link once; POST and DELETE **re-auth**; PATCH (enable or disable) not |
+| `/api/password-users/[email]/reset`, `/api/password-users/[email]/totp-reset` | POST | `internal-admin`; **re-auth** (new setup link once; TOTP re-enrolment at next sign-in) |
+| `/api/account/password` | POST | The signed-in password user (own password; current password and TOTP required); another `authMethod` → `403` with a `denied` record (D36). Used by the Account page `/dashboard/account` (D30) |
+| `/api/governance/password-sign-in` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin`, **re-auth** |
 | `/api/governance/per-user-approval` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` |
 | `/api/audit`, `/api/access-review` | GET | `internal-admin`, `internal-auditor` (audited) |
 
+**Names in management lists (D37).** The `GET` rows of
+`/api/teams/[id]/members`, `/api/teams/[id]/admins` and
+`/api/departments/[id]/admins` carry `displayName` and `email` from each
+bound person's identity (`null` when unknown); pending rows carry their
+email or UPN. Only the rows of the requested, in-scope team or department
+are returned, so a scoped admin sees the names of the people they manage
+and no one else's, without `/api/identities`.
+
 **Error-code registry:** `UNAUTHORIZED` (401), `FORBIDDEN` (403),
-`REAUTH_REQUIRED` (403), `BAD_REQUEST` (400), `NOT_FOUND` (404), `CONFLICT`,
+`REAUTH_REQUIRED` (403, a **re-auth** write without a sign-in in the last
+15 minutes; *Recent authentication*), `BAD_REQUEST` (400), `NOT_FOUND` (404), `CONFLICT`,
 `MANAGED_BY_SSO`, `ALREADY_AFFILIATED`, `SSO_BOUND` (409, the password user is bound to Entra; amended 2026-11-14), `WEAK_PASSWORD` (400), `INTERNAL` (500), and from the
 [LiteLLM spec](2026-11-10-litellm.md): `OPERATION_DISABLED` (403, operation
 toggle off), `OPERATION_UNAVAILABLE` (403, Enterprise-only on OSS, or any
@@ -665,6 +814,16 @@ user holds a proxy role). A new code is added here first. A bad or foreign list 
 | D23 | TOTP for password users | everyone / admin roles / none | **Required for any role above `internal-viewer` or any admin scope**, optional otherwise (user, 2026-11-14) |
 | D24 | Password sign-in once Entra is configured | stop at once / switch | **Admin switch, on by default**; bound users are always refused; access review flags enabled password users (user, 2026-11-14) |
 | D25 | Matching a password user to Entra | email claim / UPN / object id | **`expectedOid` when set, else `expectedUpn`**, tenant-checked, never the `email` claim or a guest UPN; conflicts flagged, never merged (user, 2026-11-14) |
+| D28 | Proving a recent sign-in for global-role grants | `signedInAt` / any re-sign-in / credential time (`auth_time` for Entra) | **`authTime` from the credential check, 15 minutes, set only at sign-in; step-up is a full sign-in through the existing providers** (Entra `prompt=login` + `max_age=900`; password and TOTP otherwise; identifier from the session); `403 REAUTH_REQUIRED` after the role and origin checks, no `denied` record, a metric (*Recent authentication*). Decided by: orchestrator design (2026-11-15); its open questions (denied record, `auth_time`, scope, cap restart) are resolved by D33 |
+| D29 | Other sessions after a password change, reset, disable or delete | end at the cap / revoke | **Revoke:** `credentialVersion` on the `LOCALUSER` item, copied into the JWT at sign-in and checked per request for password sessions (uncached); the changing session gets the new version from the server through the `selfChangeSignedInAt` marker, never from an `update` payload (*Password users*; OWASP / ASVS: invalidate sessions on credential change). Decided by: orchestrator (user delegated), 2026-11-15 |
+| D30 | Changing one's own password in the UI | route only / Account page | **Account page** `/dashboard/account` for password users, on `POST /api/account/password`; other methods see their sign-in method and no form. Decided by: orchestrator (user delegated), 2026-11-15 |
+| D31 | A password user who needs TOTP but never enrolled | new enrolment route / admin reset link | **Admin reset link**; its setup flow enrols TOTP when required — reuses the audited admin flow. Decided by: orchestrator (user delegated), 2026-11-15 |
+| D32 | Last-admin checks | read then write / one transaction | **One `TransactWriteItems`** with a `ConditionCheck` on another enabled admin's items; concurrent removals conflict and one gets `409 CONFLICT` (*Enforcement* item 8; no TOCTOU on a lockout invariant). Decided by: orchestrator (user delegated), 2026-11-15 |
+| D33 | D28's open questions | — | **No `denied` record** on `REAUTH_REQUIRED` (a challenge, not a refusal; the step-up sign-in is audited and a metric counts challenges); the **Entra `auth_time` claim** stays a user action (auth guide; fails closed without it); **re-auth extends** to password-user create, reset, TOTP reset and delete and to the password sign-in switch — not group mappings, memberships, visibility or links (sudo-mode practice, ASVS re-authentication before sensitive operations); the **return target** is the starting Settings section from a two-value allowlist; a step-up **restarts the session cap** (a new authentication issues a new session). Decided by: orchestrator (user delegated), 2026-11-15 |
+| D34 | Pending and stale lists in Settings | build now / defer | **Defer** (not in the 4R.4 brief); the access review flags stale items meanwhile (`docs/future-improvements.md` — *Pending and stale access lists*). Decided by: orchestrator (user delegated), 2026-11-15 |
+| D35 | Non-person key and D27 matching | canonicalise the ARN / keep it raw | **`byUser` keeps the raw non-person key; D27 rules match on the session name** (after the last `/` or `:`) — the spec follows the tested code. Decided by: orchestrator (user delegated), 2026-11-15 |
+| D36 | `POST /api/account/password` from a non-password session | no record / `denied` | **One `denied` record** — it is an authorization refusal (D17). Decided by: orchestrator (user delegated), 2026-11-15 |
+| D37 | Access pickers and names for scoped admins | rollup teams and bare `oid`s / registry and names | **Pickers read the account registry** through `GET /api/access/org-units`, scoped by the management-read rule; **members and admins rows carry `displayName` and `email`** for in-scope rows; `/api/identities` stays `internal-admin`/`internal-auditor` (least privilege). Decided by: orchestrator (user delegated), 2026-11-15 |
 
 **Proposed privacy wording (D6):** "LLM Usage Lens processes the AWS
 sign-in identity and the Amazon Bedrock usage and cost attributed to it, to
@@ -709,6 +868,11 @@ organisation administrators and auditors. Usage rollups are kept for
 | T27 | Disclosure or replay of a password user's TOTP secret or code | Envelope-encrypted secret, never returned; last used step stored, reuse refused | R2 (stored value is ciphertext; replayed code refused) |
 | T28 | Bypass: password sign-in sidesteps Entra Conditional Access once SSO is live | Bound users refused; password sign-in switch (D24); access review flag | R2 (bound refused); R4 (switch off refuses every password user) |
 | T29 | Disclosure: another app, service or principal in the account reads user data (shared subnets, broad IAM) | Platform — *Data isolation*: table resource policy limited to named roles, optional VPC-endpoint condition, CMK key policy, collector limited to cost keys, no inbound path to the tasks except the ALB | 4R.2 CDK assertions (policy present, principal list exact, data-plane actions only) |
+| T30 | Elevation: a stolen or unattended `internal-admin` session, or a forged same-site request riding it, grants or revokes a global role | *Recent authentication* (D28): 15-minute `authTime`, step-up by a fresh credential, same-origin check first, the UI never replays a write; `role.grant`/`role.revoke` alarm | R4 (unit `hasRecentAuth` boundaries; role-grant routes fresh / stale / missing per method; order against `401`, `FORBIDDEN`, cross-origin and `400`) |
+| T31 | Tampering: the client sets or refreshes `authTime` | Set only in the sign-in branch of the `jwt` callback; the `update` payload never merged; encrypted JWT | R4 (`update` with `authTime` leaves it unchanged; non-sign-in calls keep it) |
+| T32 | Spoofing: a step-up satisfied by an existing Entra SSO session, or by stripping `prompt`/`max_age` from the query | Only the verified ID token's `auth_time` counts, never the request parameters or the callback time; missing claim → step-up needed | R4 (Entra sign-in with an old, missing or non-integer `auth_time` gives no recent auth) |
+| T33 | Elevation / denial: two concurrent removals leave no `internal-admin` (lockout) | One transaction with a `ConditionCheck` on another enabled admin's items (*Enforcement* item 8, D32) | R4 (concurrent revokes and disables of the last two admins: at least one `409`, an admin remains) |
+| T34 | Spoofing: a stolen or left-open password session survives a password change, reset, disable or delete | `credentialVersion` checked per request, uncached; incremented with the change; only the changing session gets the new version, only from the server (D29) | R4 (old version → `401`; changing session stays signed in; `update` cannot raise the version beyond the committed value) |
 
 ## Residual risks
 
@@ -733,3 +897,13 @@ organisation administrators and auditors. Usage rollups are kept for
   lockout, reach limited to the VPN, Entra `internal-admin` holders remain
   the primary path, and the runbook covers investigating the source.
   Accepted for v1.
+- **Setup-link preview without a session** (accepted 2026-11-15, orchestrator,
+  user delegated): the setup page's `previewPasswordSetupLink` Server Action
+  reads what the link is for (the email shown at setup, T25) before any
+  session exists. It is read-only and needs the 256-bit token.
+- **List-cursor HMAC fallback** (accepted 2026-11-15, orchestrator, user
+  delegated): without `AUTH_SECRET` (tests, skipped env validation) the
+  cursor signing key is a random per-process key, so a cursor stays
+  unforgeable but does not survive a restart or reach another task; env
+  validation requires `AUTH_SECRET` in production, so the fallback never
+  applies there.

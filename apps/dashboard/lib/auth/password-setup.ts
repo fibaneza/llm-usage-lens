@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   completePasswordSetupWrite,
+  getPasswordCredential,
   findSetupLink,
 } from "@/lib/data/access/password-credentials-store";
 import { getPasswordSignIn, sha256Hex } from "@/lib/data/access/password-users";
@@ -30,6 +31,7 @@ export type PasswordSetupResult =
         email: string;
         displayName: string;
         authMethod: "password";
+        credentialVersion: number;
       };
     }
   | {
@@ -41,23 +43,51 @@ const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const SECRET_PATTERN = /^[A-Z2-7]{16,64}$/;
 const INVALID_LINK = { ok: false, code: "INVALID_LINK" } as const;
 
-export async function completePasswordSetup(
-  input: PasswordSetupInput,
-  deps: { now?: () => Date } = {},
-): Promise<PasswordSetupResult> {
-  const now = (deps.now ?? (() => new Date()))();
-  if (!TOKEN_PATTERN.test(input.token)) return INVALID_LINK;
-  const tokenHash = sha256Hex(input.token);
+// One validity rule for the preview and the completion: a well-formed token
+// whose link is live, an enabled user, password sign-in on.
+async function findLiveLink(token: string, now: Date) {
+  if (!TOKEN_PATTERN.test(token)) return null;
+  const tokenHash = sha256Hex(token);
   const link = await findSetupLink(tokenHash);
   if (
     !link ||
     link.status !== "enabled" ||
     Date.parse(link.expiresAt) <= now.getTime()
   ) {
-    return INVALID_LINK;
+    return null;
   }
+  if (!(await getPasswordSignIn()).enabled) return null;
+  return { link, tokenHash };
+}
 
-  if (!(await getPasswordSignIn()).enabled) return INVALID_LINK;
+// Read-only: shows the setup page whom the link is for (T25) and whether TOTP
+// enrolment is mandatory (D23). Consumes nothing and counts as no attempt.
+export async function previewPasswordSetup(
+  token: string,
+  deps: { now?: () => Date } = {},
+): Promise<{
+  email: string;
+  displayName: string;
+  totpRequired: boolean;
+} | null> {
+  const now = (deps.now ?? (() => new Date()))();
+  const live = await findLiveLink(token, now);
+  if (!live) return null;
+  return {
+    email: live.link.email,
+    displayName: live.link.displayName,
+    totpRequired: await isTotpRequired(live.link.oid),
+  };
+}
+
+export async function completePasswordSetup(
+  input: PasswordSetupInput,
+  deps: { now?: () => Date } = {},
+): Promise<PasswordSetupResult> {
+  const now = (deps.now ?? (() => new Date()))();
+  const live = await findLiveLink(input.token, now);
+  if (!live) return INVALID_LINK;
+  const { link, tokenHash } = live;
 
   if (checkPassword(input.password) !== "ok") {
     return { ok: false, code: "WEAK_PASSWORD" };
@@ -89,6 +119,9 @@ export async function completePasswordSetup(
     },
   );
   if (!written.ok) return INVALID_LINK;
+  // The version after the write, as stored (a concurrent change may have moved it).
+  const after = await getPasswordCredential(link.email);
+  if (!after) return INVALID_LINK;
   return {
     ok: true,
     identity: {
@@ -97,6 +130,7 @@ export async function completePasswordSetup(
       email: link.email,
       displayName: link.displayName,
       authMethod: "password",
+      credentialVersion: after.credentialVersion,
     },
   };
 }

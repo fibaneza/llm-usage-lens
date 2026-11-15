@@ -23,6 +23,7 @@ export type PasswordIdentity = {
   email: string;
   displayName: string;
   authMethod: "password";
+  credentialVersion: number;
 };
 
 const CredentialsSchema = z.object({
@@ -89,5 +90,6 @@ export async function authorizePasswordUser(
     email: usable.email,
     displayName: usable.displayName,
     authMethod: "password",
+    credentialVersion: usable.credentialVersion,
   };
 }

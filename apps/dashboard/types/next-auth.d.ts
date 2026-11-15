@@ -8,7 +8,11 @@ declare module "next-auth" {
       oid: string;
       tid: string;
       roles: string[];
-      authMethod: "entra" | "master" | "local";
+      authMethod: "entra" | "master" | "local" | "password";
+      // Epoch seconds of the last credential check (D28); read-only, set at sign-in.
+      authTime?: number;
+      // Epoch seconds of the sign-in; identifies the session to its own password change (D29).
+      signedInAt?: number;
     } & DefaultSession["user"];
   }
 
@@ -25,8 +29,13 @@ declare module "next-auth/jwt" {
     oid?: string;
     tid?: string;
     roles?: string[];
-    authMethod?: "entra" | "master" | "local";
+    authMethod?: "entra" | "master" | "local" | "password";
     // Epoch seconds of the sign-in; the session ends at its role-dependent cap.
     signedInAt?: number;
+    // Epoch seconds of the credential check (D28); set only at sign-in.
+    authTime?: number;
+    email?: string;
+    // Password sessions only (D29); never exposed on the session.
+    credentialVersion?: number;
   }
 }

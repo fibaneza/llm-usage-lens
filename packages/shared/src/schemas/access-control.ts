@@ -31,6 +31,23 @@ export const AdminScopeSchema = z.object({
   createdBy: IdSchema,
 });
 
+// F11 (temp/run-r4b/decisions.md): list rows name the person; null when the
+// identity is unknown. No other identity field leaves the route.
+const PersonNameShape = {
+  displayName: z.string().nullable(),
+  email: z.string().nullable(),
+};
+export const MemberRowSchema = MemberAffiliationSchema.extend(PersonNameShape);
+export const AdminScopeRowSchema = AdminScopeSchema.extend(PersonNameShape);
+
+// F10: GET /api/access/org-units, the account registry scoped to the caller.
+export const OrgUnitsSchema = z.object({
+  teams: z.array(
+    z.object({ id: IdSchema, name: IdSchema, departmentId: IdSchema }),
+  ),
+  departments: z.array(z.object({ id: IdSchema, name: IdSchema })),
+});
+
 const pendingBase = {
   emailOrUpn: IdSchema,
   createdBy: IdSchema,
@@ -135,6 +152,36 @@ export const PasswordUserSchema = z.object({
   ssoConflict: z.boolean().optional(),
 });
 
+export const PasswordUserListStatusSchema = z.enum([
+  "enabled",
+  "disabled",
+  "pending-setup",
+  "sso-bound",
+]);
+
+// One row of GET /api/password-users (Access Control spec - API routes
+// (additions)): never a hash, TOTP secret, setup token or token hash.
+export const PasswordUserListItemSchema = z.object({
+  email: z.email(),
+  displayName: z.string().min(1),
+  status: PasswordUserListStatusSchema,
+  totpEnrolled: z.boolean(),
+  createdAt: Iso8601Schema,
+  version: VersionSchema,
+});
+
+// POST /api/password-users body; the email is lower-cased on write.
+export const PasswordUserInputSchema = z.object({
+  email: z.email().max(254),
+  displayName: z.string().min(1).max(200),
+  sso: z
+    .object({
+      expectedUpn: z.string().min(1).max(254).optional(),
+      expectedOid: IdSchema.max(128).optional(),
+    })
+    .optional(),
+});
+
 export const IdentityLinkSchema = z
   .object({
     oid: IdSchema,
@@ -190,6 +237,7 @@ export const AUDIT_ACTIONS = [
   "account.update",
   "account.deactivate",
   "governance.approval.update",
+  "identity.map.update",
   "audit.view",
   "accessreview.export",
   "auth.signin.success",
@@ -303,6 +351,7 @@ const SNAPSHOT_KEYS: ReadonlySet<string> = new Set([
   "baseUrl",
   "litellmTeamId",
   "toggles",
+  "rules",
 ]);
 
 export function sanitizeAuditSnapshot(
@@ -340,12 +389,17 @@ export type PerUserApproval = z.infer<typeof PerUserApprovalSchema>;
 export type AccessSource = z.infer<typeof AccessSourceSchema>;
 export type MemberAffiliation = z.infer<typeof MemberAffiliationSchema>;
 export type AdminScope = z.infer<typeof AdminScopeSchema>;
+export type MemberRow = z.infer<typeof MemberRowSchema>;
+export type AdminScopeRow = z.infer<typeof AdminScopeRowSchema>;
+export type OrgUnits = z.infer<typeof OrgUnitsSchema>;
 export type PendingItem = z.infer<typeof PendingItemSchema>;
 export type GrantableRole = z.infer<typeof GrantableRoleSchema>;
 export type RoleGrant = z.infer<typeof RoleGrantSchema>;
 export type TeamVisibility = z.infer<typeof TeamVisibilitySchema>;
 export type DepartmentVisibility = z.infer<typeof DepartmentVisibilitySchema>;
 export type PasswordUser = z.infer<typeof PasswordUserSchema>;
+export type PasswordUserListItem = z.infer<typeof PasswordUserListItemSchema>;
+export type PasswordUserInput = z.infer<typeof PasswordUserInputSchema>;
 export type LocalUser = z.infer<typeof LocalUserSchema>;
 export type IdentityLink = z.infer<typeof IdentityLinkSchema>;
 export type UsageKeyClaim = z.infer<typeof UsageKeyClaimSchema>;

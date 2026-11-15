@@ -64,7 +64,7 @@ Decisions on technologies evaluated and excluded, with rationale:
 - **Access model:** role-based and scope-limited from Phase 4R ([Access Control spec](2026-11-10-access-control.md) — *Roles*, *Enforcement*); until then every authenticated member reads all data and account mutations require `Admin`.
 - **Session:** Auth.js encrypted JWT session cookie; it ends 8 hours after sign-in regardless of activity (System Architecture — *Authentication & Access*).
 - **Proxy:** Auth.js in the Next.js proxy (`proxy.ts`) protects all `/dashboard/*` and `/api/*` routes except `/api/health` (Platform spec).
-- **Sign-in page:** One action per configured provider — "Sign in with Microsoft" when Entra ID is configured, a local dev sign-in only when the dev login is enabled outside production, and an email + password form (with a TOTP step when required) while password sign-in is on (Access Control — *Password users*, amended 2026-11-14). The master user has its own link. No sign-up — identities are managed in Entra ID or by an `internal-admin`. A setup page (`/account/setup`) sets a password user's password and enrols TOTP from a one-time link; signed-in password users change their password from the user menu.
+- **Sign-in page:** One action per configured provider — "Sign in with Microsoft" when Entra ID is configured, a local dev sign-in only when the dev login is enabled outside production, and an email + password form (with a TOTP step when required) while password sign-in is on (Access Control — *Password users*, amended 2026-11-14). The master user has its own link. No sign-up — identities are managed in Entra ID or by an `internal-admin`. A setup page (`/account/setup`) sets a password user's password and enrols TOTP from a one-time link; signed-in password users change their password on the **Account page** (`/dashboard/account`, linked from the user menu; Access Control — *Password users*, D30).
 - **User menu:** Custom user menu in the top bar backed by the Auth.js session: avatar, name, email, the caller's role label(s), the sign-in method and sign out. Role and sign-in method were added on 2026-11-11 (user direction).
   - **Role labels** come from one map in `lib/auth/roles.ts` (Rule 50.3), never from string literals in the component: `internal-admin` → "Admin", `internal-org-admin` → "Org admin", `internal-auditor` → "Auditor", `internal-viewer` → "Viewer". The menu shows the session's global roles in `GLOBAL_ROLES` order, comma-separated; a session role with no label is not shown. Scoped admin grants (`internal-team-admin`) are not shown: they are authorization data read per request, not session data (Access Control — *Enforcement*).
   - **Sign-in method labels** come from the same module: `entra` → "Microsoft Entra ID", `master` → "Master user (break-glass)", `local` → "Local login (dev)". A session without a valid `authMethod` shows no sign-in method line.
@@ -158,19 +158,21 @@ Selected for enterprise SaaS analytics dashboards — clean, high-contrast, prin
 |------|-----|-------------|-------|
 | Primary | `#4F46E5` | `--color-primary` | Navigation active states, primary buttons |
 | On Primary | `#FFFFFF` | `--color-on-primary` | Text on primary color |
-| Secondary | `#6366F1` | `--color-secondary` | Links, secondary actions |
+| Secondary | `#4338CA` | `--color-secondary` | Links, secondary actions, `secondary` badge (white text): 7.90:1 on `#FFFFFF`, 7.39:1 on `#F5F7FF` (changed 2026-11-15, below) |
 | Accent/CTA | `#D97706` | `--color-accent` | Warnings, highlights, cost alerts |
 | Background | `#F5F7FF` | `--color-background` | Page background (soft blue-gray canvas) |
 | Foreground | `#0F172A` | `--color-foreground` | Primary text |
 | Muted foreground | `#566880` | `--color-muted-foreground` | Placeholders, muted text |
 | Muted | `#E2E8F0` | `--color-muted` | Muted surfaces (subtle fills, tracks) |
 | Border | `#E2E8F0` | `--color-border` | Card borders, dividers |
-| Destructive | `#E11D48` | `--color-destructive` | Error states, high cost alerts |
+| Destructive | `#BE123C` | `--color-destructive` | Error states, high cost alerts, `destructive` badge and button (white text): 6.29:1 on `#FFFFFF`, 5.88:1 on `#F5F7FF` (changed 2026-11-15, below) |
 | Success | `#059669` | `--color-success` | Positive trends, low cost indicators |
 | Ring | `rgba(79,70,229,0.35)` | `--color-ring` | Input focus glow (decorative; not the keyboard focus indicator) |
 | Focus ring | `#4F46E5` | `--color-focus-ring` | Keyboard focus indicator: 6.29:1 on `#FFFFFF`, 5.88:1 on `#F5F7FF`, 5.10:1 on `#E2E8F0` (Interaction & States; decided 2026-11-06); `apps/dashboard/app/globals-contrast.test.ts` enforces it once the token lands (Phase 5) |
 
 **Muted foreground (changed 2026-10-29).** Raised from `#94A3B8` (2.0–2.6:1) to `#566880` so muted text meets WCAG AA 4.5:1 on card, background, muted, accent and sidebar surfaces (lowest: 4.62:1 on Muted `#E2E8F0`). `apps/dashboard/app/globals-contrast.test.ts` enforces it. The vendored `docs/design-system/` previews still show the old value; this table wins.
+
+**Destructive and secondary (changed 2026-11-15; orchestrator, user delegated; WCAG 2.2 SC 1.4.3).** `--color-destructive` `#E11D48` (4.70:1 on `#FFFFFF`, 4.39:1 on `#F5F7FF`) and `--color-secondary` `#6366F1` (4.47:1 on `#FFFFFF`, 4.18:1 on `#F5F7FF`) failed AA 4.5:1 as text on the canvas and, for the secondary badge, as a fill behind white text. They become rose-700 `#BE123C` (6.29:1 on `#FFFFFF`, 5.88:1 on `#F5F7FF`, 5.10:1 on Muted `#E2E8F0`) and indigo-700 `#4338CA` (7.90:1 on `#FFFFFF`, 7.39:1 on `#F5F7FF`), which stays distinct from `--color-primary` `#4F46E5`. Their `-foreground` tokens stay `#FFFFFF`. `apps/dashboard/app/globals-contrast.test.ts` enforces 4.5:1 for both tokens against `#FFFFFF` and `--color-background`.
 
 **Known divergence (pre-existing, Phase 1).** The table lists Accent/CTA `#D97706` as `--color-accent`, but `apps/dashboard/app/globals.css` defines `#D97706` as `--color-warning` and sets `--color-accent` to `#EEF2FF` (shadcn's neutral interactive surface). This spec does not resolve it; a follow-up decision should ratify one mapping and update either this table or the code.
 
@@ -337,6 +339,7 @@ rail label and a descriptive page title shown in the top bar.
 | Attribution | Users | User breakdown | `/dashboard/users` | All users across all accounts |
 | Gateway | LiteLLM | LiteLLM usage & administration | `/dashboard/litellm` | LiteLLM-reported spend, members, keys, model access (LiteLLM units L3+; [LiteLLM spec](2026-11-10-litellm.md)) |
 | Footer | Settings | Settings | `/dashboard/settings` | Account registry, sync status, data retention (tag coverage: Phase 4.9b) |
+| — | Account | Account | `/dashboard/account` | The caller's sign-in method; for password users, the own password change form (from the user menu, no rail item; added 2026-11-15, Access Control D30) |
 
 ### Overview Page
 
@@ -403,7 +406,15 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 - Sync status: last run time, success/error count, next scheduled run
 - Tag coverage (Phase 4.9b, deferred): per-team percentage of tagged vs untagged usage
 - Data retention: TTL configuration display
-- Access (Phase 4R; [Access Control spec](2026-11-10-access-control.md)): **Members** (add by email/UPN, remove, move, pending and stale lists), **Team admins** (team and department scopes), **Visibility** (team settings, department settings and cap, "limited by department" hints), and `internal-admin`-only **Group mappings**, **Role grants** (re-authentication prompt and reason field), **Identity links**, **Password users** (create with a one-time setup link shown once, reset, TOTP reset, disable, delete, the SSO reference, bind status and conflicts; the password sign-in switch), **Per-user approval**; **Audit log** and **Access review** export for `internal-admin` and `internal-auditor`. Sections a caller cannot use are not rendered; SSO-managed rows show a read-only "Managed in Entra" badge. Forms meet the Phase 5 floor (axe clean, keyboard, visible focus).
+- Access (Phase 4R; [Access Control spec](2026-11-10-access-control.md)): **Members** (add by email/UPN, remove, move; pending and stale lists deferred, Access Control D34), **Team admins** (team and department scopes), **Visibility** (team settings, department settings and cap, "limited by department" hints), and `internal-admin`-only **Group mappings**, **Role grants** (re-authentication prompt and reason field), **Identity links**, **Password users** (create with a one-time setup link shown once, reset, TOTP reset, disable, delete, the SSO reference, bind status and conflicts; the password sign-in switch), **Per-user approval**; **Audit log** and **Access review** export for `internal-admin` and `internal-auditor`. Team and department pickers list the account registry through `GET /api/access/org-units`, scoped to what the caller manages, and member and admin rows show each person's name and email (Access Control D37). A re-auth write in Role grants or Password users opens "Confirm it's you" and returns to that section (Access Control — *Recent authentication*). Sections a caller cannot use are not rendered; SSO-managed rows show a read-only "Managed in Entra" badge. Forms meet the Phase 5 floor (axe clean, keyboard, visible focus).
+
+### Account Page
+
+*Added 2026-11-15 (Access Control D30).* `/dashboard/account`, reached from the user menu; every signed-in role.
+
+- **Password users:** a "Change password" form — current password, new password, confirm new password, and a TOTP code when enrolled — posting to `POST /api/account/password`. Inline errors: the generic refusal, `WEAK_PASSWORD` (12–128 characters, not a common password), mismatched confirmation (client-side, before sending). On success a confirmation message; the page stays signed in and other sessions end (Access Control D29).
+- **Other sign-in methods** (Entra, master user, dev login): the sign-in method and a short note on where the credential is managed; no form.
+- Forms meet the Phase 5 floor (axe clean, keyboard, visible focus, labelled fields, `autocomplete` `current-password` / `new-password` / `one-time-code`).
 
 ### LiteLLM Page
 

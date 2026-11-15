@@ -36,7 +36,7 @@ const ListQuerySchema = z.object({
 // Without it (tests, SKIP_ENV_VALIDATION) a per-process key is used, so a
 // cursor is still unforgeable but does not outlive the process.
 const processKey = randomUUID();
-function cursorSecret(): string {
+export function cursorSecret(): string {
   const base = env.AUTH_SECRET || processKey;
   return createHmac("sha256", base).update("access-list-cursor").digest("hex");
 }
@@ -67,7 +67,33 @@ export function accessErrorResponse(code: AccessErrorCode): Response {
       return jsonError(404, "NOT_FOUND", NOT_FOUND_MESSAGE);
     case "BAD_CURSOR":
       return jsonError(400, "BAD_REQUEST", "Invalid cursor");
-    default:
+    case "MANAGED_BY_SSO":
+      return jsonError(
+        409,
+        "MANAGED_BY_SSO",
+        "The resource is managed by single sign-on",
+      );
+    case "ALREADY_AFFILIATED":
+      return jsonError(
+        409,
+        "ALREADY_AFFILIATED",
+        "The user is already affiliated with a team",
+      );
+    case "CONFLICT":
       return jsonError(409, "CONFLICT", "The resource changed or conflicts");
+    default: {
+      const unreachable: never = code;
+      throw new Error(`Unhandled access error code: ${String(unreachable)}`);
+    }
   }
+}
+
+// Spec - Password users D24: password sign-in may be turned off, and the last
+// password admin is no longer protected, only once Entra is configured.
+export function entraConfigured(): boolean {
+  return Boolean(
+    env.AUTH_MICROSOFT_ENTRA_ID_ID &&
+    env.AUTH_MICROSOFT_ENTRA_ID_SECRET &&
+    env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
+  );
 }

@@ -82,7 +82,11 @@ export async function commitAudited(args: {
     return { ok: true };
   } catch (error) {
     if (error instanceof TransactionCanceledException) {
-      const index = (error.CancellationReasons ?? []).findIndex(
+      const reasons = error.CancellationReasons ?? [];
+      if (reasons.some((r) => r.Code === "TransactionConflict")) {
+        return { ok: false, code: "CONFLICT" };
+      }
+      const index = reasons.findIndex(
         (r) => r.Code === "ConditionalCheckFailed",
       );
       if (index >= 0 && index < items.length) {
@@ -102,4 +106,17 @@ export async function commitAudited(args: {
     }
     throw error;
   }
+}
+
+// A read that is itself audited (spec - Audit log: audit-log views and
+// access-review exports). Written after the read succeeds; a failed write
+// throws, so an unaudited view is never served.
+export async function recordAuditedRead(
+  audit: AuditSpec,
+  ctx: AuditContext,
+): Promise<void> {
+  const record = buildRecord(audit, ctx, "success");
+  await appendAuditRecord(record, ctx.sequence.next);
+  ctx.sequence.next += 1;
+  await deliverAuditLine(record);
 }

@@ -20,6 +20,10 @@ export type TestUserOptions = {
   // Role claims carried in the forged token (`token.roles`, mapped to
   // `session.user.roles` by auth.ts). Defaults to none, i.e. a non-admin.
   roles?: string[];
+  // Epoch seconds of the last full sign-in (`token.authTime`, Access Control
+  // spec - Recent authentication). Defaults to none; a value older than 15
+  // minutes is a stale session whose re-auth writes answer REAUTH_REQUIRED.
+  authTime?: number;
   oid?: string;
   tid?: string;
   authMethod?: "entra" | "master" | "local";
@@ -36,6 +40,7 @@ export async function signInAsTestUser(
   {
     signedInAt = Math.floor(Date.now() / 1000),
     roles = [],
+    authTime,
     oid = "e2e-user",
     tid = "e2e-tenant",
     authMethod = "entra",
@@ -49,6 +54,7 @@ export async function signInAsTestUser(
       tid,
       authMethod,
       roles,
+      ...(authTime === undefined ? {} : { authTime }),
       ...(signedInAt === null ? {} : { signedInAt }),
     },
     secret: E2E_AUTH_SECRET,

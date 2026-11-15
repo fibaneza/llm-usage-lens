@@ -16,8 +16,8 @@ import type { ApiErrorCode } from "./api";
 // account write route); Rule 20.11, Rule 10.4, Rule 60.22 (valid + invalid cases).
 
 describe("API_ERROR_CODES / ApiErrorCodeSchema", () => {
-  it("lists the ten error codes in spec order", () => {
-    expect([...API_ERROR_CODES]).toEqual([
+  it("lists the established error codes first, in spec order", () => {
+    expect([...API_ERROR_CODES].slice(0, 10)).toEqual([
       "UNAUTHORIZED",
       "FORBIDDEN",
       "BAD_REQUEST",
@@ -30,6 +30,45 @@ describe("API_ERROR_CODES / ApiErrorCodeSchema", () => {
       "CONFLICT",
     ]);
   });
+
+  // Access Control spec - "Error-code registry" (CONFLICT, MANAGED_BY_SSO,
+  // ALREADY_AFFILIATED in that order; "A new code is added here first");
+  // 4R.4 slice-1 review warning: these were mapped to a generic CONFLICT.
+  it("registers MANAGED_BY_SSO and ALREADY_AFFILIATED right after CONFLICT", () => {
+    expect([...API_ERROR_CODES].slice(9, 12)).toEqual([
+      "CONFLICT",
+      "MANAGED_BY_SSO",
+      "ALREADY_AFFILIATED",
+    ]);
+    for (const code of ["MANAGED_BY_SSO", "ALREADY_AFFILIATED"]) {
+      expect(ApiErrorCodeSchema.safeParse(code).success).toBe(true);
+    }
+  });
+
+  // Access Control spec - "Error-code registry": REAUTH_REQUIRED (403, a
+  // re-auth write without a sign-in in the last 15 minutes; D28). Appended
+  // after the established codes so their order above is unchanged.
+  it("registers REAUTH_REQUIRED", () => {
+    expect(API_ERROR_CODES).toContain("REAUTH_REQUIRED");
+    expect(ApiErrorCodeSchema.parse("REAUTH_REQUIRED")).toBe("REAUTH_REQUIRED");
+    const code: ApiErrorCode = "REAUTH_REQUIRED";
+    expect(code).toBe("REAUTH_REQUIRED");
+    expect(
+      ApiErrorBodySchema.safeParse({
+        error: {
+          code: "REAUTH_REQUIRED",
+          message: "Re-authentication required",
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each(["reauth_required", "REAUTH_REQUIRED ", "REAUTH", "REAUTHREQUIRED"])(
+    "rejects the near miss %j",
+    (code) => {
+      expect(ApiErrorCodeSchema.safeParse(code).success).toBe(false);
+    },
+  );
 
   it.each(API_ERROR_CODES)("accepts the known code %s", (code) => {
     expect(ApiErrorCodeSchema.safeParse(code).success).toBe(true);

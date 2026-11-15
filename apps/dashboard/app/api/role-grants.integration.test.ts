@@ -132,10 +132,12 @@ describe("GET /api/role-grants", () => {
     );
   });
 
-  it("is GET only in this slice: grant and revoke need re-auth and ship later", () => {
+  // Slice 4 adds POST (here) and DELETE; the re-auth suite is
+  // role-grants.reauth.integration.test.ts. No other write method exists.
+  it("exposes no write method besides POST", () => {
     expect(
       Object.keys(roleGrantsRoute).filter((k) =>
-        /^(POST|PUT|PATCH|DELETE)$/.test(k),
+        /^(PUT|PATCH|DELETE)$/.test(k),
       ),
     ).toEqual([]);
   });

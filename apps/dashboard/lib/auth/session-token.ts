@@ -7,6 +7,10 @@ const SessionTokenSchema = z.object({
   tid: z.string().min(1),
   roles: z.array(z.string()),
   authMethod: z.enum(["entra", "master", "local", "password"]),
+  // Epoch seconds of the credential check (D28); absent on pre-D28 sessions.
+  authTime: z.number().int().optional(),
+  // Password sessions: the user's credential version at sign-in (D29).
+  credentialVersion: z.number().int().min(0).optional(),
 });
 
 export type SessionTokenClaims = z.infer<typeof SessionTokenSchema>;

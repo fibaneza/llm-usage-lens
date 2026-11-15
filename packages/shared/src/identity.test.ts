@@ -29,11 +29,16 @@ describe("IdentityRecordSchema", () => {
     expect(IdentityRecordSchema.safeParse(rest).success).toBe(true);
   });
 
-  it.each(["entra", "master", "local"])("accepts authMethod %s", (m) => {
-    expect(
-      IdentityRecordSchema.safeParse({ ...VALID, authMethod: m }).success,
-    ).toBe(true);
-  });
+  // Password users: D20-D22, Access Control spec "Password users" - the setup
+  // flow writes identities with authMethod "password".
+  it.each(["entra", "master", "local", "password"])(
+    "accepts authMethod %s",
+    (m) => {
+      expect(
+        IdentityRecordSchema.safeParse({ ...VALID, authMethod: m }).success,
+      ).toBe(true);
+    },
+  );
 
   it.each([
     ["unknown authMethod", { authMethod: "saml" }],
