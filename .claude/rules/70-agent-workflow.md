@@ -124,7 +124,7 @@ review = quality-reviewer + spec-guardian + ecc reviewers
       stop on a usage freeze), merges them into
       one candidate, and runs the review fan-out (covering each unit and
       its required security review — the list in *One review per phase*)
-      and the full suite once on that tree, one squash commit per unit.
+      on that tree, one squash commit per unit; the full suite runs in CI.
       Nothing reaches `main` before both pass.
     - **Re-reviews are delta-scoped.** After REQUEST CHANGES, the next pass
       reviews only the blocker fixes (the diff since the last reviewed
@@ -142,14 +142,14 @@ review = quality-reviewer + spec-guardian + ecc reviewers
       `lib/api/respond.ts`, `auth.ts`, `env.ts`) or to test infrastructure
       (`vitest.config.ts`, `test/**`, `e2e/support/**`) is impacted
       everywhere, so `--changed` already widens to the full suite.
-    - **The full suite runs once, on the `main` candidate.** Before a phase
-      fast-forwards `main`, merge `main` into the branch and run the full
-      `pnpm check` (both Vitest projects and `build:ci`) and, when UI or
-      auth changed, the full `pnpm test:e2e` on that tree — exactly the tree
-      `main` will hold, so a regression is caught before it lands, never
-      after. CI repeats the full set on the user's push. A failure there goes
-      back into the loop on the branch; `main` is never committed to
-      directly (Rule 30.5).
+    - **The full suite runs in CI (amended 2026-11-15, user).** Sessions
+      run the branch gate (above) with `main` merged in; the coordinator
+      does not re-run tests and relies on that evidence. The full
+      `pnpm check` and `pnpm test:e2e` run in GitHub Actions on the user's
+      push (or on a PR, Rule 31's optional path). A red CI run goes back
+      into the loop on a `fix/` branch; `main` is never committed to
+      directly (Rule 30.5). Previously the full suite ran once locally on
+      the `main` candidate.
     - **Results, not logs.** Every test, gate or build run is redirected to
       a file; agents and the orchestrator read only the exit code, the count
       lines (`Test Files`, `Tests`, Playwright passed/failed) and the names

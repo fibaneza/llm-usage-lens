@@ -156,14 +156,17 @@ full suite, no per-branch review.
    queued branch in turn (resolve conflicts per §2a: keep what is on
    `main` plus each branch's new lines; append-only files get every side's
    lines).
-3. **Test once.** On the same tree, results only: `pnpm check` (DynamoDB
-   Local on `:8000`; outside the sandbox when it blocks the port or the
-   pnpm store) and, when UI or auth changed, `pnpm test:e2e`. Use a `haiku`
-   agent to run and summarise it when the coordinator's context is
-   precious. Then run `/verify-phase <unit>` for each unit on the candidate
-   (Rule 30.3).
-4. **Review once**, handing the reviewers step 3's evidence (exit codes
-   and counts, Rule 70.5). One fan-out over `git diff main...integration/<date>`:
+3. **No re-run (decided 2026-11-15, user).** The coordinator does not run
+   the tests again. It takes the worker's branch-gate evidence from the
+   report (exit codes and counts for typecheck, lint, format, the impacted
+   tests plus the file-reading tests, and targeted e2e), checks the branch
+   has `main` merged in, and runs `/verify-phase <unit>` (Rule 30.3). The
+   full suite runs in GitHub Actions (`llm-usage-lens-build.yml`) on the
+   user's push; a red CI run goes back to a `fix/` branch through the
+   Rule 70 loop. When the user wants CI before `main`, use Rule 31's
+   optional PR path.
+4. **Review once**, handing the reviewers the worker's gate evidence (exit
+   codes and counts, Rule 70.5). One fan-out over `git diff main...integration/<date>`:
    `quality-reviewer` (opus) covering every unit in the batch and every
    dedicated security review those units require (4R.4, L2, L4, …), plus
    `spec-guardian` when the batch changed `docs/specs/**` or
