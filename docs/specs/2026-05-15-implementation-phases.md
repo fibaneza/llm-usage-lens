@@ -718,6 +718,24 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ---
 
+## Maintenance — test consolidation (queued 2026-11-15, user)
+
+Runs as its own `chore/test-consolidation` branch once 4R.4 has landed and
+before L4, never during a unit that edits the same files (Rule 60.24a).
+
+- [ ] Shared route-contract suite (Rule 60.23): a registry of every
+  `app/api/**` route and one parameterised suite for the `401` shape,
+  `403` before parsing, `400` shape, `no-store` and one `denied` audit per
+  refused write; remove the per-route copies it supersedes
+- [ ] Merge the per-run files into their canonical test files
+  (`auth.r1`/`auth.r2` → `auth.test.ts`, `env.r1`/`env.r2`, `roles.r1`,
+  `operations.review`, `connection-test.warnings`), dropping duplicate cases
+- [ ] One layer per behaviour: remove component or e2e cases that only
+  repeat an integration-level assertion
+- [ ] Verify: `pnpm check` and the full `pnpm test:e2e` green; no spec rule,
+  rule item or threat item loses its last test (a coverage list per removed
+  case in the PR body); test lines and run time before and after reported
+
 ## Workflow pilots (decided 2026-11-15, user)
 
 Claude Code workflows (multi-agent orchestration; [Dynamic workflows guide](../guides/dynamic-workflows.md))

@@ -89,9 +89,28 @@ patterns) and current Next.js App Router guidance.
     tested against DynamoDB Local, not mocks.
 23. **Route Handler tests assert the `{ data }` / `{ error }` shape** and
     cover the `401` (unauthenticated) and `400` (bad input) paths, plus `403`
-    (no `internal-admin` role) on every write route.
+    (no `internal-admin` role) on every write route. **Amended 2026-11-15
+    (user):** the cross-cutting route contract — `401` shape, `403` before
+    parsing, `400` shape, `Cache-Control: private, no-store`, one `denied`
+    audit per refused write — is asserted **once**, by a shared
+    route-contract suite that iterates a registry of every route; a new
+    route registers there instead of copying those cases. A route's own
+    file tests only its route-specific behaviour. Until that suite lands
+    (test cleanup chore), the route's own file keeps the cases.
 24. **No flaky tests.** No real network, no wall-clock `sleep`; control time
     with `vi.useFakeTimers()`.
+24a. **Test budget (decided 2026-11-15, user).** Spend tests where they
+    catch defects:
+    - **One layer per behaviour** — test it once, at the lowest layer that
+      can see the defect. Component tests do not re-test API logic;
+      Playwright covers journeys, page smoke and what only a browser shows.
+    - **Every test cites its source** — a spec line, a rule or a threat
+      item (LT/T); a case with no source is not written.
+    - **Tables stay representative** outside security: role × operation,
+      denylist, path-parameter and boundary matrices stay complete; other
+      `it.each` tables cover the distinct classes, not every combination.
+    - **No per-run test files** (`*.r1`, `*.r2`, `*.review`, …): extend the
+      canonical test file next to the code.
 
 ## Naming & files
 

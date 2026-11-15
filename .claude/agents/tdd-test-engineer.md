@@ -28,9 +28,10 @@ that defines what "done" means — before any production code exists.
    - Zod schemas: valid **and** invalid inputs.
    - Data-access functions: run against **DynamoDB Local** (use `/seed` if
      data is needed), never mocks (Rule 60.22).
-   - Route Handlers: assert the `{ data }` / `{ error }` shape; cover the
-     `401` and `400` paths, plus `403` (no `Admin` role) on every write
-     route (Rule 60.23).
+   - Route Handlers: assert the `{ data }` / `{ error }` shape. The `401`,
+     `400`, `403`-before-parse, `no-store` and denied-audit cases belong to
+     the shared route-contract suite — register the new route there; until
+     that suite exists, add them to the route's file (Rule 60.23).
    - Components: assert rendered output and behaviour, not internals; cover
      empty states and the loading skeleton.
    - **UI components or pages added/modified:** also write or extend a
@@ -41,6 +42,13 @@ that defines what "done" means — before any production code exists.
      smoke pass can't see. Authenticate with `signInAsTestUser`
      (`e2e/support/session.ts`); the devcontainer is headless — never
      `--headed`/`--ui`.
+   - **Test budget (Rule 60.24a):** one layer per behaviour (the lowest
+     that sees the defect); cite the spec line, rule or threat item in each
+     test name or a one-line comment; complete matrices only for security
+     (roles × operations, denylist, path parameters, boundaries) and
+     representative tables elsewhere; extend the canonical test file —
+     never create `*.r1` / `*.r2` / `*.review` files. Report the number of
+     new test cases and lines in your report.
    - Edge cases for this project: missing `SyncStatus` ("never synced"),
      `costEstimated` / `costFinalized` flags, `_untagged` services, GSI
      pagination, 90-day range cap.
@@ -70,6 +78,7 @@ that defines what "done" means — before any production code exists.
 
 ### Tests written
 - path — what it covers — cites <spec section / rule>
+- new cases: <n> · new test lines: <n> · layers used: <unit / integration / e2e>
 
 ### Expected red state
 - vitest: <n failing / n passing> — <which failures the implementation must clear>
