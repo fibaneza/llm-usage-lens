@@ -10,7 +10,6 @@ import { LITELLM_SERVICE_KEY_ALLOWED_ROUTES } from "./allowlist";
 import { LiteLLMError, isServiceKeyConfigured } from "./client";
 import { callAllowlisted } from "./gateway";
 import type { AllowlistedRequest } from "./gateway";
-import { loadGatewayConfig } from "./gateway-config";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Security architecture" item 6
 // and decision LD4 (amended 2026-11-15: the key carries the temporary `/team/*`
@@ -27,8 +26,7 @@ import { loadGatewayConfig } from "./gateway-config";
 // Every probe goes through the gateway's choke point (Gateway guardrails
 // item 1), so only allowlisted method + route templates are ever sent. The
 // result also carries the temporary-wildcard warning (item 6) while the
-// service key's `/team/*` or `/key/*` is present and the config file leaves
-// `wildcardWarning` on.
+// service key's `/team/*` or `/key/*` is present (code-only; LD19).
 
 const NIL_ID = "00000000-0000-0000-0000-000000000000";
 const NIL_TOKEN = "0".repeat(64);
@@ -71,7 +69,6 @@ const PROBES: readonly AllowlistedRequest[] =
 const TEMPORARY_WILDCARDS = ["/team/*", "/key/*"] as const;
 
 function wildcardWarnings(): string[] {
-  if (!loadGatewayConfig().wildcardWarning) return [];
   const present = TEMPORARY_WILDCARDS.filter((w) =>
     LITELLM_SERVICE_KEY_ALLOWED_ROUTES.includes(w),
   );

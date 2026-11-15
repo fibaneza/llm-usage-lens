@@ -56,7 +56,6 @@ function view(saved: OperationToggles | null): OperationTogglesView {
   return {
     version: saved?.version ?? 0,
     edition: liteLLMEdition(env.APP_ENV),
-    wildcardWarning: file.wildcardWarning,
     operations: resolveOperationSettings({
       file,
       saved: saved?.toggles ?? null,

@@ -336,10 +336,6 @@ function EnforcedInCode() {
 }
 
 export function LiteLLMPanel({ canEdit = true }: { canEdit?: boolean }) {
-  const togglesInfo = useQuery({
-    queryKey: TOGGLES_KEY,
-    queryFn: () => fetchApi("/api/litellm/toggles", OperationTogglesViewSchema),
-  });
   const status = useQuery({
     queryKey: STATUS_KEY,
     queryFn: () => fetchApi("/api/litellm/connection", StatusSchema),
@@ -415,7 +411,7 @@ export function LiteLLMPanel({ canEdit = true }: { canEdit?: boolean }) {
           </p>
         ) : null}
       </div>
-      {togglesInfo.data?.wildcardWarning && test.data?.warnings?.length ? (
+      {test.data?.warnings?.length ? (
         <div
           data-testid="litellm-wildcard-warning"
           className="border-border rounded-md border p-2 text-sm"

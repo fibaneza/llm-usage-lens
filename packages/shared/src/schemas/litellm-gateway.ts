@@ -5,8 +5,8 @@ import { Iso8601Schema } from "./primitives";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Allowlist (the gateway)" (the
 // operation names), "Guardrail configuration" (LD19: the config file holds
-// only per-operation `enabled` defaults and `wildcardWarning`; configuration
-// can only narrow), "Data model additions" (OperationToggles, TeamLink; every
+// only per-operation `enabled: false` defaults; configuration can only
+// narrow), "Data model additions" (OperationToggles, TeamLink; every
 // item versioned); Rule 60.19.
 export const LITELLM_OPERATION_NAMES = [
   "getTeam",
@@ -49,9 +49,8 @@ export type LiteLLMOperationName = z.infer<typeof LiteLLMOperationNameSchema>;
 export const LiteLLMGatewayConfigSchema = z.strictObject({
   operations: z.partialRecord(
     LiteLLMOperationNameSchema,
-    z.strictObject({ enabled: z.boolean() }),
+    z.strictObject({ enabled: z.literal(false) }),
   ),
-  wildcardWarning: z.boolean(),
 });
 export type LiteLLMGatewayConfig = z.infer<typeof LiteLLMGatewayConfigSchema>;
 
@@ -77,7 +76,6 @@ export type TeamLink = z.infer<typeof TeamLinkSchema>;
 export const OperationTogglesViewSchema = z.object({
   version: z.number().int().min(0),
   edition: z.enum(LITELLM_EDITIONS),
-  wildcardWarning: z.boolean(),
   operations: z.record(
     z.string(),
     z.object({
