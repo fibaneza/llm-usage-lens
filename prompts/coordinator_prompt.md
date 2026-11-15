@@ -39,8 +39,11 @@ never overrides a rule; it only adds coordination.
   including the user-directed parallel allowances recorded there (for
   example L1–L2 alongside 4R.3–4R.5). Two goals run in parallel only with
   **disjoint file ownership**; write the ownership into the brief.
-- **Prepare the worktree before briefing** (from the primary checkout):
-  `git worktree add .claude/worktrees/<slug> -b <branch> main`, then
+- **Prepare the worktree before briefing** (from the primary checkout),
+  always from the **latest** `main` (user, 2026-11-16): `git fetch` is not
+  needed (local `main` is the truth), but confirm `git log -1 main` first;
+  a branch that already exists is brought to the latest `main` (merge, not
+  rebase) before the brief. `git worktree add .claude/worktrees/<slug> -b <branch> main`, then
   `CI=true corepack pnpm install --offline --frozen-lockfile` inside it.
   Record goal, worker, worktree, branch and base commit in `state.md`.
 - **Brief by `SendMessage`** to the worker's session name, with
@@ -120,10 +123,23 @@ never overrides a rule; it only adds coordination.
   its own lines and never reorders or rewrites another goal's. Count-style
   tests on these (number of audit actions, error codes, write prefixes) are
   expected to change at merge.
-- **Stay current.** After every merge into `main`, bring each other active
-  branch up to date: if its worker is idle and its worktree is clean, the
-  coordinator merges `main` into it in that worktree and runs the branch gate
-  there; otherwise it tells the worker to merge `main` at its next step.
+- **Stay current (amended 2026-11-16, user).** After every landing on
+  `main`, bring **every** active branch up to date the same hour: if its
+  worker is idle and its worktree is clean, the coordinator merges `main`
+  into it there (conflicts: `main` plus the branch's new lines; a squashed
+  copy of the branch's own work resolves to the branch side) and runs
+  typecheck plus the tests the conflict touched; otherwise it tells the
+  worker to merge `main` at its next step. A new goal never starts from a
+  stale branch.
+- **Run in order.** `state.md` keeps one **goal queue** per session (what
+  runs now, what follows, and what it waits for). The coordinator starts the
+  next goal only when its dependencies are on `main`, and lands finished
+  goals one commit per unit, consolidating to `main` as soon as each review
+  approves (or at the user's direction).
+- **Never write in the primary checkout's working tree** except through a
+  fast-forward of `main`. Inspections use `git -C <worktree>` or plumbing
+  (`merge-tree`, `commit-tree`); after every landing, `git status --short`
+  in the primary checkout must be empty.
 - **Early warning.** On each worker message and before each merge, run
   `git -C <worktree> diff --name-only main...HEAD` for the active goals and
   compare. An overlap outside the shared list is raised with both workers
