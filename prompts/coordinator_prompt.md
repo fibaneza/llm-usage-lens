@@ -141,6 +141,16 @@ never overrides a rule; it only adds coordination.
   next goal only when its dependencies are on `main`, and lands finished
   goals one commit per unit, consolidating to `main` as soon as each review
   approves (or at the user's direction).
+- **Config blockers: copy the local env files (user, 2026-11-16).** When a
+  worker is blocked by missing configuration (env validation, an auth or
+  LiteLLM setting), copy the primary checkout's git-ignored env files into
+  that worktree at the same paths: `apps/dashboard/.env`, `.env.local`,
+  `.env.development.local`, `.env.production.local`, `.devcontainer/.env`,
+  `.github/scripts/aws/.env`. Do this only after `git -C <worktree>
+  check-ignore -q <path>` confirms each one is ignored there. Then tell the
+  worker to resume. **Never** stage, commit, push or print them, and never
+  copy them into a branch where they are not ignored. Workers are told the
+  same.
 - **Never write in the primary checkout's working tree** except through a
   fast-forward of `main`. Inspections use `git -C <worktree>` or plumbing
   (`merge-tree`, `commit-tree`); after every landing, `git status --short`
