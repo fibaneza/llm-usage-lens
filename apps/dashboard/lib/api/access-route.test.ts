@@ -1,11 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
-vi.mock("@/env", () => ({ env: {} }));
+const envMock = vi.hoisted(() => ({ env: {} as { AUTH_SECRET?: string } }));
+vi.mock("@/env", () => envMock);
 vi.mock("@/lib/data/access/audit", () => ({ appendDeniedAudit: vi.fn() }));
 
-import { GroupIdSchema, accessErrorResponse } from "@/lib/api/access-route";
+import {
+  GroupIdSchema,
+  accessErrorResponse,
+  cursorSecret,
+} from "@/lib/api/access-route";
 
 // Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)",
 // "Error-code registry": CONFLICT, MANAGED_BY_SSO and ALREADY_AFFILIATED are
@@ -49,4 +54,34 @@ describe("GroupIdSchema", () => {
     expect(GroupIdSchema.safeParse("a".repeat(128)).success).toBe(true);
     expect(GroupIdSchema.safeParse("a".repeat(129)).success).toBe(false);
   });
+});
+
+// Source: docs/specs/2026-11-10-access-control.md - "Enforcement" (list cursors
+// are HMAC-signed; the key is derived from AUTH_SECRET), Rule 60.19 (fail fast
+// on misconfiguration). User decision 2026-11-15: AUTH_SECRET is required; a
+// missing secret fails closed instead of a random per-process key.
+describe("cursorSecret - AUTH_SECRET is required (fail closed)", () => {
+  afterEach(() => {
+    envMock.env = {};
+  });
+
+  it("derives a stable key from AUTH_SECRET that is not the secret itself", () => {
+    envMock.env = { AUTH_SECRET: "s3cret-one" };
+    const key = cursorSecret();
+    expect(cursorSecret()).toBe(key);
+    expect(key).not.toContain("s3cret-one");
+    envMock.env = { AUTH_SECRET: "s3cret-two" };
+    expect(cursorSecret()).not.toBe(key);
+  });
+
+  it.each([
+    ["undefined", undefined],
+    ["empty", ""],
+  ])(
+    "throws when AUTH_SECRET is %s, with no per-process fallback key",
+    (_n, value) => {
+      envMock.env = value === undefined ? {} : { AUTH_SECRET: value };
+      expect(() => cursorSecret()).toThrow();
+    },
+  );
 });

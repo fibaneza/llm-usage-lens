@@ -1,7 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { auth } from "@/auth";
 import { ctxAt, ok } from "@/lib/data/access/access-test-support";
-import { grantRole } from "@/lib/data/access/role-grants";
+import { grantRole, revokeRole } from "@/lib/data/access/role-grants";
 import {
   expectData,
   expectError,
@@ -11,6 +12,7 @@ import {
 import { clearTable, ensureTestTable } from "@/test/test-support";
 
 import * as roleGrantsRoute from "./role-grants/route";
+import { POST as POST_MAPPING } from "./group-mappings/route";
 import { GET } from "./role-grants/route";
 
 // Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)"
@@ -140,5 +142,72 @@ describe("GET /api/role-grants", () => {
         /^(PUT|PATCH|DELETE)$/.test(k),
       ),
     ).toEqual([]);
+  });
+});
+
+// Source: docs/specs/2026-11-10-access-control.md - "Roles" (global roles are
+// the claim plus in-app grants), "Password users" (Global roles are in-app role
+// grants), "Enforcement" item 4 and Rule 60.10 (authorization data is read per
+// request, never cached), "Permission matrix". 4R.4 review B1: the route gates
+// must see the same effective roles as the matrix routes. `POST
+// /api/group-mappings` is requireAdmin and `GET /api/role-grants` is
+// requireAdminOrAuditor; an invalid body (400) proves the 403 gate was passed.
+describe("effective roles = claim + in-app grants, read per request (B1)", () => {
+  const OID = "oid-granted-person";
+  const signInWith = (authMethod: "password" | "entra" | "local") =>
+    vi.mocked(auth).mockResolvedValue({
+      user: {
+        oid: OID,
+        name: "G",
+        roles: [],
+        authMethod,
+        authTime: Math.floor(Date.now() / 1000),
+      },
+    } as never);
+  const postMapping = () =>
+    invoke(POST_MAPPING, {
+      method: "POST",
+      path: "/api/group-mappings",
+      body: {},
+    });
+  const list = () => invoke(GET, { method: "GET", path: LIST });
+
+  it.each(["password", "entra"] as const)(
+    "%s session with no role claim and an in-app internal-admin grant passes a requireAdmin route",
+    async (method) => {
+      await seed(OID, "internal-admin");
+      signInWith(method);
+      await expectError(await postMapping(), 400, "BAD_REQUEST");
+    },
+  );
+
+  it("without the grant the same session is 403 on the requireAdmin route", async () => {
+    signInWith("password");
+    await expectError(await postMapping(), 403, "FORBIDDEN");
+  });
+
+  it("an in-app internal-admin grant also passes a requireAdminOrAuditor route", async () => {
+    await seed(OID, "internal-admin");
+    signInWith("password");
+    await expectData(await list());
+  });
+
+  it("a revoked grant is 403 on the very next request (no caching of roles)", async () => {
+    const grant = await seed(OID, "internal-admin");
+    signInWith("password");
+    await expectError(await postMapping(), 400, "BAD_REQUEST");
+    ok(
+      await revokeRole(
+        { oid: OID, role: "internal-admin", version: grant.version },
+        ctxAt(undefined, "req-revoke"),
+      ),
+    );
+    await expectError(await postMapping(), 403, "FORBIDDEN");
+  });
+
+  it("an org-admin grant does not make a requireAdmin route reachable", async () => {
+    await seed(OID, "internal-org-admin");
+    signInWith("password");
+    await expectError(await postMapping(), 403, "FORBIDDEN");
   });
 });

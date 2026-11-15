@@ -188,6 +188,14 @@ Create, reset, TOTP reset, delete and the password sign-in switch need a sign-in
 
 Five consecutive failed password sign-ins lock the user for 15 minutes.
 
+### Pre-SSO setup, enabling SSO later and turning password sign-in off
+
+Setting up SSO needs company approval, so `prod` may run without Entra ([Access Control spec](../specs/2026-11-10-access-control.md) - *Pre-SSO mode*). The infrastructure side is in [dashboard-deployment.md](dashboard-deployment.md) section 7.
+
+1. **Pre-SSO.** Deploy with the Entra inputs unset and the master user configured (*Master user and break-glass*). Sign in as the master user (password and, in `prod`, TOTP), open Settings → **Password users**, create the first named admin and send the one-time setup link. The master user then grants that person `internal-admin` in Settings → **Role grants** (a sign-in within 15 minutes and a written reason are required); the new admin sets a password and TOTP from the link. Create a second admin the same way, then rotate and seal the master credentials again. Everyone else signs in as a password user.
+2. **Enable SSO later.** After approval, create the Entra app registration (*Entra portal steps*), store the client secret, set both Entra CDK inputs and redeploy. Users now sign in with Entra; password users move over through the SSO reference and binding (an `expectedOid` or `expectedUpn`, bound at the first Entra sign-in). Password sign-in stays on by default so unbound users keep working.
+3. **Turn password sign-in off.** When the access review lists no unbound enabled password user, an `internal-admin` turns the switch off in Settings → Password users (audited, needs a recent sign-in). Bound users are always refused. The switch cannot be turned off while Entra is not configured; the master user stays as break-glass.
+
 ### Re-authentication for sensitive admin writes (D28, D33)
 
 Granting or revoking `internal-admin` or `internal-org-admin` (with a written reason), and creating, resetting, TOTP-resetting or deleting a password user or changing the password sign-in switch, need a sign-in within the last 15 minutes. If the last sign-in is older, the dialog shows **"Confirm it's you"** and does not send the write; the step-up returns to the section that started it (Role grants or Password users):

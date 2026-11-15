@@ -19,12 +19,13 @@ import {
 } from "@/lib/data/access/password-credentials-store";
 import {
   createPasswordUser,
+  disablePasswordUser,
   getPasswordUser,
   listPasswordUsers,
   sha256Hex,
   userKey,
 } from "@/lib/data/access/password-users";
-import { grantRole } from "@/lib/data/access/role-grants";
+import { grantRole, listRoleGrants } from "@/lib/data/access/role-grants";
 import {
   auditToday,
   deniedToday,
@@ -45,6 +46,7 @@ import {
 import { DELETE, PATCH } from "./password-users/[email]/route";
 import { POST as RESET } from "./password-users/[email]/reset/route";
 import { POST as TOTP_RESET } from "./password-users/[email]/totp-reset/route";
+import { DELETE as REVOKE_ROLE } from "./role-grants/[oid]/[role]/route";
 import { GET, POST } from "./password-users/route";
 
 // Source: docs/specs/2026-11-10-access-control.md - "Password users"
@@ -769,11 +771,14 @@ describe("PATCH /api/password-users/[email]", () => {
 // DELETE /api/password-users/[email]
 // ---------------------------------------------------------------------------
 describe("DELETE /api/password-users/[email]", () => {
+  // Enforcement item 6: every versioned write carries the version it read;
+  // a freshly created user is at version 1.
   const del = (email: string, extra = {}) =>
     invoke(DELETE, {
       method: "DELETE",
       path: one(email),
       params: { email },
+      body: { version: 1 },
       ...extra,
     });
   const deletes = async () =>
@@ -789,6 +794,53 @@ describe("DELETE /api/password-users/[email]", () => {
     const records = await deletes();
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({ result: "success", actor: "oid-admin" });
+  });
+
+  // Enforcement item 6 (optimistic concurrency on every mutable item): the
+  // delete names the version it saw; 4R.4 review warning.
+  it("409 CONFLICT for a stale version; the user remains and nothing is audited", async () => {
+    await seedUser();
+    await expectError(
+      await del("alice@example.com", { body: { version: 9 } }),
+      409,
+      "CONFLICT",
+    );
+    expect(await getPasswordUser("alice@example.com")).not.toBeNull();
+    expect(await deletes()).toEqual([]);
+  });
+
+  it("409 CONFLICT when the user changed after it was read (a disable bumps the version)", async () => {
+    await seedUser();
+    await readData(
+      await invoke(PATCH, {
+        method: "PATCH",
+        path: one("alice@example.com"),
+        params: { email: "alice@example.com" },
+        body: { enabled: false, version: 1 },
+      }),
+    );
+    await expectError(await del("alice@example.com"), 409, "CONFLICT");
+    expect(await getPasswordUser("alice@example.com")).not.toBeNull();
+    await readData(await del("alice@example.com", { body: { version: 2 } }));
+    expect(await getPasswordUser("alice@example.com")).toBeNull();
+  });
+
+  it.each([
+    ["no body", undefined],
+    ["a missing version", {}],
+    ["a negative version", { version: -1 }],
+    ["a non-integer version", { version: 1.5 }],
+    ["a string version", { version: "1" }],
+    ["a body that is not JSON", "{not json"],
+  ])("400 BAD_REQUEST for %s; the user remains", async (_n, body) => {
+    await seedUser();
+    await expectError(
+      await del("alice@example.com", { body }),
+      400,
+      "BAD_REQUEST",
+    );
+    expect(await getPasswordUser("alice@example.com")).not.toBeNull();
+    expect(await deletes()).toEqual([]);
   });
 
   it("the path email is decoded and lower-cased", async () => {
@@ -1120,6 +1172,62 @@ describe("POST /api/password-users/[email]/totp-reset", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Last-admin invariants across routes (D32, T33)
+// ---------------------------------------------------------------------------
+describe("last enabled internal-admin across the revoke and disable routes (Roles; Enforcement item 8; T33)", () => {
+  const revokeAdminRole = (oid: string) =>
+    invoke(REVOKE_ROLE, {
+      method: "DELETE",
+      path: `/api/role-grants/${oid}/internal-admin`,
+      params: { oid, role: "internal-admin" },
+      body: { version: 1 },
+    });
+  const disable = (email: string) =>
+    invoke(PATCH, {
+      method: "PATCH",
+      path: one(email),
+      params: { email },
+      body: { enabled: false, version: 1 },
+    });
+  const grants = async () =>
+    ok(await listRoleGrants({ cursorSecret: CURSOR_SECRET })).items;
+
+  // 4R.4 review warning: only an enabled holder keeps the system administrable
+  // (a disabled password user cannot sign in), so only it counts.
+  it("revoking the only enabled admin's grant is 409 when the other holder is a disabled password user; the grant stays", async () => {
+    const alice = await seedAdmin("alice@example.com");
+    await seedAdmin("bob@example.com");
+    ok(await disablePasswordUser("bob@example.com", seedCtx(), 1));
+    const audit0 = (await auditToday()).length;
+    await expectError(await revokeAdminRole(alice.oid), 409, "CONFLICT");
+    expect((await grants()).map((g) => g.oid)).toContain(alice.oid);
+    expect(await auditToday()).toHaveLength(audit0);
+  });
+
+  it("revoking an admin's grant is allowed when the other holder is an enabled password user", async () => {
+    const alice = await seedAdmin("alice@example.com");
+    await seedAdmin("bob@example.com");
+    await readData(await revokeAdminRole(alice.oid));
+    expect((await grants()).map((g) => g.oid)).not.toContain(alice.oid);
+  });
+
+  it("T33: a concurrent revoke of one admin's grant and disable of the other admin: neither order may leave no enabled admin", async () => {
+    const alice = await seedAdmin("alice@example.com");
+    const bob = await seedAdmin("bob@example.com");
+    const results = await Promise.all([
+      revokeAdminRole(alice.oid),
+      disable("bob@example.com"),
+    ]);
+    const statuses = results.map((r) => r.status);
+    expect(statuses).toContain(409);
+    expect(statuses.filter((status) => status === 200).length).toBeLessThan(2);
+    const aliceHolds = (await grants()).some((g) => g.oid === alice.oid);
+    const bobEnabled = (await getPasswordUser(bob.email))?.status === "enabled";
+    expect(aliceHolds || bobEnabled).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cross-route rules on every write
 // ---------------------------------------------------------------------------
 const WRITES = [
@@ -1153,7 +1261,7 @@ const WRITES = [
     pattern: "/api/password-users/[email]",
     action: "localuser.delete",
     params: { email: "alice@example.com" },
-    body: undefined,
+    body: { version: 1 },
     byEmail: true,
   },
   {

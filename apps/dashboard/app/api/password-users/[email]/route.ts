@@ -26,6 +26,7 @@ const PatchSchema = z.object({
   enabled: z.boolean(),
   version: z.number().int().min(0),
 });
+const DeleteSchema = z.object({ version: z.number().int().min(0) });
 const PATTERN = "/api/password-users/[email]";
 
 const patchHandler = withRoute(
@@ -56,8 +57,9 @@ const patchHandler = withRoute(
 );
 
 const deleteHandler = withRoute(
-  async (_request, ctx, session) => {
+  async (request, ctx, session) => {
     const email = parsePathEmail((await ctx.params).email);
+    const { version } = await parseJsonBody(request, DeleteSchema);
     const guard = entraConfigured()
       ? ({ protected: false } as const)
       : await passwordAdminGuard(email);
@@ -66,6 +68,7 @@ const deleteHandler = withRoute(
       email,
       auditContext(session),
       guard.protected && guard.other ? guard.other : undefined,
+      version,
     );
     if (!result.ok) return accessErrorResponse(result.code);
     return jsonData({ deleted: true });

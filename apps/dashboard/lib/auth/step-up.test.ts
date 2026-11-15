@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   STEP_UP_REDIRECTS,
+  buildDevLoginStepUp,
   buildEntraStepUp,
   buildMasterStepUp,
   buildPasswordStepUp,
@@ -27,6 +28,7 @@ const passwordSession = {
   user: { authMethod: "password", email: "root.admin@example.test" },
 };
 const masterSession = { user: { authMethod: "master" } };
+const entraSession = { user: { authMethod: "entra" } };
 
 // Access Control spec - "Recent authentication" (D33): the return target is a
 // fixed allowlist keyed by section.
@@ -44,7 +46,7 @@ describe("step-up section key (D33)", () => {
     "all three builders return to the %s anchor",
     (section) => {
       const anchor = `/dashboard/settings#${section}`;
-      expect(buildEntraStepUp(section)?.redirectTo).toBe(anchor);
+      expect(buildEntraStepUp(section, entraSession)?.redirectTo).toBe(anchor);
       expect(
         buildPasswordStepUp(passwordSession, form({ password: "pw" }), section)
           ?.redirectTo,
@@ -67,7 +69,7 @@ describe("step-up section key (D33)", () => {
     ["an empty string", ""],
     ["a prototype key", "__proto__"],
   ])("rejects %s with null in every builder", (_n, key) => {
-    expect(buildEntraStepUp(key)).toBeNull();
+    expect(buildEntraStepUp(key, entraSession)).toBeNull();
     expect(
       buildPasswordStepUp(passwordSession, form({ password: "pw" }), key),
     ).toBeNull();
@@ -79,7 +81,7 @@ describe("step-up section key (D33)", () => {
 
 describe("buildEntraStepUp", () => {
   it("asks Entra for a fresh login within 900 seconds and returns to /dashboard/settings#role-grants", () => {
-    expect(buildEntraStepUp("role-grants")).toEqual({
+    expect(buildEntraStepUp("role-grants", entraSession)).toEqual({
       providerId: "microsoft-entra-id",
       redirectTo: "/dashboard/settings#role-grants",
       authorizationParams: { prompt: "login", max_age: "900" },
@@ -190,4 +192,27 @@ describe("buildMasterStepUp", () => {
       ),
     ).toBeNull();
   });
+});
+
+// Access Control spec - "Recent authentication" (D33), T32: the dev-login
+// step-up confirms as the session's own role and never invents one. 4R.4
+// round 3 W: a local session with no global role yields null, not
+// internal-admin.
+describe("buildDevLoginStepUp (T32)", () => {
+  const local = (roles: unknown) => ({
+    user: { authMethod: "local", roles },
+  });
+
+  it("uses the session's own global role", () => {
+    expect(
+      buildDevLoginStepUp(local(["internal-viewer"]), "role-grants")?.role,
+    ).toBe("internal-viewer");
+  });
+
+  it.each([[[]], [undefined], [["not-a-role"]]])(
+    "returns null instead of falling back to internal-admin when the session has no global role (%j)",
+    (roles) => {
+      expect(buildDevLoginStepUp(local(roles), "role-grants")).toBeNull();
+    },
+  );
 });

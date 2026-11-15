@@ -32,7 +32,10 @@ user required — *Pre-SSO mode*; TOTP for the master user, the per-user approva
 only, the legacy `Admin` alias removed). A deployed `dev` task runs `next
 start` and therefore has `NODE_ENV=production`; `NODE_ENV` checks stay as an
 additional floor for the dev-only login, never as the environment switch.
-Unset or invalid `APP_ENV` fails env validation.
+Unset or invalid `APP_ENV` fails env validation. `AUTH_SECRET` is required in
+every environment (user, 2026-11-15): there is no per-process random fallback
+for the list-cursor signing key, and env validation fails startup without it
+(Rule 60.19).
 
 ## Hierarchy
 
@@ -64,6 +67,12 @@ edition, audit retention, identity links.
 
 - **Union.** Effective permission = global role grants ∪ admin-scope grants,
   then narrowed by inheritance.
+- **Effective roles (B1, 2026-11-15).** A caller's effective global roles are
+  the session role claim ∪ the caller's in-app `ROLEGRANT#` items, read per
+  request and never cached (Enforcement item 4). Every check that reads a
+  global role (`requireAdmin`, `requireAdminOrAuditor`, `isAdmin`, the
+  Settings capabilities) uses the effective set, so a password or Entra user
+  holding an in-app `internal-admin` grant reaches the configuration routes.
 - **Separation of duties.** `internal-auditor` comes only from Entra, so no
   in-app administrator can create or remove an auditor, and an auditor cannot
   write.
@@ -244,7 +253,7 @@ v1's dev-only stored local users.
   (`password` and `password-setup`). For every request of a password session
   the session check reads the item (uncached, Rule 60.10) and ends the
   session (`401`; pages redirect to sign-in) when the item is missing, not
-  `active`, or its `credentialVersion` is higher than the token's. An own
+  `enabled`, or its `credentialVersion` is higher than the token's. An own
   password change, an admin reset, an admin TOTP reset, a disable and a
   delete increment it in the same transaction as the change, so every other
   session of that user ends on its next request (a TOTP reset usually
@@ -252,9 +261,11 @@ v1's dev-only stored local users.
   password keeps going without the client's help: the change stores a
   marker `selfChangeSignedInAt` equal to that session's `signedInAt`, and the
   session check adopts the stored version only when the marker matches the
-  token's own `signedInAt`. No `update` payload is ever read. Any other
-  increment clears the marker. Residual risk: another session of the same
-  user that signed in within the same second as the changer.
+  token's own `signedInAt`, compared to the **millisecond** (user,
+  2026-11-15), so a session that signed in within the same second as the
+  changer is still ended. No `update` payload is ever read. Any other
+  increment clears the marker. Residual risk: *Residual risks* — the
+  stolen-copy limit.
 - **TOTP (D23).** **Required** when the user holds any global role other
   than `internal-viewer` or any admin scope; optional otherwise. A grant
   that makes it required takes effect at the next sign-in, which requires
@@ -386,9 +397,10 @@ ALREADY_AFFILIATED` — use move.
 **Leaver.** A user disabled in Entra cannot sign in, so their items grant
 nothing. **Stale** items are pending items not bound after 30 days, and
 affiliations, admin scopes and in-app grants whose user has not signed in
-for 90 days (decision D2); the access review flags them. A Settings list of
-pending and stale items (and its route) is deferred (D34;
-`docs/future-improvements.md` — *Pending and stale access lists*).
+for 90 days (decision D2); the access review flags them. Settings lists the
+pending and stale items in 4R.4, behind a scoped read route filtered by the
+management-read rule and paginated with the opaque cursor (D34, reversed by
+the user 2026-11-15; Design System — *Settings Page*).
 
 **Permission matrix:**
 
@@ -405,8 +417,15 @@ pending and stale items (and its route) is deferred (D34;
 
 **Identity links** (shared contract): `usageIdentities[]`, `aliases[]`,
 `litellmUserId`, per `oid`, `internal-admin` only. An alias or usage
-identity belongs to one person (duplicate → `409`). Links show a person
-their own usage and **never grant access**.
+identity belongs to one person (duplicate → `409`). A link holds at most
+that person's **own canonical email** as a person-kind key
+(*Canonical usage identity*), and only in `usageIdentities[]`. Any other
+person-kind key — a syntactically valid email, or an ARN whose session name is
+one — returns `409`, whether or not another identity owns it, and so does any
+person-kind alias, the own email included; non-person keys are accepted
+(agent decision, 2026-11-16: a stored unowned email would show its
+holder that person's usage once they sign in, T16; confirmed D27). Links show a
+person their own usage and **never grant access**.
 
 **Usage-identity mapping rules (D27, amended 2026-11-14, user).** Some
 Bedrock callers sign in with a session name that is not an email — for
@@ -489,8 +508,9 @@ remains). The export is audited.
    (*Recent authentication*). **No rate limiting** of dashboard routes
    (internal, VPN-only; request/token limits are LiteLLM's), except the
    master-user lockout.
-7. **Observability.** Policy denials (403/404) are a metric with no personal
-   data; tokens, claims and session contents are never logged. Write
+7. **Observability.** Policy denials (403/404) are a span event with no
+   personal data now and a counter when OTel metrics land (the app has no
+   metric emitter yet; amended 2026-11-15); tokens, claims and session contents are never logged. Write
    denials additionally produce a `denied` audit record (*Audit log*, D17).
 8. **Last-admin invariants are atomic (D32).** Revoking an in-app
    `internal-admin` grant, and disabling or deleting a password user who
@@ -500,8 +520,10 @@ remains). The export is audited.
    admin is picked from a read of the candidates and the check names its
    items: for a revoke, another identity's `ROLEGRANT#internal-admin` item
    exists; for a disable or delete, another password user's `LOCALUSER`
-   item is `active` and that user's `ROLEGRANT#internal-admin` item exists
-   (the master user is not counted). Two concurrent removals of the last two
+   item is `enabled` and that user's `ROLEGRANT#internal-admin` item exists
+   (the master user is not counted). The same holds for a revoke: only an
+   **enabled** holder counts, so a disabled password user's grant never
+   satisfies the check (amended 2026-11-15). Two concurrent removals of the last two
    admins each check an item the other changes, so the transactions conflict
    or the second one's condition fails: at least one returns `409`
    `CONFLICT` and writes no `success` record. No candidate → `409` without a
@@ -554,15 +576,19 @@ password).
 - **Audit.** `REAUTH_REQUIRED` is not an authorization refusal (the caller
   holds the permission), so it writes **no** `denied` record (D17; kept by
   D33: a challenge is not a refusal, and recording each would only add
-  alarm noise); it increments an id-free `ReauthRequired` metric. The step-up is an ordinary
+  alarm noise); it adds a `reauth.required` span event (no personal data) now and an
+  id-free `ReauthRequired` counter when OTel metrics land (the app has no
+  metric emitter yet; amended 2026-11-15). The step-up is an ordinary
   sign-in and is audited as one (`auth.signin.success`, D18; failures and
   lockouts as today).
 - **Step-up.** A step-up is a full sign-in through the existing providers
   (no provider bypass, no new Route Handler): it replaces the session,
   re-runs sign-in synchronisation, and restarts the session cap (accepted,
   D33: a new authentication issues a new session with its own cap). Server
-  Actions beside the sign-in actions in `auth.ts`, each refusing a caller
-  with no session or of another `authMethod`:
+  Actions in `apps/dashboard/app/dashboard/settings/step-up-actions.ts`
+  (`stepUpWithEntra`, the password step-up and the dev-login step-up), each
+  refusing a caller with no session or of another `authMethod` (a
+  session-and-method guard; amended 2026-11-15):
   - **Entra:** `signIn("microsoft-entra-id", { redirectTo }, { prompt:
     "login", max_age: "900" })` — Auth.js v5 passes the third argument as
     authorization parameters. Only the step-up sends them; the ordinary
@@ -576,7 +602,8 @@ password).
     master provider — lockout, generic errors, timing-equal paths and TOTP
     reuse refusal apply unchanged. A failed step-up returns one generic
     error to the form and leaves the current session as it was.
-  - **Dev login:** choosing the dev login again.
+  - **Dev login:** choosing the dev login again (its own path; the dialog
+    never shows the password form to a dev-login session).
   - `redirectTo` is the Settings section that started the step-up, chosen
     from a fixed allowlist of exactly two values:
     `/dashboard/settings#role-grants` and
@@ -749,16 +776,17 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/teams/[id]/visibility`, `/api/departments/[id]/visibility` | GET, PUT | Read in scope; write per matrix |
 | `/api/teams/[id]/members` | GET, POST | Per matrix |
 | `/api/teams/[id]/members/[oid]` | DELETE | Per matrix |
-| `/api/teams/[id]/admins`, `/api/departments/[id]/admins` | GET, POST | Per matrix || `/api/teams/[id]/admins/[oid]`, `/api/departments/[id]/admins/[oid]` | DELETE | Per matrix |
+| `/api/teams/[id]/admins`, `/api/departments/[id]/admins` | GET, POST | Per matrix |
+| `/api/teams/[id]/admins/[oid]`, `/api/departments/[id]/admins/[oid]` | DELETE | Per matrix |
 | `/api/affiliations/[oid]/move` | POST `{ fromTeamId, toTeamId, version }` | Per matrix |
-| `/api/access/org-units` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor` (all), a department-scope admin (its departments and their teams), a team-scope admin (its teams, `departments: []`); everyone else `403` (D37): `{ data: { teams: [{ id, name, departmentId }], departments: [{ id, name }] } }` from the account registry (every `AccountMeta` item, active or not, deduplicated by id; sorted by name), not from rollups; scope read per request. Feeds the Settings access pickers |
+| `/api/access/org-units` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor` (all), a department-scope admin (its departments and their teams), a team-scope admin (its teams, `departments: []`); everyone else `403` (D37; names sorted ascending): `{ data: { teams: [{ id, name, departmentId }], departments: [{ id, name }] } }` from the account registry (every `AccountMeta` item, active or not, deduplicated by id; sorted by name — teams and departments alike), not from rollups; scope read per request. Feeds the Settings access pickers |
 | `/api/role-grants` | GET, POST | `internal-admin` (GET also `internal-auditor`); POST **re-auth** |
-| `/api/role-grants/[oid]/[role]` | DELETE | `internal-admin`; **re-auth** |
+| `/api/role-grants/[oid]/[role]` | DELETE | `internal-admin`; **re-auth**; revoking a grant that does not exist → `404` (not `409`; amended 2026-11-15) |
 | `/api/group-mappings`, `/api/group-mappings/[groupId]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`) |
 | `/api/identities`, `/api/identities/[oid]/links` | GET, PUT | `internal-admin` (GET also `internal-auditor`); never opened to scoped admins (D37) |
 | `/api/governance/identity-map-rules` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` (versioned, audited; D27) |
 | `/api/governance/identity-map-rules/suggestions` | GET | `internal-admin`/`internal-auditor`; read-only, not audited; confirming a suggestion is `PUT /api/identities/[oid]/links` (D27) |
-| `/api/password-users`, `/api/password-users/[email]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`); POST returns the setup link once; POST and DELETE **re-auth**; PATCH (enable or disable) not |
+| `/api/password-users`, `/api/password-users/[email]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`); POST returns the setup link once; POST and DELETE **re-auth**; DELETE takes the user's `version` (optimistic concurrency, *Enforcement* item 6; amended 2026-11-15); PATCH (enable or disable) not |
 | `/api/password-users/[email]/reset`, `/api/password-users/[email]/totp-reset` | POST | `internal-admin`; **re-auth** (new setup link once; TOTP re-enrolment at next sign-in) |
 | `/api/account/password` | POST | The signed-in password user (own password; current password and TOTP required); another `authMethod` → `403` with a `denied` record (D36). Used by the Account page `/dashboard/account` (D30) |
 | `/api/governance/password-sign-in` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin`, **re-auth** |
@@ -814,16 +842,16 @@ user holds a proxy role). A new code is added here first. A bad or foreign list 
 | D23 | TOTP for password users | everyone / admin roles / none | **Required for any role above `internal-viewer` or any admin scope**, optional otherwise (user, 2026-11-14) |
 | D24 | Password sign-in once Entra is configured | stop at once / switch | **Admin switch, on by default**; bound users are always refused; access review flags enabled password users (user, 2026-11-14) |
 | D25 | Matching a password user to Entra | email claim / UPN / object id | **`expectedOid` when set, else `expectedUpn`**, tenant-checked, never the `email` claim or a guest UPN; conflicts flagged, never merged (user, 2026-11-14) |
-| D28 | Proving a recent sign-in for global-role grants | `signedInAt` / any re-sign-in / credential time (`auth_time` for Entra) | **`authTime` from the credential check, 15 minutes, set only at sign-in; step-up is a full sign-in through the existing providers** (Entra `prompt=login` + `max_age=900`; password and TOTP otherwise; identifier from the session); `403 REAUTH_REQUIRED` after the role and origin checks, no `denied` record, a metric (*Recent authentication*). Decided by: orchestrator design (2026-11-15); its open questions (denied record, `auth_time`, scope, cap restart) are resolved by D33 |
-| D29 | Other sessions after a password change, reset, disable or delete | end at the cap / revoke | **Revoke:** `credentialVersion` on the `LOCALUSER` item, copied into the JWT at sign-in and checked per request for password sessions (uncached); the changing session gets the new version from the server through the `selfChangeSignedInAt` marker, never from an `update` payload (*Password users*; OWASP / ASVS: invalidate sessions on credential change). Decided by: orchestrator (user delegated), 2026-11-15 |
-| D30 | Changing one's own password in the UI | route only / Account page | **Account page** `/dashboard/account` for password users, on `POST /api/account/password`; other methods see their sign-in method and no form. Decided by: orchestrator (user delegated), 2026-11-15 |
-| D31 | A password user who needs TOTP but never enrolled | new enrolment route / admin reset link | **Admin reset link**; its setup flow enrols TOTP when required — reuses the audited admin flow. Decided by: orchestrator (user delegated), 2026-11-15 |
-| D32 | Last-admin checks | read then write / one transaction | **One `TransactWriteItems`** with a `ConditionCheck` on another enabled admin's items; concurrent removals conflict and one gets `409 CONFLICT` (*Enforcement* item 8; no TOCTOU on a lockout invariant). Decided by: orchestrator (user delegated), 2026-11-15 |
-| D33 | D28's open questions | — | **No `denied` record** on `REAUTH_REQUIRED` (a challenge, not a refusal; the step-up sign-in is audited and a metric counts challenges); the **Entra `auth_time` claim** stays a user action (auth guide; fails closed without it); **re-auth extends** to password-user create, reset, TOTP reset and delete and to the password sign-in switch — not group mappings, memberships, visibility or links (sudo-mode practice, ASVS re-authentication before sensitive operations); the **return target** is the starting Settings section from a two-value allowlist; a step-up **restarts the session cap** (a new authentication issues a new session). Decided by: orchestrator (user delegated), 2026-11-15 |
-| D34 | Pending and stale lists in Settings | build now / defer | **Defer** (not in the 4R.4 brief); the access review flags stale items meanwhile (`docs/future-improvements.md` — *Pending and stale access lists*). Decided by: orchestrator (user delegated), 2026-11-15 |
-| D35 | Non-person key and D27 matching | canonicalise the ARN / keep it raw | **`byUser` keeps the raw non-person key; D27 rules match on the session name** (after the last `/` or `:`) — the spec follows the tested code. Decided by: orchestrator (user delegated), 2026-11-15 |
-| D36 | `POST /api/account/password` from a non-password session | no record / `denied` | **One `denied` record** — it is an authorization refusal (D17). Decided by: orchestrator (user delegated), 2026-11-15 |
-| D37 | Access pickers and names for scoped admins | rollup teams and bare `oid`s / registry and names | **Pickers read the account registry** through `GET /api/access/org-units`, scoped by the management-read rule; **members and admins rows carry `displayName` and `email`** for in-scope rows; `/api/identities` stays `internal-admin`/`internal-auditor` (least privilege). Decided by: orchestrator (user delegated), 2026-11-15 |
+| D28 | Proving a recent sign-in for global-role grants | `signedInAt` / any re-sign-in / credential time (`auth_time` for Entra) | **`authTime` from the credential check, 15 minutes, set only at sign-in; step-up is a full sign-in through the existing providers** (Entra `prompt=login` + `max_age=900`; password and TOTP otherwise; identifier from the session); `403 REAUTH_REQUIRED` after the role and origin checks, no `denied` record, a span event and later a counter (*Recent authentication*). (agent decision, 2026-11-15: a fresh credential check bounds the life of a stolen session; its open questions (denied record, `auth_time`, scope, cap restart) are resolved by D33) |
+| D29 | Other sessions after a password change, reset, disable or delete | end at the cap / revoke | **Revoke:** `credentialVersion` on the `LOCALUSER` item, copied into the JWT at sign-in and checked per request for password sessions (uncached); the changing session gets the new version from the server through the `selfChangeSignedInAt` marker, never from an `update` payload (*Password users*; OWASP / ASVS: invalidate sessions on credential change). (agent decision, 2026-11-15: a stolen or left-open session must not survive a credential change) |
+| D30 | Changing one's own password in the UI | route only / Account page | **Account page** `/dashboard/account` for password users, on `POST /api/account/password`; other methods see their sign-in method and no form. (agent decision, 2026-11-15: password users need a self-service change, and the Account page is the least new surface) |
+| D31 | A password user who needs TOTP but never enrolled | new enrolment route / admin reset link | **Admin reset link**; its setup flow enrols TOTP when required — reuses the audited admin flow. (agent decision, 2026-11-15: it reuses the audited admin flow and adds no enrolment route) |
+| D32 | Last-admin checks | read then write / one transaction | **One `TransactWriteItems`** with a `ConditionCheck` on another enabled admin's items; concurrent removals conflict and one gets `409 CONFLICT` (*Enforcement* item 8; no TOCTOU on a lockout invariant). (agent decision, 2026-11-15: a read-then-write check leaves a lockout race) |
+| D33 | D28's open questions | — | **No `denied` record** on `REAUTH_REQUIRED` (a challenge, not a refusal; the step-up sign-in is audited and a span event, later a counter, marks challenges); the **Entra `auth_time` claim** stays a user action (auth guide; fails closed without it); **re-auth extends** to password-user create, reset, TOTP reset and delete and to the password sign-in switch — not group mappings, memberships, visibility or links (sudo-mode practice, ASVS re-authentication before sensitive operations); the **return target** is the starting Settings section from a two-value allowlist; a step-up **restarts the session cap** (a new authentication issues a new session). (agent decision, 2026-11-15: each resolves a D28 question with the sudo-mode and ASVS precedent) |
+| D34 | Pending and stale lists in Settings | build now / defer | **Build now, in 4R.4** (user, 2026-11-15, reversing the orchestrator's earlier deferral): a Settings list of pending and stale items with a scoped read route, test-first. The access review keeps flagging stale items |
+| D35 | Non-person key and D27 matching | canonicalise the ARN / keep it raw | **`byUser` keeps the raw non-person key; D27 rules match on the session name** (after the last `/` or `:`) — the spec follows the tested code; raw ARNs are stored lower-cased by the links key schema. (agent decision, 2026-11-15: the spec follows the tested code; 2026-11-16: lower-casing recorded) |
+| D36 | `POST /api/account/password` from a non-password session | no record / `denied` | **One `denied` record** — it is an authorization refusal (D17). (agent decision, 2026-11-15: a refusal is an authorization event (D17)) |
+| D37 | Access pickers and names for scoped admins | rollup teams and bare `oid`s / registry and names | **Pickers read the account registry** through `GET /api/access/org-units`, scoped by the management-read rule; **members and admins rows carry `displayName` and `email`** for in-scope rows; `/api/identities` stays `internal-admin`/`internal-auditor` (least privilege). (agent decision, 2026-11-15: least privilege; approved by the user, 2026-11-15, for in-scope rows only) |
 
 **Proposed privacy wording (D6):** "LLM Usage Lens processes the AWS
 sign-in identity and the Amazon Bedrock usage and cost attributed to it, to
@@ -897,13 +925,13 @@ organisation administrators and auditors. Usage rollups are kept for
   lockout, reach limited to the VPN, Entra `internal-admin` holders remain
   the primary path, and the runbook covers investigating the source.
   Accepted for v1.
-- **Setup-link preview without a session** (accepted 2026-11-15, orchestrator,
-  user delegated): the setup page's `previewPasswordSetupLink` Server Action
+- **Setup-link preview without a session** (accepted, user, 2026-11-15): the setup page's `previewPasswordSetupLink` Server Action
   reads what the link is for (the email shown at setup, T25) before any
   session exists. It is read-only and needs the 256-bit token.
-- **List-cursor HMAC fallback** (accepted 2026-11-15, orchestrator, user
-  delegated): without `AUTH_SECRET` (tests, skipped env validation) the
-  cursor signing key is a random per-process key, so a cursor stays
-  unforgeable but does not survive a restart or reach another task; env
-  validation requires `AUTH_SECRET` in production, so the fallback never
-  applies there.
+- **Stolen copy of the changing session's token** (D29; recorded 2026-11-15):
+  the session that changes its own password adopts the new `credentialVersion`
+  through the `selfChangeSignedInAt` marker, which matches that session's
+  `signedInAt`. A copy of that same token (same `signedInAt`) taken before the
+  change is therefore adopted too and survives the change; every other
+  session ends. Mitigations: the 8 h cap, VPN-only reach, and an admin reset
+  or disable, which clears the marker.

@@ -469,7 +469,12 @@ export function PasswordUsersSection({
   });
   const remove = useMutation({
     mutationFn: (user: PasswordUserListItem) =>
-      mutateApi(userPath(user.email), "DELETE", undefined, IgnoredSchema),
+      mutateApi(
+        userPath(user.email),
+        "DELETE",
+        { version: user.version },
+        IgnoredSchema,
+      ),
     onSuccess: () => {
       onWritten();
       setDialog(null);

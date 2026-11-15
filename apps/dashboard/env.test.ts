@@ -69,6 +69,14 @@ describe("env.ts sign-in provider cross-check", () => {
     await expect(loadEnv()).rejects.toThrow();
   });
 
+  // User decision 2026-11-15 (Rule 60.19): AUTH_SECRET is required; the cursor
+  // key has no random fallback, so startup fails without it.
+  it("throws when AUTH_SECRET is missing", async () => {
+    stubBase({ NODE_ENV: "development", AUTH_DEV_LOGIN: "true" });
+    vi.stubEnv("AUTH_SECRET", "");
+    await expect(loadEnv()).rejects.toThrow(/AUTH_SECRET/);
+  });
+
   it("passes in development with AUTH_DEV_LOGIN=true", async () => {
     stubBase({ NODE_ENV: "development", AUTH_DEV_LOGIN: "true" });
     const { env } = await loadEnv();

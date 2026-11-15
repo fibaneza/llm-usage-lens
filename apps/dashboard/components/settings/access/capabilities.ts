@@ -22,6 +22,7 @@ export type AccessCapabilities = {
   members: boolean;
   teamAdmins: boolean;
   visibility: boolean;
+  pendingAccess: boolean;
   moveMember: boolean;
   grantDepartmentAdmin: boolean;
   editDepartmentVisibility: boolean;
@@ -54,6 +55,9 @@ export function accessCapabilities(viewer: ViewerInput): AccessCapabilities {
     members: matrix,
     teamAdmins: matrix,
     visibility: matrix,
+    // D34 (user, 2026-11-15): the managers and the auditor read the pending and
+    // stale lists; the routes scope the rows.
+    pendingAccess: matrix || isAuditor,
     moveMember: matrixWriter || departmentScope,
     grantDepartmentAdmin: matrixWriter,
     editDepartmentVisibility: matrixWriter || departmentScope,

@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 const auth = vi.hoisted(() => vi.fn());
 vi.mock("@/auth", () => ({ auth: () => auth() }));
+vi.mock("@/lib/data/access/authorization", () => ({
+  loadGrantedRoles: vi.fn(async () => []),
+}));
 const denied = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/data/access/audit", () => ({ appendDeniedAudit: denied }));
 

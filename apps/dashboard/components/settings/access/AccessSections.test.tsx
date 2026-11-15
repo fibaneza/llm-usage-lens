@@ -57,12 +57,14 @@ afterEach(() => {
 const stepUp: StepUpActions = {
   entra: async () => undefined,
   credentials: async () => undefined,
+  devLogin: async () => undefined,
 };
 
 const HEADINGS = {
   members: "Members",
   "team-admins": "Team admins",
   visibility: "Visibility",
+  "pending-access": "Pending and stale access",
   "group-mappings": "Group mappings",
   "role-grants": "Role grants",
   "identity-links": "Identity links",
@@ -73,7 +75,12 @@ const HEADINGS = {
 } as const;
 type Slug = keyof typeof HEADINGS;
 const ALL = Object.keys(HEADINGS) as Slug[];
-const MATRIX: Slug[] = ["members", "team-admins", "visibility"];
+const MATRIX: Slug[] = [
+  "members",
+  "team-admins",
+  "visibility",
+  "pending-access",
+];
 const CONFIG: Slug[] = ALL.filter((s) => !MATRIX.includes(s));
 
 function baseRoutes(): RouteTable {
@@ -91,6 +98,8 @@ function baseRoutes(): RouteTable {
       version: 0,
       updatedAt: "2026-11-10T09:00:00.000Z",
     },
+    "GET /api/access/pending": page([]),
+    "GET /api/access/stale": page([]),
     "GET /api/group-mappings": page([groupMappingItem()]),
     "GET /api/role-grants": page([roleGrantItem()]),
     "GET /api/identities/oid-alice/links": {
@@ -121,7 +130,13 @@ describe("AccessSections - role gating", () => {
   it.each([
     ["internal-admin", ADMIN, ALL],
     ["internal-org-admin", ORG_ADMIN, MATRIX],
-    ["internal-auditor", AUDITOR, CONFIG.filter((s) => s !== "members")],
+    // D34 reversed (user, 2026-11-15): the auditor also reads the pending and
+    // stale lists.
+    [
+      "internal-auditor",
+      AUDITOR,
+      [...CONFIG.filter((s) => s !== "members"), "pending-access"],
+    ],
     ["a team-scope admin", TEAM_ADMIN, MATRIX],
     ["a department-scope admin", DEPT_ADMIN, MATRIX],
     ["a plain viewer", PLAIN_VIEWER, []],
@@ -279,6 +294,7 @@ describe("AccessSections - one failure never breaks the others (Rule 40.4)", () 
       "GET /api/teams/team-pay/visibility",
       /couldn't load .*visibility/i,
     ],
+    ["pending-access", "GET /api/access/pending", /couldn't load .*pending/i],
     [
       "group-mappings",
       "GET /api/group-mappings",

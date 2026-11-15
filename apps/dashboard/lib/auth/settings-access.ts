@@ -79,5 +79,10 @@ export async function loadSettingsAccessViewer(
         })),
       ]
     : [];
-  return buildAccessViewer(session, scopes) ?? undefined;
+  const viewer = buildAccessViewer(session, scopes);
+  if (viewer === null) return undefined;
+  // Effective roles: the claim plus in-app grants, read per request (B1; Rule
+  // 60.10). The write actor already merged them.
+  const roles = [...new Set([...viewer.roles, ...(actor?.roles ?? [])])];
+  return { ...viewer, roles };
 }

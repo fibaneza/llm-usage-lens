@@ -12,6 +12,10 @@ import { accessCapabilities } from "./capabilities";
 //   accessCapabilities({ roles, adminScopes }) -> flags per section.
 // "edit" = shown with write controls, "read" = shown read-only (auditor),
 // "none" = not rendered.
+// 4R.4 user decision 2026-11-15 (D34 reversed): `pendingAccess` shows the
+// pending and stale lists to everyone who manages members (the matrix
+// sections) and to the auditor (read-only, the quarterly access review),
+// scoped on the server.
 const TEAM_SCOPE = [{ scopeType: "team", scopeId: "team-pay" }] as const;
 const DEPT_SCOPE = [{ scopeType: "department", scopeId: "dept-eng" }] as const;
 
@@ -23,6 +27,7 @@ describe("accessCapabilities", () => {
       members: true,
       teamAdmins: true,
       visibility: true,
+      pendingAccess: true,
       moveMember: true,
       grantDepartmentAdmin: true,
       editDepartmentVisibility: true,
@@ -43,6 +48,7 @@ describe("accessCapabilities", () => {
       members: true,
       teamAdmins: true,
       visibility: true,
+      pendingAccess: true,
       moveMember: true,
       grantDepartmentAdmin: true,
       editDepartmentVisibility: true,
@@ -63,6 +69,7 @@ describe("accessCapabilities", () => {
       members: false,
       teamAdmins: false,
       visibility: false,
+      pendingAccess: true,
       moveMember: false,
       grantDepartmentAdmin: false,
       editDepartmentVisibility: false,
@@ -85,6 +92,7 @@ describe("accessCapabilities", () => {
       members: true,
       teamAdmins: true,
       visibility: true,
+      pendingAccess: true,
       moveMember: false,
       grantDepartmentAdmin: false,
       editDepartmentVisibility: false,
@@ -103,6 +111,7 @@ describe("accessCapabilities", () => {
       members: true,
       teamAdmins: true,
       visibility: true,
+      pendingAccess: true,
       moveMember: true,
       grantDepartmentAdmin: false,
       editDepartmentVisibility: true,
@@ -112,7 +121,12 @@ describe("accessCapabilities", () => {
   it("a plain viewer, no roles, or unknown roles see nothing", () => {
     for (const roles of [["internal-viewer"], [], ["Reader"]]) {
       const caps = accessCapabilities({ roles, adminScopes: [] });
-      expect(caps.members || caps.teamAdmins || caps.visibility).toBe(false);
+      expect(
+        caps.members ||
+          caps.teamAdmins ||
+          caps.visibility ||
+          caps.pendingAccess,
+      ).toBe(false);
       expect(caps).toMatchObject({
         groupMappings: "none",
         roleGrants: "none",

@@ -1,15 +1,19 @@
-import { IdentityLinkSchema } from "@llm-usage-lens/shared";
+import {
+  IdentityLinkSchema,
+  canonicalUsageIdentity,
+} from "@llm-usage-lens/shared";
 import { z } from "zod";
 
 import { accessErrorResponse, auditContext } from "@/lib/api/access-route";
 import { IdParamSchema } from "@/lib/api/id-param";
 import {
   jsonData,
+  jsonError,
   parseInput,
   parseJsonBody,
   withRoute,
 } from "@/lib/api/respond";
-import { identityExists } from "@/lib/data/access/identities";
+import { identityExists, ownEmail } from "@/lib/data/access/identities";
 import {
   getIdentityLink,
   putIdentityLink,
@@ -18,7 +22,8 @@ import { notFoundResponse } from "@/lib/api/matrix-route";
 
 // Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)"
 // (/api/identities/[oid]/links GET internal-admin or internal-auditor, PUT
-// internal-admin), "Identity links" (a key belongs to one person: 409; links
+// internal-admin), "Identity links" (a key belongs to one person: 409; a key
+// that is another identity's email: 409; aliases are non-person keys only; links
 // never grant access), "Canonical usage identity" (lower-cased; matching is
 // exact, so keys are stored lower-cased on both sides), "Data model additions"
 // (the version convention: no link reads as version 0, and a PUT with
@@ -83,6 +88,21 @@ const putHandler = withRoute(
       }),
     );
     if (!(await identityExists(oid))) return notFoundResponse();
+    // T16: a link holds at most this person's own canonical email as a
+    // person-kind key, and only as a usage identity; any other person-kind key,
+    // or any person-kind alias, would show its holder someone's usage.
+    const own = await ownEmail(oid);
+    const isForeignPerson = (key: string, alias: boolean) => {
+      const identity = canonicalUsageIdentity(key);
+      if (identity.kind !== "person") return false;
+      return alias || identity.key !== own;
+    };
+    if (
+      body.usageIdentities.some((k) => isForeignPerson(k, false)) ||
+      body.aliases.some((k) => isForeignPerson(k, true))
+    ) {
+      return jsonError(409, "CONFLICT", "A key belongs to a person");
+    }
     const result = await putIdentityLink(
       {
         oid,

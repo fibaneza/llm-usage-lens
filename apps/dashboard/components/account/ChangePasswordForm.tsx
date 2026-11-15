@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { checkPassword } from "@/lib/auth/password-policy";
 import { mutateApi } from "@/lib/query/fetch-api";
 
-// Source: temp/run-r4b/decisions.md F9; docs/specs/2026-11-10-access-control.md
+// Source: docs/specs/2026-11-10-access-control.md (D30)
 // - "Password users" (Passwords: 12-128 characters, no composition rules,
 // common list; TOTP D23), "API routes (additions)" (POST /api/account/password:
 // current password and, when enrolled, the TOTP code). Any refusal shows one

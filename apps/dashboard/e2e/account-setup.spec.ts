@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
   test,
@@ -56,6 +57,23 @@ async function openAsAnonymous(browser: Browser, hash: string) {
   const page = await context.newPage();
   await page.goto(`/account/setup${hash}`);
   return { context, page };
+}
+
+// UI Verify "axe clean" (4R.4 review B5; Design System - accessibility, WCAG
+// 2.1 AA): the setup page in its form state and in its generic invalid state.
+async function expectNoBlockingViolations(page: Page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+  expect(
+    results.violations
+      .filter((v) => v.impact === "serious" || v.impact === "critical")
+      .map((v) => ({
+        id: v.id,
+        impact: v.impact,
+        nodes: v.nodes.map((node) => node.target.join(" ")),
+      })),
+  ).toEqual([]);
 }
 
 function noteRequestUrls(page: Page): string[] {
@@ -158,5 +176,25 @@ test.describe("/account/setup", () => {
     );
     await expect(page).toHaveURL(/\/account\/setup/);
     await context.close();
+  });
+
+  test("has no serious or critical axe violations, with the form and in the invalid state (4R.4 B5)", async ({
+    browser,
+  }) => {
+    const token = await issueSetupToken(
+      browser,
+      `setup-${randomUUID()}@example.com`,
+    );
+    const form = await openAsAnonymous(browser, `#${token}`);
+    await expect(form.page.getByLabel(/^new password/i)).toBeVisible();
+    await expectNoBlockingViolations(form.page);
+    await form.context.close();
+
+    const invalid = await openAsAnonymous(browser, `#${"C".repeat(43)}`);
+    await expect(
+      invalid.page.getByRole("alert").filter({ hasText: INVALID_LINK }),
+    ).toBeVisible();
+    await expectNoBlockingViolations(invalid.page);
+    await invalid.context.close();
   });
 });

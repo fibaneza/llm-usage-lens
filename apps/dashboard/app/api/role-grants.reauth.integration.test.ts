@@ -288,6 +288,26 @@ describe("DELETE /api/role-grants/[oid]/[role]", () => {
     expect(await auditToday()).toHaveLength(audit0);
   });
 
+  // 4R.4 review nit: a grant that is not there is NOT_FOUND whatever the role;
+  // the last-admin guard speaks only about a grant that exists (Roles; Error-
+  // code registry: 404 NOT_FOUND).
+  it.each([
+    ["no other internal-admin grant exists", false],
+    ["another internal-admin grant exists", true],
+  ])(
+    "404 NOT_FOUND for a missing internal-admin grant when %s, not 409",
+    async (_n, withOther) => {
+      if (withOther) await seed("oid-admin-b", "internal-admin");
+      const audit0 = (await auditToday()).length;
+      await expectError(
+        await del("oid-nobody", "internal-admin"),
+        404,
+        "NOT_FOUND",
+      );
+      expect(await auditToday()).toHaveLength(audit0);
+    },
+  );
+
   it("409 CONFLICT for a stale version, the grant stays", async () => {
     await seed("oid-target");
     const audit0 = (await auditToday()).length;

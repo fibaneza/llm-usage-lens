@@ -129,4 +129,31 @@ describe("GET /api/access/org-units", () => {
     const data = await expectData<OrgUnits>(await read());
     expect(data.teams).toEqual([ALL_TEAMS[2]]);
   });
+
+  it("returns teams and departments sorted by name, not by id or registry order (D37, 4R.4 review B4)", async () => {
+    await loadFixtures({
+      accounts: [
+        makeAccount(7, {
+          teamId: "team-z",
+          teamName: "0 First",
+          departmentId: "dept-zz",
+          departmentName: "Aardvark",
+        }),
+      ],
+    });
+    signInAs("admin");
+    const data = await expectData<OrgUnits>(await read());
+    expect(data.teams.map((t) => t.name)).toEqual([
+      "0 First",
+      "A",
+      "B",
+      "C",
+      "M",
+    ]);
+    expect(data.departments.map((d) => d.name)).toEqual([
+      "Aardvark",
+      "Engineering",
+      "Ops",
+    ]);
+  });
 });

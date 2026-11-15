@@ -216,6 +216,34 @@ async function mockApi(
         return data({ rules: [], version: 0 });
       case "/api/governance/identity-map-rules/suggestions":
         return data({ items: [] });
+      // D34 reversed (user, 2026-11-15): the pending and stale lists.
+      case "/api/access/pending":
+        return data({
+          items: [
+            {
+              kind: "affiliation",
+              emailOrUpn: "new.hire@example.com",
+              teamId: "team-pay",
+              createdBy: "oid-admin",
+              createdAt: NOW,
+              version: 1,
+            },
+          ],
+        });
+      case "/api/access/stale":
+        return data({
+          items: [
+            {
+              reason: "inactive",
+              kind: "affiliation",
+              subject: "oid-alice",
+              displayName: "Alice Adams",
+              email: "alice@example.com",
+              teamId: "team-pay",
+              since: "2026-06-01T09:00:00.000Z",
+            },
+          ],
+        });
       case "/api/audit":
         return data({
           items: [
@@ -249,7 +277,8 @@ async function openSettings(page: Page) {
 
 const heading = (page: Page, name: string) =>
   page.getByRole("heading", { level: 2, name, exact: true });
-const MATRIX = ["Members", "Team admins", "Visibility"];
+const PENDING = "Pending and stale access";
+const MATRIX = ["Members", "Team admins", "Visibility", PENDING];
 const CONFIG = [
   "Group mappings",
   "Role grants",
@@ -286,6 +315,22 @@ test.describe("settings access sections - internal-admin", () => {
     ).toBeChecked();
   });
 
+  test("the pending and stale lists show the pending invitation and the idle access with their reasons", async ({
+    page,
+  }) => {
+    await mockApi(page);
+    await openSettings(page);
+    const section = page.getByRole("region", {
+      name: "Pending and stale access",
+    });
+    await expect(
+      section.getByRole("row", { name: /new\.hire@example\.com/ }),
+    ).toContainText("Payments");
+    const idle = section.getByRole("row", { name: /Alice Adams/ });
+    await expect(idle).toContainText(/no sign-in for 90 days/i);
+    await expect(idle).toContainText("2026-06-01");
+  });
+
   test("the Members team picker lists a registry team that has no usage (F10)", async ({
     page,
   }) => {
@@ -310,6 +355,7 @@ test.describe("settings access sections - internal-admin", () => {
       "members",
       "team-admins",
       "visibility",
+      "pending-access",
       "group-mappings",
       "role-grants",
       "identity-links",
@@ -463,7 +509,9 @@ test.describe("settings access sections - other roles", () => {
     for (const name of CONFIG) {
       await expect(heading(page, name)).toBeVisible();
     }
-    for (const name of MATRIX) {
+    // D34 reversed (Access Control spec): the auditor reads Pending and stale access.
+    await expect(heading(page, PENDING)).toBeVisible();
+    for (const name of MATRIX.filter((n) => n !== PENDING)) {
       await expect(heading(page, name)).toHaveCount(0);
     }
     for (const name of [

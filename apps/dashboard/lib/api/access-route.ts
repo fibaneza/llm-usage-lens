@@ -33,11 +33,11 @@ const ListQuerySchema = z.object({
 });
 
 // The cursor HMAC key is derived from AUTH_SECRET (never the secret itself).
-// Without it (tests, SKIP_ENV_VALIDATION) a per-process key is used, so a
-// cursor is still unforgeable but does not outlive the process.
-const processKey = randomUUID();
+// AUTH_SECRET is required: with none there is no key, and the call fails
+// closed (user decision 2026-11-15; Rule 60.19).
 export function cursorSecret(): string {
-  const base = env.AUTH_SECRET || processKey;
+  const base = env.AUTH_SECRET;
+  if (!base) throw new Error("AUTH_SECRET is required to sign list cursors");
   return createHmac("sha256", base).update("access-list-cursor").digest("hex");
 }
 

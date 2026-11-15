@@ -350,7 +350,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.tid = identity.tid;
         token.roles = identity.roles;
         token.authMethod = identity.authMethod;
-        token.signedInAt = nowSeconds;
+        // Millisecond precision: the same-user session comparison (D29) must
+        // tell two sign-ins within one second apart.
+        token.signedInAt = Date.now() / 1000;
         if (String(identity.authMethod) === "password") {
           token.credentialVersion = identity.credentialVersion ?? 0;
           if (identity.email) token.email = identity.email;

@@ -1475,6 +1475,29 @@ describe("auth.ts password sessions follow the stored credentialVersion (F7)", (
       ).toBeNull();
     });
 
+    // D29 (user, 2026-11-15): sign-in times are compared to the millisecond, so
+    // another session of the same user that signed in within the same second
+    // as the changer is still ended. The marker is the value the session
+    // exposes as `signedInAt` (the route stores it).
+    it("ends another session of the same user that signed in within the same second, 500 ms later (D29)", async () => {
+      const { jwt, session } = await load();
+      const changer = await jwt(signIn({ credentialVersion: 2 }));
+      vi.setSystemTime(new Date(NOW.getTime() + 500));
+      const other = await jwt(signIn({ credentialVersion: 2 }));
+      const exposed = (await session({
+        session: { user: { name: "Ada" }, expires: "2099-01-01T00:00:00.000Z" },
+        token: changer as Json,
+      })) as { user: { signedInAt: number } };
+      passwordStore.getPasswordCredential.mockResolvedValue(
+        stored({
+          credentialVersion: 3,
+          selfChangeSignedInAt: exposed.user.signedInAt,
+        }),
+      );
+      expect(await jwt({ token: changer as Json })).not.toBeNull();
+      expect(await jwt({ token: other as Json })).toBeNull();
+    });
+
     it("ends the session once a later reset has cleared the marker", async () => {
       passwordStore.getPasswordCredential.mockResolvedValue(
         stored({ credentialVersion: 4 }),

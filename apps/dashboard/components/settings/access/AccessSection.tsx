@@ -19,9 +19,15 @@ export function AccessSection({
   children: ReactNode;
 }) {
   return (
-    <section id={slug} className="flex scroll-mt-20 flex-col gap-3">
+    <section
+      id={slug}
+      aria-labelledby={`${slug}-heading`}
+      className="flex scroll-mt-20 flex-col gap-3"
+    >
       <div className="flex max-w-[72ch] flex-col gap-1">
-        <h2 className="text-base font-semibold">{heading}</h2>
+        <h2 id={`${slug}-heading`} className="text-base font-semibold">
+          {heading}
+        </h2>
         {description ? (
           <p className="text-muted-foreground text-sm">{description}</p>
         ) : null}

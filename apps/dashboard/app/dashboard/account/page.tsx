@@ -3,7 +3,7 @@ import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
 import { AUTH_METHOD_LABELS } from "@/lib/auth/roles";
 import { getPasswordCredential } from "@/lib/data/access/password-credentials-store";
 
-// Source: temp/run-r4b/decisions.md F9; docs/specs/2026-11-10-access-control.md
+// Source: docs/specs/2026-11-10-access-control.md (D30)
 // - "Password users" (POST /api/account/password is for password sessions
 // only). The sign-in method and the TOTP enrolment are resolved on the server
 // (Rule 10.3, 50.3); the route enforces them again. Per-request, uncached

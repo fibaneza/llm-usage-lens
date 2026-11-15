@@ -25,6 +25,7 @@ afterEach(() => {
 const stepUp: StepUpActions = {
   entra: async () => undefined,
   credentials: async () => undefined,
+  devLogin: async () => undefined,
 };
 
 function stubAll() {

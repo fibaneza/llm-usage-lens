@@ -2,6 +2,7 @@
 
 import { auth, signIn } from "@/auth";
 import {
+  buildDevLoginStepUp,
   buildEntraStepUp,
   buildMasterStepUp,
   buildPasswordStepUp,
@@ -16,10 +17,22 @@ import type { StepUpSection } from "@/lib/auth/step-up";
 export async function stepUpWithEntra(
   section: StepUpSection,
 ): Promise<{ ok: false } | undefined> {
-  const step = buildEntraStepUp(section);
+  const step = buildEntraStepUp(section, await auth());
   if (step === null) return { ok: false };
   const { providerId, redirectTo, authorizationParams } = step;
   await signIn(providerId, { redirectTo }, authorizationParams);
+  return undefined;
+}
+
+export async function stepUpWithDevLogin(
+  section: StepUpSection,
+): Promise<{ ok: false } | undefined> {
+  const step = buildDevLoginStepUp(await auth(), section);
+  if (step === null) return { ok: false };
+  await signIn(step.providerId, {
+    role: step.role,
+    redirectTo: step.redirectTo,
+  });
   return undefined;
 }
 

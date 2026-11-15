@@ -14,9 +14,9 @@ import { hasRecentAuth } from "@/lib/auth/recent-auth";
 import {
   INTERNAL_ADMIN_ROLE,
   INTERNAL_AUDITOR_ROLE,
-  hasAdminRole,
   hasGlobalRole,
 } from "@/lib/auth/roles";
+import type { GlobalRole } from "@/lib/auth/roles";
 
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes"; Rule 10.3,
 // Rule 50.4 (401 before any data access), Rule 50.6, Rule 60.18; System
@@ -153,6 +153,20 @@ function isSameOrigin(request: Request): boolean {
   }
 }
 
+// Effective roles are the claim plus in-app grants, read per request and never
+// cached (Access Control spec - Roles, Enforcement item 4; Rule 60.10), for
+// every sign-in method. The grant read happens only when the claim alone does
+// not answer; loadWriteActor and resolveScope apply the same union.
+async function holdsAnyRole(
+  session: Session,
+  roles: readonly GlobalRole[],
+): Promise<boolean> {
+  if (roles.some((role) => hasGlobalRole(session, role))) return true;
+  const { loadGrantedRoles } = await import("@/lib/data/access/authorization");
+  const granted = await loadGrantedRoles(session.user.oid);
+  return roles.some((role) => granted.includes(role));
+}
+
 const tracer = trace.getTracer("bedrock-usage-dashboard");
 
 export type RouteOptions = {
@@ -226,7 +240,10 @@ export function withRoute(
         if (typeof session?.user?.oid !== "string" || session.user.oid === "") {
           return unauthenticatedResponse();
         }
-        if (options.requireAdmin && !hasAdminRole(session)) {
+        if (
+          options.requireAdmin &&
+          !(await holdsAnyRole(session, [INTERNAL_ADMIN_ROLE]))
+        ) {
           if (options.denied) {
             await recordDeniedWrite(
               request,
@@ -248,8 +265,10 @@ export function withRoute(
         }
         if (
           options.requireAdminOrAuditor &&
-          !hasAdminRole(session) &&
-          !hasGlobalRole(session, INTERNAL_AUDITOR_ROLE)
+          !(await holdsAnyRole(session, [
+            INTERNAL_ADMIN_ROLE,
+            INTERNAL_AUDITOR_ROLE,
+          ]))
         ) {
           return jsonError(
             403,
@@ -264,6 +283,8 @@ export function withRoute(
           options.requireRecentAuth &&
           !hasRecentAuth(session.user.authTime, Math.floor(Date.now() / 1000))
         ) {
+          // No attributes: nothing personal in telemetry (Rule 50.6).
+          span.addEvent("reauth.required");
           return jsonError(
             403,
             "REAUTH_REQUIRED",

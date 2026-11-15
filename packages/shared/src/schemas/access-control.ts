@@ -31,7 +31,7 @@ export const AdminScopeSchema = z.object({
   createdBy: IdSchema,
 });
 
-// F11 (temp/run-r4b/decisions.md): list rows name the person; null when the
+// D37 (docs/specs/2026-11-10-access-control.md): list rows name the person; null when the
 // identity is unknown. No other identity field leaves the route.
 const PersonNameShape = {
   displayName: z.string().nullable(),
@@ -67,6 +67,23 @@ export const PendingItemSchema = z.discriminatedUnion("kind", [
     scopeId: IdSchema,
   }),
 ]);
+
+// GET /api/access/stale (Access Control spec - Leaver, D2, D34): a pending
+// item unbound for more than 30 days (`reason: "pending"`, `subject` the email
+// or UPN) or bound access whose person has not signed in for 90 days
+// (`reason: "inactive"`, `subject` the oid; names from the identity, D37).
+export const StaleAccessRowSchema = z.object({
+  reason: z.enum(["pending", "inactive"]),
+  kind: z.enum(["affiliation", "adminScope", "roleGrant"]),
+  subject: IdSchema,
+  displayName: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  teamId: IdSchema.optional(),
+  scopeType: ScopeTypeSchema.optional(),
+  scopeId: IdSchema.optional(),
+  role: z.string().min(1).optional(),
+  since: Iso8601Schema,
+});
 
 // Rule 50.3 keeps role values in lib/auth, but shared schemas need the
 // literals too (group-mapping.ts precedent; contract R2 decision 18).
@@ -393,6 +410,7 @@ export type MemberRow = z.infer<typeof MemberRowSchema>;
 export type AdminScopeRow = z.infer<typeof AdminScopeRowSchema>;
 export type OrgUnits = z.infer<typeof OrgUnitsSchema>;
 export type PendingItem = z.infer<typeof PendingItemSchema>;
+export type StaleAccessRow = z.infer<typeof StaleAccessRowSchema>;
 export type GrantableRole = z.infer<typeof GrantableRoleSchema>;
 export type RoleGrant = z.infer<typeof RoleGrantSchema>;
 export type TeamVisibility = z.infer<typeof TeamVisibilitySchema>;

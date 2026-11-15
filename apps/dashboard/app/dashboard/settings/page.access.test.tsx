@@ -22,16 +22,18 @@ vi.mock("@/lib/auth/settings-access", () => ({
 
 const stepUpWithEntra = vi.fn();
 const stepUpWithCredentials = vi.fn();
+const stepUpWithDevLogin = vi.fn();
 vi.mock("./step-up-actions", () => ({
   stepUpWithEntra: (...args: unknown[]) => stepUpWithEntra(...args),
   stepUpWithCredentials: (...args: unknown[]) => stepUpWithCredentials(...args),
+  stepUpWithDevLogin: (...args: unknown[]) => stepUpWithDevLogin(...args),
 }));
 
 type Props = {
   isAdmin: boolean;
   access?: {
     viewer: unknown;
-    stepUp: { entra: unknown; credentials: unknown };
+    stepUp: { entra: unknown; credentials: unknown; devLogin: unknown };
   };
 };
 const content = vi.fn((props: Props) => (
@@ -68,6 +70,10 @@ describe("SettingsPage - access sections", () => {
       | undefined;
     expect(typeof stepUp?.entra).toBe("function");
     expect(typeof stepUp?.credentials).toBe("function");
+    // B3: a dev-login session has its own step-up path.
+    expect(typeof (stepUp as { devLogin?: unknown })?.devLogin).toBe(
+      "function",
+    );
     expect(stepUpWithEntra).not.toHaveBeenCalled();
     await stepUp?.entra();
     expect(stepUpWithEntra).toHaveBeenCalledTimes(1);
@@ -82,6 +88,30 @@ describe("SettingsPage - access sections", () => {
     loadViewer.mockResolvedValue(undefined);
     render(await SettingsPage());
     expect(content.mock.calls[0]?.[0]?.access).toBeUndefined();
+  });
+
+  // 4R.4 review B1: `isAdmin` is the same effective-role answer the viewer
+  // carries (claim + in-app grants, resolved per request on the server).
+  it("isAdmin follows the viewer's effective roles: a grant-only admin has isAdmin=true", async () => {
+    auth.mockResolvedValue({
+      user: { oid: "oid-1", roles: [], authMethod: "password" },
+    });
+    loadViewer.mockResolvedValue({
+      ...VIEWER,
+      authMethod: "password",
+      roles: ["internal-admin"],
+    });
+    render(await SettingsPage());
+    expect(content.mock.calls[0]?.[0]?.isAdmin).toBe(true);
+  });
+
+  it("isAdmin is false when neither the claim nor the viewer holds internal-admin", async () => {
+    auth.mockResolvedValue({
+      user: { oid: "oid-1", roles: ["internal-auditor"], authMethod: "entra" },
+    });
+    loadViewer.mockResolvedValue(VIEWER);
+    render(await SettingsPage());
+    expect(content.mock.calls[0]?.[0]?.isAdmin).toBe(false);
   });
 
   it("keeps isAdmin separate from the viewer", async () => {

@@ -1,7 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { auth } from "@/auth";
+
 import { ok } from "@/lib/data/access/access-test-support";
 import { resetDeniedAudit } from "@/lib/data/access/audit";
+import { grantRole } from "@/lib/data/access/role-grants";
 import {
   getIdentityLink,
   putIdentityLink,
@@ -330,10 +333,10 @@ describe("PUT /api/identities/[oid]/links", () => {
     const data = await expectData<Link>(
       await putLink(
         alice.oid,
-        link(0, { usageIdentities: ["Alice.Doe@Company.com"], aliases: [] }),
+        link(0, { usageIdentities: ["  Alice@Company.com "], aliases: [] }),
       ),
     );
-    expect(data.usageIdentities).toEqual(["alice.doe@company.com"]);
+    expect(data.usageIdentities).toEqual(["alice@company.com"]);
   });
 
   it("omits the LiteLLM id when none is given", async () => {
@@ -480,6 +483,237 @@ describe("PUT /api/identities/[oid]/links", () => {
       409,
       "CONFLICT",
     );
+  });
+
+  // T16 (per-user data before approval) and Identity links: a link must not
+  // let its holder read another person's usage. 4R.4 review B2.
+  describe("a key that is, or resolves to, another identity's canonical email (T16)", () => {
+    it.each([
+      [
+        "an alias equal to another identity's email",
+        { usageIdentities: [], aliases: ["bob@company.com"] },
+      ],
+      [
+        "an alias equal to another identity's email, differing in case",
+        { usageIdentities: [], aliases: ["Bob@Company.com"] },
+      ],
+      [
+        "an alias whose session name is another identity's email",
+        {
+          usageIdentities: [],
+          aliases: [
+            "arn:aws:sts::000000000000:assumed-role/AWSReservedSSO_X_y/bob@company.com",
+          ],
+        },
+      ],
+      [
+        "a usage identity equal to another identity's email",
+        { usageIdentities: ["bob@company.com"], aliases: [] },
+      ],
+    ])(
+      "409 CONFLICT for %s; nothing is stored, claimed or audited",
+      async (_n, over) => {
+        const before = await nonAuditItems();
+        await expectError(
+          await putLink(
+            alice.oid,
+            link(0, { ...over, litellmUserId: undefined }),
+          ),
+          409,
+          "CONFLICT",
+        );
+        expect(await getIdentityLink(alice.oid)).toBeNull();
+        expect(await nonAuditItems()).toEqual(before);
+        expect(await auditToday()).toEqual([]);
+        expect(await deniedToday()).toEqual([]);
+      },
+    );
+
+    // 4R.4 round 3 B2 (T16; Identity links): a link holds at most the
+    // person's OWN canonical email as a person-kind key, owned elsewhere or not.
+    it("a usage identity equal to the person's own email is accepted (the one person-kind key allowed)", async () => {
+      const data = await expectData<Link>(
+        await putLink(
+          alice.oid,
+          link(0, { aliases: [], litellmUserId: undefined }),
+        ),
+      );
+      expect(data.usageIdentities).toEqual(["alice@company.com"]);
+    });
+
+    it("the own email is normalised (case, whitespace) and stored once", async () => {
+      const data = await expectData<Link>(
+        await putLink(
+          alice.oid,
+          link(0, {
+            usageIdentities: ["  Alice@Company.com "],
+            aliases: [],
+            litellmUserId: undefined,
+          }),
+        ),
+      );
+      expect(data.usageIdentities).toEqual(["alice@company.com"]);
+    });
+
+    it.each([
+      [
+        "an unowned email as a usage identity",
+        { usageIdentities: ["bobby@elsewhere.example"], aliases: [] },
+      ],
+      [
+        "an unowned email, mixed case and padded",
+        { usageIdentities: ["  Bobby@Elsewhere.Example "], aliases: [] },
+      ],
+      [
+        "an unowned email as an alias",
+        { usageIdentities: [], aliases: ["bobby@elsewhere.example"] },
+      ],
+      [
+        "an ARN whose session name is an unowned email, as a usage identity",
+        {
+          usageIdentities: [
+            "arn:aws:sts::000000000000:assumed-role/AWSReservedSSO_X_y/bobby@elsewhere.example",
+          ],
+          aliases: [],
+        },
+      ],
+      [
+        "an ARN whose session name is an unowned email, as an alias",
+        {
+          usageIdentities: [],
+          aliases: [
+            "arn:aws:sts::000000000000:assumed-role/AWSReservedSSO_X_y/Bobby@Elsewhere.Example",
+          ],
+        },
+      ],
+      [
+        "an owned other email next to the own email",
+        {
+          usageIdentities: ["alice@company.com", "bob@company.com"],
+          aliases: [],
+        },
+      ],
+    ])(
+      "409 CONFLICT for %s; nothing is stored, claimed or audited",
+      async (_n, over) => {
+        const before = await nonAuditItems();
+        await expectError(
+          await putLink(
+            alice.oid,
+            link(0, { ...over, litellmUserId: undefined }),
+          ),
+          409,
+          "CONFLICT",
+        );
+        expect(await getIdentityLink(alice.oid)).toBeNull();
+        expect(await nonAuditItems()).toEqual(before);
+        expect(await auditToday()).toEqual([]);
+        expect(await deniedToday()).toEqual([]);
+      },
+    );
+
+    it("non-person keys (an ARN without an email session name, a plain name) are accepted", async () => {
+      const data = await expectData<Link>(
+        await putLink(
+          alice.oid,
+          link(0, {
+            usageIdentities: [
+              "alice@company.com",
+              "arn:aws:iam::000000000000:role/svc-bot",
+            ],
+            aliases: ["svc-name"],
+            litellmUserId: undefined,
+          }),
+        ),
+      );
+      expect(data.usageIdentities).toContain(
+        "arn:aws:iam::000000000000:role/svc-bot",
+      );
+      expect(data.aliases).toEqual(["svc-name"]);
+    });
+  });
+
+  // Access Control spec - "Identity links" / D27: an alias is the exact raw key
+  // of a non-person usage identity (D35). 4R.4 round 3 B2: a person-kind alias
+  // other than the own email is a 409 (T16), like a usage identity.
+  describe("person-kind aliases (D27, T16)", () => {
+    it.each([
+      ["an email no identity owns", "stranger@elsewhere.example"],
+      [
+        "an ARN whose session name is an email",
+        "arn:aws:sts::000000000000:assumed-role/AWSReservedSSO_X_y/stranger@elsewhere.example",
+      ],
+    ])(
+      "409 CONFLICT for an alias that is %s; nothing is stored or audited",
+      async (_n, alias) => {
+        await expectError(
+          await putLink(
+            alice.oid,
+            link(0, {
+              usageIdentities: ["alice@company.com"],
+              aliases: [alias],
+              litellmUserId: undefined,
+            }),
+          ),
+          409,
+          "CONFLICT",
+        );
+        expect(await getIdentityLink(alice.oid)).toBeNull();
+        expect(await auditToday()).toEqual([]);
+        expect(await deniedToday()).toEqual([]);
+      },
+    );
+
+    it("the own email as an alias is not accepted: it belongs in usageIdentities (D27)", async () => {
+      const res = await putLink(
+        alice.oid,
+        link(0, {
+          usageIdentities: [],
+          aliases: ["alice@company.com"],
+          litellmUserId: undefined,
+        }),
+      );
+      expect([400, 409]).toContain(res.status);
+      expect(await getIdentityLink(alice.oid)).toBeNull();
+      expect(await auditToday()).toEqual([]);
+    });
+
+    it("accepts a non-person alias such as an SSO role session name", async () => {
+      const data = await expectData<Link>(
+        await putLink(
+          alice.oid,
+          link(0, {
+            usageIdentities: ["alice@company.com"],
+            aliases: ["alice-sso"],
+          }),
+        ),
+      );
+      expect(data.aliases).toEqual(["alice-sso"]);
+    });
+  });
+
+  // 4R.4 round 3 W: one effective-roles rule (claim + in-app grants) for
+  // requireAdmin, loadWriteActor and resolveScope - Access Control spec, Roles
+  // and Enforcement item 4. A dev-login (local) session holding an
+  // internal-admin grant is admin on a requireAdmin route.
+  it("a dev-login (local) session holding an in-app internal-admin grant passes requireAdmin, as resolveScope sees it", async () => {
+    const localOid = CALLERS.viewerNone.oid;
+    ok(
+      await grantRole(
+        { oid: localOid, role: "internal-admin", reason: "dev cover" },
+        seedCtx(),
+      ),
+    );
+    vi.mocked(auth).mockResolvedValue({
+      user: {
+        oid: localOid,
+        email: "v0@company.com",
+        roles: ["internal-viewer"],
+        tid: "local",
+        authMethod: "local",
+      },
+    } as never);
+    await expectData(await putLink(alice.oid, link(0)));
   });
 
   it.each([

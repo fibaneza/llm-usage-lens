@@ -116,3 +116,61 @@ describe("withRoute span", () => {
     }
   });
 });
+
+// Source: docs/specs/2026-11-10-access-control.md - "Recent authentication"
+// (Audit: `REAUTH_REQUIRED` writes no denied record; it adds a
+// `reauth.required` span event with no personal data, an id-free counter when
+// OTel metrics land), "Enforcement" item 7 (Observability), D33; 4R.4 review
+// warning (code and spec must agree).
+describe("withRoute REAUTH_REQUIRED span event", () => {
+  const write = () =>
+    new Request("http://localhost/api/x", {
+      method: "POST",
+      headers: { origin: "http://localhost", host: "localhost" },
+    });
+  const route = () =>
+    withRoute(async () => jsonData(1), { requireRecentAuth: true });
+  const reauthEvents = () =>
+    recordedSpans.flatMap((s) =>
+      s.events.filter((e) => e.name === "reauth.required"),
+    );
+
+  it("a stale sign-in answers 403 REAUTH_REQUIRED and records one reauth.required event, not an error", async () => {
+    auth.mockResolvedValue({
+      user: { oid: "oid-personal-1", name: "t", authTime: 1 },
+    });
+    const res = await route()(write(), ctx);
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      "REAUTH_REQUIRED",
+    );
+    expect(reauthEvents()).toHaveLength(1);
+    expect(recordedSpans.some((s) => s.exceptions.length > 0)).toBe(false);
+    expect(
+      recordedSpans.some((s) => s.status.code === SpanStatusCode.ERROR),
+    ).toBe(false);
+  });
+
+  it("the event carries no personal data (Rule 50.6)", async () => {
+    auth.mockResolvedValue({
+      user: { oid: "oid-personal-1", name: "t", authTime: 1 },
+    });
+    await route()(write(), ctx);
+    const text = JSON.stringify(reauthEvents());
+    expect(text).not.toContain("oid-personal-1");
+    expect(text).not.toContain("authTime");
+  });
+
+  it("a fresh sign-in records no event", async () => {
+    auth.mockResolvedValue({
+      user: {
+        oid: "oid-test",
+        name: "t",
+        authTime: Math.floor(Date.now() / 1000),
+      },
+    });
+    const res = await route()(write(), ctx);
+    expect(res.status).toBe(200);
+    expect(reauthEvents()).toEqual([]);
+  });
+});

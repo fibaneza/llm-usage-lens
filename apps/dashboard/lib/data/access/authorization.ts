@@ -54,6 +54,13 @@ async function queryByIdent<S extends z.ZodType>(
   return out;
 }
 
+// The global roles an oid holds through in-app grants (Access Control spec -
+// Roles). Read per request; never cached.
+export async function loadGrantedRoles(oid: string): Promise<string[]> {
+  const grants = await queryByIdent(oid, "ROLEGRANT#", RoleGrantSchema);
+  return grants.map((grant) => grant.role);
+}
+
 export type AuthorizationRequest = {
   appEnv: "dev" | "prod";
   session: PolicySession;

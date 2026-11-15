@@ -19,6 +19,7 @@ export type RecordedSpan = {
   name: string;
   attributes: Record<string, unknown>;
   exceptions: unknown[];
+  events: { name: string; attributes: Record<string, unknown> }[];
   status: SpanStatus;
   ended: boolean;
 };
@@ -54,6 +55,7 @@ function makeSpan(name: string): Span {
     name,
     attributes: {},
     exceptions: [],
+    events: [],
     status: { code: 0 },
     ended: false,
   };
@@ -66,7 +68,17 @@ function makeSpan(name: string): Span {
     }),
     setAttribute: (k, v) => ((rec.attributes[k] = v), span),
     setAttributes: (a) => (Object.assign(rec.attributes, a), span),
-    addEvent: () => span,
+    addEvent: (eventName, attributesOrTime) => {
+      const attributes =
+        typeof attributesOrTime === "object" &&
+        attributesOrTime !== null &&
+        !Array.isArray(attributesOrTime) &&
+        !(attributesOrTime instanceof Date)
+          ? { ...(attributesOrTime as Record<string, unknown>) }
+          : {};
+      rec.events.push({ name: eventName, attributes });
+      return span;
+    },
     addLink: () => span,
     addLinks: () => span,
     setStatus: (s) => ((rec.status = s), span),

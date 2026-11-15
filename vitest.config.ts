@@ -85,6 +85,10 @@ export default defineConfig({
             AWS_REGION: "us-east-1",
             DYNAMODB_TABLE_NAME: integrationTableName,
             SKIP_ENV_VALIDATION: "true",
+            // The list-cursor HMAC key derives from AUTH_SECRET and there is no
+            // fallback (Access Control spec, user decision 2026-11-15); a
+            // test-only value, never a real secret.
+            AUTH_SECRET: "integration-test-auth-secret",
           },
         },
       },

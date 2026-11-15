@@ -39,7 +39,7 @@ export async function identityExists(oid: string): Promise<boolean> {
 
 export type PersonNames = { displayName: string | null; email: string | null };
 
-// F11 (temp/run-r4b/decisions.md): the name and email of each person in an
+// D37 (docs/specs/2026-11-10-access-control.md): the name and email of each person in an
 // in-scope list, null when there is no identity item. Nothing else of the
 // record is returned.
 export async function personNamesOf(
@@ -75,4 +75,14 @@ export async function withPersonNames<T extends { oid: string }>(
     displayName: names.get(row.oid)?.displayName ?? null,
     email: names.get(row.oid)?.email ?? null,
   }));
+}
+
+// The identity's own lower-cased email, for the identity link check that a
+// link holds no person-kind key but that one (Access Control spec - Identity
+// links, T16). Null when the record has none.
+export async function ownEmail(oid: string): Promise<string | null> {
+  const item = await getItem(identPk(oid), META_SK);
+  if (!item) return null;
+  const email = IdentityListItemSchema.shape.email.parse(item.email);
+  return email ? email.trim().toLowerCase() : null;
 }

@@ -7,13 +7,25 @@ import { getAllAccountsCached } from "@/lib/api/cached-reads";
 import { isMatrixWriter } from "@/lib/auth/write-policy";
 import { INTERNAL_AUDITOR_ROLE } from "@/lib/auth/roles";
 
-// Source: temp/run-r4b/decisions.md F10; docs/specs/2026-11-10-access-control.md
+// Source: docs/specs/2026-11-10-access-control.md (D37)
 // - "Permission matrix" (a team-scope admin manages its team, a
 // department-scope admin its department and that department's teams;
 // internal-admin, internal-org-admin and, read-only, internal-auditor see the
 // whole organisation). The lists come from the AccountMeta registry, so a team
 // with no recent usage is included. The registry is organisation data and may
 // be cached; the caller's scopes are read per request (Rule 60.10).
+const byName = (
+  a: { name: string; id: string },
+  b: { name: string; id: string },
+) =>
+  a.name < b.name
+    ? -1
+    : a.name > b.name
+      ? 1
+      : a.id < b.id
+        ? -1
+        : +(a.id > b.id);
+
 export const GET = withRoute(async (_request, _ctx, session) => {
   const actor = await loadManager(session);
   const global =
@@ -55,8 +67,8 @@ export const GET = withRoute(async (_request, _ctx, session) => {
   }
   return jsonData(
     OrgUnitsSchema.parse({
-      teams: [...teams.values()],
-      departments: [...departments.values()],
+      teams: [...teams.values()].sort(byName),
+      departments: [...departments.values()].sort(byName),
     }),
   );
 });

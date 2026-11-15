@@ -25,7 +25,7 @@ import type { StepUpSection } from "@/lib/auth/step-up";
 
 // Source: docs/specs/2026-11-10-access-control.md - "Recent authentication"
 // (D28): 'Confirm it's you' with the control for the session's own sign-in
-// method - a button for Entra, password and authenticator code otherwise. The
+// method - a button for Entra and the dev login, password and authenticator code otherwise. The
 // identifier comes from the server session, never from this form; the unsent
 // draft and the secrets never go in the URL or web storage; the write is not
 // replayed (threat T32).
@@ -98,6 +98,22 @@ export function StepUpDialog({
                 onClick={() => void run(() => stepUp.entra(section))}
               >
                 Confirm with Microsoft
+              </Button>
+            </DialogFooter>
+          </>
+        ) : authMethod === "local" ? (
+          <>
+            {error ? <FormError>{error}</FormError> : null}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={pending}
+                onClick={() => void run(() => stepUp.devLogin(section))}
+              >
+                Confirm with dev login
               </Button>
             </DialogFooter>
           </>

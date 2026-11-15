@@ -21,4 +21,5 @@ export type StepUpActions = {
     form: FormData,
     section: StepUpSection,
   ) => Promise<StepUpResult>;
+  devLogin: (section: StepUpSection) => Promise<StepUpResult>;
 };

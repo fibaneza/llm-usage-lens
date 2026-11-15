@@ -7,6 +7,10 @@ vi.mock("next/cache", async () => {
 });
 const auth = vi.hoisted(() => vi.fn());
 vi.mock("@/auth", () => ({ auth: () => auth() }));
+vi.mock("@/lib/data/access/authorization", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/data/access/authorization")>()),
+  loadGrantedRoles: vi.fn(async () => []),
+}));
 const data = vi.hoisted(() => ({
   getRollupsByDate: vi.fn(),
   getAllAccounts: vi.fn(),

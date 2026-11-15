@@ -4,6 +4,9 @@ import { z } from "zod";
 vi.mock("server-only", () => ({}));
 const auth = vi.hoisted(() => vi.fn());
 vi.mock("@/auth", () => ({ auth: () => auth() }));
+vi.mock("@/lib/data/access/authorization", () => ({
+  loadGrantedRoles: vi.fn(async () => []),
+}));
 
 import { INTERNAL_ADMIN_ROLE } from "@/lib/auth/roles";
 import {

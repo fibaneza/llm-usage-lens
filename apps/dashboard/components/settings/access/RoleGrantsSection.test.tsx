@@ -58,7 +58,8 @@ function stepUpMocks() {
   const credentials = vi.fn<StepUpActions["credentials"]>(
     async () => undefined,
   );
-  return { entra, credentials } satisfies StepUpActions;
+  const devLogin = vi.fn<StepUpActions["devLogin"]>(async () => undefined);
+  return { entra, credentials, devLogin } satisfies StepUpActions;
 }
 
 function routes(extra: Record<string, unknown> = {}) {

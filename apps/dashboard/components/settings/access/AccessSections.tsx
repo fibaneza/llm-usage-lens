@@ -7,6 +7,7 @@ import { accessCapabilities } from "@/components/settings/access/capabilities";
 import { GroupMappingsSection } from "@/components/settings/access/GroupMappingsSection";
 import { IdentityLinksSection } from "@/components/settings/access/IdentityLinksSection";
 import { MembersSection } from "@/components/settings/access/MembersSection";
+import { PendingAccessSection } from "@/components/settings/access/PendingAccessSection";
 import { PasswordUsersSection } from "@/components/settings/access/PasswordUsersSection";
 import { PerUserApprovalSection } from "@/components/settings/access/PerUserApprovalSection";
 import { RoleGrantsSection } from "@/components/settings/access/RoleGrantsSection";
@@ -63,6 +64,16 @@ export function AccessSections({
           description="What each team and department shows to its users."
         >
           <VisibilitySection viewer={viewer} />
+        </AccessSection>
+      ) : null}
+      {capabilities.pendingAccess ? (
+        <AccessSection
+          slug="pending-access"
+          heading="Pending and stale access"
+          title="the pending and stale access"
+          description="Invitations not yet bound to a sign-in, and access whose person has not signed in lately."
+        >
+          <PendingAccessSection />
         </AccessSection>
       ) : null}
       {capabilities.groupMappings !== "none" ? (

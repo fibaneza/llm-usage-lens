@@ -123,7 +123,7 @@ Order: FoundationStack, then DashboardServiceStack.
 4. Create the internal DNS record: `<dashboardHostname>` to the ALB
    (CNAME or alias). In create mode the ALB DNS name is a stack output; in
    import mode it is the shared ALB's.
-. Verify the data isolation (Platform spec — *Data isolation*), in `dev`
+5. Verify the data isolation (Platform spec — *Data isolation*), in `dev`
    first: a `GetItem` on the table with an account admin role that is **not**
    `opsRoleArn` must return `AccessDeniedException`, and the dashboard must
    still sign in and load. Only then deploy the FoundationStack to `prod`.
@@ -133,7 +133,36 @@ header the task receives (Access Control spec — *Enforcement* item 6). The
 ALB forwards `Host` unchanged; keep the HTTPS listener on 443 and serve the
 dashboard only at `<dashboardHostname>`, or account edits return `403`.
 
-## 7. Undeploy
+## 7. Sign-in setup: before SSO, enabling SSO, password sign-in off
+
+Per the [Access Control spec](../specs/2026-11-10-access-control.md) -
+*Pre-SSO mode* and *Password users* (4R.4). The in-app steps are in
+[auth-setup.md](auth-setup.md) - *Pre-SSO setup, enabling SSO later and
+turning password sign-in off*.
+
+**Before SSO (Pre-SSO `prod`).** Leave `entraClientId` and `entraIssuer`
+unset and set `masterUsername`; synth requires it and omits the Entra
+client-secret entry (Platform spec - *Inputs*). Create these SSM SecureStrings
+by hand: `/llm-usage-lens/<env>/app/auth-secret` (required in every
+environment; startup fails without `AUTH_SECRET`),
+`/llm-usage-lens/<env>/auth/master-password-hash` and, in `prod`,
+`/llm-usage-lens/<env>/auth/master-totp-secret`. Skip the Entra client-secret
+parameter of section 4. After the deploy, sign in as the master user and
+create the first password `internal-admin` (Settings, Password users).
+
+**Enabling SSO later.** Configuration only: create the
+`/llm-usage-lens/<env>/app/entra-client-secret` parameter, pass
+`entraClientId` and `entraIssuer` (both, never one), redeploy the
+DashboardServiceStack (section 6, step 3), and register the redirect URI
+(section 4). Then bind password users to Entra and follow the auth guide.
+
+**Turning password sign-in off.** An in-app step, not a deploy: once Entra
+is configured and every user is bound, an `internal-admin` turns off
+Settings, password sign-in (it needs a sign-in within 15 minutes and cannot be
+turned off while Entra is not configured). Keep the master user as
+break-glass.
+
+## 8. Undeploy
 
 See [operations.md](operations.md) - *Deploy and undeploy*. The FoundationStack
 retains the table and CMK by design.

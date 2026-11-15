@@ -425,12 +425,16 @@ export async function deletePasswordUser(
   emailInput: string,
   ctx: AuditContext,
   otherAdmin?: OtherPasswordAdmin,
+  expectedVersion?: number,
 ): Promise<AccessResult<void>> {
   const email = emailInput.toLowerCase();
   const key = userKey(email);
   const item = await getItem(key.PK, key.SK);
   if (!item) return { ok: false, code: "NOT_FOUND" };
   const version = Number(item.version);
+  if (expectedVersion !== undefined && expectedVersion !== version) {
+    return { ok: false, code: "CONFLICT" };
+  }
   const sso = (item.sso ?? {}) as Record<string, unknown>;
   const drop = (PK: string): TransactItem => ({
     Delete: { TableName: getTableName(), Key: { PK, SK: OWNER_SK } },
