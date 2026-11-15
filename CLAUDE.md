@@ -21,7 +21,7 @@ The `docs/specs/` directory is the source of truth:
 - `docs/specs/2026-05-15-system-architecture.md` — AWS serverless pipeline, account layout, data sources, Lambda collector flow
 - `docs/specs/2026-05-15-data-model.md` — DynamoDB single-table design, entities, access patterns, model ID normalization
 - `docs/specs/2026-05-15-design-system.md` — tech stack, visual design, component inventory, performance patterns
-- `docs/specs/2026-05-15-implementation-phases.md` — 6-phase build plan; each phase independently testable
+- `docs/specs/2026-05-15-implementation-phases.md` — the build plan: Phases 1–6, plus Phase 4R (access & platform) and the LiteLLM units (L0–L8); each phase independently testable
 - `docs/specs/2026-11-10-access-control.md` — roles from Entra ID, scopes, membership, visibility, audit log, threat model (Phase 4R)
 - `docs/specs/2026-11-10-platform.md` — AWS ECS Fargate hosting and the CDK stacks (Phase 4R.P)
 - `docs/specs/2026-11-10-litellm.md` — LiteLLM team/user administration, the gateway allowlist, service key, LiteLLM-reported cost (LiteLLM units L0–L8); contract snapshot in `docs/litellm/`
@@ -39,21 +39,24 @@ Not in the reading path above, but worth knowing they exist:
 
 - `docs/future-improvements.md` — the parking lot of intentionally-deferred enhancements, each with the trigger that would revisit it; per Rule 00, adopting any starts with a spec change, not a PR
 - `ONBOARDING.md` — new-contributor setup checklist (codebases, MCP servers, skills to know)
+- `prompts/` — the prompts behind the guarded, agent-driven build runs (worker and coordinator sessions); [`prompts/README.md`](prompts/README.md) is the index
+- `poc/` — an isolated proof of concept that runs the dashboard image on one EC2 instance with Docker Compose; **not** the deployment path and not in the pnpm workspace ([`poc/README.md`](poc/README.md))
 - `docs/superpowers/` — the design spec + implementation plan for the already-shipped `/new-component` command; kept for provenance, not active guidance
 
-Build strictly in phase order (see implementation-phases spec). Phase 2 (2.1–2.3), Phase 3 (3.1–3.3), and Phase 4 (4.1–4.9) are each split into independently deliverable sub-phases — one per PR (Rule 30.4); Phase 4's are one per dashboard page. Components are built where first needed and reused later.
+Build strictly in phase order (Rule 30 has the order and its decided exceptions). Phase 2 (2.1–2.3), Phase 3 (3.1–3.3), Phase 4 (4.1–4.9), Phase 4R (RP, R1–R5) and the LiteLLM units (L0–L8, with L3b and L3c) are each split into independently deliverable sub-phases — one per branch and squash commit (Rule 30.4); Phase 4's are one per dashboard page. Components are built where first needed and reused later.
 
 Project-specific Claude Code customization lives under `.claude/`:
 - **Rules** — `.claude/rules/` (numbered `00`–`70`; always loaded)
 - **Slash commands** — `.claude/commands/` (see table below)
 - **Agents** — `.claude/agents/` — see Rule 70
+- **Hooks** — `.claude/hooks/`, wired in `.claude/settings.json`: `session-start.sh` (installs dependencies), `server-only-guard.sh` (blocks a Rule 10 violation when a `"use client"` file is written), `prettier-on-edit.sh` (formats after an edit)
 
 ## What This Project Is
 
-Two deliverables (plus the platform IaC) in a **pnpm monorepo**, sharing `packages/shared` (Zod schemas, model normalization, price table):
+Two deliverables (plus the platform IaC) in a **pnpm monorepo** (`apps/*`, `packages/*`, `infra`), sharing `packages/shared` (Zod schemas, model normalization, price table):
 
-1. **Next.js dashboard** (`apps/dashboard`) — reads aggregated Bedrock cost/usage from DynamoDB, displays 9 pages. Built first (Phases 1–5), developed against **DynamoDB Local**.
-2. **AWS Lambda collector** (`apps/collector`, `bedrock-cost-collector`) — serverless hourly pipeline that collects real Bedrock data and writes to DynamoDB. Built last (Phase 6).
+1. **Next.js dashboard** (`apps/dashboard`) — reads aggregated Bedrock cost/usage from DynamoDB and displays the 9 Phase 4 pages, plus the role-based access management in Settings (Phase 4R), the LiteLLM page and Settings panel (LiteLLM units) and the account page. Built first (Phases 1–5), developed against **DynamoDB Local**.
+2. **AWS Lambda collector** (`apps/collector`, `bedrock-cost-collector`) — serverless hourly pipeline that collects real Bedrock data and writes to DynamoDB. Built last (Phase 6); the directory does not exist until then.
 
 The dashboard's AWS platform (ECS Fargate, FoundationStack + DashboardServiceStack) is a CDK app in `infra/` (`@llm-usage-lens/infra`; [Platform spec](docs/specs/2026-11-10-platform.md)). Deploying is always a user action.
 
@@ -81,7 +84,7 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 | `pnpm dev` | Next.js dev server (`apps/dashboard`) |
 | `pnpm build` | `next build` |
 | `pnpm build:ci` | `pnpm build` with non-secret placeholder auth/env values so env validation still runs (what the CI build job runs) |
-| `pnpm check` | Full local gate, stopping at the first failure: `typecheck`, `lint`, `format:check`, `vitest run` (both projects; DynamoDB Local on `:8000`), `build:ci` — the pre-merge gate in Rule 31 |
+| `pnpm check` | Full local gate, stopping at the first failure: `typecheck`, `lint`, `format:check`, `vitest run` (both projects; DynamoDB Local on `:8000`), `build:ci`, then the bundle scan (`lib/litellm/bundle-output.test.ts` with `REQUIRE_BUILD_OUTPUT=1` — the LiteLLM service key must not reach `.next/static`) — the pre-merge gate in Rule 31 |
 | `pnpm format:check` | Prettier format check (`pnpm format` to write) |
 | `pnpm lint` | ESLint v9 flat config (`eslint.config.ts`) |
 | `pnpm typecheck` | `tsc --noEmit` across every workspace (`pnpm -r --if-present typecheck`) plus `tsc -p tsconfig.scripts.json` for `scripts/` |
@@ -96,7 +99,7 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 
 DynamoDB Local (Phase 3.2): `docker compose up -d dynamodb-local` (inside `.devcontainer`; from the host use `docker compose -f .devcontainer/docker-compose.yml up -d dynamodb-local`), then `pnpm db:create-table` and `pnpm db:seed` (variants `db:seed:empty` / `db:seed:large` / `db:seed:ranking`). The scripts default to `http://localhost:8000` and must never target real AWS. The `/seed` slash command wraps this flow. See the [README](README.md) for the macOS volume workaround.
 
-**Git hooks (Husky).** Pre-commit: gitleaks (or grep fallback) secret scan + `lint-staged` (ESLint fix + Prettier on staged files). Commit-msg: `commitlint` (Conventional Commits). Pre-push: when `apps/`/`packages/`/`scripts/`/`tsconfig.scripts.json` change, runs `pnpm typecheck` + `pnpm exec vitest run --project unit --passWithNoTests` (integration tests run in CI and via `pnpm test`); when `tools/bedrock-simulator/` changes, runs that workspace's typecheck + tests; then a gitleaks scan of the pushed range (skipped with a notice if gitleaks is not installed). Never bypass with `--no-verify` (Rule 50.5).
+**Git hooks (Husky).** Pre-commit: gitleaks (or grep fallback) secret scan + `lint-staged` (ESLint fix + Prettier on staged files). Commit-msg: `commitlint` (Conventional Commits). Pre-push: when `apps/`/`packages/`/`scripts/`/`infra/`/`tsconfig.scripts.json` change, runs `pnpm typecheck` + `pnpm exec vitest run --project unit --passWithNoTests` (integration tests run in CI and via `pnpm test`); when `tools/bedrock-simulator/` changes, runs that workspace's typecheck + tests; then a gitleaks scan of the pushed range (skipped with a notice if gitleaks is not installed). Never bypass with `--no-verify` (Rule 50.5).
 
 ## Slash commands
 
@@ -129,6 +132,9 @@ is the source of truth — read it before touching any workflow.
 | `claude-code-review.yml` | release tag push / `workflow_dispatch` | Release audit scoped to commits since the previous tag; files issues |
 | `github-pr-title-lint.yml` | PR opened / edited / reopened | Conventional-Commits check on the PR title (the squash-merge commit on `main`) |
 | `claude-assistant.yml` | `@claude` mention | On-demand reactive bot |
+| `github-sync-labels.yml` | push to `main` touching the label definitions or the workflow; `workflow_dispatch` | Syncs the repository labels (create/update only, never deletes) |
+
+The five `bedrock-simulator-*.yml` workflows (build, deps, deploy, run, destroy) belong to the standalone simulator (see *Out-of-scope tooling*) and are documented in `.github/ACTIONS.md`.
 
 Reusable logic is factored into composite actions (`.github/actions/`) and
 scripts (`.github/scripts/claude/`).
@@ -185,5 +191,5 @@ Detailed conventions live in `.claude/rules/` (numbered `00`–`70`, always load
 - **Rule 31** — GitHub Flow (branching strategy, squash-merge, release tagging)
 - **Rule 40** — design system & stack (light mode default, no raw hex, lazy-loaded charts)
 - **Rule 50** — security & secrets (two credential concerns, no static AWS keys)
-- **Rule 60** — coding standards (TypeScript strict, validate at the boundary, Vitest)
+- **Rule 60** — coding standards (TypeScript strict, validate at the boundary, Vitest; a new Route Handler registers in `apps/dashboard/test/route-registry.ts`, which the shared route-contract suite iterates — Rule 60.23)
 - **Rule 70** — tdd-test-engineer → typescript-developer → quality-reviewer TDD agent workflow
