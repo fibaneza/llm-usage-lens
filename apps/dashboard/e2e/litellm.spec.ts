@@ -8,7 +8,10 @@ import { signInAsTestUser } from "./support/session";
 // rights, Cost visualisation and provenance (LT8), LD20; implementation-phases
 // L3 ("e2e probe, fake"). The LiteLLM API is fulfilled from fixtures
 // (Rule 60.24). Behaviour detail lives in the component tests (Rule 60.24a);
-// this covers the real shell, role gating and axe.
+// this covers the real shell, role gating and axe. L3b (Views by role): the
+// page is tabs (?tab=); Admin sees all five, org-admin everything but Audit
+// (the harness cannot forge a team-scope Lead: Lead scope lives in DynamoDB, so
+// org-admin stands in for the Team + Users case), a Viewer only My usage.
 const ME = {
   linked: true,
   spend: 12.5,
@@ -48,6 +51,7 @@ async function mockApi(page: Page, me: unknown = ME) {
         connected: true,
         items: [
           {
+            userId: "u-ada",
             oid: "oid-ada",
             name: "Ada Lovelace",
             email: "ada@example.test",
@@ -59,6 +63,42 @@ async function mockApi(page: Page, me: unknown = ME) {
         ],
       },
       "/api/litellm/teams/t1/keys": { connected: true, items: [] },
+      "/api/litellm/org": {
+        totals: { spend: 1234.5 },
+        enabledOperations: [],
+        daily: [{ date: "2026-11-14", spend: 100 }],
+        teams: [
+          {
+            teamId: "t1",
+            teamName: "Payments",
+            spend: 321.75,
+            maxBudget: 500,
+            memberCount: 7,
+          },
+        ],
+      },
+      "/api/litellm/users": {
+        page: 1,
+        pageSize: 25,
+        enabledOperations: [],
+        users: [
+          {
+            userId: "u-ada",
+            email: "ada@example.test",
+            spend: 77.1,
+            maxBudget: 150,
+            teams: [{ teamId: "t1", teamName: "Payments" }],
+          },
+        ],
+      },
+      "/api/litellm/users/u-ada": {
+        userId: "u-ada",
+        email: "ada@example.test",
+        spend: 77.1,
+        maxBudget: 150,
+        daily: [{ date: "2026-11-14", spend: 4.5 }],
+        enabledOperations: [],
+      },
       "/api/litellm/audit": {
         items: [
           {
@@ -104,19 +144,20 @@ test.describe("LiteLLM page", () => {
     await mockApi(page);
     await openPage(page);
 
+    await expect(page.getByRole("region", { name: "My usage" })).toBeVisible();
+    await page.getByRole("tab", { name: "Team", exact: true }).click();
     for (const name of [
-      "My usage",
       "Team spend & budgets",
       "Members",
       "Keys",
       "Model access",
-      "LiteLLM audit",
     ]) {
       await expect(page.getByRole("region", { name })).toBeVisible();
     }
     await expect(
       page.getByRole("region", { name: "Team spend & budgets" }),
     ).toContainText("LiteLLM-reported");
+    await page.getByRole("tab", { name: "Audit" }).click();
     await expect(
       page.getByRole("region", { name: "LiteLLM audit" }),
     ).toContainText("AEDT");
@@ -144,10 +185,94 @@ test.describe("LiteLLM page", () => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
     await openPage(page);
+    await page.getByRole("tab", { name: "Audit" }).click();
     await expect(
       page.getByRole("region", { name: "LiteLLM audit" }),
     ).toBeVisible();
 
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => v.id),
+    ).toEqual([]);
+  });
+});
+
+// Views by role (L3b): role x tab in the real shell; behaviour detail lives in
+// the component tests (Rule 60.24a).
+test.describe("LiteLLM page tabs", () => {
+  const names = async (page: Page) =>
+    (await page.getByRole("tab").allTextContents()).map((t) => t.trim());
+
+  test("an Admin sees all five tabs and can search users on the Users tab", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await openPage(page);
+    expect(await names(page)).toEqual([
+      "My usage",
+      "Team",
+      "Organisation",
+      "Users",
+      "Audit",
+    ]);
+
+    await page.getByRole("tab", { name: "Organisation" }).click();
+    await expect(page).toHaveURL(/tab=organisation/);
+    await expect(
+      page.getByRole("region", { name: "Organisation" }),
+    ).toContainText("Payments");
+
+    await page.getByRole("tab", { name: "Users" }).click();
+    await page.getByRole("searchbox", { name: /search users/i }).fill("ada");
+    await page.getByRole("button", { name: "ada@example.test" }).click();
+    await expect(
+      page.getByRole("region", { name: /user usage/i }),
+    ).toContainText("$77.10");
+  });
+
+  test("an org-admin (stand-in for a Lead) sees Team and Users but not Audit", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    const hits = await mockApi(page);
+    await openPage(page);
+    const tabs = await names(page);
+    expect(tabs).toContain("Team");
+    expect(tabs).toContain("Users");
+    expect(tabs).not.toContain("Audit");
+    expect(hits).not.toContain("/api/litellm/audit");
+  });
+
+  test("a Viewer sees only My usage, and a direct ?tab=audit link falls back to it", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-viewer"] });
+    await mockApi(page, { ...ME, teams: [] });
+    await page.goto("/dashboard/litellm?tab=audit");
+    await waitForHydration(page);
+    expect(await names(page)).toEqual(["My usage"]);
+    await expect(page.getByRole("region", { name: "My usage" })).toBeVisible();
+  });
+
+  test("the Users tab has no serious or critical axe violations", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.goto("/dashboard/litellm?tab=users");
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("searchbox", { name: /search users/i }),
+    ).toBeVisible();
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa"])
       .analyze();

@@ -19,7 +19,7 @@ import {
   stubLiteLLMEnv,
   useEnv,
 } from "@/test/fake-litellm-views";
-import { signInAs } from "@/test/scope-fixtures";
+import { CALLERS, signInAs } from "@/test/scope-fixtures";
 import { clearTable } from "@/test/test-support";
 
 // Source: docs/specs/2026-11-10-litellm.md — "API routes" (/api/litellm/me GET,
@@ -32,6 +32,8 @@ import { clearTable } from "@/test/test-support";
 // Contract for the developer (.../me/route.ts, GET):
 //   query: dateFrom, dateTo (90-day cap -> 400). No user-id input exists.
 //   200 data = { linked: false } when the caller has no litellmUserId, with no LiteLLM call, else
+//   An unlinked caller is resolved with findUserByEmail(session email) and, when found,
+//   gets the same linked:true payload; when not found { linked: false }. Read only.
 //   { linked: true, spend, maxBudget, daily: [{ date, spend, ... }],
 //     keys: [{ tokenId, keyAlias, blocked, expires, models, spend, maxBudget, ... }],
 //     enabledOperations: string[] }.
@@ -58,14 +60,14 @@ describe("GET /api/litellm/me", () => {
     expect(state.fake.calls).toHaveLength(0);
   });
 
-  it.each(["teamAdminA", "auditor", "admin"] as const)(
-    "%s with no LiteLLM user link gets the empty 'unlinked' state with no LiteLLM call (Roles and rights: Viewer)",
+  it.each(["auditor", "admin"] as const)(
+    "%s with no stored link and no LiteLLM user for their email gets the empty 'unlinked' state; the only call is the email lookup (Views: Own usage without a stored link)",
     async (who) => {
       signInAs(who);
       const { res, body } = await me();
       expect(res.status).toBe(200);
       expect(body.data.linked).toBe(false);
-      expect(state.fake.calls).toHaveLength(0);
+      expect(state.fake.calls.map((c) => c.path)).toEqual(["/user/list"]);
     },
   );
 
@@ -74,6 +76,47 @@ describe("GET /api/litellm/me", () => {
     const { res, body } = await me();
     expect(res.status).toBe(200);
     expect(body.data.linked).toBe(false);
+  });
+
+  it("an unlinked caller is resolved by findUserByEmail on the session email and reads that user's usage (Views: Own usage without a stored link; LD13)", async () => {
+    signInAs("teamAdminA"); // ta@company.com: no IdentityLink; LiteLLM id is uid-ta-0001
+    const { res, body } = await me();
+    expect(res.status).toBe(200);
+    expect(body.data).toMatchObject({ linked: true, spend: 1, maxBudget: 5 });
+    const list = state.fake.calls.find((c) => c.path === "/user/list")!;
+    expect(new URL(list.url).searchParams.get("user_email")).toBe(
+      "ta@company.com",
+    );
+    // The id LiteLLM returned is used, never one composed from the email.
+    const userIds = state.fake.calls
+      .filter(
+        (c) => c.path === "/user/info" || c.path === "/user/daily/activity",
+      )
+      .map((c) => new URL(c.url).searchParams.get("user_id"));
+    expect(userIds).toEqual(expect.arrayContaining(["uid-ta-0001"]));
+    expect(new Set(userIds)).toEqual(new Set(["uid-ta-0001"]));
+  });
+
+  it("an unlinked caller whose session email fails the gateway's email schema gets the normal unlinked payload, not a 500, and no /user/list call (Rule 60.17; Views: Own usage without a stored link)", async () => {
+    signInAs("teamAdminA", "not-an-email");
+    const { res, body } = await me();
+    expect(res.status).toBe(200);
+    expect(body.data.linked).toBe(false);
+    expect(state.fake.calls.some((c) => c.path === "/user/list")).toBe(false);
+  });
+
+  it("the fallback is read only: it writes no IdentityLink (Views: Own usage without a stored link)", async () => {
+    signInAs("teamAdminA");
+    await me();
+    const { getIdentityLink } =
+      await import("@/lib/data/access/identity-links");
+    expect(await getIdentityLink(CALLERS.teamAdminA.oid)).toBeNull();
+  });
+
+  it("a stored link wins: no email lookup is made for a linked caller (Views: Own usage)", async () => {
+    signInAs("memberA");
+    await me();
+    expect(state.fake.calls.some((c) => c.path === "/user/list")).toBe(false);
   });
 
   it("a Viewer reads only their own LiteLLM user, never another (Viewer own vs other)", async () => {

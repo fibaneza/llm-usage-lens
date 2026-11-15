@@ -9,7 +9,7 @@ Source: `docs/specs/2026-05-15-implementation-phases.md`.
   → 3 Data Layer (3.1 → 3.3, in order)
     → 4 Pages (4.1 → 4.9, in order)
       → 4R Access & Platform (RP → R1 → R5, in order)
-        → LiteLLM units (L0–L8)
+        → LiteLLM units (L0–L8; L3b and L3c between L3 and L4)
           → 5 Polish & Accessibility
             → 6 AWS Lambda Collector
 ```

@@ -36,6 +36,7 @@ describe("LITELLM_OPERATION_NAMES", () => {
         "getTeamDailySpend",
         "getUser",
         "findUserByEmail",
+        "searchUsers",
         "getUserDailySpend",
         "listKeys",
         "getKey",

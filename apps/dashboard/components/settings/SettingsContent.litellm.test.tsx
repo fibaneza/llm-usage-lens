@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { apiResponse } from "@/test/api-stubs";
@@ -62,7 +63,9 @@ describe("SettingsContent LiteLLM section", () => {
     expect(
       await screen.findByText("https://litellm.example.internal"),
     ).toBeInTheDocument();
-    // L2 (LD19): the operation toggles live in the same section.
+    // L2 (LD19): the operation toggles live in the same section; since L3b
+    // they sit on the Guardrails tab.
+    await userEvent.click(screen.getByRole("tab", { name: "Guardrails" }));
     expect(
       await screen.findByRole("switch", { name: "createTeam" }),
     ).toBeInTheDocument();

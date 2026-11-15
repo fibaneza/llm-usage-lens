@@ -4,14 +4,18 @@ import {
   ConnectionTestResultSchema,
   LiteLLMConnectionStatusSchema,
   OperationTogglesViewSchema,
+  TeamLinkSchema,
 } from "@llm-usage-lens/shared";
 import type { OperationTogglesView } from "@llm-usage-lens/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useState } from "react";
+import { z } from "zod";
 
+import { UserSearch } from "@/components/litellm/UserSearch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fetchApi, mutateApi } from "@/lib/query/fetch-api";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Page and Settings" and "Security
@@ -23,6 +27,8 @@ import { fetchApi, mutateApi } from "@/lib/query/fetch-api";
 const StatusSchema = LiteLLMConnectionStatusSchema.strip();
 const STATUS_KEY = ["litellm", "connection"] as const;
 const TOGGLES_KEY = ["litellm", "toggles"] as const;
+const TEAM_LINKS_KEY = ["litellm", "team-links"] as const;
+const TeamLinksSchema = z.object({ items: z.array(TeamLinkSchema) });
 
 type Toggles = OperationTogglesView;
 
@@ -338,7 +344,7 @@ function EnforcedInCode() {
   );
 }
 
-export function LiteLLMPanel({ canEdit = true }: { canEdit?: boolean }) {
+function ConnectionTab() {
   const status = useQuery({
     queryKey: STATUS_KEY,
     queryFn: () => fetchApi("/api/litellm/connection", StatusSchema),
@@ -425,8 +431,94 @@ export function LiteLLMPanel({ canEdit = true }: { canEdit?: boolean }) {
           ))}
         </div>
       ) : null}
-      <TogglesSection canEdit={canEdit} />
-      <EnforcedInCode />
     </div>
+  );
+}
+
+function TeamLinksTab() {
+  const searchId = useId();
+  const [term, setTerm] = useState("");
+  const query = useQuery({
+    queryKey: TEAM_LINKS_KEY,
+    queryFn: () => fetchApi("/api/litellm/team-links", TeamLinksSchema),
+  });
+
+  if (query.isError) {
+    return (
+      <p role="alert" className="text-destructive text-sm">
+        {query.error.message}
+      </p>
+    );
+  }
+  if (query.data === undefined) return <PanelSkeleton />;
+
+  const needle = term.trim().toLowerCase();
+  const items = query.data.items.filter(
+    (link) =>
+      link.teamId.toLowerCase().includes(needle) ||
+      link.litellmTeamId.toLowerCase().includes(needle),
+  );
+  return (
+    <div className="flex max-w-[72ch] flex-col gap-3">
+      <label htmlFor={searchId} className="text-sm font-medium">
+        Search teams
+      </label>
+      <Input
+        id={searchId}
+        type="search"
+        value={term}
+        onChange={(e) => setTerm(e.target.value)}
+      />
+      {items.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          {query.data.items.length === 0
+            ? "No team links yet"
+            : "No matching teams"}
+        </p>
+      ) : (
+        <ul className="divide-border divide-y">
+          {items.map((link) => (
+            <li
+              key={link.teamId}
+              className="flex items-center justify-between gap-3 py-1 text-sm"
+            >
+              <span className="font-mono">{link.teamId}</span>
+              <span className="text-muted-foreground font-mono">
+                {link.litellmTeamId}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// Settings -> LiteLLM, tabbed like the page (LiteLLM spec -- Views by role).
+// Tab state is local; each tab mounts only when selected, so team links load
+// on their tab.
+export function LiteLLMPanel({ canEdit = true }: { canEdit?: boolean }) {
+  return (
+    <Tabs defaultValue="connection">
+      <TabsList aria-label="LiteLLM settings">
+        <TabsTrigger value="connection">Connection</TabsTrigger>
+        <TabsTrigger value="guardrails">Guardrails</TabsTrigger>
+        <TabsTrigger value="team-links">Team links</TabsTrigger>
+        <TabsTrigger value="users">Users</TabsTrigger>
+      </TabsList>
+      <TabsContent value="connection">
+        <ConnectionTab />
+      </TabsContent>
+      <TabsContent value="guardrails">
+        <TogglesSection canEdit={canEdit} />
+        <EnforcedInCode />
+      </TabsContent>
+      <TabsContent value="team-links">
+        <TeamLinksTab />
+      </TabsContent>
+      <TabsContent value="users">
+        <UserSearch />
+      </TabsContent>
+    </Tabs>
   );
 }

@@ -11,6 +11,10 @@ import { LiteLLMContent } from "./LiteLLMContent";
 // visualisation and provenance (LT8 "LiteLLM-reported"); Page and Settings;
 // LD20 (UTC day buckets labelled, timestamps in Australia/Sydney with zone);
 // Design System -- LiteLLM Page (sections, states); Rules 40.4, 60.12.
+// L3b (Views by role): the sections are grouped into tabs -- My usage (my-usage),
+// Team (team), Organisation (organisation), Users (users), Audit (audit). The
+// server passes `tabs` (the allowed ids); `?tab=` (nuqs) selects one. Existing
+// cases are unchanged in behaviour; each now opens the tab holding its section.
 // Component tests assert rendering only; the routes' scoping and audit logic
 // are tested with the routes (Rule 60.24a).
 
@@ -146,6 +150,28 @@ function teamRoutes(overrides: Routes = {}): Routes {
 
 const region = (name: string) => screen.findByRole("region", { name });
 
+type TabId = "my-usage" | "team" | "organisation" | "users" | "audit";
+const ALL: TabId[] = ["my-usage", "team", "organisation", "users", "audit"];
+const NO_AUDIT: TabId[] = ["my-usage", "team", "organisation", "users"];
+const TAB_NAME: Record<TabId, string> = {
+  "my-usage": "My usage",
+  team: "Team",
+  organisation: "Organisation",
+  users: "Users",
+  audit: "Audit",
+};
+
+function renderPage(tabs: TabId[], tab?: TabId) {
+  return renderWithProviders(<LiteLLMContent tabs={tabs} />, {
+    searchParams: tab ? { tab } : {},
+  });
+}
+async function openTab(tab: TabId) {
+  await userEvent.click(
+    await screen.findByRole("tab", { name: TAB_NAME[tab] }),
+  );
+}
+
 beforeEach(() => {
   // React logs caught render errors; keep output readable.
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -156,25 +182,115 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("LiteLLMContent tabs (Views by role, L3b)", () => {
+  it("renders exactly the tabs the server allows, My usage selected by default (Views by role)", async () => {
+    stub(teamRoutes());
+    renderPage(ALL);
+    const tabs = await screen.findAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "My usage",
+      "Team",
+      "Organisation",
+      "Users",
+      "Audit",
+    ]);
+    expect(screen.getByRole("tab", { name: "My usage" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("does not render a tab the caller cannot use, and never calls its routes (Views by role)", async () => {
+    const calls = stub(teamRoutes());
+    renderPage(["my-usage"]);
+    await region("My usage");
+    for (const name of ["Team", "Organisation", "Users", "Audit"]) {
+      expect(screen.queryByRole("tab", { name })).not.toBeInTheDocument();
+    }
+    expect(calls.every((p) => p === "/api/litellm/me")).toBe(true);
+  });
+
+  it("shows the Team tab only when me.teams is non-empty (Views by role: Team)", async () => {
+    stub({ "/api/litellm/me": ok({ ...ME_LINKED, teams: [] }) });
+    renderPage(["my-usage", "team", "users"]);
+    await region("My usage");
+    await screen.findByRole("tab", { name: "Users" });
+    expect(screen.queryByRole("tab", { name: "Team" })).not.toBeInTheDocument();
+  });
+
+  it("the allowed-tabs prop is a ceiling: teams alone do not add a Team tab (Views by role)", async () => {
+    stub(teamRoutes());
+    renderPage(["my-usage"]);
+    await region("My usage");
+    expect(screen.queryByRole("tab", { name: "Team" })).not.toBeInTheDocument();
+  });
+
+  it("?tab= selects an allowed tab (Rule 40.5 URL state)", async () => {
+    stub(teamRoutes());
+    renderPage(ALL, "audit");
+    expect(await region("LiteLLM audit")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Audit" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it.each(["audit", "bogus"])(
+    "?tab=%s falls back to My usage when it is not allowed or unknown (Views by role)",
+    async (tab) => {
+      stub(teamRoutes());
+      renderWithProviders(<LiteLLMContent tabs={["my-usage"]} />, {
+        searchParams: { tab },
+      });
+      expect(await region("My usage")).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "My usage" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    },
+  );
+
+  it("choosing a tab writes ?tab= (Rule 40.5)", async () => {
+    stub(teamRoutes());
+    const onUrlUpdate = vi.fn();
+    renderWithProviders(<LiteLLMContent tabs={ALL} />, { onUrlUpdate });
+    await openTab("organisation");
+    expect(onUrlUpdate).toHaveBeenCalled();
+    expect(onUrlUpdate.mock.lastCall?.[0].searchParams.get("tab")).toBe(
+      "organisation",
+    );
+  });
+
+  it("only the selected tab's sections request data (Design System -- LiteLLM Page: sections keep Suspense per tab)", async () => {
+    const calls = stub(teamRoutes());
+    renderPage(ALL);
+    await region("My usage");
+    expect(calls).not.toContain("/api/litellm/audit");
+    expect(calls).not.toContain("/api/litellm/org");
+  });
+});
+
 describe("LiteLLMContent sections (Page and Settings)", () => {
   it("renders every section for an Admin or Auditor with a linked team", async () => {
     stub(teamRoutes());
-    renderWithProviders(<LiteLLMContent canViewAudit />);
+    renderPage(ALL);
+    expect(await region("My usage")).toBeInTheDocument();
+    await openTab("team");
     for (const name of [
-      "My usage",
       "Team spend & budgets",
       "Members",
       "Keys",
       "Model access",
-      "LiteLLM audit",
     ]) {
       expect(await region(name)).toBeInTheDocument();
     }
+    await openTab("audit");
+    expect(await region("LiteLLM audit")).toBeInTheDocument();
   });
 
   it("shows only My usage to a Viewer and never calls team or audit routes", async () => {
     const calls = stub({ "/api/litellm/me": ok(ME_LINKED) });
-    renderWithProviders(<LiteLLMContent canViewAudit={false} />);
+    renderPage(["my-usage"]);
     expect(await region("My usage")).toBeInTheDocument();
     for (const name of [
       "Team spend & budgets",
@@ -190,10 +306,13 @@ describe("LiteLLMContent sections (Page and Settings)", () => {
 
   it("hides LiteLLM audit and skips its route for a Lead (not Admin/Auditor)", async () => {
     const calls = stub(teamRoutes());
-    renderWithProviders(<LiteLLMContent canViewAudit={false} />);
+    renderPage(["my-usage", "team", "users"], "team");
     expect(await region("Members")).toBeInTheDocument();
     expect(
       screen.queryByRole("region", { name: "LiteLLM audit" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Audit" }),
     ).not.toBeInTheDocument();
     expect(calls).not.toContain("/api/litellm/audit");
   });
@@ -216,7 +335,7 @@ describe("LiteLLMContent sections (Page and Settings)", () => {
         "/api/litellm/teams/t2/keys": ok({ connected: true, items: [] }),
       }),
     );
-    renderWithProviders(<LiteLLMContent canViewAudit={false} />);
+    renderPage(NO_AUDIT, "team");
     await userEvent.selectOptions(
       await screen.findByLabelText("Team"),
       "Search",
@@ -230,13 +349,12 @@ describe("LiteLLMContent sections (Page and Settings)", () => {
 describe("LiteLLMContent LiteLLM-reported labels (LT8) and USD", () => {
   it("labels the spend in My usage, Team spend, Members and Keys as LiteLLM-reported", async () => {
     stub(teamRoutes());
-    renderWithProviders(<LiteLLMContent canViewAudit />);
-    for (const name of [
-      "My usage",
-      "Team spend & budgets",
-      "Members",
-      "Keys",
-    ]) {
+    renderPage(ALL);
+    expect(
+      within(await region("My usage")).getAllByText("LiteLLM-reported").length,
+    ).toBeGreaterThan(0);
+    await openTab("team");
+    for (const name of ["Team spend & budgets", "Members", "Keys"]) {
       expect(
         within(await region(name)).getAllByText("LiteLLM-reported").length,
       ).toBeGreaterThan(0);
@@ -245,10 +363,11 @@ describe("LiteLLMContent LiteLLM-reported labels (LT8) and USD", () => {
 
   it("renders spend and budgets in USD", async () => {
     stub(teamRoutes());
-    renderWithProviders(<LiteLLMContent canViewAudit />);
+    renderPage(ALL);
     const mine = await region("My usage");
     expect(within(mine).getByText("$12.50")).toBeInTheDocument();
     expect(within(mine).getByText("$100.00")).toBeInTheDocument();
+    await openTab("team");
     const team = await region("Team spend & budgets");
     expect(within(team).getByText("$321.75")).toBeInTheDocument();
     expect(within(team).getByText("$500.00")).toBeInTheDocument();
@@ -262,18 +381,19 @@ describe("LiteLLMContent LiteLLM-reported labels (LT8) and USD", () => {
 describe("LiteLLMContent time rendering (LD20)", () => {
   it("labels daily buckets as UTC days", async () => {
     stub(teamRoutes());
-    renderWithProviders(<LiteLLMContent canViewAudit />);
-    expect(
-      within(await region("Team spend & budgets")).getByText(/UTC days?/i),
-    ).toBeInTheDocument();
+    renderPage(ALL);
     expect(
       within(await region("My usage")).getByText(/UTC days?/i),
+    ).toBeInTheDocument();
+    await openTab("team");
+    expect(
+      within(await region("Team spend & budgets")).getByText(/UTC days?/i),
     ).toBeInTheDocument();
   });
 
   it("renders key expiry in Australia/Sydney with the zone label", async () => {
     stub(teamRoutes());
-    renderWithProviders(<LiteLLMContent canViewAudit />);
+    renderPage(ALL, "team");
     // 2026-12-01T13:00:00Z is 2026-12-02 00:00 in AEDT.
     expect(
       within(await region("Keys")).getByText(/2 Dec 2026,? 00:00 AEDT/),
@@ -282,7 +402,7 @@ describe("LiteLLMContent time rendering (LD20)", () => {
 
   it("renders audit timestamps in Australia/Sydney with the zone label", async () => {
     stub(teamRoutes());
-    renderWithProviders(<LiteLLMContent canViewAudit />);
+    renderPage(ALL, "audit");
     expect(
       within(await region("LiteLLM audit")).getByText(
         /16 Nov 2026,? 00:00 AEDT/,
@@ -294,29 +414,39 @@ describe("LiteLLMContent time rendering (LD20)", () => {
 describe("LiteLLMContent Keys (metadata only)", () => {
   it("shows alias, models, spend, expiry and blocked state, never a key value", async () => {
     stub(teamRoutes());
-    const { container } = renderWithProviders(<LiteLLMContent canViewAudit />);
+    const { container } = renderPage(ALL, "team");
     const keys = await region("Keys");
     expect(within(keys).getByText("ci-key")).toBeInTheDocument();
     expect(within(keys).getByText("claude-haiku")).toBeInTheDocument();
     expect(within(keys).getByText("$8.40")).toBeInTheDocument();
     expect(within(keys).getByText(/blocked/i)).toBeInTheDocument();
+    expect(container.textContent).not.toContain(SENTINEL_KEY_VALUE);
+    await openTab("my-usage");
     await region("My usage");
     expect(container.textContent).not.toContain(SENTINEL_KEY_VALUE);
   });
 
   it("lists the viewer's own keys' metadata in My usage", async () => {
     stub({ "/api/litellm/me": ok(ME_LINKED) });
-    renderWithProviders(<LiteLLMContent canViewAudit={false} />);
+    renderPage(["my-usage"]);
     expect(
       within(await region("My usage")).getByText("my-key"),
     ).toBeInTheDocument();
+  });
+
+  it("a Lead who is also a LiteLLM user sees their own usage on My usage (Views by role: My usage)", async () => {
+    stub(teamRoutes());
+    renderPage(["my-usage", "team", "users"]);
+    const mine = await region("My usage");
+    expect(within(mine).getByText("$12.50")).toBeInTheDocument();
+    expect(within(mine).getByText("my-key")).toBeInTheDocument();
   });
 });
 
 describe("LiteLLMContent Model access and Members", () => {
   it("lists the team's models read-only", async () => {
     stub(teamRoutes());
-    renderWithProviders(<LiteLLMContent canViewAudit />);
+    renderPage(ALL, "team");
     const models = await region("Model access");
     expect(within(models).getByText("claude-sonnet")).toBeInTheDocument();
     expect(within(models).getByText("claude-haiku")).toBeInTheDocument();
@@ -326,7 +456,7 @@ describe("LiteLLMContent Model access and Members", () => {
 
   it("shows each member's name, budget and limits (read views carry no write controls in L3)", async () => {
     stub(teamRoutes());
-    renderWithProviders(<LiteLLMContent canViewAudit />);
+    renderPage(ALL, "team");
     const members = await region("Members");
     expect(within(members).getByText("Ada Lovelace")).toBeInTheDocument();
     expect(within(members).getByText("$150.00")).toBeInTheDocument();
@@ -337,7 +467,7 @@ describe("LiteLLMContent Model access and Members", () => {
 describe("LiteLLMContent LiteLLM audit (LD15, LT20)", () => {
   it("shows time, actor, action, object and changed field names, with via dashboard on dashboard entries only", async () => {
     stub(teamRoutes());
-    renderWithProviders(<LiteLLMContent canViewAudit />);
+    renderPage(ALL, "audit");
     const audit = await region("LiteLLM audit");
     expect(within(audit).getByText("ops@example.test")).toBeInTheDocument();
     expect(within(audit).getByText("max_budget")).toBeInTheDocument();
@@ -354,7 +484,7 @@ describe("LiteLLMContent states", () => {
         teams: [{ teamId: "t1", teamName: "Payments", linked: false }],
       }),
     });
-    renderWithProviders(<LiteLLMContent canViewAudit={false} />);
+    renderPage(NO_AUDIT, "team");
     const team = await region("Team spend & budgets");
     expect(
       within(team).getByText(/not connected to LiteLLM/i),
@@ -374,23 +504,19 @@ describe("LiteLLMContent states", () => {
         teams: [],
       }),
     });
-    renderWithProviders(<LiteLLMContent canViewAudit={false} />);
+    renderPage(["my-usage"]);
     expect(
       within(await region("My usage")).getByText(/not linked to LiteLLM/i),
     ).toBeInTheDocument();
   });
 
-  it("shows an inline 'LiteLLM unavailable' on an outage and keeps the page and other sections up", async () => {
-    stub(
-      teamRoutes({
-        "/api/litellm/me": unavailable,
-        "/api/litellm/audit": ok(AUDIT),
-      }),
-    );
-    renderWithProviders(<LiteLLMContent canViewAudit />);
+  it("shows an inline 'LiteLLM unavailable' on an outage and keeps the page and other tabs up", async () => {
+    stub(teamRoutes({ "/api/litellm/me": unavailable }));
+    renderPage(ALL);
     expect(
       within(await region("My usage")).getByText(/LiteLLM unavailable/i),
     ).toBeInTheDocument();
+    await openTab("audit");
     expect(
       within(await region("LiteLLM audit")).getByText("ops@example.test"),
     ).toBeInTheDocument();
@@ -405,12 +531,13 @@ describe("LiteLLMContent states", () => {
         "/api/litellm/teams/t1/keys": unavailable,
       }),
     );
-    renderWithProviders(<LiteLLMContent canViewAudit />);
+    renderPage(ALL, "team");
     for (const name of ["Team spend & budgets", "Members", "Keys"]) {
       expect(
         within(await region(name)).getByText(/LiteLLM unavailable/i),
       ).toBeInTheDocument();
     }
+    await openTab("my-usage");
     expect(
       within(await region("My usage")).getByText("$12.50"),
     ).toBeInTheDocument();
@@ -422,15 +549,39 @@ describe("LiteLLMContent states", () => {
         "/api/litellm/teams/t1/members": () => apiError(500),
       }),
     );
-    renderWithProviders(<LiteLLMContent canViewAudit />);
+    renderPage(ALL, "team");
     expect(
       await within(await region("Members")).findByRole("alert"),
     ).toHaveTextContent(/couldn't load/i);
     expect(
       within(await region("Keys")).getByText("ci-key"),
     ).toBeInTheDocument();
+    await openTab("my-usage");
     expect(
       within(await region("My usage")).getByText("$12.50"),
+    ).toBeInTheDocument();
+  });
+});
+
+// Organisation and Users tabs: wiring only; the section behaviour is tested in
+// OrganisationSection.test.tsx and UserSearch.test.tsx (Rule 60.24a).
+describe("LiteLLMContent Organisation and Users tabs (Views by role)", () => {
+  it("the Organisation tab holds an 'Organisation' region and the Users tab a 'Users' region, each its own boundary", async () => {
+    stub(
+      teamRoutes({
+        "/api/litellm/org": () => apiError(500),
+      }),
+    );
+    renderPage(ALL, "organisation");
+    expect(
+      await within(await region("Organisation")).findByRole("alert"),
+    ).toHaveTextContent(/couldn't load/i);
+    await openTab("users");
+    expect(await region("Users")).toBeInTheDocument();
+    expect(
+      within(await region("Users")).getByRole("searchbox", {
+        name: /search users/i,
+      }),
     ).toBeInTheDocument();
   });
 });

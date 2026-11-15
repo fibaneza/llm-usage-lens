@@ -426,7 +426,8 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 - **Shown-once key dialog:** after generate or rotate, a dialog shows the value once with a copy action and the warning "This key will not be shown again"; closing it discards the value.
 - **Team-key budget note:** "Only the team and team-member budgets are enforced on team keys; the owner's personal budget does not apply."
 - **Controls** for disabled or Enterprise-only operations are not rendered; destructive actions (remove member, reset spend, delete key) confirm in a dialog, never a browser `confirm()`.
-- **Settings → LiteLLM** (`internal-admin`; read-only for `internal-auditor`): connection URL, edition (read-only), service-key status ("configured: yes/no" — no entry, reveal or rotate), connection test result, operation toggles, team links, orphaned LiteLLM members.
+- **Tabs (L3b, 2026-11-16):** the page's sections are grouped into tabs — *My usage*, *Team*, *Organisation*, *Users*, *Audit* — with the shadcn `Tabs` component and `?tab=` URL state; each tab keeps its sections' Suspense + ErrorBoundary (LiteLLM spec — *Views by role*). The *Users* tab and the Settings *Users* tab share one search component: a labelled search input, results in a shadcn `Table` (at most 25 rows, so no TanStack paging), a selected user's spend and daily spend below.
+- **Settings → LiteLLM** (`internal-admin`; read-only for `internal-auditor`; tabbed from L3b: *Connection*, *Guardrails*, *Team links*, *Users*): connection URL, edition (read-only), service-key status ("configured: yes/no" — no entry, reveal or rotate), connection test result, operation toggles, team links, orphaned LiteLLM members.
 
 ### Access states and scoped labels
 
@@ -509,6 +510,8 @@ Conventions for interactive controls, established with the global
 | `MetricCard` | Custom (shadcn Card) | KPI card with value, trend indicator, icon |
 | `DeltaBadge` | Custom | "+12.3%" green arrow or "-5.1%" red arrow for trends |
 | `UsageTable` | Custom (TanStack Table + shadcn Table) | Sortable, filterable data table with pagination; renders as a card list below the `md` breakpoint (see Responsive Tables) |
+| `Tabs` | shadcn (Radix Tabs) | Tabbed views with Arrow/Home/End keyboard navigation and a visible focus ring on triggers and panels (LiteLLM page and Settings → LiteLLM, L3b) |
+| `UserSearch` | Custom | Debounced LiteLLM user search with a results table and the selected user's usage; shared by the LiteLLM *Users* tab and Settings → LiteLLM *Users* (L3b) |
 | `RankingList` | Custom | Ranked list; the rank is rendered by `RankCell` (medal icons for the top three). The % of total bar is `PercentOfTotalBar`, composed in where a page shows shares (the Ranking table, Phase 4.2) — not part of `RankingList` itself (decided 2026-11-06) |
 | `SparklineCell` | Custom | Inline trend sparkline for table cells |
 | `PercentOfTotalBar` | Custom | Inline bar showing proportion visually in ranking tables |

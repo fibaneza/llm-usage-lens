@@ -137,3 +137,43 @@ export const LiteLLMAuditResponseSchema = z.object({
   totalPages: z.number().optional(),
   total: z.number().optional(),
 });
+
+// L3b: Views by role (Organisation, Users tabs).
+export const LiteLLMOrgResponseSchema = z.object({
+  totals: z.object({ spend: z.number() }),
+  daily: DailySchema,
+  teams: z.array(
+    z.object({
+      teamId: z.string(),
+      teamName: z.string(),
+      spend: z.number(),
+      maxBudget: z.number().nullable(),
+      memberCount: z.number(),
+    }),
+  ),
+  enabledOperations: EnabledOperations,
+});
+
+export const LiteLLMUserSearchResponseSchema = z.object({
+  users: z.array(
+    z.object({
+      userId: z.string(),
+      email: z.string(),
+      spend: z.number(),
+      maxBudget: z.number().nullable(),
+      teams: z.array(z.object({ teamId: z.string(), teamName: z.string() })),
+    }),
+  ),
+  page: z.number(),
+  pageSize: z.number(),
+  enabledOperations: EnabledOperations,
+});
+
+export const LiteLLMUserDetailResponseSchema = z.object({
+  userId: z.string(),
+  email: z.string(),
+  spend: z.number(),
+  maxBudget: z.number().nullable(),
+  daily: DailySchema,
+  enabledOperations: EnabledOperations,
+});

@@ -21,7 +21,7 @@ import { LiteLLMError } from "./client";
 import { LiteLLMOperationRefused } from "./gateway";
 import { loadGatewayConfig } from "./gateway-config";
 import { resolveOperationSettings } from "./operation-settings";
-import { liteLLMErrorResponse } from "./route-guard";
+import { globalRolesFor, liteLLMErrorResponse } from "./route-guard";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Allowlist -> Reads" (who may
 // read; the only query fields), "Roles and rights", "Cost visualisation and
@@ -146,6 +146,59 @@ export async function viewableTeams(session: Session): Promise<{
   };
 }
 
+export type LinkedTeam = {
+  teamId: string;
+  teamName: string;
+  litellmTeamId: string;
+};
+
+export type TeamAccess = {
+  // org-admin, Admin or Auditor: the whole proxy (Views by role - Scope).
+  orgWide: boolean;
+  // Lead of at least one team (linked or not); never a Viewer.
+  lead: boolean;
+  // Linked teams the caller may read, by dashboard team.
+  linked: LinkedTeam[];
+};
+
+const ORG_WIDE_ROLES: readonly string[] = [
+  "internal-admin",
+  "internal-org-admin",
+  "internal-auditor",
+];
+
+// Roles come from globalRolesFor (stored grants count); the team list from
+// the same scope the other L3 views use. Read per request, never cached.
+export async function teamAccess(session: Session): Promise<TeamAccess> {
+  const [roles, accounts, links, scope] = await Promise.all([
+    globalRolesFor(session),
+    getAllAccounts(),
+    listTeamLinks(),
+    scopeFor(session, [], {}),
+  ]);
+  const orgWide = !!roles?.some((r) => ORG_WIDE_ROLES.includes(r));
+  const linkOf = new Map(links.map((l) => [l.teamId, l.litellmTeamId]));
+  const seen = new Set<string>();
+  const linked: LinkedTeam[] = [];
+  let readable = 0;
+  for (const a of accounts) {
+    if (seen.has(a.teamId)) continue;
+    seen.add(a.teamId);
+    if (!canReadTeamViews(scope, a.teamId, a.departmentId)) continue;
+    readable += 1;
+    const litellmTeamId = linkOf.get(a.teamId);
+    if (litellmTeamId) {
+      linked.push({
+        teamId: a.teamId,
+        teamName: a.teamName,
+        litellmTeamId,
+      });
+    }
+  }
+  linked.sort((x, y) => x.teamName.localeCompare(y.teamName));
+  return { orgWide, lead: !orgWide && readable > 0, linked };
+}
+
 // ---- query parsing ---------------------------------------------------------
 
 export const PageQuerySchema = z.object({
@@ -158,6 +211,16 @@ const AUDIT_TABLES = [
   "LiteLLM_VerificationToken",
   "LiteLLM_UserTable",
 ] as const;
+
+export const UserSearchQuerySchema = z.object({
+  q: z.string().trim().min(2).max(100),
+  page: z.coerce.number().int().min(1).max(10_000).optional(),
+  pageSize: z.coerce.number().int().min(1).max(25).optional(),
+});
+
+export const LiteLLMUserIdSchema = z
+  .string()
+  .refine(isValidLiteLLMId, "Invalid id");
 
 export const AuditQuerySchema = PageQuerySchema.extend({
   action: z

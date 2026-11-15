@@ -193,7 +193,7 @@ Architecture *Sign-in providers*):
   login.
 
 **Dev login.** Outside production and only while Entra is not configured, a
-no-password login offers a role choice (R1). **It is rejected by env
+no-password login offers a role choice (R1) and, from L3c (user, 2026-11-16), an optional identity: an email or a dashboard `oid`. A given identity that exists in DynamoDB signs in as that identity (its `oid`, email and name); an unknown email signs in as a dev identity with that email and a stable `dev-` `oid`. The chosen role still decides access; no role is read from the identity. **It is rejected by env
 validation when Entra is configured** (amending *Sign-in providers*, which
 allowed both outside production). Production fail-closed checks are
 unchanged; no production bypass exists (Rule 70.11).
@@ -873,7 +873,7 @@ organisation administrators and auditors. Usage rollups are kept for
 | T4 | Elevation: non-`internal-admin` grants a global role | Grant routes `internal-admin` only; mappings cannot target global roles | R1 schema, R4 grant matrix |
 | T5 | Elevation: default viewer reaches team data | Data only through member/admin items | R3 "no affiliation" rows |
 | T6 | Elevation: usage data grants access | `resolveScope` never reads `byUser` | R3 |
-| T7 | Elevation: the dev login used in production or while Entra is configured; a bound password user signs in with the password (amended 2026-11-14) | Env rejection of the dev login; `sso-bound` users refused; password sign-in switch (D24) | R1 (dev login and env rejection); R2 (bound user refused); R4 (switch) |
+| T7 | Elevation: the dev login used in production or while Entra is configured; a bound password user signs in with the password (amended 2026-11-14) | Env rejection of the dev login, including its identity option; `sso-bound` users refused; password sign-in switch (D24) | R1 (dev login and env rejection); R2 (bound user refused); R4 (switch); L3c (identity option rejected in `prod` and with Entra configured) |
 | T8 | Elevation: ambiguous/overage groups give the wrong team | Ambiguous → none; overage → none + scopes suspended | R2 resolver table |
 | T9 | Elevation: privilege carried across a move | Move removes source team-scope admin atomically | R4 move test |
 | T10 | Tampering: UI overrides SSO-managed item | `409 MANAGED_BY_SSO` | R4 |

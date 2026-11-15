@@ -280,3 +280,105 @@ describe("LiteLLMPanel base URL entry", () => {
     },
   );
 });
+
+// L3b (LiteLLM spec -- Views by role: "Settings -> LiteLLM is tabbed the same
+// way"; Design System -- Settings -> LiteLLM): tabs Connection, Guardrails,
+// Team links (with a team search), Users (the shared UserSearch). Assumed:
+// GET /api/litellm/team-links -> { items: [{ teamId, litellmTeamId, version,
+// updatedAt }] }; Team links tab has a searchbox "Search teams" filtering the
+// list by teamId or litellmTeamId (case-insensitive, client side) and a
+// "No matching teams" empty state; tab state is local (not the URL).
+describe("LiteLLMPanel tabs (L3b)", () => {
+  const LINKS = {
+    items: [
+      {
+        teamId: "payments",
+        litellmTeamId: "ll-111",
+        version: 1,
+        updatedAt: "2026-11-01T00:00:00Z",
+      },
+      {
+        teamId: "search",
+        litellmTeamId: "ll-222",
+        version: 2,
+        updatedAt: "2026-11-02T00:00:00Z",
+      },
+    ],
+  };
+
+  function stubAll() {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = new URL(String(input), "http://localhost").pathname;
+        calls.push(path);
+        if (path === "/api/litellm/team-links") {
+          return Promise.resolve(apiResponse({ data: LINKS }));
+        }
+        if (path === "/api/litellm/toggles") {
+          return Promise.resolve(apiResponse({ data: TOGGLES }));
+        }
+        return Promise.resolve(apiResponse({ data: CONFIGURED }));
+      }),
+    );
+    return calls;
+  }
+
+  it("offers the four tabs in order, Connection selected first", async () => {
+    stubAll();
+    renderWithProviders(<LiteLLMPanel />);
+    const tabs = await screen.findAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "Connection",
+      "Guardrails",
+      "Team links",
+      "Users",
+    ]);
+    expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      await screen.findByText("https://litellm.example.internal"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps connection details and the test off the other tabs, and requests team links only on its tab", async () => {
+    const calls = stubAll();
+    renderWithProviders(<LiteLLMPanel />);
+    await screen.findByText("https://litellm.example.internal");
+    expect(calls).not.toContain("/api/litellm/team-links");
+    await userEvent.click(screen.getByRole("tab", { name: "Team links" }));
+    expect(await screen.findByText("ll-111")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /test connection/i }),
+    ).toBeNull();
+  });
+
+  it("the team search box filters the link list and shows an empty state", async () => {
+    stubAll();
+    renderWithProviders(<LiteLLMPanel />);
+    await userEvent.click(
+      await screen.findByRole("tab", { name: "Team links" }),
+    );
+    await screen.findByText("ll-111");
+    const box = screen.getByRole("searchbox", { name: /search teams/i });
+    await userEvent.type(box, "SEAR");
+    expect(screen.queryByText("ll-111")).toBeNull();
+    expect(screen.getByText("ll-222")).toBeInTheDocument();
+    await userEvent.clear(box);
+    await userEvent.type(box, "nomatch");
+    expect(screen.getByText(/no matching teams/i)).toBeInTheDocument();
+  });
+
+  it("the Users tab hosts the shared user search and requests nothing until a term is typed", async () => {
+    const calls = stubAll();
+    renderWithProviders(<LiteLLMPanel />);
+    await userEvent.click(await screen.findByRole("tab", { name: "Users" }));
+    expect(
+      await screen.findByRole("searchbox", { name: /search users/i }),
+    ).toBeInTheDocument();
+    expect(calls).not.toContain("/api/litellm/users");
+  });
+});

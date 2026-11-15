@@ -259,6 +259,48 @@ const CASES: Case[] = [
     ],
   },
   {
+    name: "searchUsers",
+    write: false,
+    run: (o) =>
+      o.searchUsers!({
+        search: "  Jane  ",
+        page: 2,
+        pageSize: 25,
+        litellmTeamId: TEAM_ID,
+      }),
+    calls: [
+      {
+        method: "GET",
+        template: "/user/list",
+        path: "/user/list",
+        query: { search: "Jane", page: "2", page_size: "25", team: TEAM_ID },
+      },
+    ],
+  },
+  {
+    name: "getTeamDailySpend (org: all linked teams in one call, L3b)",
+    write: false,
+    run: (o) =>
+      o.getTeamDailySpend!({
+        litellmTeamIds: [TEAM_ID, OTHER_TEAM_ID],
+        startDate: D1,
+        endDate: D2,
+      }),
+    calls: [
+      {
+        method: "GET",
+        template: "/team/daily/activity/aggregated",
+        path: "/team/daily/activity/aggregated",
+        query: {
+          team_ids: `${TEAM_ID},${OTHER_TEAM_ID}`,
+          start_date: DATE,
+          end_date: DATE,
+          timezone: TZ,
+        },
+      },
+    ],
+  },
+  {
     name: "getUserDailySpend",
     write: false,
     run: (o) =>
@@ -1327,6 +1369,41 @@ describe("read inputs are bounded (Reads table)", () => {
       (o: Ops) => o.listKeys!({ litellmTeamId: TEAM_ID, size: 101 }),
     ],
     ["getUser without user_id", (o: Ops) => o.getUser!({})],
+    // searchUsers bounds (Reads: search 2-100 chars trimmed, page_size <= 25; LT21)
+    [
+      "searchUsers with 1 character",
+      (o: Ops) => o.searchUsers!({ search: "a" }),
+    ],
+    [
+      "searchUsers with 1 character after trimming",
+      (o: Ops) => o.searchUsers!({ search: "  a  " }),
+    ],
+    [
+      "searchUsers with 101 characters",
+      (o: Ops) => o.searchUsers!({ search: "a".repeat(101) }),
+    ],
+    [
+      "searchUsers with page_size 26",
+      (o: Ops) => o.searchUsers!({ search: "jane", pageSize: 26 }),
+    ],
+    [
+      "searchUsers with an unknown field",
+      (o: Ops) => o.searchUsers!({ search: "jane", userEmail: "x@y.com" }),
+    ],
+    [
+      "searchUsers with a team that is not an id",
+      (o: Ops) => o.searchUsers!({ search: "jane", litellmTeamId: "../x" }),
+    ],
+    [
+      "getTeamDailySpend with both litellmTeamId and litellmTeamIds",
+      (o: Ops) =>
+        o.getTeamDailySpend!({
+          litellmTeamId: TEAM_ID,
+          litellmTeamIds: [OTHER_TEAM_ID],
+          startDate: D1,
+          endDate: D2,
+        }),
+    ],
     ["getKey without a token", (o: Ops) => o.getKey!({})],
     [
       "listSpendLogs without team or user",
@@ -1394,6 +1471,47 @@ describe("read inputs are bounded (Reads table)", () => {
     await ops.listKeys!({ litellmUserId: USER_ID });
     expect(q(fake.calls[0]!).user_id).toBe(USER_ID);
     expect(q(fake.calls[0]!).team_id).toBeUndefined();
+  });
+});
+
+describe("searchUsers response (Reads: rows reduced; L3b)", () => {
+  const row = {
+    user_id: "uid-1",
+    user_email: "jane@company.com",
+    spend: 2.5,
+    max_budget: 9,
+    teams: [TEAM_ID],
+    sso_user_id: "SECRET-HASH-SENTINEL",
+    metadata: { note: "USERTEAM-SENTINEL" },
+  };
+
+  it("is reduced to user_id, user_email, spend, max_budget and team ids", async () => {
+    fake.setHandler(() => ({
+      status: 200,
+      body: { users: [row], total: 1, page: 1, page_size: 25, total_pages: 1 },
+    }));
+    const { ops } = await load();
+    const result = (await ops.searchUsers!({ search: "jane" })) as {
+      users: unknown[];
+    };
+    expect(result.users).toEqual([
+      {
+        user_id: "uid-1",
+        user_email: "jane@company.com",
+        spend: 2.5,
+        max_budget: 9,
+        teams: [TEAM_ID],
+      },
+    ]);
+    expect(JSON.stringify(result)).not.toContain("SENTINEL");
+  });
+
+  it("a malformed answer is contract drift: LITELLM_UNAVAILABLE", async () => {
+    fake.setHandler(() => ({ status: 200, body: { nope: true } }));
+    const { ops } = await load();
+    await expect(ops.searchUsers!({ search: "jane" })).rejects.toMatchObject({
+      code: "LITELLM_UNAVAILABLE",
+    });
   });
 });
 

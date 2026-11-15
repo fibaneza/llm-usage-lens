@@ -28,6 +28,7 @@ const EXPECTED: Record<string, [Kind, boolean, string[]]> = {
   getTeamDailySpend: ["read", true, ["GET /team/daily/activity/aggregated"]],
   getUser: ["read", true, ["GET /user/info"]],
   findUserByEmail: ["read", true, ["GET /user/list"]],
+  searchUsers: ["read", true, ["GET /user/list"]], // L3b, LT3
   getUserDailySpend: ["read", true, ["GET /user/daily/activity"]],
   listKeys: ["read", true, ["GET /key/list"]],
   getKey: ["read", true, ["GET /key/info"]],

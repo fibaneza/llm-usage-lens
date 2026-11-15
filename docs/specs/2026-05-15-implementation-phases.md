@@ -659,7 +659,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ## LiteLLM units (L0–L8; decided 2026-11-10)
 
-**Goal:** team and user administration of the existing LiteLLM proxy and LiteLLM-reported cost, per the [LiteLLM spec](2026-11-10-litellm.md). One branch and squash commit per unit (Rule 30.4), in order. L0 has no dependency. **L1 and L2 need 4R.1–4R.2 on `main` and the Phase 4.9 Settings shell, and may run in parallel with 4R.3–4R.5 (user direction 2026-11-14; Rule 30):** the L1 Settings → LiteLLM panel is its own `internal-admin` section in the existing shell and does not wait for the 4R.4 access sections. L3 needs L2 and 4R.3; L4 needs L3, 4R.3 and 4R.4; L5–L8 follow in order. A parallel L-unit owns `lib/litellm/**`, `app/api/litellm/**`, its Settings section and its `env.ts` and infra additions; it does not edit the policy module, existing Route Handlers or pages that 4R.3 changes. Each code unit runs the Rule 70 loop; L1, L2 and L4 add a dedicated security review against the spec's threat model (LT1–LT18). The fake LiteLLM (in-process HTTP or MSW, both editions) implements the allowlisted operations exactly per `docs/litellm/openapi.json`; no test reaches the internet (Rule 60.24).
+**Goal:** team and user administration of the existing LiteLLM proxy and LiteLLM-reported cost, per the [LiteLLM spec](2026-11-10-litellm.md). One branch and squash commit per unit (Rule 30.4), in order. L0 has no dependency. **L1 and L2 need 4R.1–4R.2 on `main` and the Phase 4.9 Settings shell, and may run in parallel with 4R.3–4R.5 (user direction 2026-11-14; Rule 30):** the L1 Settings → LiteLLM panel is its own `internal-admin` section in the existing shell and does not wait for the 4R.4 access sections. L3 needs L2 and 4R.3; L3b and L3c (added 2026-11-16, user) follow L3 and come before L4; L4 needs L3, L3b, 4R.3 and 4R.4; L5–L8 follow in order. A parallel L-unit owns `lib/litellm/**`, `app/api/litellm/**`, its Settings section and its `env.ts` and infra additions; it does not edit the policy module, existing Route Handlers or pages that 4R.3 changes. Each code unit runs the Rule 70 loop; L1, L2 and L4 add a dedicated security review against the spec's threat model (LT1–LT18). The fake LiteLLM (in-process HTTP or MSW, both editions) implements the allowlisted operations exactly per `docs/litellm/openapi.json`; no test reaches the internet (Rule 60.24).
 
 ### L0 — Spec, version pin, contract (`docs/litellm-admin`)
 
@@ -689,6 +689,22 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 - [x] Scoped read routes (`/api/litellm/me`, `/teams/[teamId]`, members, keys metadata, spend logs, models); `/dashboard/litellm` with *My usage*, *Team spend & budgets*, *Members*, *Keys*, *Model access* (read), *LiteLLM audit* (`/api/litellm/audit`, Admin and Auditor, audited view; LD15), each in its own Suspense + ErrorBoundary; "LiteLLM-reported" labels; outage and "not connected" states; nav item
 - [ ] Verify (landed without the phase review, user one-off skip 2026-11-15; e2e probe ran against stubs only): role × read matrix (unauthenticated, no role, Viewer own/other, Lead own/other/department incl. moved team, Auditor, Admin) with `404` parity; LT8 labels; LT20; outage leaves other pages working; e2e probe (fake unless a non-production LiteLLM is provided)
+
+### L3b — Views by role and Settings tabs (`feature/phase-l3b-litellm-role-views`)
+
+*Added 2026-11-16 at the user's direction ("add the following improvements"); runs after L3 and before L4.*
+
+- [x] `/dashboard/litellm` as tabs (nuqs `tab` URL state): *My usage* (all roles), *Team* (Lead in scope, org-admin, Admin, Auditor: team spend, members' usage, keys, model access), *Organisation* (org-admin, Admin, Auditor: totals across linked teams and a per-team table), *Users* (search; Lead within its teams, org-admin, Admin, Auditor), *Audit* (Admin, Auditor); a tab the caller cannot use is not rendered (LiteLLM spec — *Views by role*)
+- [x] Routes `/api/litellm/org` and `/api/litellm/users` (search) and `/api/litellm/users/[litellmUserId]` (one user's usage); new allowlist row `searchUsers`; *My usage* resolves an unlinked caller by `findUserByEmail` on the session email (read only)
+- [x] Settings → LiteLLM as tabs: *Connection*, *Guardrails*, *Team links* (with a team search), *Users* (the same user search)
+- [ ] Verify (landed before its review blockers B1–B3 and G5 were fixed, user direction 2026-11-16; fix list temp/run-l3b/review-blockers.md): role × tab and role × route matrix (Viewer, Lead own/other/department, org-admin, Auditor, Admin) incl. `searchUsers` scoping for Leads (LT21); axe clean; e2e per role
+
+### L3c — Dev identity login (`feature/phase-l3c-dev-identity-login`)
+
+*Split from L3b (agent decision, 2026-11-16: `auth.ts` is held for the 4R.4 fix, so the views ship first; reversible).*
+
+- [ ] Dev login as a chosen identity (Access Control — *Dev login*, amended 2026-11-16), additive to `auth.ts` once the 4R.4 fix is on `main`
+- [ ] Verify: an existing identity's email or `oid` signs in as that identity; an unknown email gets a stable `dev-` `oid`; the chosen role decides access; rejected in `prod` and with Entra configured (T7, LT21)
 
 ### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)
 

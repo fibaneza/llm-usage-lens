@@ -149,7 +149,14 @@ function stub(opts: {
 const putsOf = (calls: Call[]) =>
   calls.filter((c) => c.method === "PUT" && c.url.includes("/toggles"));
 
+// L3b: the toggles and the guardrail summary moved to the Guardrails tab
+// (LiteLLM spec -- Views by role, Settings tabs); behaviour is unchanged.
+async function openGuardrails() {
+  await userEvent.click(await screen.findByRole("tab", { name: "Guardrails" }));
+}
+
 async function ready() {
+  await openGuardrails();
   await screen.findByRole("switch", { name: "createTeam" });
 }
 
@@ -492,7 +499,7 @@ describe("LiteLLMPanel guardrail summary - LD18 item", () => {
 
 describe("LiteLLMPanel wildcard warning", () => {
   async function runTest() {
-    await ready();
+    await screen.findByRole("button", { name: /test connection/i });
     await userEvent.click(
       screen.getByRole("button", { name: /test connection/i }),
     );
@@ -501,7 +508,7 @@ describe("LiteLLMPanel wildcard warning", () => {
   it("is absent before the test and when the result has no warnings", async () => {
     stub({ test: { result: "ok", message: "Connection ok", warnings: [] } });
     renderWithProviders(<LiteLLMPanel />);
-    await ready();
+    await screen.findByRole("button", { name: /test connection/i });
     expect(screen.queryByTestId("litellm-wildcard-warning")).toBeNull();
     await runTest();
     expect(await screen.findByText("Connection ok")).toBeInTheDocument();
@@ -555,6 +562,7 @@ describe("LiteLLMPanel without edit rights", () => {
       }),
     });
     renderWithProviders(<LiteLLMPanel canEdit={false} />);
+    await openGuardrails();
     const row = await screen.findByTestId("litellm-op-createTeam");
     expect(row).toHaveTextContent("createTeam");
     expect(row).toHaveTextContent(/off/i);
@@ -584,6 +592,7 @@ describe("LiteLLMPanel toggles loading and error states", () => {
     );
     renderWithProviders(<LiteLLMPanel />);
     await screen.findByText("https://litellm.example.internal");
+    await openGuardrails();
     expect(screen.queryAllByRole("switch")).toHaveLength(0);
     expect(
       document.querySelector('[data-testid="litellm-toggles-loading"]') ??
@@ -599,12 +608,13 @@ describe("LiteLLMPanel toggles loading and error states", () => {
       ),
     });
     renderWithProviders(<LiteLLMPanel />);
+    expect(
+      await screen.findByText("https://litellm.example.internal"),
+    ).toBeInTheDocument();
+    await openGuardrails();
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Toggles unavailable",
     );
-    expect(
-      screen.getByText("https://litellm.example.internal"),
-    ).toBeInTheDocument();
     expect(screen.queryAllByRole("switch")).toHaveLength(0);
   });
 });

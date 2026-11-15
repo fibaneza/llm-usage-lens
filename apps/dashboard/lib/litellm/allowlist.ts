@@ -55,6 +55,7 @@ export const LITELLM_OPERATIONS = {
   getTeamDailySpend: read(get("/team/daily/activity/aggregated")),
   getUser: read(get("/user/info")),
   findUserByEmail: read(get("/user/list")),
+  searchUsers: read(get("/user/list")),
   getUserDailySpend: read(get("/user/daily/activity")),
   listKeys: read(get("/key/list")),
   getKey: read(get("/key/info")),

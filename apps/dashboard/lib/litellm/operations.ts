@@ -233,6 +233,18 @@ const UserListResponse = z.object({
   ),
   ...Paging,
 });
+const UserSearchResponse = z.object({
+  users: z.array(
+    z.object({
+      user_id: z.string(),
+      user_email: z.string().nullish(),
+      spend: z.number().nullish(),
+      max_budget: z.number().nullish(),
+      teams: z.array(z.string()).nullish(),
+    }),
+  ),
+  ...Paging,
+});
 const KeyListResponse = z.object({
   keys: z.array(KeyRow),
   total_count: z.number().nullish(),
@@ -342,11 +354,18 @@ export async function listProxyTeams() {
 }
 
 const TeamDailyInput = withRange(
-  z.strictObject({
-    litellmTeamId: LiteLLMId,
-    startDate: UtcDaySchema,
-    endDate: UtcDaySchema,
-  }),
+  z
+    .strictObject({
+      litellmTeamId: LiteLLMId.optional(),
+      litellmTeamIds: z.array(LiteLLMId).min(1).max(200).optional(),
+      startDate: UtcDaySchema,
+      endDate: UtcDaySchema,
+    })
+    .refine(
+      (v) =>
+        (v.litellmTeamId === undefined) !== (v.litellmTeamIds === undefined),
+      "Exactly one of a team or a list of teams",
+    ),
 );
 const UserDailyInput = withRange(
   z.strictObject({
@@ -366,7 +385,7 @@ export async function getTeamDailySpend(input: z.input<typeof TeamDailyInput>) {
   return read(
     "/team/daily/activity/aggregated",
     {
-      team_ids: i.litellmTeamId,
+      team_ids: i.litellmTeamIds?.join(",") ?? i.litellmTeamId,
       start_date: i.startDate,
       end_date: i.endDate,
       timezone: UTC_OFFSET,
@@ -385,6 +404,28 @@ export async function findUserByEmail(input: { email: string }) {
   await gate("findUserByEmail");
   const i = z.strictObject({ email: Email }).parse(input);
   return findUser(i.email);
+}
+
+const SearchUsersInput = z.strictObject({
+  search: z.string().trim().min(2).max(100),
+  page: PageNumber.optional(),
+  pageSize: z.number().int().min(1).max(25).optional(),
+  litellmTeamId: LiteLLMId.optional(),
+});
+
+export async function searchUsers(input: z.input<typeof SearchUsersInput>) {
+  await gate("searchUsers");
+  const i = SearchUsersInput.parse(input);
+  return read(
+    "/user/list",
+    {
+      search: i.search,
+      page: i.page,
+      page_size: i.pageSize,
+      team: i.litellmTeamId,
+    },
+    UserSearchResponse,
+  );
 }
 
 async function findUser(email: string) {

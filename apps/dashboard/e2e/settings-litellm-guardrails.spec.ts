@@ -122,6 +122,12 @@ async function openPanel(page: Page) {
   ).toBeVisible();
 }
 
+// L3b: toggles and the guardrail summary sit on the Guardrails tab (LiteLLM
+// spec -- Views by role, Settings tabs).
+async function openGuardrails(page: Page) {
+  await page.getByRole("tab", { name: "Guardrails" }).click();
+}
+
 test.describe("settings LiteLLM guardrail configuration", () => {
   test.beforeEach(async ({ context }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
@@ -132,6 +138,7 @@ test.describe("settings LiteLLM guardrail configuration", () => {
   }) => {
     await mockApi(page, createFakeToggles());
     await openPanel(page);
+    await openGuardrails(page);
 
     await expect(
       page.getByRole("switch", { name: "createTeam" }),
@@ -154,6 +161,7 @@ test.describe("settings LiteLLM guardrail configuration", () => {
     const fake = createFakeToggles();
     await mockApi(page, fake);
     await openPanel(page);
+    await openGuardrails(page);
 
     await page.getByRole("switch", { name: "listKeys" }).click();
     await expect(
@@ -191,6 +199,7 @@ test.describe("settings LiteLLM guardrail configuration", () => {
     const fake = createFakeToggles(0);
     await mockApi(page, fake);
     await openPanel(page);
+    await openGuardrails(page);
 
     const reset = page.getByRole("button", { name: /reset to file defaults/i });
     if ((await reset.count()) > 0) await expect(reset).toBeDisabled();

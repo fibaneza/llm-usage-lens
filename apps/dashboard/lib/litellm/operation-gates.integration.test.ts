@@ -227,6 +227,7 @@ describe("saved OperationToggles (UI layer)", () => {
     ["getTeam", (o: Ops) => o.getTeam!({ litellmTeamId: TEAM_ID })],
     ["listProxyTeams", (o: Ops) => o.listProxyTeams!()],
     ["getUser", (o: Ops) => o.getUser!({ litellmUserId: USER_ID })],
+    ["searchUsers", (o: Ops) => o.searchUsers!({ search: "jane" })],
     ["listKeys", (o: Ops) => o.listKeys!({ litellmTeamId: TEAM_ID })],
     ["listProxyModels", (o: Ops) => o.listProxyModels!()],
     [

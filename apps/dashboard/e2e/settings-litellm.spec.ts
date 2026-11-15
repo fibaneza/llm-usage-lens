@@ -39,6 +39,34 @@ async function openSettings(page: Page) {
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 }
 
+test.describe("settings LiteLLM tabs (L3b)", () => {
+  test("an Admin sees Connection, Guardrails, Team links and Users tabs, Connection first", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await openSettings(page);
+    const tabs = page
+      .getByRole("tab")
+      .filter({ hasText: /^(Connection|Guardrails|Team links|Users)$/ });
+    expect((await tabs.allTextContents()).map((t) => t.trim())).toEqual([
+      "Connection",
+      "Guardrails",
+      "Team links",
+      "Users",
+    ]);
+    await expect(page.getByRole("tab", { name: "Connection" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await page.getByRole("tab", { name: "Users" }).click();
+    await expect(
+      page.getByRole("searchbox", { name: /search users/i }),
+    ).toBeVisible();
+  });
+});
+
 test.describe("settings LiteLLM section", () => {
   test("renders for internal-admin with status, no key input, and a working connection test", async ({
     page,

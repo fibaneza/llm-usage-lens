@@ -74,9 +74,37 @@ export function expectNoSentinels(body: unknown) {
 
 export type ViewsFakeOptions = {
   outage?: boolean;
+  // GET /user/list ignores `team=` (a misbehaving or older proxy), so the
+  // route's own post-call filtering is what the test sees (LT21).
+  ignoreTeamFilter?: boolean;
   teamModels?: string[];
   extraKeys?: Array<Record<string, unknown>>;
 };
+
+// L3b: LiteLLM users known to the fake. `id` differs from the email for the
+// unlinked-caller case so a composed id would be caught (LD13). `teams` are
+// LiteLLM team ids, as GET /user/list and GET /user/info report them.
+export const USER_ROWS = [
+  { id: "a1@company.com", spend: 3.25, max: 10, teams: ["team-a"] },
+  { id: "b1@company.com", spend: 4, max: 10, teams: ["team-b"] },
+  { id: "c1@company.com", spend: 5, max: 10, teams: ["team-c"] },
+  { id: "ab@company.com", spend: 6, max: 10, teams: ["team-a", "team-b"] },
+  { id: "mix@company.com", spend: 7, max: null, teams: ["team-a", "team-c"] },
+  { id: "lone@company.com", spend: 0, max: null, teams: [] },
+  { id: "uid-ta-0001", email: "ta@company.com", spend: 1, max: 5, teams: [] },
+].map((u) => ({
+  user_id: u.id,
+  user_email: u.email ?? u.id,
+  spend: u.spend,
+  max_budget: u.max,
+  teams: u.teams.map(
+    (t) => (LTEAM as Record<string, string>)[t] ?? UNLINKED_LTEAM,
+  ),
+  // Loose upstream fields that must never leave the server (LT1, LT9).
+  sso_user_id: "SECRET-HASH-SENTINEL",
+  metadata: { note: "USERTEAM-SENTINEL" },
+}));
+export const GHOST_USER_ID = "ghost@company.com";
 
 const keyRow = (token: string, team: string | null, user: string) => ({
   token,
@@ -199,8 +227,59 @@ export function viewsHandler(opts: ViewsFakeOptions = {}): FakeHandler {
             total_pages: 1,
           },
         };
+      case "GET /user/list": {
+        const email = q.get("user_email")?.toLowerCase();
+        const search = q.get("search")?.toLowerCase();
+        const team = q.get("team");
+        const users = USER_ROWS.filter(
+          (u) =>
+            (!email || u.user_email === email) &&
+            (!search ||
+              u.user_id.toLowerCase().includes(search) ||
+              u.user_email.toLowerCase().includes(search)) &&
+            (!team || opts.ignoreTeamFilter || u.teams.includes(team)),
+        );
+        return {
+          status: 200,
+          body: {
+            users,
+            total: users.length,
+            page: 1,
+            page_size: 25,
+            total_pages: 1,
+          },
+        };
+      }
       case "GET /user/info": {
         const userId = q.get("user_id");
+        if (userId === GHOST_USER_ID) {
+          return { status: 404, body: { detail: "user not found" } };
+        }
+        const known = USER_ROWS.find((u) => u.user_id === userId);
+        const isLinkedFixture = (Object.values(LUSER) as string[]).includes(
+          userId ?? "",
+        );
+        if (known && !isLinkedFixture) {
+          return {
+            status: 200,
+            body: {
+              user_id: userId,
+              user_info: {
+                user_id: userId,
+                user_email: known.user_email,
+                user_role: "internal_user",
+                spend: known.spend,
+                max_budget: known.max_budget,
+              },
+              keys: [],
+              teams: known.teams.map((t) => ({
+                team_id: t,
+                team_alias: "T",
+                internal_note: "USERTEAM-SENTINEL",
+              })),
+            },
+          };
+        }
         return {
           status: 200,
           body: {
@@ -219,18 +298,24 @@ export function viewsHandler(opts: ViewsFakeOptions = {}): FakeHandler {
               keyRow(TOKEN_B, LTEAM["team-a"], OTHER_USER_ID),
               keyRow(TOKEN_C, UNLINKED_LTEAM, userId ?? ""),
             ],
-            teams: [
-              {
-                team_id: LTEAM["team-a"],
-                team_alias: "Alpha",
-                internal_note: "USERTEAM-SENTINEL",
-              },
-              {
-                team_id: UNLINKED_LTEAM,
-                team_alias: "Hidden",
-                internal_note: "USERTEAM-SENTINEL",
-              },
-            ],
+            teams: known
+              ? known.teams.map((t) => ({
+                  team_id: t,
+                  team_alias: "T",
+                  internal_note: "USERTEAM-SENTINEL",
+                }))
+              : [
+                  {
+                    team_id: LTEAM["team-a"],
+                    team_alias: "Alpha",
+                    internal_note: "USERTEAM-SENTINEL",
+                  },
+                  {
+                    team_id: UNLINKED_LTEAM,
+                    team_alias: "Hidden",
+                    internal_note: "USERTEAM-SENTINEL",
+                  },
+                ],
           },
         };
       }

@@ -1,8 +1,13 @@
 import { DateRangeQuerySchema } from "@llm-usage-lens/shared";
+import { z } from "zod";
 
 import { jsonData, parseSearchParams, withRoute } from "@/lib/api/respond";
 import { getIdentityLink } from "@/lib/data/access/identity-links";
-import { getUser, getUserDailySpend } from "@/lib/litellm/operations";
+import {
+  findUserByEmail,
+  getUser,
+  getUserDailySpend,
+} from "@/lib/litellm/operations";
 import { openModeRefusal } from "@/lib/litellm/route-guard";
 import {
   enabledOperations,
@@ -20,6 +25,8 @@ import {
 // caller's scope; getUserDailySpend timezone=0, LD20). `teams` lists the
 // teams the caller may open as Lead, Admin or Auditor.
 
+const EmailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
+
 export const dynamic = "force-dynamic";
 
 export const GET = withRoute(async (request, _ctx, session) => {
@@ -31,11 +38,22 @@ export const GET = withRoute(async (request, _ctx, session) => {
     enabledOperations(),
     viewableTeams(session),
   ]);
-  const litellmUserId = link?.litellmUserId;
-  if (!litellmUserId) {
-    return jsonData({ linked: false, teams, enabledOperations: enabled });
-  }
   return liteLLMResponse(async () => {
+    // Without a stored link the session email resolves the user, read only
+    // (Views by role - Own usage); LiteLLM's user_id is used as returned.
+    let litellmUserId = link?.litellmUserId;
+    // An email the gateway would refuse is treated as no match, not an error.
+    const parsedEmail = EmailSchema.safeParse(session.user.email);
+    const email = parsedEmail.success ? parsedEmail.data : undefined;
+    if (!litellmUserId && email && enabled.includes("findUserByEmail")) {
+      const found = await findUserByEmail({ email });
+      litellmUserId = found.users.find(
+        (u) => u.user_email?.toLowerCase() === email,
+      )?.user_id;
+    }
+    if (!litellmUserId) {
+      return jsonData({ linked: false, teams, enabledOperations: enabled });
+    }
     requireEnabled(enabled, ["getUser", "getUserDailySpend"]);
     const [info, daily] = await Promise.all([
       getUser({ litellmUserId }),

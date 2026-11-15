@@ -5,7 +5,8 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Source: LiteLLM spec -- Page and Settings (audit section: Admin, Auditor
-// only); Rules 10.3, 50.3, 60.7. The server resolves the role and passes it
+// only) and Views by role (L3b: the tab set per role; a tab the caller cannot
+// use is not rendered); Rules 10.3, 50.3, 60.7. The server resolves the role and passes it
 // down; the route handlers enforce it again.
 const auth = vi.fn();
 vi.mock("@/auth", () => ({ auth: () => auth() }));
@@ -20,8 +21,8 @@ vi.mock("@/env", () => ({
   env: { APP_ENV: "dev", AUTH_ACCESS_MODE: "enforce" },
 }));
 vi.mock("@/components/litellm/LiteLLMContent", () => ({
-  LiteLLMContent: (props: { canViewAudit: boolean }) => (
-    <div data-testid="content">{String(props.canViewAudit)}</div>
+  LiteLLMContent: (props: { tabs: string[] }) => (
+    <div data-testid="content">{props.tabs.join(",")}</div>
   ),
 }));
 
@@ -44,30 +45,49 @@ describe("LiteLLMPage (/dashboard/litellm)", () => {
     expect(source).not.toMatch(/^\s*["']use client["']/m);
   });
 
+  // L3b contract: the server computes `tabs` (ids my-usage | team |
+  // organisation | users | audit, in this order) and passes them to
+  // <LiteLLMContent tabs={...} />. Team is a ceiling; the client also needs
+  // me.teams non-empty.
   it.each([
-    ["internal-admin", "true"],
-    ["internal-auditor", "true"],
-    ["internal-org-admin", "false"],
-    ["internal-viewer", "false"],
-  ])("canViewAudit for %s is %s", async (role, expected) => {
+    ["internal-admin", "my-usage,team,organisation,users,audit"],
+    ["internal-auditor", "my-usage,team,organisation,users,audit"],
+    ["internal-org-admin", "my-usage,team,organisation,users"],
+    ["internal-viewer", "my-usage"],
+  ])("tabs for %s are %s (Views by role)", async (role, expected) => {
     auth.mockResolvedValue({ user: { oid: "o", roles: [role] } });
     render(await LiteLLMPage());
-    expect(screen.getByTestId("content")).toHaveTextContent(expected);
+    expect(screen.getByTestId("content")).toHaveTextContent(
+      new RegExp(`^${expected}$`),
+    );
   });
 
-  it("a stored internal-admin grant opens the audit section for a claim without the role (Rule 50.4)", async () => {
+  it("a Lead (team admin scope, no global role) gets My usage, Team and Users (Views by role)", async () => {
+    auth.mockResolvedValue({ user: { oid: "o", roles: ["internal-viewer"] } });
+    loadAuthorization.mockResolvedValue({
+      appEnv: "dev",
+      roleGrants: [],
+      adminScopes: [{ scopeType: "team", scopeId: "t1" }],
+    });
+    render(await LiteLLMPage());
+    expect(screen.getByTestId("content")).toHaveTextContent(
+      /^my-usage,team,users$/,
+    );
+  });
+
+  it("a stored internal-admin grant opens every tab for a claim without the role (Rule 50.4)", async () => {
     auth.mockResolvedValue({ user: { oid: "o", roles: ["internal-viewer"] } });
     loadAuthorization.mockResolvedValue({
       appEnv: "dev",
       roleGrants: [{ role: "internal-admin" }],
     });
     render(await LiteLLMPage());
-    expect(screen.getByTestId("content")).toHaveTextContent("true");
+    expect(screen.getByTestId("content")).toHaveTextContent(/audit/);
   });
 
-  it("denies the audit section without a session", async () => {
+  it("gives only My usage without a session", async () => {
     auth.mockResolvedValue(null);
     render(await LiteLLMPage());
-    expect(screen.getByTestId("content")).toHaveTextContent("false");
+    expect(screen.getByTestId("content")).toHaveTextContent(/^my-usage$/);
   });
 });

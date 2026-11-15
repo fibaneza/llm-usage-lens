@@ -266,8 +266,11 @@ export {
   LiteLLMMeResponseSchema,
   LiteLLMMembersResponseSchema,
   LiteLLMModelsResponseSchema,
+  LiteLLMOrgResponseSchema,
   LiteLLMSpendLogsResponseSchema,
   LiteLLMTeamDetailResponseSchema,
+  LiteLLMUserDetailResponseSchema,
+  LiteLLMUserSearchResponseSchema,
 } from "./schemas/litellm-views";
 
 export {
