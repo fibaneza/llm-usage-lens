@@ -99,14 +99,9 @@ export type OperationContext = { actor: LiteLLMActor };
 
 // ---- gate and parsing -----------------------------------------------------
 
+// Gate order is toggle, then edition, then input validation (Security
+// architecture item 2), so every operation calls this before parsing input.
 async function gate(name: LiteLLMOperationName): Promise<void> {
-  const op = LITELLM_OPERATIONS[name];
-  if (
-    op.routes.every((r) => r.enterpriseOnly) &&
-    liteLLMEdition(env.APP_ENV) === "oss"
-  ) {
-    throw new LiteLLMOperationRefused("OPERATION_UNAVAILABLE");
-  }
   const saved = await getOperationToggles();
   const settings = resolveOperationSettings({
     file: loadGatewayConfig(),
@@ -114,6 +109,13 @@ async function gate(name: LiteLLMOperationName): Promise<void> {
   });
   if (!settings[name].enabled) {
     throw new LiteLLMOperationRefused("OPERATION_DISABLED");
+  }
+  const op = LITELLM_OPERATIONS[name];
+  if (
+    op.routes.every((r) => r.enterpriseOnly) &&
+    liteLLMEdition(env.APP_ENV) === "oss"
+  ) {
+    throw new LiteLLMOperationRefused("OPERATION_UNAVAILABLE");
   }
 }
 
@@ -160,6 +162,7 @@ const KeyRow = z.object({
   user_id: z.string().nullish(),
   key_alias: z.string().nullish(),
   blocked: z.boolean().nullish(),
+  expires: z.string().nullish(),
   models: z.array(z.string()).nullish(),
   spend: z.number().nullish(),
   max_budget: z.number().nullish(),
@@ -320,9 +323,17 @@ const KeyIssuedResponse = z
 // ---- reads ----------------------------------------------------------------
 
 export async function getTeam(input: { litellmTeamId: string }) {
-  const i = z.strictObject({ litellmTeamId: LiteLLMId }).parse(input);
   await gate("getTeam");
+  const i = z.strictObject({ litellmTeamId: LiteLLMId }).parse(input);
   return read("/team/info", { team_id: i.litellmTeamId }, TeamInfoResponse);
+}
+
+// Linking confirms the team exists with a read that bypasses the `getTeam`
+// read toggle, as the connection-test probes do: a link is a dashboard-only
+// configuration write, not a use of the read (Writes table, `linkTeam`).
+export async function confirmTeamExists(input: { litellmTeamId: string }) {
+  const i = z.strictObject({ litellmTeamId: LiteLLMId }).parse(input);
+  await read("/team/info", { team_id: i.litellmTeamId }, TeamInfoResponse);
 }
 
 export async function listProxyTeams() {
@@ -350,8 +361,8 @@ const UserDailyInput = withRange(
 const UTC_OFFSET = 0;
 
 export async function getTeamDailySpend(input: z.input<typeof TeamDailyInput>) {
-  const i = TeamDailyInput.parse(input);
   await gate("getTeamDailySpend");
+  const i = TeamDailyInput.parse(input);
   return read(
     "/team/daily/activity/aggregated",
     {
@@ -365,14 +376,14 @@ export async function getTeamDailySpend(input: z.input<typeof TeamDailyInput>) {
 }
 
 export async function getUser(input: { litellmUserId: string }) {
-  const i = z.strictObject({ litellmUserId: LiteLLMId }).parse(input);
   await gate("getUser");
+  const i = z.strictObject({ litellmUserId: LiteLLMId }).parse(input);
   return read("/user/info", { user_id: i.litellmUserId }, UserInfoResponse);
 }
 
 export async function findUserByEmail(input: { email: string }) {
-  const i = z.strictObject({ email: Email }).parse(input);
   await gate("findUserByEmail");
+  const i = z.strictObject({ email: Email }).parse(input);
   return findUser(i.email);
 }
 
@@ -381,8 +392,8 @@ async function findUser(email: string) {
 }
 
 export async function getUserDailySpend(input: z.input<typeof UserDailyInput>) {
-  const i = UserDailyInput.parse(input);
   await gate("getUserDailySpend");
+  const i = UserDailyInput.parse(input);
   return read(
     "/user/daily/activity",
     {
@@ -408,8 +419,8 @@ const ListKeysInput = z
   );
 
 export async function listKeys(input: z.input<typeof ListKeysInput>) {
-  const i = ListKeysInput.parse(input);
   await gate("listKeys");
+  const i = ListKeysInput.parse(input);
   return read(
     "/key/list",
     {
@@ -424,8 +435,8 @@ export async function listKeys(input: z.input<typeof ListKeysInput>) {
 }
 
 export async function getKey(input: { tokenId: string }) {
-  const i = z.strictObject({ tokenId: TokenId }).parse(input);
   await gate("getKey");
+  const i = z.strictObject({ tokenId: TokenId }).parse(input);
   return readKey(i.tokenId);
 }
 
@@ -451,8 +462,8 @@ const ListSpendLogsInput = withRange(
 );
 
 export async function listSpendLogs(input: z.input<typeof ListSpendLogsInput>) {
-  const i = ListSpendLogsInput.parse(input);
   await gate("listSpendLogs");
+  const i = ListSpendLogsInput.parse(input);
   return read(
     "/spend/logs/v2",
     {
@@ -494,8 +505,8 @@ const ListAuditInput = withRange(
 );
 
 export async function listProxyAuditLog(input: z.input<typeof ListAuditInput>) {
-  const i = ListAuditInput.parse(input);
   await gate("listProxyAuditLog");
+  const i = ListAuditInput.parse(input);
   return read(
     "/audit",
     {
@@ -518,8 +529,8 @@ const GlobalSpendInput = withRange(
 export async function getGlobalSpendReport(
   input: z.input<typeof GlobalSpendInput>,
 ) {
-  const i = GlobalSpendInput.parse(input);
   await gate("getGlobalSpendReport");
+  const i = GlobalSpendInput.parse(input);
   return read(
     "/global/spend/report",
     { start_date: i.startDate, end_date: i.endDate, group_by: "team" },
@@ -552,9 +563,9 @@ export async function createTeam(
   input: z.input<typeof CreateTeamInput>,
   ctx: OperationContext,
 ) {
+  await gate("createTeam");
   const i = CreateTeamInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("createTeam");
   const r = await write("/team/new", actor, TeamIdResponse, {
     body: {
       team_alias: i.teamAlias,
@@ -583,9 +594,9 @@ export async function setTeamBudget(
   input: z.input<typeof SetTeamBudgetInput>,
   ctx: OperationContext,
 ) {
+  await gate("setTeamBudget");
   const i = SetTeamBudgetInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("setTeamBudget");
   await write("/team/update", actor, TeamIdResponse, {
     body: {
       team_id: i.litellmTeamId,
@@ -613,9 +624,9 @@ export async function setTeamLimits(
   input: z.input<typeof SetTeamLimitsInput>,
   ctx: OperationContext,
 ) {
+  await gate("setTeamLimits");
   const i = SetTeamLimitsInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("setTeamLimits");
   await write("/team/update", actor, TeamIdResponse, {
     body: {
       team_id: i.litellmTeamId,
@@ -638,9 +649,9 @@ export async function setTeamModels(
   input: z.input<typeof SetTeamModelsInput>,
   ctx: OperationContext,
 ) {
+  await gate("setTeamModels");
   const i = SetTeamModelsInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("setTeamModels");
   await write("/team/update", actor, TeamIdResponse, {
     body: { team_id: i.litellmTeamId, models: i.models },
   });
@@ -666,9 +677,9 @@ export async function addTeamMember(
   input: z.input<typeof AddTeamMemberInput>,
   ctx: OperationContext,
 ) {
+  await gate("addTeamMember");
   const i = AddTeamMemberInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("addTeamMember");
   const found = (await findUser(i.email)).users.find(
     (u) => u.user_email?.toLowerCase() === i.email,
   );
@@ -709,9 +720,9 @@ export async function removeTeamMember(
   input: z.input<typeof MemberInput>,
   ctx: OperationContext,
 ) {
+  await gate("removeTeamMember");
   const i = MemberInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("removeTeamMember");
   await write("/team/member_delete", actor, Ack, {
     body: { team_id: i.litellmTeamId, user_id: i.litellmUserId },
   });
@@ -731,9 +742,9 @@ export async function setMemberBudget(
   input: z.input<typeof SetMemberBudgetInput>,
   ctx: OperationContext,
 ) {
+  await gate("setMemberBudget");
   const i = SetMemberBudgetInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("setMemberBudget");
   await write("/team/member_update", actor, MemberUpdateResponse, {
     body: {
       team_id: i.litellmTeamId,
@@ -758,9 +769,9 @@ export async function setMemberLimits(
   input: z.input<typeof SetMemberLimitsInput>,
   ctx: OperationContext,
 ) {
+  await gate("setMemberLimits");
   const i = SetMemberLimitsInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("setMemberLimits");
   await write("/team/member_update", actor, MemberUpdateResponse, {
     body: {
       team_id: i.litellmTeamId,
@@ -775,9 +786,9 @@ export async function resetMemberSpend(
   input: z.input<typeof MemberInput>,
   ctx: OperationContext,
 ) {
+  await gate("resetMemberSpend");
   const i = MemberInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("resetMemberSpend");
   await write("/team/{team_id}/member/{user_id}/reset_spend", actor, Ack, {
     params: { team_id: i.litellmTeamId, user_id: i.litellmUserId },
     body: { reset_to: 0 },
@@ -788,9 +799,9 @@ export async function resetMemberBudget(
   input: z.input<typeof MemberInput>,
   ctx: OperationContext,
 ) {
+  await gate("resetMemberBudget");
   const i = MemberInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("resetMemberBudget");
   const r = await write(
     "/team/{team_id}/member/{user_id}/reset_budget",
     actor,
@@ -814,7 +825,7 @@ async function memberKeyTokens(
 ): Promise<string[]> {
   const MAX_PAGES = 100;
   const tokens: string[] = [];
-  for (let page = 1; page <= MAX_PAGES; page += 1) {
+  for (let page = 1; ; page += 1) {
     const list = await read(
       "/key/list",
       {
@@ -828,12 +839,15 @@ async function memberKeyTokens(
     );
     for (const row of list.keys) {
       if (row.team_id === litellmTeamId && row.user_id === litellmUserId) {
-        tokens.push(TokenId.parse(row.token));
+        const token = TokenId.safeParse(row.token);
+        if (!token.success) throw new LiteLLMError("contract_drift");
+        tokens.push(token.data);
       }
     }
-    if (page >= (list.total_pages ?? 1)) break;
+    if (page >= (list.total_pages ?? 1)) return tokens;
+    // Stopping at the cap would leave some of the member's keys untouched.
+    if (page >= MAX_PAGES) throw new LiteLLMError("contract_drift");
   }
-  return tokens;
 }
 
 async function setMemberKeysBlocked(
@@ -841,9 +855,9 @@ async function setMemberKeysBlocked(
   input: z.input<typeof MemberInput>,
   ctx: OperationContext,
 ) {
+  await gate(name);
   const i = MemberInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate(name);
   const template = name === "disableMember" ? "/key/block" : "/key/unblock";
   const tokens = await memberKeyTokens(i.litellmTeamId, i.litellmUserId);
   for (const key of tokens) {
@@ -880,6 +894,7 @@ const GenerateKeyInput = z.strictObject({
   litellmUserId: LiteLLMId,
   dashboardTeamId: DashboardTeamId,
   duration: Duration.optional(),
+  blocked: z.literal(true).optional(),
   ...KeySettings,
 });
 type GenerateKey = z.output<typeof GenerateKeyInput>;
@@ -897,6 +912,7 @@ async function generateKey(i: GenerateKey, actor: LiteLLMActor) {
       tpm_limit: i.tpmLimit,
       max_parallel_requests: i.maxParallelRequests,
       duration: i.duration,
+      blocked: i.blocked,
       key_alias: i.keyAlias,
       metadata: metadata(i.dashboardTeamId, { createdByOid: actor.oid }),
     },
@@ -907,9 +923,9 @@ export async function generateMemberKey(
   input: z.input<typeof GenerateKeyInput>,
   ctx: OperationContext,
 ) {
+  await gate("generateMemberKey");
   const i = GenerateKeyInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("generateMemberKey");
   return generateKey(i, actor);
 }
 
@@ -922,9 +938,9 @@ export async function updateMemberKey(
   input: z.input<typeof UpdateMemberKeyInput>,
   ctx: OperationContext,
 ) {
+  await gate("updateMemberKey");
   const i = UpdateMemberKeyInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("updateMemberKey");
   await write("/key/update", actor, Ack, {
     body: {
       key: i.tokenId,
@@ -949,9 +965,9 @@ export async function blockKey(
   input: z.input<typeof TokenInput>,
   ctx: OperationContext,
 ) {
+  await gate("blockKey");
   const i = TokenInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("blockKey");
   await blockToken(i.tokenId, actor);
 }
 
@@ -959,9 +975,9 @@ export async function unblockKey(
   input: z.input<typeof TokenInput>,
   ctx: OperationContext,
 ) {
+  await gate("unblockKey");
   const i = TokenInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("unblockKey");
   await write("/key/unblock", actor, Ack, { body: { key: i.tokenId } });
 }
 
@@ -969,11 +985,27 @@ export async function deleteKey(
   input: z.input<typeof TokenInput>,
   ctx: OperationContext,
 ) {
+  await gate("deleteKey");
   const i = TokenInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("deleteKey");
   // Exactly one key per call.
   await write("/key/delete", actor, Ack, { body: { keys: [i.tokenId] } });
+}
+
+// The old key's remaining lifetime as a whole-day (else hour, else minute)
+// duration, rounded up and capped at the schema's four digits. An expiry that
+// has passed or cannot be read is contract drift: a new key must not outlive
+// the old one's intent.
+function remainingDuration(expires: string | null | undefined) {
+  if (expires == null) return undefined;
+  const left = Date.parse(expires) - Date.now();
+  if (!Number.isFinite(left) || left <= 0)
+    throw new LiteLLMError("contract_drift");
+  const days = Math.ceil(left / DAY_MS);
+  if (days >= 1 && left >= DAY_MS) return `${Math.min(days, 9999)}d`;
+  const hours = Math.ceil(left / 3_600_000);
+  if (left >= 3_600_000) return `${hours}h`;
+  return `${Math.ceil(left / 60_000)}m`;
 }
 
 const RotateKeyInput = z.strictObject({
@@ -988,9 +1020,9 @@ export async function rotateKey(
   input: z.input<typeof RotateKeyInput>,
   ctx: OperationContext,
 ) {
+  await gate("rotateKey");
   const i = RotateKeyInput.parse(input);
   const { actor } = Context.parse(ctx);
-  await gate("rotateKey");
   if (liteLLMEdition(env.APP_ENV) === "enterprise") {
     // Exactly `{ grace_period }`: never new_key, ids or allowed_routes.
     return write("/key/{key}/regenerate", actor, KeyIssuedResponse, {
@@ -998,12 +1030,18 @@ export async function rotateKey(
       body: i.gracePeriod === undefined ? {} : { grace_period: i.gracePeriod },
     });
   }
-  // OSS: a new key with the old key's models and limits (never its alias,
-  // which LiteLLM requires to be unique), then block the old one.
+  // OSS: a new key with the old key's models, limits, expiry and blocked
+  // state (never its alias, which LiteLLM requires to be unique), then block
+  // the old one. Spec: the `rotateKey` row (OSS carry-over, 2026-11-15).
   const old = (await readKey(i.tokenId)).info;
-  const models = (old.models ?? []).filter(
-    (n) => ModelName.safeParse(n).success,
-  );
+  if (old.team_id !== i.litellmTeamId || old.user_id !== i.litellmUserId) {
+    throw new LiteLLMError("contract_drift");
+  }
+  const models = old.models ?? [];
+  if (!Models.safeParse(models).success && models.length > 0) {
+    throw new LiteLLMError("contract_drift");
+  }
+  const duration = remainingDuration(old.expires);
   const issued = await generateKey(
     GenerateKeyInput.parse({
       litellmTeamId: i.litellmTeamId,
@@ -1020,6 +1058,8 @@ export async function rotateKey(
       ...(old.max_parallel_requests != null
         ? { maxParallelRequests: old.max_parallel_requests }
         : {}),
+      ...(duration !== undefined ? { duration } : {}),
+      ...(old.blocked === true ? { blocked: true } : {}),
     }),
     actor,
   );

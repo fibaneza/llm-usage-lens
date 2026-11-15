@@ -11,6 +11,7 @@ import {
   withRoute,
 } from "@/lib/api/respond";
 import type { RouteContext } from "@/lib/api/respond";
+import { getAllAccounts } from "@/lib/data/account-meta";
 import {
   deleteTeamLink,
   getTeamLink,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/data/litellm/team-links";
 import { isValidLiteLLMId } from "@/lib/litellm/allowlist";
 import { LiteLLMError } from "@/lib/litellm/client";
-import { getTeam } from "@/lib/litellm/operations";
+import { confirmTeamExists } from "@/lib/litellm/operations";
 import {
   adminOrAuditorRefusal,
   liteLLMErrorResponse,
@@ -71,9 +72,11 @@ export const PUT = withRoute(
     if (refused) return refused;
     const teamId = await teamIdOf(ctx);
     const input = await parseJsonBody(request, PutBodySchema);
+    const known = (await getAllAccounts()).some((a) => a.teamId === teamId);
+    if (!known) return notFound();
 
     try {
-      await getTeam({ litellmTeamId: input.litellmTeamId });
+      await confirmTeamExists({ litellmTeamId: input.litellmTeamId });
     } catch (error) {
       if (
         error instanceof LiteLLMError &&

@@ -25,6 +25,9 @@ export type GatewayFakeOptions = {
   // Rows returned by GET /key/list regardless of the query, so tests prove
   // the gateway re-checks ownership itself.
   keys?: Array<{ token: string; team_id: string | null; user_id: string }>;
+  // Fields merged over the GET /key/info `info` object (models, expires,
+  // blocked, team_id, user_id, limits), so rotation tests control the old key.
+  keyInfo?: Record<string, unknown>;
 };
 
 const DEFAULT_KEYS = [
@@ -117,7 +120,12 @@ export function gatewayHandler(opts: GatewayFakeOptions = {}): FakeHandler {
           status: 200,
           body: {
             key: q.get("key"),
-            info: { token: q.get("key"), team_id: TEAM_ID, user_id: USER_ID },
+            info: {
+              token: q.get("key"),
+              team_id: TEAM_ID,
+              user_id: USER_ID,
+              ...opts.keyInfo,
+            },
           },
         };
       case "GET /spend/logs/v2":

@@ -20,6 +20,8 @@ import {
   TEST_TABLE_NAME,
   clearTable,
   ensureTestTable,
+  loadFixtures,
+  makeAccount,
   testDoc,
 } from "@/test/test-support";
 
@@ -158,6 +160,13 @@ beforeEach(async () => {
   install();
   await clearTable();
   await storeConnection();
+  // A link needs an existing dashboard team (a team on an AccountMeta).
+  await loadFixtures({
+    accounts: [
+      makeAccount(1, { teamId: "team-a", teamName: "Team A" }),
+      makeAccount(2, { teamId: "team-b", teamName: "Team B" }),
+    ],
+  });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -165,6 +174,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+
+async function storeToggles(toggles: Record<string, boolean>) {
+  await testDoc().send(
+    new PutCommand({
+      TableName: TEST_TABLE_NAME,
+      Item: {
+        PK: "LITELLM#CONFIG",
+        SK: "TOGGLES",
+        version: 1,
+        toggles,
+        updatedAt: "2026-11-14T10:00:00.000Z",
+      },
+    }),
+  );
+}
 
 const link = (
   h: Awaited<ReturnType<typeof load>>,
@@ -379,6 +403,51 @@ describe("PUT /api/litellm/team-links/[teamId] (linkTeam)", () => {
     expect((await claimItem(OTHER_TEAM_ID))?.teamId).toBe("team-a");
     // the freed LiteLLM team can now be linked by another dashboard team
     expect((await link(h, "team-b", TEAM_ID)).status).toBe(200);
+  });
+
+  it("returns 404 NOT_FOUND for a dashboard team that does not exist: nothing stored, nothing audited", async () => {
+    const h = await load();
+    await expectError(await link(h, "team-ghost", TEAM_ID), 404, "NOT_FOUND");
+    expect(await linkItem("team-ghost")).toBeUndefined();
+    expect(await claimItem(TEAM_ID)).toBeUndefined();
+    expect(await auditActions()).toHaveLength(0);
+  });
+
+  it("linking works with the getTeam read toggle off (the link probe bypasses the read toggle)", async () => {
+    await storeToggles({ getTeam: false });
+    const h = await load();
+    const res = await link(h, "team-a", TEAM_ID);
+    expect(res.status).toBe(200);
+    expect(fake.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "GET /team/info",
+    ]);
+    expect((await linkItem("team-a"))?.litellmTeamId).toBe(TEAM_ID);
+  });
+
+  it("a relink deletes the old claim only while it still belongs to this team: a claim taken over by another team survives and the relink is 409", async () => {
+    const h = await load();
+    await link(h, "team-a", TEAM_ID);
+    // The old claim now belongs to team-b (a race or a repaired record).
+    await testDoc().send(
+      new PutCommand({
+        TableName: TEST_TABLE_NAME,
+        Item: {
+          PK: `LITELLM#LTEAM#${TEAM_ID}`,
+          SK: "OWNER",
+          teamId: "team-b",
+          version: 1,
+          updatedAt: "2026-11-14T10:00:00.000Z",
+        },
+      }),
+    );
+    await expectError(
+      await link(h, "team-a", OTHER_TEAM_ID, 1),
+      409,
+      "CONFLICT",
+    );
+    expect((await claimItem(TEAM_ID))?.teamId).toBe("team-b");
+    expect((await linkItem("team-a"))?.litellmTeamId).toBe(TEAM_ID);
+    expect(await claimItem(OTHER_TEAM_ID)).toBeUndefined();
   });
 
   it("returns 409 for a stale or missing version on an existing link, changing nothing", async () => {

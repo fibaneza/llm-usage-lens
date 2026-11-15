@@ -121,6 +121,8 @@ export async function putTeamLink(
                   PK: teamLinkClaimPk(current.litellmTeamId),
                   SK: LITELLM_CLAIM_OWNER_SK,
                 },
+                ConditionExpression: "teamId = :me",
+                ExpressionAttributeValues: { ":me": value.teamId },
               },
             },
           ]

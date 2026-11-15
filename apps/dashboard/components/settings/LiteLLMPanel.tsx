@@ -48,14 +48,13 @@ const WRITE_OPS = new Set([
 ]);
 
 const CODE_GUARDRAILS = [
-  "Operation allowlist: only the listed operations can be called",
-  "Fixed route templates, never built from free text",
-  "Hard-limit budgets only; soft budgets are not used",
-  "Path-parameter values are validated before use",
+  "Operation allowlist and its method + route templates: only the listed operations can be called",
+  "Hard-limit denylist: routes that can mint, reveal or widen access are never callable",
+  "Path-parameter patterns and encoding: values are validated and encoded before use",
   "Exact request bodies per operation; unknown fields are rejected",
   "Edition gate: operations that need a paid edition are refused",
   "litellm-changed-by header is sent on every write",
-  "Inference traffic is never proxied through the dashboard",
+  "Inference refusal: inference traffic is never proxied through the dashboard (pending verification)",
 ];
 
 function PanelSkeleton() {
@@ -254,7 +253,10 @@ function TogglesSection({ canEdit }: { canEdit: boolean }) {
   const data = query.data;
   const names = Object.keys(data.operations);
   const toggle = (op: string, enabled: boolean) =>
-    save.mutate({ version: data.version, toggles: { [op]: enabled } });
+    save.mutate({
+      version: data.version === 0 ? null : data.version,
+      toggles: { [op]: enabled },
+    });
   const shared = { data, canEdit, pending: save.isPending, onToggle: toggle };
   return (
     <div className="flex max-w-[72ch] flex-col gap-4">
@@ -301,6 +303,7 @@ function TogglesSection({ canEdit }: { canEdit: boolean }) {
             <Button
               type="button"
               variant="outline"
+              disabled={data.version === 0}
               onClick={() => setConfirming(true)}
             >
               Reset to file defaults
@@ -414,7 +417,8 @@ export function LiteLLMPanel({ canEdit = true }: { canEdit?: boolean }) {
       {test.data?.warnings?.length ? (
         <div
           data-testid="litellm-wildcard-warning"
-          className="border-border rounded-md border p-2 text-sm"
+          role="status"
+          className="border-warning bg-warning/10 rounded-md border p-2 text-sm"
         >
           {test.data.warnings.map((w) => (
             <p key={w}>{w}</p>

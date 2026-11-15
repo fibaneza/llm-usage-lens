@@ -161,8 +161,12 @@ export type RouteOptions = {
   requireAdminOrAuditor?: boolean;
   // The operation and fixed route pattern a `requireAdmin` refusal records
   // (Access Control spec - Audit log D17, T22); never the raw path.
-  denied?: { action: AuditAction; pattern: string };
+  // May be a function of the request when one route records different actions
+  // (toggles update vs reset); it must read the request without validating it.
+  denied?: DeniedRecord | ((request: Request) => Promise<DeniedRecord>);
 };
+
+type DeniedRecord = { action: AuditAction; pattern: string };
 
 // Best-effort: a failed record write never changes the response (D17). The
 // request id is generated here, never taken from a header.
@@ -172,13 +176,15 @@ async function recordDeniedWrite(
   denied: NonNullable<RouteOptions["denied"]>,
 ): Promise<void> {
   try {
+    const record =
+      typeof denied === "function" ? await denied(request.clone()) : denied;
     const { appendDeniedAudit } = await import("@/lib/data/access/audit");
     await appendDeniedAudit({
       actor,
-      action: denied.action,
+      action: record.action,
       requestId: randomUUID(),
       code: "FORBIDDEN",
-      route: { method: request.method, pattern: denied.pattern },
+      route: { method: request.method, pattern: record.pattern },
     });
   } catch (error) {
     trace

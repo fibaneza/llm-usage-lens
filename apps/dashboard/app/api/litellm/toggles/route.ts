@@ -69,6 +69,27 @@ export const GET = withRoute(async (_request, _ctx, session) => {
   return jsonData(view(await getOperationToggles()));
 });
 
+// A non-validating peek at the raw body, only to pick which action a refusal
+// records; the body is never parsed with the schema before the 403 (Rule 10.3).
+async function deniedRecord(request: Request) {
+  let reset = false;
+  try {
+    const raw: unknown = await request.json();
+    reset =
+      typeof raw === "object" &&
+      raw !== null &&
+      (raw as { reset?: unknown }).reset === true;
+  } catch {
+    reset = false;
+  }
+  return {
+    action: reset
+      ? ("litellm.toggles.reset" as const)
+      : ("litellm.toggles.update" as const),
+    pattern: "/api/litellm/toggles",
+  };
+}
+
 export const PUT = withRoute(
   async (request, _ctx, session) => {
     const refused = openModeRefusal();
@@ -91,9 +112,6 @@ export const PUT = withRoute(
   },
   {
     requireAdmin: true,
-    denied: {
-      action: "litellm.toggles.update",
-      pattern: "/api/litellm/toggles",
-    },
+    denied: deniedRecord,
   },
 );

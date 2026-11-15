@@ -175,7 +175,8 @@ type Case = {
   calls: Expected[];
 };
 
-const TZ = expect.stringMatching(/^(UTC|0)$/);
+// openapi 1.109.1: `timezone` is an integer offset in minutes; 0 is UTC (LD20).
+const TZ = "0";
 const DATE = expect.any(String);
 const RESET_PATH = (leaf: string) =>
   `/team/${TEAM_ID}/member/${encodeURIComponent(USER_ID)}/${leaf}`;

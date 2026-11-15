@@ -247,6 +247,25 @@ describe("PUT /api/litellm/toggles", () => {
     },
   );
 
+  it("a refused reset (no Admin role) records litellm.toggles.reset, not litellm.toggles.update", async () => {
+    authMock.mockResolvedValue(AUDITOR);
+    const { PUT } = await load();
+    await expectError(
+      await PUT(put({ version: 1, reset: true }), ctx),
+      403,
+      "FORBIDDEN",
+    );
+    const records = await auditActions();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      action: "litellm.toggles.reset",
+      actor: "oid-test",
+      result: "denied",
+      code: "FORBIDDEN",
+    });
+    expect(await stored()).toBeUndefined();
+  });
+
   it("returns 403 for a cross-origin write", async () => {
     const { PUT } = await load();
     await expectError(
@@ -335,6 +354,21 @@ describe("PUT /api/litellm/toggles", () => {
     });
     expect(JSON.stringify(records[0])).toContain("createTeam");
     expect(fake.calls).toHaveLength(0);
+  });
+
+  it("the first save on a fresh deployment works from the version GET reports (0): GET -> PUT creates version 1", async () => {
+    const { GET, PUT } = await load();
+    const fresh = (await (await GET(get(), ctx)).json()).data;
+    expect(fresh.version).toBe(0);
+    // The client must send a version the route accepts for "nothing saved":
+    // null (create). A literal 0 is not a saved version.
+    const res = await PUT(
+      put({ version: null, toggles: { createTeam: false } }),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.version).toBe(1);
+    expect((await stored())?.version).toBe(1);
   });
 
   it("merges later writes into the saved map and bumps the version", async () => {

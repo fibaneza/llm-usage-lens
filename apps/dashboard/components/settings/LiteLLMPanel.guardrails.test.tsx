@@ -297,6 +297,85 @@ describe("LiteLLMPanel operation toggles", () => {
   });
 });
 
+describe("LiteLLMPanel on a fresh deployment (nothing saved, GET reports version 0)", () => {
+  it("the first save sends version null (create), never the literal 0 the route rejects", async () => {
+    const after = toggles({
+      version: 1,
+      ops: { createTeam: { enabled: false, source: "ui" } },
+    });
+    const calls = stub({
+      toggles: toggles({ version: 0 }),
+      putResponse: apiResponse({ data: after }),
+    });
+    renderWithProviders(<LiteLLMPanel />);
+    await ready();
+    await userEvent.click(screen.getByRole("switch", { name: "createTeam" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("switch", { name: "createTeam" }),
+      ).not.toBeChecked(),
+    );
+    expect(putsOf(calls).map((c) => c.body)).toEqual([
+      { version: null, toggles: { createTeam: false } },
+    ]);
+  });
+
+  it("a second save after the first uses the returned version", async () => {
+    const first = toggles({
+      version: 1,
+      ops: { createTeam: { enabled: false, source: "ui" } },
+    });
+    const second = toggles({
+      version: 2,
+      ops: {
+        createTeam: { enabled: false, source: "ui" },
+        getTeam: { enabled: false, source: "ui" },
+      },
+    });
+    const calls = stub({
+      toggles: toggles({ version: 0 }),
+      putResponse: apiResponse({ data: first }),
+    });
+    renderWithProviders(<LiteLLMPanel />);
+    await ready();
+    await userEvent.click(screen.getByRole("switch", { name: "createTeam" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("switch", { name: "createTeam" }),
+      ).not.toBeChecked(),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_i: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({
+          url: "/api/litellm/toggles",
+          method: (init?.method ?? "GET").toUpperCase(),
+          body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        });
+        return Promise.resolve(apiResponse({ data: second }));
+      }),
+    );
+    await userEvent.click(screen.getByRole("switch", { name: "getTeam" }));
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "getTeam" })).not.toBeChecked(),
+    );
+    expect(putsOf(calls).map((c) => c.body)).toEqual([
+      { version: null, toggles: { createTeam: false } },
+      { version: 1, toggles: { getTeam: false } },
+    ]);
+  });
+
+  it("offers no usable Reset while nothing is saved (hidden or disabled)", async () => {
+    stub({ toggles: toggles({ version: 0 }) });
+    renderWithProviders(<LiteLLMPanel />);
+    await ready();
+    const reset = screen.queryByRole("button", {
+      name: /reset to file defaults/i,
+    });
+    if (reset !== null) expect(reset).toBeDisabled();
+  });
+});
+
 describe("LiteLLMPanel reset to file defaults", () => {
   it("asks for confirmation without a browser dialog and sends nothing until confirmed", async () => {
     const confirmSpy = vi.fn(() => true);
@@ -426,6 +505,17 @@ describe("LiteLLMPanel wildcard warning", () => {
     expect(w).toHaveTextContent(/temporary wildcards/i);
     expect(w).toHaveTextContent("/team/*");
     expect(w).toHaveTextContent("/key/*");
+  });
+
+  it("is announced as a status region (role=status), not an alert", async () => {
+    stub({
+      test: { result: "ok", message: "Connection ok", warnings: [WILDCARD] },
+    });
+    renderWithProviders(<LiteLLMPanel />);
+    await runTest();
+    const w = await screen.findByTestId("litellm-wildcard-warning");
+    expect(w).toHaveAttribute("role", "status");
+    expect(within(w).queryByRole("alert")).toBeNull();
   });
 
   it("is shown whenever the test returns it: the toggles payload has no wildcardWarning field", async () => {
