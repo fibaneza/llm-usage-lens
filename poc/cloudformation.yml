@@ -23,7 +23,7 @@ Metadata:
       - Label: { default: Existing Application Load Balancer (optional) }
         Parameters:
           - ExistingAlbArn
-          - ExistingAlbSecurityGroupId
+          - AlbAllowedInboundCidr
           - AlbListenerPort
           - AlbCertificateArn
       - Label: { default: ECR }
@@ -99,20 +99,22 @@ Parameters:
     ConstraintDescription: must be empty or the ARN of an Application Load Balancer.
     Description: >-
       Optional ARN of an existing Application Load Balancer in VpcId. When
-      set, the stack adds one listener and one target group to it and adds
-      one inbound rule to the instance's security group so the load balancer
-      can reach AppPort. The load balancer itself and its security group are
-      never created or modified. Empty (default) adds
-      nothing.
-  ExistingAlbSecurityGroupId:
+      set, the stack adds one listener and one target group to it and creates
+      a new security group for it (output AlbSecurityGroupId). CloudFormation
+      cannot attach that group to a load balancer it does not own: attach it
+      with poc/scripts/alb-security-group.sh. The load balancer, its existing
+      security groups and its certificates are never created, changed or
+      deleted by this stack. Empty (default) adds nothing.
+  AlbAllowedInboundCidr:
     Type: String
     Default: ""
-    AllowedPattern: "^$|^sg-[0-9a-f]{8,17}$"
-    ConstraintDescription: must be empty or a security group ID such as sg-0123456789abcdef0.
+    AllowedPattern: "^$|^([0-9]{1,3}\\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$"
+    ConstraintDescription: must be empty or an IPv4 CIDR such as 203.0.113.0/24.
     Description: >-
-      Security group already attached to the existing load balancer. Required
-      with ExistingAlbArn; it becomes the only source allowed to reach AppPort
-      through the load balancer.
+      Optional IPv4 CIDR the new load balancer security group allows on
+      AlbListenerPort. Empty (default) adds no inbound rule to it; inbound
+      access to the listener then depends on the load balancer's existing
+      security groups.
   AlbListenerPort:
     Type: Number
     Default: 443
@@ -120,8 +122,7 @@ Parameters:
     MaxValue: 65535
     Description: >-
       Port of the listener added to the existing load balancer. It must be
-      free on that load balancer and already allowed inbound by its security
-      group.
+      free on that load balancer.
   AlbCertificateArn:
     Type: String
     Default: ""
@@ -150,17 +151,15 @@ Rules:
     Assertions:
       - Assert: !Not [!Equals [!Ref AllowedInboundCidr, "0.0.0.0/0"]]
         AssertDescription: AllowedInboundCidr must not be 0.0.0.0/0.
-  AlbNeedsItsSecurityGroup:
-    RuleCondition: !Not [!Equals [!Ref ExistingAlbArn, ""]]
-    Assertions:
-      - Assert: !Not [!Equals [!Ref ExistingAlbSecurityGroupId, ""]]
-        AssertDescription: ExistingAlbSecurityGroupId is required when ExistingAlbArn is set.
 
 Conditions:
   HasInboundCidr: !Not [!Equals [!Ref AllowedInboundCidr, ""]]
   IsArm64: !Equals [!Ref InstanceArchitecture, arm64]
   HasAlb: !Not [!Equals [!Ref ExistingAlbArn, ""]]
   HasAlbCertificate: !Not [!Equals [!Ref AlbCertificateArn, ""]]
+  HasAlbInboundCidr: !And
+    - !Condition HasAlb
+    - !Not [!Equals [!Ref AlbAllowedInboundCidr, ""]]
 
 Resources:
   # Deleting the stack deletes this repository AND every image in it
@@ -261,11 +260,53 @@ Resources:
         - Key: Name
           Value: !Sub ${InstanceName}-sg
 
-  # Optional: publish the app through an EXISTING load balancer. Only the
-  # listener, the target group and one ingress rule on the instance's own
-  # security group are created. No new security group is needed: the rule
-  # below is all the load balancer requires to reach the instance. The load
-  # balancer and its security group are left as they are.
+  # Optional: publish the app through an EXISTING load balancer. The stack
+  # creates the listener, the target group and a NEW security group for the
+  # load balancer. It never reuses, edits or deletes the load balancer's
+  # existing security groups, the load balancer itself or its certificates.
+  #
+  # CloudFormation cannot attach a security group to a load balancer it does
+  # not own, so AlbSecurityGroup is attached (in addition to the existing
+  # groups) and detached with poc/scripts/alb-security-group.sh. Detach it
+  # before deleting the stack, or the group cannot be deleted.
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: HasAlb
+    Properties:
+      GroupDescription: LLM Usage Lens POC - added to the existing load balancer for the POC listener
+      VpcId: !Ref VpcId
+      # Placeholder that replaces the default allow-all egress rule; the only
+      # real egress is AlbToInstanceEgress below.
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 127.0.0.1/32
+          Description: Placeholder - no general outbound traffic through this group
+      Tags:
+        - Key: Name
+          Value: !Sub ${InstanceName}-alb-sg
+
+  AlbListenerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasAlbInboundCidr
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: !Ref AlbListenerPort
+      ToPort: !Ref AlbListenerPort
+      CidrIp: !Ref AlbAllowedInboundCidr
+      Description: POC listener port from the allowed CIDR
+
+  AlbToInstanceEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Condition: HasAlb
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: !Ref AppPort
+      ToPort: !Ref AppPort
+      DestinationSecurityGroupId: !Ref InstanceSecurityGroup
+      Description: Application port and health check to the POC instance
+
   AlbToInstanceIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Condition: HasAlb
@@ -274,8 +315,8 @@ Resources:
       IpProtocol: tcp
       FromPort: !Ref AppPort
       ToPort: !Ref AppPort
-      SourceSecurityGroupId: !Ref ExistingAlbSecurityGroupId
-      Description: Application port and health check from the existing load balancer
+      SourceSecurityGroupId: !Ref AlbSecurityGroup
+      Description: Application port and health check from the POC load balancer security group
 
   AlbTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -404,6 +445,14 @@ Outputs:
   AppPort:
     Description: Host port the application is published on.
     Value: !Ref AppPort
+  AlbArn:
+    Condition: HasAlb
+    Description: The existing load balancer the listener was added to (not owned by this stack).
+    Value: !Ref ExistingAlbArn
+  AlbSecurityGroupId:
+    Condition: HasAlb
+    Description: New security group to attach to the existing load balancer (poc/scripts/alb-security-group.sh attach).
+    Value: !Ref AlbSecurityGroup
   AlbListenerArn:
     Condition: HasAlb
     Description: Listener added to the existing load balancer.

@@ -17,6 +17,8 @@ neither and does not replace them.
 | [`cloudformation.yml`](cloudformation.yml)           | EC2 instance, security group, IAM role, private ECR repository       |
 | [`docker-compose.yml`](docker-compose.yml)           | `app`, `dynamodb-local`, `dynamodb-admin`                            |
 | [`.env.example`](.env.example)                       | Runtime environment template (placeholders only)                     |
+| [`scripts/deploy-stack.sh`](scripts/deploy-stack.sh)       | Local: create or update the CloudFormation stack               |
+| [`scripts/alb-security-group.sh`](scripts/alb-security-group.sh) | Local: attach/detach the POC security group on the existing ALB |
 | [`scripts/build-and-push.sh`](scripts/build-and-push.sh)   | Local: build the image and push `latest` to ECR                |
 | [`scripts/make-ec2-bundle.sh`](scripts/make-ec2-bundle.sh) | Local: print one command that copies the runtime files to EC2  |
 | [`scripts/init-dynamodb.sh`](scripts/init-dynamodb.sh)     | EC2: create the table in DynamoDB Local                        |
@@ -46,8 +48,10 @@ developer machine                         existing VPC / subnet
 - No SSH, no key pair, no inbound rule by default. Browsers reach the app
   through SSM port forwarding.
 - Optionally, the stack adds a listener and a target group to an **existing**
-  Application Load Balancer (*Publish through an existing load balancer*). It
-  never creates a load balancer, and no new security group is needed.
+  Application Load Balancer (*Publish through an existing load balancer*),
+  with a **new** security group of its own for that load balancer. It never
+  creates a load balancer and never reuses, edits or deletes the load
+  balancer's existing security groups.
 
 ### What repository inspection found
 
@@ -85,7 +89,8 @@ In AWS:
   deploy command needs `CAPABILITY_IAM`); ECR repositories and lifecycle
   policies; `ssm:GetParameters` on the public Amazon Linux AMI parameter;
   with the load balancer option, `elasticloadbalancing` listener and target
-  group actions.
+  group actions, plus `elasticloadbalancing:DescribeLoadBalancers` and
+  `elasticloadbalancing:SetSecurityGroups` for the attach/detach script.
 - Permission to connect: `ssm:StartSession` on the instance and on the
   `AWS-StartPortForwardingSession` document.
 - Permission to push images, for the **developer identity only**:
@@ -126,7 +131,22 @@ export AWS_REGION=ap-southeast-2
 export STACK_NAME=llm-usage-lens-poc
 ```
 
-Validate, then deploy (replace the VPC and subnet IDs):
+Deploy with the script (replace the VPC and subnet IDs). It checks your
+credentials, validates the template, creates or updates the stack and prints
+the outputs and next steps. It never builds, pushes or starts the application:
+
+```bash
+poc/scripts/deploy-stack.sh --region "$AWS_REGION" --stack-name "$STACK_NAME" --vpc-id vpc-0123456789abcdef0 --subnet-id subnet-0123456789abcdef0
+```
+
+Every template parameter has a flag (`poc/scripts/deploy-stack.sh --help`),
+`--profile` selects an AWS CLI profile, and `--parameter Key=Value` passes
+any other parameter. Re-run it to update the stack: parameters you do not
+pass keep their current values. All parameters except the VPC and subnet
+have defaults; the ECR repository is `llm-usage-lens-poc` unless you pass
+`--ecr-repository-name`.
+
+The same thing with the plain AWS CLI:
 
 ```bash
 aws cloudformation validate-template --template-body file://poc/cloudformation.yml --region "$AWS_REGION"
@@ -161,7 +181,7 @@ aws cloudformation deploy \
 | `AppPort`                    | `3000`               | Host port; only matters with `AllowedInboundCidr`.                                                        |
 | `AllowedInboundCidr`         | empty                | Empty: no inbound rule at all. A trusted IPv4 CIDR opens `AppPort` to it. `0.0.0.0/0` is rejected.        |
 | `ExistingAlbArn`             | empty                | Optional existing Application Load Balancer; see *Publish through an existing load balancer*.             |
-| `ExistingAlbSecurityGroupId` | empty                | Security group already on that load balancer. Required with `ExistingAlbArn`.                             |
+| `AlbAllowedInboundCidr`      | empty                | Optional CIDR the new load balancer security group allows on `AlbListenerPort`.                           |
 | `AlbListenerPort`            | `443`                | Port of the listener the stack adds; must be free on the load balancer.                                   |
 | `AlbCertificateArn`          | empty                | ACM certificate: set gives an HTTPS listener, empty gives HTTP.                                           |
 | `EcrRepositoryName`          | `llm-usage-lens-poc` | Private repository created (and deleted) by the stack.                                                    |
@@ -175,8 +195,8 @@ aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_N
 
 Outputs: `InstanceId`, `InstancePrivateIp`, `InstanceSecurityGroupId`,
 `EcrRepositoryUri`, `EcrRepositoryName`, `ImagePlatform`, `AppPort`, `Region`,
-`AccountId`, and with the load balancer option `AlbListenerArn` and
-`AlbTargetGroupArn`. Keep the instance ID for the later commands:
+`AccountId`, and with the load balancer option `AlbArn`,
+`AlbSecurityGroupId`, `AlbListenerArn` and `AlbTargetGroupArn`. Keep the instance ID for the later commands:
 
 ```bash
 export INSTANCE_ID=$(aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue | [0]" --output text)
@@ -388,71 +408,79 @@ prefer port forwarding. The instance needs an address your network can reach.
 ### Publish through an existing load balancer (optional)
 
 The stack can attach the app to an Application Load Balancer you already
-have. It creates only three things: a **listener** on that load balancer, a
-**target group** containing the instance (health check `GET /api/health`),
-and one **inbound rule** on the instance's own security group that allows
-`AppPort` from the load balancer's security group. It does not create or
-change the load balancer, its security group, its subnets or DNS.
+have. It creates, and later deletes, only its own resources:
 
-No additional security group is required: a security group rule that names
-the load balancer's group as its source is all the instance needs, and
-CloudFormation could not attach a new group to a load balancer it does not
-own anyway.
+| Created by the stack                 | Purpose                                                                                                   |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Listener on the existing ALB         | `AlbListenerPort`, HTTPS with `AlbCertificateArn` or HTTP without; forwards to the target group           |
+| Target group                         | The instance on `AppPort`; health check `GET /api/health`                                                 |
+| **New** security group for the ALB   | Outbound: `AppPort` to the instance only. Inbound: `AlbListenerPort` from `AlbAllowedInboundCidr`, if set |
+| Inbound rule on the instance's group | `AppPort` from the new ALB security group only                                                            |
 
-Requirements, all on existing resources:
+It does **not** create, change or delete the load balancer, the load
+balancer's existing security groups, its other listeners, its certificates,
+its subnets or DNS. The existing security groups are not reused: the
+instance trusts only the new group.
 
-- The load balancer is an Application Load Balancer in the same VPC as the
-  instance, and its subnets can route to the instance's subnet.
-- `AlbListenerPort` is not already used by another listener on it.
-- Its security group already allows inbound on `AlbListenerPort` from your
-  users, and outbound to the instance on `AppPort`. The POC does not edit
-  that group.
+CloudFormation cannot attach a security group to a load balancer the stack
+does not own, so that one step is a script. It **adds** the new group to the
+groups already on the load balancer; it never replaces them.
+
+Requirements on the existing resources:
+
+- An Application Load Balancer in the same VPC as the instance, whose subnets
+  can route to the instance's subnet, with fewer than five security groups.
+- `AlbListenerPort` is not used by another listener on it.
 - For HTTPS, an ACM certificate in the same region for the hostname you use.
+  The stack references the certificate; it never deletes it.
+- Inbound access to the new listener: either set `AlbAllowedInboundCidr`, or
+  rely on a rule the load balancer's existing groups already have.
 
-Add the parameters to the deploy command in *Deploy infrastructure* (keep the
-others):
+1. Deploy (or update) the stack with the load balancer parameters:
 
-```bash
-aws cloudformation deploy \
-  --region "$AWS_REGION" \
-  --stack-name "$STACK_NAME" \
-  --template-file poc/cloudformation.yml \
-  --capabilities CAPABILITY_IAM \
-  --parameter-overrides \
-    VpcId=vpc-0123456789abcdef0 \
-    SubnetId=subnet-0123456789abcdef0 \
-    ExistingAlbArn=arn:aws:elasticloadbalancing:ap-southeast-2:000000000000:loadbalancer/app/my-alb/0123456789abcdef \
-    ExistingAlbSecurityGroupId=sg-0123456789abcdef0 \
-    AlbListenerPort=443 \
-    AlbCertificateArn=arn:aws:acm:ap-southeast-2:000000000000:certificate/00000000-0000-0000-0000-000000000000
-```
+   ```bash
+   poc/scripts/deploy-stack.sh --region "$AWS_REGION" --stack-name "$STACK_NAME" --vpc-id vpc-0123456789abcdef0 --subnet-id subnet-0123456789abcdef0 --alb-arn arn:aws:elasticloadbalancing:ap-southeast-2:000000000000:loadbalancer/app/my-alb/0123456789abcdef --alb-listener-port 443 --alb-certificate-arn arn:aws:acm:ap-southeast-2:000000000000:certificate/00000000-0000-0000-0000-000000000000 --alb-allowed-inbound-cidr 203.0.113.0/24
+   ```
 
-Then, on the instance, edit `.env` and run `docker compose up -d`:
+2. Attach the new security group to the load balancer:
 
-| Variable                          | Value                                                                              |
-| --------------------------------- | ---------------------------------------------------------------------------------- |
-| `APP_BIND_ADDRESS`                | `0.0.0.0`, so the load balancer can reach the published port.                      |
-| `APP_PORT`                        | The stack's `AppPort` (default `3000`).                                            |
-| `AUTH_URL`, `NEXT_PUBLIC_APP_URL` | The URL users open, for example `https://poc.example.com` (add `:port` if not 443). |
+   ```bash
+   poc/scripts/alb-security-group.sh attach --region "$AWS_REGION" --stack-name "$STACK_NAME"
+   ```
 
-The target becomes healthy once the app answers `/api/health`:
+   `status` instead of `attach` shows the load balancer's groups without
+   changing anything. The script reads the current groups, appends the POC
+   group and writes the combined list back.
 
-```bash
-aws elbv2 describe-target-health --region "$AWS_REGION" --target-group-arn "$(aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey=='AlbTargetGroupArn'].OutputValue | [0]" --output text)"
-```
+3. On the instance, edit `.env` and run `docker compose up -d`:
+
+   | Variable                          | Value                                                                               |
+   | --------------------------------- | ----------------------------------------------------------------------------------- |
+   | `APP_BIND_ADDRESS`                | `0.0.0.0`, so the load balancer can reach the published port.                       |
+   | `APP_PORT`                        | The stack's `AppPort` (default `3000`).                                             |
+   | `AUTH_URL`, `NEXT_PUBLIC_APP_URL` | The URL users open, for example `https://poc.example.com` (add `:port` if not 443). |
+
+4. Check the target. It is healthy once the group is attached and the app
+   answers `/api/health`:
+
+   ```bash
+   aws elbv2 describe-target-health --region "$AWS_REGION" --target-group-arn "$(aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey=='AlbTargetGroupArn'].OutputValue | [0]" --output text)"
+   ```
 
 Notes:
 
+- Until step 2 is done the target stays unhealthy: the instance accepts the
+  app port only from the new group.
 - With an empty `AlbCertificateArn` the listener is plain HTTP; use that only
   on an internal load balancer.
 - The listener forwards **every** request on its port to the app. If the
   load balancer already serves other applications on that port, use another
   port; the POC does not add rules to an existing listener.
-- Who can reach the app is decided by the load balancer (internal or
-  internet-facing) and its security group, which the POC does not manage.
-  The app's own sign-in is then the only access control.
-- Deleting the stack removes the listener, the target group and the inbound
-  rule, and leaves the load balancer as it was.
+- Security groups on a load balancer are additive: the new group's inbound
+  rule adds to whatever the existing groups allow, and the existing groups'
+  outbound rules still apply to the other targets.
+- Removing the load balancer option later: run the `detach` command from
+  *Cleanup* first, then update the stack with `--alb-arn ""`.
 
 ### Load sample data (optional)
 
@@ -562,6 +590,25 @@ To inspect the data volume: `docker volume inspect llm-usage-lens-poc_dynamodb-d
 To keep a copy before deleting, export the items you need with DynamoDB Admin;
 the POC has no backup.
 
+If the stack was deployed with `ExistingAlbArn`, **detach the POC security
+group from the load balancer before deleting the stack**. A security group
+that is still attached cannot be deleted, so the stack deletion would stop
+at `DELETE_FAILED` (nothing external is harmed; detach and delete again):
+
+```bash
+poc/scripts/alb-security-group.sh detach --region "$AWS_REGION" --stack-name "$STACK_NAME"
+```
+
+The script removes only the POC group from the load balancer and leaves its
+other security groups attached.
+
+Deleting the stack removes **only what the stack created**: the instance and
+its root volume, its security group and IAM role, the ECR repository, and
+with the load balancer option the POC listener, target group and the new
+security group. It never deletes the existing load balancer, that load
+balancer's own security groups or other listeners, the ACM certificate, the
+VPC or the subnet.
+
 > **Warning: deleting the stack permanently deletes the ECR repository and
 > every image in it.** The repository is created with `EmptyOnDelete: true`
 > and has no `Retain` policy, so CloudFormation force-deletes it together
@@ -584,6 +631,7 @@ aws ecr delete-repository --repository-name llm-usage-lens-poc --region "$AWS_RE
 ```
 
 Not owned by the stack, with their own lifecycle: the VPC and subnet, the
+existing load balancer with its security groups and certificate, the
 external LiteLLM deployment and its service key (revoke the key in LiteLLM if
 the POC is finished), CloudTrail records of the sessions, and any EBS
 snapshot you took by hand.
@@ -619,8 +667,8 @@ Security:
 
 - **Exposure:** no SSH, no key pair, no inbound rule unless
   `AllowedInboundCidr` or `ExistingAlbArn` is set, and `0.0.0.0/0` is
-  rejected. With the load balancer option the only new inbound source is the
-  load balancer's security group, but the app is then as reachable as that
+  rejected. With the load balancer option the only new inbound source on the
+  instance is the POC's own load balancer security group, but the app is then as reachable as that
   load balancer is. All container
   ports bind to loopback by default. DynamoDB Admin and DynamoDB Local are
   never published. Outbound traffic is unrestricted (needed for SSM, ECR,
@@ -684,7 +732,8 @@ Security:
 
 | Check                                                                 | Result                                                      |
 | --------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `bash -n` on all three scripts                                        | Passed                                                      |
+| `bash -n` on all five scripts                                         | Passed                                                      |
+| `deploy-stack.sh` and `alb-security-group.sh` against a stub AWS CLI  | Passed: attach keeps existing groups, detach removes only the POC group, limits and missing parameters are refused |
 | `docker compose config` with `.env.example`                           | Passed; three services, all host ports on `127.0.0.1`       |
 | Resources, outputs and IAM actions as described                       | Checked by reading the parsed YAML                          |
 | Lifecycle policy text is valid JSON with the two intended rules       | Passed                                                      |
