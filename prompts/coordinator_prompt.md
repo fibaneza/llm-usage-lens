@@ -141,6 +141,14 @@ never overrides a rule; it only adds coordination.
   next goal only when its dependencies are on `main`, and lands finished
   goals one commit per unit, consolidating to `main` as soon as each review
   approves (or at the user's direction).
+- **No test collisions (user, 2026-11-16).** Vitest is isolated per run: each run gets its own `bedrock-usage-test-<pid>` table. **E2E and the seeded probes are not:** every worktree serves Playwright on port 3211 against the shared `bedrock-usage` table in DynamoDB Local. Hold the cross-session lock while running them:
+  ```bash
+  L=/Users/fibanez/Projects/aws-bedrock-cost-tracker/temp/coordinator/locks/e2e
+  if mkdir "$L" 2>/dev/null; then echo "<session> <unit> $(date +%H:%M)" > "$L/owner"
+    pnpm test:e2e -- <specs> > <log> 2>&1; rc=$?; rm "$L/owner"; rmdir "$L"; (exit $rc)
+  else echo "e2e lock held by: $(cat "$L/owner")"; fi
+  ```
+  If the lock is held, do other work and retry later. Never wait in a loop, and never break another session's lock: tell the coordinator if one looks stale (more than 30 min). A seeded probe also uses its own table (`bedrock-usage-probe-<unit>`), never `bedrock-usage`. The lasting fix is a per-worktree port and table, queued as test infra.
 - **Config blockers: copy the local env files (user, 2026-11-16).** When a
   worker is blocked by missing configuration (env validation, an auth or
   LiteLLM setting), copy the primary checkout's git-ignored env files into
