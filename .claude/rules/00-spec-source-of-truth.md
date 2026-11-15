@@ -19,7 +19,7 @@ cite it in your response.
 | LiteLLM administration, gateway allowlist, service key, LiteLLM-reported cost | `docs/specs/2026-11-10-litellm.md`, `docs/guides/litellm-admin.md`, `docs/litellm/openapi.json` | Anything under `lib/litellm/`, `/api/litellm/**` or the LiteLLM page and Settings panel |
 | Dashboard deployment runbook (Netlify; superseded by the Platform spec) | `docs/guides/dashboard-deployment.md` | Deployment work until Phase 4R.P rewrites it |
 | Bedrock simulator (standalone test harness) | `docs/specs/2026-05-24-bedrock-simulator.md`, `docs/guides/bedrock-simulator.md` | Anything under `tools/bedrock-simulator/` |
-| Dynamic workflows (not adopted in v1) | `docs/guides/dynamic-workflows.md` | Proposing multi-agent workflow orchestration |
+| Dynamic workflows (piloted per implementation-phases — *Workflow pilots*) | `docs/guides/dynamic-workflows.md` | Proposing multi-agent workflow orchestration |
 | GitHub / Actions practice | `docs/guides/github-best-practices.md` | Workflow, branching, or PR changes |
 | Local git hooks (Husky) | `docs/guides/git-hooks.md` | Changing or debugging hooks |
 | Guided learning path | `docs/guides/learning-path.md` | Onboarding or explaining the build order |

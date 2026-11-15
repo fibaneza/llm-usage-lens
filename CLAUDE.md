@@ -30,7 +30,7 @@ The `docs/specs/` directory is the source of truth:
 - `docs/guides/dashboard-deployment.md` — operational runbook: building and deploying the dashboard on ECS Fargate (CDK inputs, `cdk synth`, user-run deploy, DNS)
 - `docs/guides/operations.md` — operations runbook: alarms, redeploy, secret rotation, deploy/undeploy order
 - `docs/guides/litellm-admin.md` — LiteLLM runbook: service user and key, `allowed_routes`, SSM, connection, rotation
-- `docs/guides/dynamic-workflows.md` — where Opus 4.8 dynamic workflows fit (and don't fit) the phase plan; not adopted in v1
+- `docs/guides/dynamic-workflows.md` — where Opus 4.8 dynamic workflows fit (and don't fit) the phase plan; piloted per implementation-phases — *Workflow pilots*
 - `docs/guides/github-best-practices.md` — general GitHub/Actions practice reconciled to this project's GitHub Flow, SAM, and pnpm conventions
 - `docs/guides/git-hooks.md` — local git-hook strategy: the current simulator pre-push hook and the Phase 1 Husky suite that supersedes it
 - `docs/guides/learning-path.md` — guided, phase-by-phase walk-through of the whole build (lesson + tracker); start here if you're new to the project

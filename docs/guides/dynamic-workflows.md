@@ -93,10 +93,10 @@ has a *Verify* checklist, Rule 60 mandates Vitest, Route Handler tests assert th
 response shape plus the 401/400 paths, and Phase 5 adds Playwright + axe. That
 verification culture is what lets a fan-out run self-check.
 
-The non-negotiable constraint is output shape: a pilot must emit **one branch and
-one PR per unit** (per page, per handler), never a single bundled merge. That keeps
-Rule 31 squash-merge, human review, and the per-phase Verify checklists fully in
-force — the workflow accelerates the *building*, not the *gating*.
+The non-negotiable constraint is output shape: a pilot keeps **one branch and
+one squash commit per unit** (Rule 30.4, Rule 31), never a single bundled merge;
+fan-out agents work inside that unit's branch. That keeps the Rule 70 review and
+the per-phase Verify checklists fully in force — the workflow accelerates the *building*, not the *gating*.
 
 ## 7. Status and next step
 

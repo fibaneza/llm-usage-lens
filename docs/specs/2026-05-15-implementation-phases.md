@@ -692,7 +692,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)
 
-- [ ] Write routes for every allowlisted write (workflow pilot candidate — *Workflow pilots*) (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list
+- [ ] Write routes for every allowlisted write (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list (workflow pilot candidate — *Workflow pilots*)
 - [ ] Team members (LiteLLM spec — LD10, LD16; amended 2026-11-14): Leads create, update and delete members (`removeTeamMember` default on); the LiteLLM team join link is added as `inviteTeamMember` only after the operators confirm the endpoint and the snapshot is refreshed — until then the UI invites through `addTeamMember`
 - [ ] Verify: write matrix; LT5, LT9, LT10, LT13, LT16, LT18 (privileged member → `409`, no key or membership write); one audit record per success/failure, one `denied` per authorization refusal (incl. `409 PRIVILEGED_TARGET`) and none on other rejections; structural write-route test includes every LiteLLM write route; e2e probe
 
@@ -725,12 +725,12 @@ are planned only where a unit has many independent pieces against one test
 bar. Every pilot keeps the rules: one branch and one squash commit per unit
 (Rule 30.4), Rule 70 roles (tdd-test-engineer writes tests, typescript-developer
 writes code, reviewers read only), at most 5 agents, the user's opt-in per run,
-and the 5-hour freeze. A workflow speeds up building inside a unit; it never
-merges or gates.
+and the 5-hour freeze (`prompts/coordinator_prompt.md` §3). A workflow speeds
+up building inside a unit; it never merges or skips the review.
 
 | Where | Fan-out | Fit |
 |---|---|---|
-| Coordinator merge review (every merge, from the next one) | reviewers in parallel (quality, spec, UI), then one adversarial check per BLOCKER before it is reported | high — first pilot |
+| Coordinator merge review (every merge, from the next one) | the reviewers Rule 70.12 calls for, in parallel, then adversarial checks of the BLOCKERs batched within the 5-agent cap | high — first pilot |
 | L4 write routes | one slice per route group (members, budgets/limits, keys, team), all against the structural write-route test and the write matrix | high |
 | L5 role × operation matrix | one agent per role row against the fake LiteLLM | high |
 | Phase 5 polish | one agent per page: ErrorBoundary per section, axe fixes, breakpoints, empty states | high (guide §4.1) |
@@ -780,6 +780,7 @@ merges or gates.
   - Charts render without lag
   - No memory issues with 50 accounts x 90 days
 - [ ] Verify `prefers-reduced-motion` is respected (animations disabled/reduced)
+- [ ] App-wide AEDT display (LiteLLM spec — LD20, decided 2026-11-15): render timestamps in `Australia/Sydney` with the zone label on every page (`SyncStatusBadge`, `format-last-run.ts`, tables); day buckets stay UTC (Rule 20.1); amend Rule 20 and the Design System *Component inventory* first
 - [ ] Populate `CommandMenu` with real data (departments, teams, users, services)
 - [ ] E2E tests with Playwright
   > The Playwright harness itself lands **before** Phase 5: the agent loop
