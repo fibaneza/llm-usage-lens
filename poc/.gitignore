@@ -1,0 +1,2 @@
+# Local deploy configuration (account IDs and ARNs). Template: stack.env.example
+stack.env

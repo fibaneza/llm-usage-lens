@@ -17,6 +17,7 @@ neither and does not replace them.
 | [`cloudformation.yml`](cloudformation.yml)           | EC2 instance, security group, IAM role, private ECR repository       |
 | [`docker-compose.yml`](docker-compose.yml)           | `app`, `dynamodb-local`, `dynamodb-admin`                            |
 | [`.env.example`](.env.example)                       | Runtime environment template (placeholders only)                     |
+| [`stack.env.example`](stack.env.example)                   | Template for `stack.env`, the gitignored deploy configuration  |
 | [`scripts/deploy-stack.sh`](scripts/deploy-stack.sh)       | Local: create or update the CloudFormation stack               |
 | [`scripts/alb-security-group.sh`](scripts/alb-security-group.sh) | Local: attach/detach the POC security group on the existing ALB |
 | [`scripts/build-and-push.sh`](scripts/build-and-push.sh)   | Local: build the image and push `latest` to ECR                |
@@ -138,6 +139,31 @@ the outputs and next steps. It never builds, pushes or starts the application:
 ```bash
 poc/scripts/deploy-stack.sh --region "$AWS_REGION" --stack-name "$STACK_NAME" --vpc-id vpc-0123456789abcdef0 --subnet-id subnet-0123456789abcdef0
 ```
+
+Instead of passing options each time, keep them in a configuration file:
+
+```bash
+cp poc/stack.env.example poc/stack.env
+```
+
+Edit `poc/stack.env`: replace the `<placeholders>` you need (at least
+`VpcId` and `SubnetId`) and leave the rest empty or at their defaults. Then:
+
+```bash
+poc/scripts/deploy-stack.sh
+```
+
+- `poc/stack.env` is gitignored ([`poc/.gitignore`](.gitignore)): it holds
+  your account's IDs and ARNs. It holds no secrets.
+- Keys are the template parameter names plus `AWS_PROFILE`, `AWS_REGION` and
+  `STACK_NAME`. The file is parsed as `KEY=VALUE` lines and never executed.
+- Precedence: command-line option, then the file, then the environment
+  (`AWS_PROFILE`, `AWS_REGION`) and the template defaults. For example
+  `poc/scripts/deploy-stack.sh --instance-type t4g.medium` overrides only
+  that value.
+- An empty value means "not set". A value that still contains a
+  `<placeholder>` stops the script before any AWS call.
+- `--config <path>` reads another file.
 
 Every template parameter has a flag (`poc/scripts/deploy-stack.sh --help`),
 `--profile` selects an AWS CLI profile, and `--parameter Key=Value` passes
@@ -733,7 +759,7 @@ Security:
 | Check                                                                 | Result                                                      |
 | --------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `bash -n` on all five scripts                                         | Passed                                                      |
-| `deploy-stack.sh` and `alb-security-group.sh` against a stub AWS CLI  | Passed: attach keeps existing groups, detach removes only the POC group, limits and missing parameters are refused |
+| `deploy-stack.sh` and `alb-security-group.sh` against a stub AWS CLI  | Passed: attach keeps existing groups, detach removes only the POC group, limits and missing parameters are refused; `stack.env` values load, command-line options override them, unfilled placeholders are refused |
 | `docker compose config` with `.env.example`                           | Passed; three services, all host ports on `127.0.0.1`       |
 | Resources, outputs and IAM actions as described                       | Checked by reading the parsed YAML                          |
 | Lifecycle policy text is valid JSON with the two intended rules       | Passed                                                      |

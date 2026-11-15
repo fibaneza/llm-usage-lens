@@ -3,6 +3,11 @@
 # with the AWS CLI. Run on the developer machine. It provisions the
 # infrastructure only: it never builds, pushes, pulls or starts the
 # application. See poc/README.md - Deploy infrastructure.
+#
+# Values come from, in order of precedence: command-line options, then the
+# configuration file (poc/stack.env, gitignored; template
+# poc/stack.env.example), then the environment (AWS_PROFILE, AWS_REGION) and
+# the template defaults.
 
 set -euo pipefail
 
@@ -10,9 +15,15 @@ readonly DEFAULT_STACK_NAME="llm-usage-lens-poc"
 
 usage() {
   cat <<'EOF'
-Usage: poc/scripts/deploy-stack.sh --vpc-id <vpc-id> --subnet-id <subnet-id> [options]
+Usage: poc/scripts/deploy-stack.sh [options]
 
-Required on the first deploy (an update reuses the previous values):
+Configuration file:
+  --config <path>                KEY=VALUE file (default: poc/stack.env when it exists;
+                                 copy poc/stack.env.example). An option given on the
+                                 command line overrides the same value in the file.
+
+Required on the first deploy, from the file or the command line (an update
+reuses the previous values):
   --vpc-id <id>                  Existing VPC
   --subnet-id <id>               Existing subnet in that VPC
 
@@ -48,11 +59,64 @@ die() {
   exit 1
 }
 
-profile="${AWS_PROFILE:-}"
-region="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
-stack_name="$DEFAULT_STACK_NAME"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+poc_dir="$(cd "$script_dir/.." && pwd)"
+readonly DEFAULT_CONFIG="$poc_dir/stack.env"
+
+profile=""
+region=""
+stack_name=""
+config_file=""
 validate="yes"
 overrides=()
+
+# Set a template parameter, replacing an earlier value for the same key, so
+# the last caller wins (the command line is applied after the file).
+set_param() {
+  local key="$1" value="$2" kept=() entry
+  for entry in ${overrides[@]+"${overrides[@]}"}; do
+    [[ "$entry" == "$key="* ]] || kept+=("$entry")
+  done
+  overrides=(${kept[@]+"${kept[@]}"} "$key=$value")
+}
+
+# Read KEY=VALUE lines. The file is parsed, never sourced, so it cannot run
+# commands. Blank values are ignored (the default applies).
+load_config() {
+  local file="$1" line key value number=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    number=$((number + 1))
+    line="${line#"${line%%[![:space:]]*}"}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" == *=* ]] || die "$file:$number: expected KEY=VALUE"
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="${key%"${key##*[![:space:]]}"}"
+    [[ "$key" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]] || die "$file:$number: invalid key"
+    # Drop a trailing comment, surrounding spaces and one pair of quotes.
+    value="${value%%[[:space:]]#*}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    if [[ "$value" == \"*\" || "$value" == \'*\' ]] && [[ ${#value} -ge 2 ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+    [[ -n "$value" ]] || continue
+    [[ "$value" != *"<"* && "$value" != *">"* ]] ||
+      die "$file:$number: $key still holds a <placeholder>; set it or leave it empty"
+    case "$key" in
+      AWS_PROFILE) profile="$value" ;;
+      AWS_REGION) region="$value" ;;
+      STACK_NAME) stack_name="$value" ;;
+      *) set_param "$key" "$value" ;;
+    esac
+  done <"$file"
+}
+
+# Command-line values are collected first and applied after the file.
+cli_profile=""
+cli_region=""
+cli_stack_name=""
+cli_params=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -71,25 +135,26 @@ while [[ $# -gt 0 ]]; do
     die "unknown option or missing value: $1"
   }
   case "$1" in
-    --profile) profile="$2" ;;
-    --region) region="$2" ;;
-    --stack-name) stack_name="$2" ;;
-    --vpc-id) overrides+=("VpcId=$2") ;;
-    --subnet-id) overrides+=("SubnetId=$2") ;;
-    --instance-name) overrides+=("InstanceName=$2") ;;
-    --instance-type) overrides+=("InstanceType=$2") ;;
-    --architecture) overrides+=("InstanceArchitecture=$2") ;;
-    --root-volume-size) overrides+=("RootVolumeSizeGiB=$2") ;;
-    --ecr-repository-name) overrides+=("EcrRepositoryName=$2") ;;
-    --app-port) overrides+=("AppPort=$2") ;;
-    --allowed-inbound-cidr) overrides+=("AllowedInboundCidr=$2") ;;
-    --alb-arn) overrides+=("ExistingAlbArn=$2") ;;
-    --alb-listener-port) overrides+=("AlbListenerPort=$2") ;;
-    --alb-certificate-arn) overrides+=("AlbCertificateArn=$2") ;;
-    --alb-allowed-inbound-cidr) overrides+=("AlbAllowedInboundCidr=$2") ;;
+    --config) config_file="$2" ;;
+    --profile) cli_profile="$2" ;;
+    --region) cli_region="$2" ;;
+    --stack-name) cli_stack_name="$2" ;;
+    --vpc-id) cli_params+=("VpcId=$2") ;;
+    --subnet-id) cli_params+=("SubnetId=$2") ;;
+    --instance-name) cli_params+=("InstanceName=$2") ;;
+    --instance-type) cli_params+=("InstanceType=$2") ;;
+    --architecture) cli_params+=("InstanceArchitecture=$2") ;;
+    --root-volume-size) cli_params+=("RootVolumeSizeGiB=$2") ;;
+    --ecr-repository-name) cli_params+=("EcrRepositoryName=$2") ;;
+    --app-port) cli_params+=("AppPort=$2") ;;
+    --allowed-inbound-cidr) cli_params+=("AllowedInboundCidr=$2") ;;
+    --alb-arn) cli_params+=("ExistingAlbArn=$2") ;;
+    --alb-listener-port) cli_params+=("AlbListenerPort=$2") ;;
+    --alb-certificate-arn) cli_params+=("AlbCertificateArn=$2") ;;
+    --alb-allowed-inbound-cidr) cli_params+=("AlbAllowedInboundCidr=$2") ;;
     --parameter)
       [[ "$2" == *=* ]] || die "--parameter needs Key=Value"
-      overrides+=("$2")
+      cli_params+=("$2")
       ;;
     *)
       usage >&2
@@ -98,6 +163,23 @@ while [[ $# -gt 0 ]]; do
   esac
   shift 2
 done
+
+if [[ -n "$config_file" ]]; then
+  [[ -f "$config_file" ]] || die "configuration file not found: $config_file"
+elif [[ -f "$DEFAULT_CONFIG" ]]; then
+  config_file="$DEFAULT_CONFIG"
+fi
+if [[ -n "$config_file" ]]; then
+  log "Reading configuration from $config_file"
+  load_config "$config_file"
+fi
+
+for entry in ${cli_params[@]+"${cli_params[@]}"}; do
+  set_param "${entry%%=*}" "${entry#*=}"
+done
+profile="${cli_profile:-${profile:-${AWS_PROFILE:-}}}"
+region="${cli_region:-${region:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}}"
+stack_name="${cli_stack_name:-${stack_name:-$DEFAULT_STACK_NAME}}"
 
 aws_cli() {
   local args=()
@@ -108,8 +190,7 @@ aws_cli() {
   aws ${args[@]+"${args[@]}"} "$@"
 }
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-template="$(cd "$script_dir/.." && pwd)/cloudformation.yml"
+template="$poc_dir/cloudformation.yml"
 this_script="poc/scripts/$(basename "${BASH_SOURCE[0]}")"
 
 command -v aws >/dev/null 2>&1 || die "the AWS CLI is not installed or not on PATH"
@@ -133,7 +214,7 @@ fi
 if [[ "$stack_exists" == "no" ]]; then
   joined=" ${overrides[*]:-} "
   [[ "$joined" == *" VpcId="* && "$joined" == *" SubnetId="* ]] ||
-    die "the first deploy needs --vpc-id and --subnet-id"
+    die "the first deploy needs VpcId and SubnetId (poc/stack.env, or --vpc-id and --subnet-id)"
 fi
 
 if [[ "$validate" == "yes" ]]; then
