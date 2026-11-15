@@ -87,12 +87,6 @@ beforeEach(async () => {
 afterEach(() => vi.useRealTimers());
 
 describe("GET /api/access-review", () => {
-  it("401 without a session; nothing audited", async () => {
-    signInAs(null);
-    await expectError(await get(), 401, "UNAUTHORIZED");
-    expect(await auditToday()).toEqual([]);
-  });
-
   it.each(["viewer", "orgAdmin", "noRoles"] as const)(
     "403 FORBIDDEN for %s; no export record and no denied record",
     async (caller) => {

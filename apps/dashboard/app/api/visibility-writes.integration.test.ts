@@ -120,11 +120,6 @@ const CANNOT_WRITE: CallerName[] = [
 ];
 
 describe("GET /api/teams/[id]/visibility", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await getTeam("team-a"), 401, "UNAUTHORIZED");
-  });
-
   it.each([
     "admin",
     "orgAdmin",
@@ -306,15 +301,6 @@ describe("PUT /api/teams/[id]/visibility", () => {
     expect(await deniedToday()).toEqual([]);
   });
 
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(
-      await putTeam("team-a", teamBody("team-a", 0)),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
-
   describe.each(CANNOT_WRITE)("as %s (no write permission)", (caller) => {
     beforeEach(() => signInAs(caller));
 
@@ -373,17 +359,6 @@ describe("PUT /api/teams/[id]/visibility", () => {
         0,
       );
     });
-  });
-
-  it("403 for a permitted caller with a missing or foreign Origin, before parsing; nothing is stored", async () => {
-    for (const origin of [null, "https://evil.example.test", "null"]) {
-      await expectError(
-        await putTeam("team-a", teamBody("team-a", 0), { origin }),
-        403,
-        "FORBIDDEN",
-      );
-    }
-    expect((await expectData<TeamVis>(await getTeamAsAdmin())).version).toBe(0);
   });
 
   it.each([
@@ -455,11 +430,6 @@ async function getTeamAsAdmin(): Promise<Response> {
 }
 
 describe("GET /api/departments/[id]/visibility", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await getDept("dept-eng"), 401, "UNAUTHORIZED");
-  });
-
   it.each(["admin", "orgAdmin", "auditor", "deptAdminEng"] as const)(
     "%s reads the defaults (hidden, own, version 0) when nothing is stored",
     async (caller) => {
@@ -599,26 +569,6 @@ describe("PUT /api/departments/[id]/visibility (internal-admin, internal-org-adm
       });
     },
   );
-
-  it("401 without a session; 403 for an admin with a foreign Origin before parsing", async () => {
-    signInAs(null);
-    await expectError(
-      await putDept("dept-eng", deptBody("dept-eng", 0)),
-      401,
-      "UNAUTHORIZED",
-    );
-    signInAs("admin");
-    await expectError(
-      await putDept("dept-eng", deptBody("dept-eng", 0), {
-        origin: "https://evil.example.test",
-      }),
-      403,
-      "FORBIDDEN",
-    );
-    expect((await expectData<DeptVis>(await getDept("dept-eng"))).version).toBe(
-      0,
-    );
-  });
 
   it.each([
     ["invalid JSON", "{not json"],

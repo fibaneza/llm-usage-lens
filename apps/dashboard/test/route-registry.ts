@@ -1,0 +1,591 @@
+// Test-only registry of every Route Handler under app/api: one typed entry per
+// METHOD + route file, the single source the shared route-contract suite
+// (app/api/route-contract.integration.test.ts) iterates, and the lists
+// write-routes.integration.test.ts takes its permission classes from. Not
+// imported by production code.
+//
+// Source: Rule 60.23 (amended 2026-11-15: the cross-cutting route contract is
+// asserted once, over a registry of every route; a new route registers here),
+// Rule 10.3, Rule 50.4; Access Control spec - "Enforcement" items 2, 4, 6 and
+// "Audit log" D17/T22.
+//
+// ADDING A ROUTE: register every exported method. The suite's parity check
+// fails on an unregistered route file and on a stale entry. Entries are
+// compared against the route files on THIS branch's disk, so routes that exist
+// only on other branches are not listed here yet. When these land, the merge
+// adds `frozen: true` entries for them:
+//   - GET  access/pending/route.ts, GET access/stale/route.ts (4R.4 fix)
+//   - GET  litellm/org/route.ts, GET litellm/users/route.ts,
+//     GET litellm/users/[litellmUserId]/route.ts (LiteLLM L3 org/users views)
+// Frozen entries (`frozen: true`) are routes whose own test file or route file
+// is on the frozen list: the suite gives them only today's sweep parity
+// (401, 403 before parsing, Origin 403, no-store) and no new assertion.
+import { createGroupMapping } from "@/lib/data/access/group-mappings";
+import { putTeamLink } from "@/lib/data/litellm/team-links";
+import { ok } from "@/lib/data/access/access-test-support";
+import {
+  seedAdminScope,
+  seedCtx,
+  seedMember,
+} from "@/test/matrix-route-support";
+import { accounts } from "@/test/scope-fixtures";
+import { PEOPLE } from "@/test/matrix-route-support";
+
+export type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export type RouteKind =
+  | "public"
+  | "read"
+  | "admin-write"
+  | "matrix-write"
+  | "self-write";
+export type RouteFamily = "core" | "litellm";
+// Session shapes the suite knows how to sign in as (see the suite's CALLERS).
+export type CallerName =
+  | "admin"
+  | "orgAdmin"
+  | "auditor"
+  | "viewer"
+  | "noRoles"
+  | "password"
+  | "entraAdmin"
+  | "masterAdmin"
+  | "localAdmin";
+
+export type RouteEntry = {
+  // "PUT governance/password-sign-in/route.ts"
+  key: string;
+  method: RouteMethod;
+  // Route file relative to app/api, "/" separated.
+  file: string;
+  // "/api/governance/password-sign-in" (dynamic segments stay as [name]).
+  pattern: string;
+  kind: RouteKind;
+  family: RouteFamily;
+  frozen: boolean;
+  // True for the 4R.4 access-control writes (group mappings, governance,
+  // password users, role grants, identity links).
+  accessControl: boolean;
+  // Creates the real target so a write that wrongly ran would change the table.
+  seed?: () => Promise<void>;
+  params: {
+    // The real seeded ids.
+    valid: Record<string, string>;
+    // A malformed id (200 x characters).
+    invalid: Record<string, string>;
+  };
+  // Query string of a successful read.
+  query?: string;
+  // Read routes with a query schema: a query that must answer 400.
+  badQuery?: string;
+  // A body that would succeed for a permitted caller (writes).
+  validBody?: unknown;
+  // Input for the 400 check when the route's own body is not what it parses
+  // (a DELETE without a body is refused on its path parameter instead).
+  badInput?: { body?: string; params?: Record<string, string> };
+  // Statuses a permitted same-origin call with `validBody` answers; absent
+  // when the route reaches a dependency this suite does not fake.
+  successStatuses?: number[];
+  // Needs a sign-in within 900 s (Access Control spec - D28; F3).
+  reauth: boolean;
+  // The `denied` audit a refusal writes (writes; D17/T22).
+  denied?: { action: string };
+  // Callers that must be refused (403) on a write.
+  refusedCallers: CallerName[];
+  // Callers that pass the permission gate on a write.
+  permittedCallers: CallerName[];
+  // Admin-only writes also say so in the 403 message.
+  permission?: "internal-admin";
+};
+
+const ADMIN_REFUSED: CallerName[] = [
+  "auditor",
+  "orgAdmin",
+  "viewer",
+  "noRoles",
+];
+const MATRIX_REFUSED: CallerName[] = ["auditor", "viewer", "noRoles"];
+const SELF_REFUSED: CallerName[] = [
+  "entraAdmin",
+  "masterAdmin",
+  "localAdmin",
+  "noRoles",
+];
+
+const PARAM = /\[(\w+)\]/g;
+const DUMMY = "not-an-id";
+const LONG = "x".repeat(200);
+
+function paramNames(pattern: string): string[] {
+  return [...pattern.matchAll(PARAM)].map((m) => m[1] ?? "");
+}
+
+function invalidFor(pattern: string): Record<string, string> {
+  return Object.fromEntries(paramNames(pattern).map((name) => [name, LONG]));
+}
+
+type Base = {
+  method: RouteMethod;
+  file: string;
+  validParams?: Record<string, string>;
+  family?: RouteFamily;
+  frozen?: boolean;
+};
+
+function patternOf(file: string): string {
+  const dir = file.replace(/\/?route\.ts$/, "");
+  return `/api${dir === "" ? "" : `/${dir}`}`;
+}
+
+function base(b: Base) {
+  const pattern = patternOf(b.file);
+  const frozen = b.frozen ?? false;
+  const validParams =
+    b.validParams ??
+    Object.fromEntries(paramNames(pattern).map((name) => [name, DUMMY]));
+  return {
+    key: `${b.method} ${b.file}`,
+    method: b.method,
+    file: b.file,
+    pattern,
+    family: b.family ?? ("core" as RouteFamily),
+    frozen,
+    accessControl: false,
+    params: { valid: validParams, invalid: invalidFor(pattern) },
+    reauth: false,
+    refusedCallers: [] as CallerName[],
+    permittedCallers: [] as CallerName[],
+  };
+}
+
+const RANGE = "dateFrom=2026-10-01&dateTo=2026-10-03";
+const BAD_RANGE = "dateFrom=not-a-date&dateTo=2026-10-03";
+
+function read(
+  file: string,
+  opts: Omit<Base, "method" | "file"> &
+    Partial<Pick<RouteEntry, "query" | "badQuery" | "kind">> = {},
+): RouteEntry {
+  const { query, badQuery, kind, ...rest } = opts;
+  return {
+    ...base({ method: "GET", file, ...rest }),
+    kind: kind ?? "read",
+    ...(query !== undefined ? { query } : {}),
+    ...(badQuery !== undefined ? { badQuery } : {}),
+  };
+}
+
+type WriteOpts = Omit<Base, "method" | "file"> &
+  Partial<
+    Pick<
+      RouteEntry,
+      | "seed"
+      | "validBody"
+      | "badInput"
+      | "successStatuses"
+      | "reauth"
+      | "accessControl"
+    >
+  > & { action?: string };
+
+function adminWrite(
+  method: RouteMethod,
+  file: string,
+  opts: WriteOpts = {},
+): RouteEntry {
+  const { action, ...rest } = opts;
+  return {
+    ...base({ method, file, ...opts }),
+    kind: "admin-write",
+    ...rest,
+    reauth: opts.reauth ?? false,
+    accessControl: opts.accessControl ?? false,
+    ...(action ? { denied: { action } } : {}),
+    refusedCallers: ADMIN_REFUSED,
+    permittedCallers: ["admin"],
+    permission: "internal-admin",
+  };
+}
+
+function matrixWrite(
+  method: RouteMethod,
+  file: string,
+  opts: WriteOpts = {},
+): RouteEntry {
+  const { action, ...rest } = opts;
+  return {
+    ...base({ method, file, ...opts }),
+    kind: "matrix-write",
+    ...rest,
+    reauth: false,
+    accessControl: false,
+    ...(action ? { denied: { action } } : {}),
+    refusedCallers: MATRIX_REFUSED,
+    permittedCallers: ["admin", "orgAdmin"],
+  };
+}
+
+const alice = PEOPLE.alice;
+const TEAM = { id: "team-a" };
+const DEPT = { id: "dept-eng" };
+const teamAccount = accounts[0];
+const ACCOUNT_ID = teamAccount ? teamAccount.accountId : "000000000000";
+
+const newAccount = {
+  accountId: "111122223333",
+  accountName: "new-account",
+  departmentId: "dept-finance",
+  departmentName: "Finance",
+  teamId: "team-ledger",
+  teamName: "Ledger",
+  region: "ap-southeast-2",
+};
+
+async function seedGroupMapping(): Promise<void> {
+  ok(
+    await createGroupMapping(
+      {
+        groupId: "g-existing",
+        target: { type: "team", id: "team-a" },
+        scopedRole: "member",
+      } as never,
+      seedCtx(),
+    ),
+  );
+}
+
+export const ROUTE_REGISTRY: RouteEntry[] = [
+  // ---- public (Platform spec: GET /api/health has no session, no data) ----
+  read("health/route.ts", { kind: "public" }),
+
+  // ---- core reads ----
+  read("access-review/route.ts"),
+  read("access/org-units/route.ts", { frozen: true }),
+  read("accounts/route.ts"),
+  read("audit/route.ts", { badQuery: "day=not-a-day" }),
+  read("departments/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
+  read("departments/[id]/route.ts", {
+    validParams: { id: "dept-eng" },
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
+  read("departments/[id]/admins/route.ts", { validParams: { id: "dept-eng" } }),
+  read("departments/[id]/visibility/route.ts", {
+    validParams: { id: "dept-eng" },
+  }),
+  read("governance/identity-map-rules/route.ts"),
+  read("governance/identity-map-rules/suggestions/route.ts", {
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
+  read("governance/password-sign-in/route.ts"),
+  read("governance/per-user-approval/route.ts"),
+  read("group-mappings/route.ts"),
+  read("identities/route.ts", { frozen: true }),
+  read("identities/[oid]/links/route.ts", { frozen: true }),
+  read("me/route.ts"),
+  read("me/usage/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
+  read("overview/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
+  read("password-users/route.ts", { frozen: true }),
+  read("ranking/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
+  read("role-grants/route.ts", { frozen: true }),
+  read("services/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
+  read("sync-status/route.ts"),
+  read("teams/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
+  read("teams/[id]/route.ts", {
+    validParams: { id: "team-a" },
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
+  read("teams/[id]/admins/route.ts", { validParams: { id: "team-a" } }),
+  read("teams/[id]/members/route.ts", { validParams: { id: "team-a" } }),
+  read("teams/[id]/visibility/route.ts", { validParams: { id: "team-a" } }),
+  read("users/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
+
+  // ---- litellm reads (the gateway is faked; LiteLLM spec - API routes) ----
+  read("litellm/audit/route.ts", { family: "litellm" }),
+  read("litellm/connection/route.ts", { family: "litellm" }),
+  read("litellm/me/route.ts", { family: "litellm", frozen: true }),
+  read("litellm/models/route.ts", { family: "litellm" }),
+  read("litellm/team-links/route.ts", { family: "litellm" }),
+  read("litellm/team-links/[teamId]/route.ts", {
+    family: "litellm",
+    validParams: { teamId: "team-a" },
+  }),
+  read("litellm/teams/[teamId]/route.ts", {
+    family: "litellm",
+    validParams: { teamId: "team-a" },
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
+  read("litellm/teams/[teamId]/keys/route.ts", {
+    family: "litellm",
+    validParams: { teamId: "team-a" },
+  }),
+  read("litellm/teams/[teamId]/members/route.ts", {
+    family: "litellm",
+    validParams: { teamId: "team-a" },
+  }),
+  read("litellm/teams/[teamId]/spend-logs/route.ts", {
+    family: "litellm",
+    validParams: { teamId: "team-a" },
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
+  read("litellm/toggles/route.ts", { family: "litellm" }),
+
+  // ---- admin-only writes, core ----
+  adminWrite("POST", "accounts/route.ts", {
+    action: "account.create",
+    validBody: newAccount,
+    successStatuses: [200, 201],
+  }),
+  adminWrite("PATCH", "accounts/[id]/route.ts", {
+    action: "account.update",
+    validParams: { id: ACCOUNT_ID },
+    validBody: { accountName: "renamed" },
+    successStatuses: [200],
+  }),
+  adminWrite("DELETE", "accounts/[id]/route.ts", {
+    action: "account.deactivate",
+    validParams: { id: ACCOUNT_ID },
+    // The handler parses no body; the id is what it refuses.
+    badInput: { params: { id: LONG } },
+    successStatuses: [200],
+  }),
+  adminWrite("POST", "group-mappings/route.ts", {
+    accessControl: true,
+    action: "groupmap.create",
+    validBody: {
+      groupId: "g-new",
+      target: { type: "team", id: "team-a" },
+      scopedRole: "member",
+    },
+    successStatuses: [200, 201],
+  }),
+  adminWrite("PATCH", "group-mappings/[groupId]/route.ts", {
+    accessControl: true,
+    action: "groupmap.update",
+    validParams: { groupId: "g-existing" },
+    seed: seedGroupMapping,
+    validBody: {
+      groupId: "g-existing",
+      target: { type: "team", id: "team-a" },
+      scopedRole: "member",
+      version: 1,
+    },
+    successStatuses: [200],
+  }),
+  adminWrite("DELETE", "group-mappings/[groupId]/route.ts", {
+    accessControl: true,
+    action: "groupmap.delete",
+    validParams: { groupId: "g-existing" },
+    seed: seedGroupMapping,
+    validBody: { version: 1 },
+    successStatuses: [200],
+  }),
+  adminWrite("PUT", "governance/password-sign-in/route.ts", {
+    accessControl: true,
+    reauth: true,
+    action: "governance.passwordsignin.update",
+    validBody: { enabled: true, version: 0 },
+    successStatuses: [200],
+  }),
+  adminWrite("PUT", "governance/per-user-approval/route.ts", {
+    accessControl: true,
+    action: "governance.approval.update",
+    validBody: { reference: "WC-2026-14", version: 0 },
+    successStatuses: [200],
+  }),
+  adminWrite("PUT", "governance/identity-map-rules/route.ts", {
+    accessControl: true,
+    action: "identity.map.update",
+    validBody: {
+      rules: [{ pattern: "{name}-sso", template: "{name}@company.com" }],
+      version: 0,
+    },
+    successStatuses: [200],
+  }),
+
+  // ---- admin-only writes, frozen (their own test files are frozen) ----
+  adminWrite("PUT", "identities/[oid]/links/route.ts", {
+    frozen: true,
+    accessControl: true,
+    validBody: {},
+  }),
+  adminWrite("POST", "password-users/route.ts", {
+    frozen: true,
+    accessControl: true,
+    reauth: true,
+    validBody: {},
+  }),
+  adminWrite("PATCH", "password-users/[email]/route.ts", {
+    frozen: true,
+    accessControl: true,
+    validBody: {},
+  }),
+  adminWrite("DELETE", "password-users/[email]/route.ts", {
+    frozen: true,
+    accessControl: true,
+    reauth: true,
+    validBody: {},
+  }),
+  adminWrite("POST", "password-users/[email]/reset/route.ts", {
+    frozen: true,
+    accessControl: true,
+    reauth: true,
+    validBody: {},
+  }),
+  adminWrite("POST", "password-users/[email]/totp-reset/route.ts", {
+    frozen: true,
+    accessControl: true,
+    reauth: true,
+    validBody: {},
+  }),
+  adminWrite("POST", "role-grants/route.ts", {
+    frozen: true,
+    accessControl: true,
+    reauth: true,
+    validBody: {},
+  }),
+  adminWrite("DELETE", "role-grants/[oid]/[role]/route.ts", {
+    frozen: true,
+    accessControl: true,
+    reauth: true,
+    validBody: {},
+  }),
+
+  // ---- admin-only writes, litellm (LiteLLM spec - API routes) ----
+  adminWrite("PUT", "litellm/connection/route.ts", {
+    family: "litellm",
+    action: "litellm.connection.update",
+    validBody: { baseUrl: "http://litellm.test:4000", version: null },
+  }),
+  adminWrite("POST", "litellm/connection/test/route.ts", {
+    family: "litellm",
+    validBody: {},
+  }),
+  adminWrite("PUT", "litellm/team-links/[teamId]/route.ts", {
+    family: "litellm",
+    action: "litellm.teamlink.link",
+    validParams: { teamId: "team-a" },
+    validBody: { litellmTeamId: "lt-team-a", version: null },
+  }),
+  adminWrite("DELETE", "litellm/team-links/[teamId]/route.ts", {
+    family: "litellm",
+    action: "litellm.teamlink.unlink",
+    validParams: { teamId: "team-a" },
+    seed: async () => {
+      ok(
+        await putTeamLink(
+          { teamId: "team-a", litellmTeamId: "lt-team-a", version: null },
+          seedCtx(),
+        ),
+      );
+    },
+    // The handler parses no body; the id is what it refuses.
+    badInput: { params: { teamId: LONG } },
+    successStatuses: [200],
+  }),
+  adminWrite("PUT", "litellm/toggles/route.ts", {
+    family: "litellm",
+    action: "litellm.toggles.update",
+    validBody: { version: null, toggles: { getTeam: false } },
+  }),
+
+  // ---- matrix writes (Access Control spec - Permission matrix) ----
+  matrixWrite("POST", "teams/[id]/members/route.ts", {
+    action: "affiliation.add",
+    validParams: TEAM,
+    validBody: { oid: alice.oid },
+    successStatuses: [200, 201],
+  }),
+  matrixWrite("DELETE", "teams/[id]/members/[oid]/route.ts", {
+    action: "affiliation.remove",
+    validParams: { id: "team-a", oid: alice.oid },
+    seed: async () => {
+      await seedMember(alice.oid, "team-a");
+    },
+    validBody: { version: 1 },
+    successStatuses: [200],
+  }),
+  matrixWrite("POST", "teams/[id]/admins/route.ts", {
+    action: "adminscope.grant",
+    validParams: TEAM,
+    validBody: { oid: alice.oid },
+    successStatuses: [200, 201],
+  }),
+  matrixWrite("DELETE", "teams/[id]/admins/[oid]/route.ts", {
+    action: "adminscope.revoke",
+    validParams: { id: "team-a", oid: alice.oid },
+    seed: async () => {
+      await seedAdminScope(alice.oid, "team", "team-a");
+    },
+    validBody: { version: 1 },
+    successStatuses: [200],
+  }),
+  matrixWrite("POST", "departments/[id]/admins/route.ts", {
+    action: "adminscope.grant",
+    validParams: DEPT,
+    validBody: { oid: alice.oid },
+    successStatuses: [200, 201],
+  }),
+  matrixWrite("DELETE", "departments/[id]/admins/[oid]/route.ts", {
+    action: "adminscope.revoke",
+    validParams: { id: "dept-eng", oid: alice.oid },
+    seed: async () => {
+      await seedAdminScope(alice.oid, "department", "dept-eng");
+    },
+    validBody: { version: 1 },
+    successStatuses: [200],
+  }),
+  matrixWrite("PUT", "teams/[id]/visibility/route.ts", {
+    action: "visibility.update",
+    validParams: TEAM,
+    validBody: {
+      teamId: "team-a",
+      teamLevel: "hidden",
+      userLevel: "none",
+      version: 0,
+    },
+    successStatuses: [200],
+  }),
+  matrixWrite("PUT", "departments/[id]/visibility/route.ts", {
+    action: "visibility.update",
+    validParams: DEPT,
+    validBody: {
+      departmentId: "dept-eng",
+      departmentLevel: "visible",
+      maxUserLevel: "all",
+      version: 0,
+    },
+    successStatuses: [200],
+  }),
+  matrixWrite("POST", "affiliations/[oid]/move/route.ts", {
+    action: "affiliation.move",
+    validParams: { oid: alice.oid },
+    seed: async () => {
+      await seedMember(alice.oid, "team-a");
+    },
+    validBody: { fromTeamId: "team-a", toTeamId: "team-b", version: 1 },
+    successStatuses: [200],
+  }),
+
+  // ---- self-service write: a password user's own password ----
+  {
+    ...base({ method: "POST", file: "account/password/route.ts" }),
+    kind: "self-write",
+    validBody: {
+      currentPassword: "old-password-1",
+      newPassword: "new-password-2",
+    },
+    denied: { action: "localuser.update" },
+    refusedCallers: SELF_REFUSED,
+    permittedCallers: ["password"],
+  },
+];
+
+export const registryKeys = (): string[] => ROUTE_REGISTRY.map((e) => e.key);
+export const entriesOfKind = (kind: RouteKind): RouteEntry[] =>
+  ROUTE_REGISTRY.filter((e) => e.kind === kind);
+export const writeEntries = (): RouteEntry[] =>
+  ROUTE_REGISTRY.filter((e) => e.method !== "GET");

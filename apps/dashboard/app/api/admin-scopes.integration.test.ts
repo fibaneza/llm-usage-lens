@@ -127,11 +127,6 @@ const CANNOT_WRITE: CallerName[] = [
 ];
 
 describe("team-scope admins: GET /api/teams/[id]/admins", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await teamList("team-a"), 401, "UNAUTHORIZED");
-  });
-
   it.each([
     "admin",
     "orgAdmin",
@@ -324,16 +319,6 @@ describe("team-scope admins: POST /api/teams/[id]/admins", () => {
     );
     expect(await auditToday()).toEqual([]);
     expect(await deniedToday()).toEqual([]);
-  });
-
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(
-      await grantTeam("team-a", { oid: alice.oid }),
-      401,
-      "UNAUTHORIZED",
-    );
-    expect(await auditToday()).toEqual([]);
   });
 
   describe.each(CANNOT_WRITE)("as %s (no write permission)", (caller) => {
@@ -584,17 +569,6 @@ describe("team-scope admins: DELETE /api/teams/[id]/admins/[oid]", () => {
     });
   });
 
-  it("401 without a session", async () => {
-    await seedAdminScope(alice.oid, "team", "team-a");
-    signInAs(null);
-    await expectError(
-      await revokeTeam("team-a", alice.oid, { version: 1 }),
-      401,
-      "UNAUTHORIZED",
-    );
-    expect(await scopesOf(alice.oid)).toHaveLength(1);
-  });
-
   it("409 CONFLICT for a stale version; the scope stays and nothing is audited", async () => {
     await seedAdminScope(alice.oid, "team", "team-a");
     await expectError(
@@ -641,32 +615,10 @@ describe("team-scope admins: DELETE /api/teams/[id]/admins/[oid]", () => {
       expect(await deniedToday()).toEqual([]);
     },
   );
-
-  it("403 for a permitted caller with a foreign Origin, before parsing; the scope stays", async () => {
-    await seedAdminScope(alice.oid, "team", "team-a");
-    await expectError(
-      await revokeTeam(
-        "team-a",
-        alice.oid,
-        { version: 1 },
-        {
-          origin: "https://evil.example.test",
-        },
-      ),
-      403,
-      "FORBIDDEN",
-    );
-    expect(await scopesOf(alice.oid)).toHaveLength(1);
-  });
 });
 
 describe("department-scope admins (internal-admin and internal-org-admin only)", () => {
   describe("GET /api/departments/[id]/admins", () => {
-    it("401 without a session", async () => {
-      signInAs(null);
-      await expectError(await deptList("dept-eng"), 401, "UNAUTHORIZED");
-    });
-
     it.each(["admin", "orgAdmin", "auditor", "deptAdminEng"] as const)(
       "%s lists the department's admins with no-store",
       async (caller) => {
@@ -796,30 +748,6 @@ describe("department-scope admins (internal-admin and internal-org-admin only)",
         "NOT_FOUND",
       );
       expect(await auditToday()).toEqual([]);
-    });
-
-    it("401 without a session", async () => {
-      signInAs(null);
-      await expectError(
-        await grantDept("dept-eng", { oid: alice.oid }),
-        401,
-        "UNAUTHORIZED",
-      );
-    });
-
-    it("403 for an admin with a foreign Origin, before parsing", async () => {
-      await expectError(
-        await grantDept(
-          "dept-eng",
-          { oid: alice.oid },
-          {
-            origin: "https://evil.example.test",
-          },
-        ),
-        403,
-        "FORBIDDEN",
-      );
-      expect(await scopesOf(alice.oid)).toEqual([]);
     });
 
     it("409 CONFLICT when the person already holds the department scope", async () => {
@@ -963,18 +891,12 @@ describe("department-scope admins (internal-admin and internal-org-admin only)",
       expect(await auditToday()).toEqual([]);
     });
 
-    it("400 BAD_REQUEST without a version; 401 without a session", async () => {
+    it("400 BAD_REQUEST without a version", async () => {
       await seedAdminScope(alice.oid, "department", "dept-eng");
       await expectError(
         await revokeDept("dept-eng", alice.oid, {}),
         400,
         "BAD_REQUEST",
-      );
-      signInAs(null);
-      await expectError(
-        await revokeDept("dept-eng", alice.oid, { version: 1 }),
-        401,
-        "UNAUTHORIZED",
       );
       expect(await scopesOf(alice.oid)).toHaveLength(1);
     });

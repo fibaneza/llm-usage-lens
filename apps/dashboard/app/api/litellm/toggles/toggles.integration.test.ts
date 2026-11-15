@@ -129,12 +129,6 @@ const ops = async (res: Response) =>
   (await res.clone().json()).data.operations as Effective;
 
 describe("GET /api/litellm/toggles", () => {
-  it("returns 401 without a session", async () => {
-    authMock.mockResolvedValue(null);
-    const { GET } = await load();
-    await expectError(await GET(get(), ctx), 401, "UNAUTHORIZED");
-  });
-
   it.each([
     ["a viewer", VIEWER],
     ["no roles", { user: { oid: "oid-test" } }],
@@ -215,16 +209,6 @@ describe("GET /api/litellm/toggles", () => {
 });
 
 describe("PUT /api/litellm/toggles", () => {
-  it("returns 401 without a session", async () => {
-    authMock.mockResolvedValue(null);
-    const { PUT } = await load();
-    await expectError(
-      await PUT(put({ version: null, toggles: { createTeam: false } }), ctx),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
-
   it.each([
     ["an Auditor", AUDITOR],
     ["a viewer", VIEWER],
@@ -294,21 +278,6 @@ describe("PUT /api/litellm/toggles", () => {
       action: "litellm.toggles.update",
       result: "denied",
     });
-  });
-
-  it("returns 403 for a cross-origin write", async () => {
-    const { PUT } = await load();
-    await expectError(
-      await PUT(
-        put(
-          { version: null, toggles: { createTeam: false } },
-          { host: HOST, origin: "http://evil.example" },
-        ),
-        ctx,
-      ),
-      403,
-      "FORBIDDEN",
-    );
   });
 
   it("returns 403 OPERATION_UNAVAILABLE in open access mode", async () => {

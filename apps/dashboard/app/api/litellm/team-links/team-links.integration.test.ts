@@ -202,27 +202,6 @@ const link = (
   );
 
 describe("authorisation (every method)", () => {
-  it("returns 401 without a session", async () => {
-    authMock.mockResolvedValue(null);
-    const h = await load();
-    await expectError(
-      await h.LIST(get(LIST_URL), ctxFor()),
-      401,
-      "UNAUTHORIZED",
-    );
-    await expectError(
-      await h.GET(get(ONE_URL("team-a")), ctxFor("team-a")),
-      401,
-      "UNAUTHORIZED",
-    );
-    await expectError(await link(h, "team-a", TEAM_ID), 401, "UNAUTHORIZED");
-    await expectError(
-      await h.DELETE(send("DELETE", ONE_URL("team-a")), ctxFor("team-a")),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
-
   it.each([
     ["a viewer", VIEWER],
     ["a team lead", LEAD],
@@ -291,20 +270,6 @@ describe("authorisation (every method)", () => {
     }
     expect(await linkItem("team-b")).toBeUndefined();
     expect(await linkItem("team-a")).toBeDefined();
-  });
-
-  it("writes are 403 for a cross-origin request", async () => {
-    const h = await load();
-    const res = await h.PUT(
-      send(
-        "PUT",
-        ONE_URL("team-a"),
-        { litellmTeamId: TEAM_ID, version: null },
-        { host: HOST, origin: "http://evil.example" },
-      ),
-      ctxFor("team-a"),
-    );
-    await expectError(res, 403, "FORBIDDEN");
   });
 
   it("every route is 403 OPERATION_UNAVAILABLE in open access mode", async () => {

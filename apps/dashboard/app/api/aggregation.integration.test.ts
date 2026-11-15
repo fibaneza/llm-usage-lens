@@ -173,15 +173,6 @@ const query = (name: string, extra = "") =>
 describe.each(routes)("GET /api/$name", (route) => {
   const url = (q: string) => `${route.path}?${q}`;
 
-  it("returns 401 UNAUTHORIZED without a session and no data", async () => {
-    signedIn(false);
-    const res = await call(route.handler, url(query(route.name)), route.id);
-    expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(ApiErrorBodySchema.parse(body).error.code).toBe("UNAUTHORIZED");
-    expect(body).not.toHaveProperty("data");
-  });
-
   it("returns 400 BAD_REQUEST for malformed dates", async () => {
     const res = await call(
       route.handler,

@@ -224,15 +224,6 @@ describe("POST /api/account/password", { timeout: 60_000 }, () => {
       expect(await credentialOf()).toEqual(before);
     });
 
-    it("401 wins over a foreign Origin and a bad body", async () => {
-      signInAs(null);
-      await expectError(
-        await change("{not json", { origin: "https://evil.example.test" }),
-        401,
-        "UNAUTHORIZED",
-      );
-    });
-
     const NOT_PASSWORD_USERS: [string, Record<string, unknown>][] = [
       [
         "an Entra admin with the same email",
@@ -327,23 +318,6 @@ describe("POST /api/account/password", { timeout: 60_000 }, () => {
         (await auditRecords()).filter((r) => r.result === "denied"),
       ).toHaveLength(0);
     });
-
-    it.each([
-      ["a missing Origin", null],
-      ["a foreign Origin", "https://evil.example.test"],
-      ["Origin: null", "null"],
-    ] as const)(
-      "403 FORBIDDEN for %s before parsing; the table is untouched",
-      async (_name, origin) => {
-        const alice = await seedUser();
-        signInAsPasswordUser(alice);
-        const before = await nonAuditItems();
-        for (const sent of [body(), "{not json"]) {
-          await expectError(await change(sent, { origin }), 403, "FORBIDDEN");
-        }
-        expect(await nonAuditItems()).toEqual(before);
-      },
-    );
 
     it("the Origin check never reaches a different user: x-forwarded-host does not make a foreign Origin pass", async () => {
       const alice = await seedUser();

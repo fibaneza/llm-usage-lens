@@ -18,7 +18,6 @@ import {
   invoke,
   nonAuditItems,
   signInAs,
-  type Caller,
 } from "@/test/governance-route-support";
 import { clearTable, ensureTestTable } from "@/test/test-support";
 
@@ -71,15 +70,6 @@ beforeEach(async () => {
 });
 
 describe("GET /api/group-mappings", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(
-      await invoke(GET, { method: "GET", path: LIST }),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
-
   it.each(["viewer", "orgAdmin", "noRoles"] as const)(
     "403 FORBIDDEN for %s, with no data in the body",
     async (caller) => {
@@ -188,90 +178,6 @@ describe("POST /api/group-mappings", () => {
     expect((await stored())[0]).toMatchObject({
       target: { type: "team", id: "team-payments" },
     });
-  });
-
-  it("401 without a session, before anything is read or written", async () => {
-    signInAs(null);
-    await expectError(
-      await invoke(POST, { method: "POST", path: LIST, body: mapping("g-1") }),
-      401,
-      "UNAUTHORIZED",
-    );
-    expect(await nonAuditItems()).toEqual([]);
-    expect(await auditToday()).toEqual([]);
-  });
-
-  describe.each(["auditor", "orgAdmin", "viewer", "noRoles"] as const)(
-    "as %s (authorization refusal)",
-    (caller: Caller) => {
-      beforeEach(() => signInAs(caller));
-
-      it("403 FORBIDDEN, the table is untouched, and exactly one denied record names the fixed route pattern", async () => {
-        await seed("g-existing");
-        const before = await nonAuditItems();
-        const audit0 = (await auditToday()).length;
-        await expectError(
-          await invoke(POST, {
-            method: "POST",
-            path: LIST,
-            body: mapping("g-1"),
-          }),
-          403,
-          "FORBIDDEN",
-        );
-        expect(await nonAuditItems()).toEqual(before);
-        const records = await auditToday();
-        expect(records).toHaveLength(audit0 + 1);
-        const denied = await deniedToday();
-        expect(denied).toHaveLength(1);
-        expect(denied[0]).toMatchObject({
-          action: "groupmap.create",
-          result: "denied",
-          category: "security",
-          code: "FORBIDDEN",
-          actor: `oid-${caller.toLowerCase()}`,
-          route: { method: "POST", pattern: "/api/group-mappings" },
-        });
-      });
-
-      it("403 comes before parsing: a malformed body, wrong content type and foreign origin all stay 403", async () => {
-        for (const call of [
-          { body: "{not json" },
-          { body: {} },
-          { body: mapping("g-1"), contentType: "text/plain" },
-          { body: mapping("g-1"), origin: "https://evil.example.test" },
-        ]) {
-          resetDeniedAudit();
-          await expectError(
-            await invoke(POST, { method: "POST", path: LIST, ...call }),
-            403,
-            "FORBIDDEN",
-          );
-        }
-        expect(await nonAuditItems()).toEqual([]);
-      });
-    },
-  );
-
-  it("403 FORBIDDEN for an admin write with a missing or foreign Origin, before parsing; the table is untouched", async () => {
-    for (const origin of [
-      null,
-      "https://evil.example.test",
-      "null",
-      "http://localhost:4000",
-    ]) {
-      await expectError(
-        await invoke(POST, {
-          method: "POST",
-          path: LIST,
-          body: mapping("g-1"),
-          origin,
-        }),
-        403,
-        "FORBIDDEN",
-      );
-    }
-    expect(await nonAuditItems()).toEqual([]);
   });
 
   it.each([
@@ -412,57 +318,6 @@ describe("PATCH /api/group-mappings/[groupId]", () => {
     expect(await auditToday()).toEqual([]);
   });
 
-  it("401 without a session", async () => {
-    await seed("g-1");
-    signInAs(null);
-    await expectError(
-      await patch("g-1", update("g-1", 1)),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
-
-  it.each(["auditor", "orgAdmin", "viewer", "noRoles"] as const)(
-    "%s: 403 before parsing and before any read, exactly one denied record, no raw path in it",
-    async (caller) => {
-      await seed("g-1");
-      const before = await nonAuditItems();
-      signInAs(caller);
-      // A malformed id and a malformed body must still be 403, never 400.
-      await expectError(
-        await invoke(PATCH, {
-          method: "PATCH",
-          path: item("bad id"),
-          params: { groupId: "bad id" },
-          body: "{not json",
-        }),
-        403,
-        "FORBIDDEN",
-      );
-      expect(await nonAuditItems()).toEqual(before);
-      const denied = await deniedToday();
-      expect(denied).toHaveLength(1);
-      expect(denied[0]).toMatchObject({
-        action: "groupmap.update",
-        code: "FORBIDDEN",
-        route: { method: "PATCH", pattern: "/api/group-mappings/[groupId]" },
-      });
-      expect(JSON.stringify(denied[0])).not.toContain("bad id");
-    },
-  );
-
-  it("403 for an admin write with a foreign Origin, before parsing", async () => {
-    await seed("g-1");
-    await expectError(
-      await patch("g-1", update("g-1", 1), {
-        origin: "https://evil.example.test",
-      }),
-      403,
-      "FORBIDDEN",
-    );
-    expect((await stored())[0]).toMatchObject({ version: 1 });
-  });
-
   it("400 for a wrong content type", async () => {
     await seed("g-1");
     await expectError(
@@ -567,51 +422,6 @@ describe("DELETE /api/group-mappings/[groupId]", () => {
     expect(a).toEqual(b);
     expect(JSON.stringify(a)).not.toContain("g-missing");
     expect(await auditToday()).toEqual([]);
-  });
-
-  it("401 without a session", async () => {
-    await seed("g-1");
-    signInAs(null);
-    await expectError(await del("g-1"), 401, "UNAUTHORIZED");
-    expect(await stored()).toHaveLength(1);
-  });
-
-  it.each(["auditor", "orgAdmin", "viewer", "noRoles"] as const)(
-    "%s: 403 before parsing and any read, exactly one denied record with the fixed pattern",
-    async (caller) => {
-      await seed("g-probe-secret");
-      const before = await nonAuditItems();
-      signInAs(caller);
-      await expectError(
-        await invoke(DELETE, {
-          method: "DELETE",
-          path: item("g-probe-secret"),
-          params: { groupId: "g-probe-secret" },
-          body: "{not json",
-        }),
-        403,
-        "FORBIDDEN",
-      );
-      expect(await nonAuditItems()).toEqual(before);
-      const denied = await deniedToday();
-      expect(denied).toHaveLength(1);
-      expect(denied[0]).toMatchObject({
-        action: "groupmap.delete",
-        code: "FORBIDDEN",
-        route: { method: "DELETE", pattern: "/api/group-mappings/[groupId]" },
-      });
-      expect(JSON.stringify(denied[0])).not.toContain("g-probe-secret");
-    },
-  );
-
-  it("403 for an admin write with no Origin, before parsing; the mapping remains", async () => {
-    await seed("g-1");
-    await expectError(
-      await del("g-1", { version: 1 }, { origin: null }),
-      403,
-      "FORBIDDEN",
-    );
-    expect(await stored()).toHaveLength(1);
   });
 
   it("400 for a wrong content type, a missing version and a malformed path id; no denied record", async () => {

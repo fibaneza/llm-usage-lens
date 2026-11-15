@@ -115,11 +115,6 @@ describe("GET /api/governance/identity-map-rules", () => {
     expect(await nonAuditItems()).toEqual([]);
   });
 
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await get(), 401, "UNAUTHORIZED");
-  });
-
   it.each(["orgAdmin", "viewer", "noRoles"] as const)(
     "403 FORBIDDEN for %s with no rules in the body; a read refusal writes no denied record",
     async (caller) => {
@@ -207,64 +202,6 @@ describe("PUT /api/governance/identity-map-rules", () => {
     await expectError(await put({ rules: [SSO], version: 2 }), 409, "CONFLICT");
     expect(await getIdentityMapRules()).toBeNull();
     expect(await auditToday()).toEqual([]);
-  });
-
-  it("401 without a session, nothing written", async () => {
-    signInAs(null);
-    await expectError(
-      await put({ rules: [SSO], version: 0 }),
-      401,
-      "UNAUTHORIZED",
-    );
-    expect(await nonAuditItems()).toEqual([]);
-    expect(await auditToday()).toEqual([]);
-  });
-
-  it.each(["auditor", "orgAdmin", "viewer", "noRoles"] as const)(
-    "%s: 403 before parsing and any read, nothing stored, exactly one denied record with the fixed pattern",
-    async (caller) => {
-      signInAs(caller);
-      for (const call of [
-        { body: "{not json" },
-        { body: {} },
-        { contentType: "text/plain", body: { rules: [], version: 0 } },
-      ]) {
-        await expectError(
-          await invoke(putRules, { method: "PUT", path: RULES, ...call }),
-          403,
-          "FORBIDDEN",
-        );
-      }
-      expect(await nonAuditItems()).toEqual([]);
-      resetDeniedAudit();
-      const audit0 = (await auditToday()).length;
-      await expectError(
-        await put({ rules: [SSO], version: 0 }),
-        403,
-        "FORBIDDEN",
-      );
-      expect(await auditToday()).toHaveLength(audit0 + 1);
-      expect((await deniedToday()).at(-1)).toMatchObject({
-        action: "identity.map.update",
-        result: "denied",
-        category: "security",
-        code: "FORBIDDEN",
-        actor: `oid-${caller.toLowerCase()}`,
-        route: { method: "PUT", pattern: RULES },
-      });
-      expect(await getIdentityMapRules()).toBeNull();
-    },
-  );
-
-  it("403 for an admin write with a missing or foreign Origin; nothing stored", async () => {
-    for (const origin of [null, "https://evil.example.test", "null"]) {
-      await expectError(
-        await put({ rules: [SSO], version: 0 }, { origin }),
-        403,
-        "FORBIDDEN",
-      );
-    }
-    expect(await nonAuditItems()).toEqual([]);
   });
 
   const many = (n: number) =>
@@ -579,11 +516,6 @@ describe("GET /api/governance/identity-map-rules/suggestions", () => {
     await seedWorld({ rules: [SSO], keys: ["alice-sso"] });
     signInAs("auditor");
     expect(await expectData(await sug())).toEqual({ items: [alice] });
-  });
-
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await sug(), 401, "UNAUTHORIZED");
   });
 
   it.each(["orgAdmin", "viewer", "noRoles"] as const)(

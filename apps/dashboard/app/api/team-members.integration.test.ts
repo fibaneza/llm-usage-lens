@@ -107,11 +107,6 @@ const CANNOT_WRITE: CallerName[] = [
 ];
 
 describe("GET /api/teams/[id]/members", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await list("team-a"), 401, "UNAUTHORIZED");
-  });
-
   it.each([...CAN_WRITE_TEAM_A, "auditor"] as CallerName[])(
     "%s lists the team's members as { data: { items } } with no-store",
     async (caller) => {
@@ -317,18 +312,6 @@ describe("POST /api/teams/[id]/members", () => {
     expect(await deniedToday()).toEqual([]);
   });
 
-  it("401 without a session, before anything is read or written", async () => {
-    signInAs(null);
-    const before = await nonAuditItems();
-    await expectError(
-      await add("team-a", { oid: alice.oid }),
-      401,
-      "UNAUTHORIZED",
-    );
-    expect(await nonAuditItems()).toEqual(before);
-    expect(await auditToday()).toEqual([]);
-  });
-
   describe.each(CANNOT_WRITE)("as %s (no write permission)", (caller) => {
     beforeEach(() => signInAs(caller));
 
@@ -386,25 +369,6 @@ describe("POST /api/teams/[id]/members", () => {
         forbiddenRaw: [longId],
       });
     });
-  });
-
-  it("403 FORBIDDEN for a permitted caller with a missing or foreign Origin, before parsing; nothing is written", async () => {
-    for (const origin of [
-      null,
-      "https://evil.example.test",
-      "null",
-      "http://localhost:4000",
-    ]) {
-      await expectError(
-        await add("team-a", { oid: alice.oid }, { origin }),
-        403,
-        "FORBIDDEN",
-      );
-    }
-    expect(await affiliationOf(alice.oid)).toBeNull();
-    expect(
-      await auditToday().then((r) => r.filter((x) => x.result === "success")),
-    ).toEqual([]);
   });
 
   it.each([
@@ -611,17 +575,6 @@ describe("DELETE /api/teams/[id]/members/[oid]", () => {
     },
   );
 
-  it("401 without a session", async () => {
-    await seedMember(alice.oid, "team-a");
-    signInAs(null);
-    await expectError(
-      await remove("team-a", alice.oid, { version: 1 }),
-      401,
-      "UNAUTHORIZED",
-    );
-    expect(await affiliationOf(alice.oid)).not.toBeNull();
-  });
-
   describe.each(CANNOT_WRITE)("as %s (no write permission)", (caller) => {
     beforeEach(() => signInAs(caller));
 
@@ -643,23 +596,6 @@ describe("DELETE /api/teams/[id]/members/[oid]", () => {
         forbiddenRaw: [longId],
       });
     });
-  });
-
-  it("403 for a permitted caller with a foreign Origin, before parsing; the member stays", async () => {
-    await seedMember(alice.oid, "team-a");
-    await expectError(
-      await remove(
-        "team-a",
-        alice.oid,
-        { version: 1 },
-        {
-          origin: "https://evil.example.test",
-        },
-      ),
-      403,
-      "FORBIDDEN",
-    );
-    expect(await affiliationOf(alice.oid)).not.toBeNull();
   });
 
   it("409 CONFLICT for a stale version; the member stays and nothing is audited", async () => {

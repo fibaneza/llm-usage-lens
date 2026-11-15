@@ -21,7 +21,6 @@ import {
   auditToday,
   deniedToday,
   invoke,
-  nonAuditItems,
   signInAs,
 } from "@/test/governance-route-support";
 import { clearTable, ensureTestTable, putRaw } from "@/test/test-support";
@@ -80,15 +79,6 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("GET /api/governance/password-sign-in", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(
-      await invoke(getSignIn, { method: "GET", path: SIGN_IN }),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
-
   it.each(["viewer", "orgAdmin", "noRoles"] as const)(
     "403 FORBIDDEN for %s",
     async (caller) => {
@@ -205,67 +195,6 @@ describe("PUT /api/governance/password-sign-in", () => {
     });
   });
 
-  it("401 without a session, nothing written", async () => {
-    signInAs(null);
-    configureEntra(true);
-    await expectError(
-      await put({ enabled: false, version: 0 }),
-      401,
-      "UNAUTHORIZED",
-    );
-    expect(await nonAuditItems()).toEqual([]);
-  });
-
-  it.each(["auditor", "orgAdmin", "viewer", "noRoles"] as const)(
-    "%s: 403 before parsing and any read, state untouched, exactly one denied record",
-    async (caller) => {
-      configureEntra(true);
-      signInAs(caller);
-      for (const call of [
-        { body: "{not json" },
-        { body: {} },
-        { contentType: "text/plain", body: { enabled: false, version: 0 } },
-      ]) {
-        resetDeniedAudit();
-        await expectError(
-          await invoke(putSignIn, { method: "PUT", path: SIGN_IN, ...call }),
-          403,
-          "FORBIDDEN",
-        );
-      }
-      expect(await nonAuditItems()).toEqual([]);
-      resetDeniedAudit();
-      const audit0 = (await auditToday()).length;
-      await expectError(
-        await put({ enabled: false, version: 0 }),
-        403,
-        "FORBIDDEN",
-      );
-      expect(await auditToday()).toHaveLength(audit0 + 1);
-      const denied = (await deniedToday()).at(-1);
-      expect(denied).toMatchObject({
-        action: "governance.passwordsignin.update",
-        result: "denied",
-        category: "security",
-        code: "FORBIDDEN",
-        route: { method: "PUT", pattern: "/api/governance/password-sign-in" },
-      });
-      expect(await getPasswordSignIn()).toEqual({ enabled: true, version: 0 });
-    },
-  );
-
-  it("403 for an admin write with a missing or foreign Origin; state untouched", async () => {
-    configureEntra(true);
-    for (const origin of [null, "https://evil.example.test", "null"]) {
-      await expectError(
-        await put({ enabled: false, version: 0 }, { origin }),
-        403,
-        "FORBIDDEN",
-      );
-    }
-    expect(await getPasswordSignIn()).toEqual({ enabled: true, version: 0 });
-  });
-
   it.each([
     [
       "no Content-Type",
@@ -301,15 +230,6 @@ describe("PUT /api/governance/password-sign-in", () => {
 });
 
 describe("GET /api/governance/per-user-approval", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(
-      await invoke(getApproval, { method: "GET", path: APPROVAL }),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
-
   it.each(["viewer", "orgAdmin", "noRoles"] as const)(
     "403 FORBIDDEN for %s",
     async (caller) => {

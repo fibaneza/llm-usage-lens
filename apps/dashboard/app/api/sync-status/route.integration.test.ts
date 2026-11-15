@@ -46,16 +46,6 @@ describe("GET /api/sync-status", () => {
     expect(revalidate).toBe(3600);
   });
 
-  it("returns 401 without a session and exposes no data", async () => {
-    auth.mockResolvedValue(null);
-    await putRaw({ PK: "SYSTEM", SK: "SYNC#LATEST", ...STATUS });
-    const res = await call();
-    expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body.error.code).toBe("UNAUTHORIZED");
-    expect(body.data).toBeUndefined();
-  });
-
   it("returns the never-synced state as data (not an error) when no item exists", async () => {
     auth.mockResolvedValue({ user: { oid: "oid-test" } });
     const res = await call();

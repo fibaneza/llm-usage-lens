@@ -35,16 +35,6 @@ describe("GET /api/accounts", () => {
     expect(revalidate).toBe(3600);
   });
 
-  it("returns 401 without a session and exposes no accounts", async () => {
-    auth.mockResolvedValue(null);
-    await loadFixtures({ accounts: [makeAccount(1)] });
-    const res = await call();
-    expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body.error.code).toBe("UNAUTHORIZED");
-    expect(body.data).toBeUndefined();
-  });
-
   it("returns { data: [] } when there are no accounts", async () => {
     auth.mockResolvedValue({ user: { oid: "oid-test" } });
     const res = await call();

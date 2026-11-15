@@ -12,6 +12,8 @@ import {
   withRoute,
   type RouteContext,
 } from "@/lib/api/respond";
+import { ROUTE_REGISTRY } from "@/test/route-registry";
+import { NON_ADMIN_SESSIONS } from "@/test/route-sessions";
 import {
   TEST_TABLE_NAME,
   clearTable,
@@ -123,54 +125,6 @@ const label = (route: WriteRoute) => `${route.method} ${route.file}`;
 function setSession(session: unknown) {
   vi.mocked(auth).mockResolvedValue(session as never);
 }
-
-// Signed in, but not an Admin: every shape a non-admin session can take.
-const NON_ADMIN_SESSIONS: [string, unknown][] = [
-  [
-    "no roles claim (token from before roles existed)",
-    { user: { oid: "oid-test", name: "M" } },
-  ],
-  ["an empty roles list", { user: { oid: "oid-test", name: "M", roles: [] } }],
-  [
-    "other roles only",
-    { user: { oid: "oid-test", name: "M", roles: ["Reader", "Auditor"] } },
-  ],
-  [
-    "the role in the wrong case",
-    { user: { oid: "oid-test", name: "M", roles: ["admin"] } },
-  ],
-  [
-    "a role that merely contains Admin",
-    { user: { oid: "oid-test", roles: ["SuperAdmin"] } },
-  ],
-  [
-    "roles that is a string, not a list",
-    { user: { oid: "oid-test", roles: "Admin" } },
-  ],
-  // Phase 4R.1: only effective internal-admin may write (Access Control
-  // spec — Permission matrix; contract R1 decision 10).
-  [
-    "internal-auditor",
-    { user: { oid: "oid-test", name: "M", roles: ["internal-auditor"] } },
-  ],
-  [
-    "internal-org-admin",
-    { user: { oid: "oid-test", name: "M", roles: ["internal-org-admin"] } },
-  ],
-  [
-    "internal-viewer",
-    { user: { oid: "oid-test", name: "M", roles: ["internal-viewer"] } },
-  ],
-  [
-    "internal-auditor and internal-org-admin together",
-    {
-      user: {
-        oid: "oid-test",
-        roles: ["internal-auditor", "internal-org-admin"],
-      },
-    },
-  ],
-];
 
 // Bodies an ungated handler would reject with 400 (or accept): the gate must
 // answer first either way.
@@ -390,66 +344,12 @@ describe("write route discovery (the structural test is not vacuous)", () => {
 // route with its required permission". Every write method added by 4R.4 slice 1
 // is listed here with the single role that may call it (T3, T4); a new write
 // route under these paths that is not listed fails the check below.
-const ACCESS_CONTROL_WRITE_ROUTES = [
-  { label: "POST group-mappings/route.ts", permission: "internal-admin" },
-  {
-    label: "PATCH group-mappings/[groupId]/route.ts",
-    permission: "internal-admin",
-  },
-  {
-    label: "DELETE group-mappings/[groupId]/route.ts",
-    permission: "internal-admin",
-  },
-  {
-    label: "PUT governance/password-sign-in/route.ts",
-    permission: "internal-admin",
-  },
-  // 4R.4 slice 2: password-user management (Access Control spec - "Password
-  // users", "API routes (additions)"; contract-slice2.md).
-  { label: "POST password-users/route.ts", permission: "internal-admin" },
-  {
-    label: "PATCH password-users/[email]/route.ts",
-    permission: "internal-admin",
-  },
-  {
-    label: "DELETE password-users/[email]/route.ts",
-    permission: "internal-admin",
-  },
-  {
-    label: "POST password-users/[email]/reset/route.ts",
-    permission: "internal-admin",
-  },
-  {
-    label: "POST password-users/[email]/totp-reset/route.ts",
-    permission: "internal-admin",
-  },
-  // 4R.4 slice 3: the per-user approval setter (Access Control spec - "API
-  // routes (additions)"; contract-slice3.md).
-  {
-    label: "PUT governance/per-user-approval/route.ts",
-    permission: "internal-admin",
-  },
-  // 4R.4 slice 4: identity links (Access Control spec - "API routes
-  // (additions)": /api/identities/[oid]/links PUT is internal-admin only).
-  {
-    label: "PUT identities/[oid]/links/route.ts",
-    permission: "internal-admin",
-  },
-  // 4R.4 step 7 (D27): the usage-identity mapping rules, one governance item
-  // (Access Control spec - "Usage-identity mapping rules"; route derived, see
-  // identity-map-rules.integration.test.ts).
-  {
-    label: "PUT governance/identity-map-rules/route.ts",
-    permission: "internal-admin",
-  },
-  // 4R.4 slice 4: in-app global-role grants, internal-admin plus recent
-  // authentication (Access Control spec - "API routes (additions)", D28).
-  { label: "POST role-grants/route.ts", permission: "internal-admin" },
-  {
-    label: "DELETE role-grants/[oid]/[role]/route.ts",
-    permission: "internal-admin",
-  },
-] as const;
+// The list lives in the shared route registry (test/route-registry.ts, the
+// single source of the route-contract suite); a write route that exists on
+// disk but is not registered still fails the unlisted-method check below.
+const ACCESS_CONTROL_WRITE_ROUTES = ROUTE_REGISTRY.filter(
+  (e) => e.kind === "admin-write" && e.accessControl,
+).map((e) => ({ label: e.key, permission: e.permission }));
 
 describe("4R.4 slice 1 and 2 write routes are enumerated with their permission", () => {
   it("every listed method exists", () => {
@@ -496,17 +396,9 @@ describe("4R.4 slice 1 and 2 write routes are enumerated with their permission",
 // Access Control spec - "Permission matrix"), so the admin-only sweeps below
 // skip them; the block at the end of this file enumerates them with their own
 // permission checks.
-const MATRIX_WRITE_ROUTES = [
-  "POST teams/[id]/members/route.ts",
-  "DELETE teams/[id]/members/[oid]/route.ts",
-  "POST teams/[id]/admins/route.ts",
-  "DELETE teams/[id]/admins/[oid]/route.ts",
-  "POST departments/[id]/admins/route.ts",
-  "DELETE departments/[id]/admins/[oid]/route.ts",
-  "PUT teams/[id]/visibility/route.ts",
-  "PUT departments/[id]/visibility/route.ts",
-  "POST affiliations/[oid]/move/route.ts",
-] as const;
+const MATRIX_WRITE_ROUTES: string[] = ROUTE_REGISTRY.filter(
+  (e) => e.kind === "matrix-write",
+).map((e) => e.key);
 
 // 4R.5 step 5: the one write route that is not an admin or matrix write is a
 // password user changing their own password (Access Control spec - "API routes
@@ -514,13 +406,15 @@ const MATRIX_WRITE_ROUTES = [
 // It has no role gate, so the admin-only sweeps skip it; the block at the end of
 // this file enumerates it with its own gate, and account-password.integration
 // .test.ts covers its behaviour.
-const SELF_SERVICE_WRITE_ROUTES = ["POST account/password/route.ts"] as const;
+const SELF_SERVICE_WRITE_ROUTES: string[] = ROUTE_REGISTRY.filter(
+  (e) => e.kind === "self-write",
+).map((e) => e.key);
 
 const eachWriteRoute = writeRoutes
   .filter(
     (route) =>
-      !(MATRIX_WRITE_ROUTES as readonly string[]).includes(label(route)) &&
-      !(SELF_SERVICE_WRITE_ROUTES as readonly string[]).includes(label(route)),
+      !MATRIX_WRITE_ROUTES.includes(label(route)) &&
+      !SELF_SERVICE_WRITE_ROUTES.includes(label(route)),
   )
   .map((route) => [label(route), route] as const);
 
@@ -724,15 +618,9 @@ describe("the structural checks catch a route that is not gated", () => {
 // extends the list to the credential- and sign-in-affecting admin writes
 // (password users, the password sign-in switch); PATCH, group mappings,
 // memberships, visibility and links stay ungated.
-const REAUTH_ROUTES = [
-  "POST role-grants/route.ts",
-  "DELETE role-grants/[oid]/[role]/route.ts",
-  "POST password-users/route.ts",
-  "POST password-users/[email]/reset/route.ts",
-  "POST password-users/[email]/totp-reset/route.ts",
-  "DELETE password-users/[email]/route.ts",
-  "PUT governance/password-sign-in/route.ts",
-] as const;
+const REAUTH_ROUTES: string[] = ROUTE_REGISTRY.filter((e) => e.reauth).map(
+  (e) => e.key,
+);
 
 const STALE_ADMIN_SESSIONS: [string, unknown][] = [
   [
@@ -794,7 +682,7 @@ describe("recent-authentication routes are enumerated", () => {
 
   it("no other write route answers REAUTH_REQUIRED to an internal-admin with no authTime", async () => {
     const others = writeRoutes.filter(
-      (route) => !(REAUTH_ROUTES as readonly string[]).includes(label(route)),
+      (route) => !REAUTH_ROUTES.includes(label(route)),
     );
     expect(others.length).toBeGreaterThan(0);
     for (const route of others) {
@@ -830,9 +718,7 @@ describe("4R.4 slice 4 matrix write routes are enumerated", () => {
 });
 
 const MATRIX_ROUTES = writeRoutes
-  .filter((route) =>
-    (MATRIX_WRITE_ROUTES as readonly string[]).includes(label(route)),
-  )
+  .filter((route) => MATRIX_WRITE_ROUTES.includes(label(route)))
   .map((route) => [label(route), route] as const);
 
 // The sessions of NON_ADMIN_SESSIONS that hold no write permission anywhere:
@@ -953,9 +839,7 @@ describe("every matrix write route enforces session, permission and origin", () 
 // FORBIDDEN even with the admin role, and the same-origin check applies to all.
 describe("self-service write routes are enumerated and gated", () => {
   const SELF_ROUTES = writeRoutes
-    .filter((route) =>
-      (SELF_SERVICE_WRITE_ROUTES as readonly string[]).includes(label(route)),
-    )
+    .filter((route) => SELF_SERVICE_WRITE_ROUTES.includes(label(route)))
     .map((route) => [label(route), route] as const);
 
   const PASSWORD_SESSION = {

@@ -508,29 +508,4 @@ describe("caching cannot leak (T14)", () => {
     );
     expect(await teamIds()).toEqual([]);
   });
-
-  it.each([
-    ["unauthenticated", null, 401],
-    ["in scope", "memberA", 200],
-    ["out of scope detail", "memberB", 404],
-  ] as const)(
-    "%s responses carry Cache-Control: private, no-store",
-    async (_n, who, status) => {
-      signInAs(who);
-      const { res } = await get(
-        getTeamDetail,
-        `/api/teams/team-a?${RANGE}`,
-        "team-a",
-      );
-      expect(res.status).toBe(status);
-      expect(res.headers.get("Cache-Control")).toBe("private, no-store");
-    },
-  );
-
-  it("a 400 also carries the header", async () => {
-    signInAs("admin");
-    const { res } = await get(getTeams, "/api/teams?dateFrom=bad&dateTo=bad");
-    expect(res.status).toBe(400);
-    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
-  });
 });

@@ -40,13 +40,6 @@ const get = async () => {
 };
 
 describe("GET /api/litellm/models", () => {
-  it("401 without a session (Rule 10.3)", async () => {
-    signInAs(null);
-    const { res } = await get();
-    await expectError(res, 401, "UNAUTHORIZED");
-    expect(state.fake.calls).toHaveLength(0);
-  });
-
   it.each([
     ["teamAdminA", true],
     ["deptAdminEng", true],

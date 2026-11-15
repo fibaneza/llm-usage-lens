@@ -168,12 +168,6 @@ afterEach(() => {
 });
 
 describe("GET /api/litellm/connection", () => {
-  it("returns 401 without a session", async () => {
-    authMock.mockResolvedValue(null);
-    const { GET } = await load();
-    await expectError(await GET(get(), ctx), 401, "UNAUTHORIZED");
-  });
-
   it.each([
     ["a viewer", VIEWER],
     ["no roles", { user: { oid: "oid-test" } }],
@@ -242,16 +236,6 @@ describe("PUT /api/litellm/connection", () => {
   const put = (payload: unknown, headers?: Record<string, string>) =>
     send("PUT", CONN_URL, payload, headers);
 
-  it("returns 401 without a session", async () => {
-    authMock.mockResolvedValue(null);
-    const { PUT } = await load();
-    await expectError(
-      await PUT(put({ baseUrl: BASE_A, version: null }), ctx),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
-
   it.each([
     ["an Auditor", AUDITOR],
     ["a viewer", VIEWER],
@@ -273,47 +257,6 @@ describe("PUT /api/litellm/connection", () => {
   // Source: Access Control spec D17 / T22 -- a refused write route appends one
   // `denied` record via withRoute `denied: { action, pattern }` (as
   // POST /api/accounts does); the fixed pattern, never the raw path.
-  it.each([
-    ["an Auditor", AUDITOR],
-    ["a viewer", VIEWER],
-  ])(
-    "writes exactly one denied audit record for %s (litellm.connection.update)",
-    async (_n, s) => {
-      authMock.mockResolvedValue(s);
-      const { PUT } = await load();
-      await expectError(
-        await PUT(put({ baseUrl: BASE_A, version: null }), ctx),
-        403,
-        "FORBIDDEN",
-      );
-      const records = await auditActions();
-      expect(records).toHaveLength(1);
-      expect(records[0]).toMatchObject({
-        action: "litellm.connection.update",
-        actor: "oid-test",
-        result: "denied",
-        code: "FORBIDDEN",
-        route: { method: "PUT", pattern: "/api/litellm/connection" },
-      });
-      expect(JSON.stringify(records)).not.toContain(KEY);
-      expect(await storedUrl()).toBeUndefined();
-    },
-  );
-
-  it("returns 403 for a cross-origin write", async () => {
-    const { PUT } = await load();
-    await expectError(
-      await PUT(
-        put(
-          { baseUrl: BASE_A, version: null },
-          { host: HOST, origin: "http://evil.example" },
-        ),
-        ctx,
-      ),
-      403,
-      "FORBIDDEN",
-    );
-  });
 
   it.each([
     ["a missing baseUrl", { version: null }],
@@ -480,12 +423,6 @@ describe("PUT /api/litellm/connection", () => {
 describe("POST /api/litellm/connection/test", () => {
   const post = (payload?: unknown, headers?: Record<string, string>) =>
     send("POST", TEST_URL, payload ?? {}, headers);
-
-  it("returns 401 without a session", async () => {
-    authMock.mockResolvedValue(null);
-    const { POST } = await load();
-    await expectError(await POST(post(), ctx), 401, "UNAUTHORIZED");
-  });
 
   it.each([
     ["an Auditor", AUDITOR],

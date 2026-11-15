@@ -1,5 +1,4 @@
-import { readdirSync } from "node:fs";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -195,56 +194,4 @@ describe("/api/me and /api/me/usage", () => {
       numbersIn((await get(handler, `/api/me/usage?${RANGE}`)).body).has(123),
     ).toBe(true);
   });
-});
-
-describe("Cache-Control on every GET route under app/api (except litellm)", () => {
-  const files = readdirSync(API_DIR, { recursive: true, encoding: "utf8" })
-    .map((entry) => entry.split(sep).join("/"))
-    .filter((entry) => /(^|\/)route\.ts$/.test(entry))
-    .filter(
-      (entry) =>
-        !entry.startsWith("litellm/") &&
-        !entry.startsWith("auth/") &&
-        !entry.startsWith("health/"),
-    )
-    .sort();
-
-  it("finds the read routes", () => {
-    expect(files).toEqual(
-      expect.arrayContaining(["teams/route.ts", "overview/route.ts"]),
-    );
-  });
-
-  it.each(files)(
-    "%s answers 401 and a signed-in call with no-store",
-    async (file) => {
-      const mod: Record<string, unknown> = await import(
-        /* @vite-ignore */ join(API_DIR, file)
-      );
-      if (typeof mod.GET !== "function") return;
-      const url = `/api/${file.replace(/\/?route\.ts$/, "").replace(/\[[^\]]+\]/g, "not-an-id")}?${RANGE}`;
-      const params = Object.fromEntries(
-        [...file.matchAll(/\[(\w+)\]/g)].map((m) => [m[1], "not-an-id"]),
-      ) as Record<string, string>;
-      const call = async () => {
-        const res = await (
-          mod.GET as (r: Request, c: unknown) => Promise<Response>
-        )(new Request(`http://localhost${url}`), {
-          params: Promise.resolve(params),
-        });
-        await res.text();
-        return res;
-      };
-      signInAs(null);
-      const anon = await call();
-      expect(anon.status).toBe(401);
-      expect(anon.headers.get("Cache-Control")).toBe("private, no-store");
-      for (const name of ["viewerNone", "admin"] as const) {
-        signInAs(name);
-        expect((await call()).headers.get("Cache-Control")).toBe(
-          "private, no-store",
-        );
-      }
-    },
-  );
 });

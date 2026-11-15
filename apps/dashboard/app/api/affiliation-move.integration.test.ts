@@ -128,16 +128,6 @@ describe("POST /api/affiliations/[oid]/move", () => {
     expect(await scopesOf(alice.oid)).toEqual([]);
   });
 
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(
-      await move(alice.oid, req("team-a", "team-b")),
-      401,
-      "UNAUTHORIZED",
-    );
-    expect(await affiliationOf(alice.oid)).toMatchObject({ teamId: "team-a" });
-  });
-
   it.each([
     ["deptAdminEng", "team-a", "team-c"],
     ["deptAdminEng", "team-c", "team-a"],
@@ -237,17 +227,6 @@ describe("POST /api/affiliations/[oid]/move", () => {
         teamId: "team-a",
       });
     });
-  });
-
-  it("403 for a permitted caller with a missing or foreign Origin, before parsing; nothing changes", async () => {
-    for (const origin of [null, "https://evil.example.test", "null"]) {
-      await expectError(
-        await move(alice.oid, req("team-a", "team-b"), { origin }),
-        403,
-        "FORBIDDEN",
-      );
-    }
-    expect(await affiliationOf(alice.oid)).toMatchObject({ teamId: "team-a" });
   });
 
   it("409 CONFLICT for a stale version; the member, the source scope and the audit log are unchanged", async () => {

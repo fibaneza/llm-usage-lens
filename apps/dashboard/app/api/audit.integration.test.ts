@@ -70,12 +70,6 @@ beforeEach(async () => {
 });
 
 describe("GET /api/audit", () => {
-  it("401 without a session; no audit.view record", async () => {
-    signInAs(null);
-    await expectError(await get(`?day=${DAY}`), 401, "UNAUTHORIZED");
-    expect(await auditToday()).toEqual([]);
-  });
-
   it.each(["viewer", "orgAdmin", "noRoles"] as const)(
     "403 FORBIDDEN for %s; no audit.view and no denied record (read refusals are metric-only)",
     async (caller) => {

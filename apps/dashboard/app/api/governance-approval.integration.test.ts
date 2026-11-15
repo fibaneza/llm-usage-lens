@@ -157,63 +157,6 @@ describe("PUT /api/governance/per-user-approval", () => {
     expect(await auditToday()).toEqual([]);
   });
 
-  it("401 without a session, nothing written", async () => {
-    signInAs(null);
-    await expectError(
-      await put({ reference: "x", version: 0 }),
-      401,
-      "UNAUTHORIZED",
-    );
-    expect(await nonAuditItems()).toEqual([]);
-    expect(await auditToday()).toEqual([]);
-  });
-
-  it.each(["auditor", "orgAdmin", "viewer", "noRoles"] as const)(
-    "%s: 403 before parsing and any read, nothing stored, exactly one denied record",
-    async (caller) => {
-      signInAs(caller);
-      for (const call of [
-        { body: "{not json" },
-        { body: {} },
-        { contentType: "text/plain", body: { reference: "x", version: 0 } },
-      ]) {
-        await expectError(
-          await invoke(putApproval, { method: "PUT", path: APPROVAL, ...call }),
-          403,
-          "FORBIDDEN",
-        );
-      }
-      expect(await nonAuditItems()).toEqual([]);
-      resetDeniedAudit();
-      const audit0 = (await auditToday()).length;
-      await expectError(
-        await put({ reference: "x", version: 0 }),
-        403,
-        "FORBIDDEN",
-      );
-      expect(await auditToday()).toHaveLength(audit0 + 1);
-      expect((await deniedToday()).at(-1)).toMatchObject({
-        action: "governance.approval.update",
-        result: "denied",
-        category: "security",
-        code: "FORBIDDEN",
-        route: { method: "PUT", pattern: APPROVAL },
-      });
-      expect(await getPerUserApproval()).toBeNull();
-    },
-  );
-
-  it("403 for an admin write with a missing or foreign Origin; nothing stored", async () => {
-    for (const origin of [null, "https://evil.example.test", "null"]) {
-      await expectError(
-        await put({ reference: "x", version: 0 }, { origin }),
-        403,
-        "FORBIDDEN",
-      );
-    }
-    expect(await nonAuditItems()).toEqual([]);
-  });
-
   it.each([
     [
       "no Content-Type",
