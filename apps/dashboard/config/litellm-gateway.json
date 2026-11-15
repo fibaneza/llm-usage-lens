@@ -1,0 +1,10 @@
+{
+  "operations": {
+    "resetMemberSpend": {
+      "enabled": false
+    },
+    "deleteKey": {
+      "enabled": false
+    }
+  }
+}

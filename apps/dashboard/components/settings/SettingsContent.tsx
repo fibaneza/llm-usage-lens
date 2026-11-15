@@ -45,7 +45,7 @@ export function SettingsContent({ isAdmin }: { isAdmin: boolean }) {
       </section>
       {isAdmin ? (
         <Section heading="LiteLLM" title="the LiteLLM connection">
-          <LiteLLMPanel />
+          <LiteLLMPanel canEdit={isAdmin} />
         </Section>
       ) : null}
       <Section heading="Data retention" title="the data retention policy">

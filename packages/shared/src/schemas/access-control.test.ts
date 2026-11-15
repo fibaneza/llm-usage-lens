@@ -249,11 +249,15 @@ describe("UsageKeyClaimSchema", () => {
 
 describe("audit schemas", () => {
   it("lists every audited action", () => {
-    expect(AUDIT_ACTIONS).toHaveLength(40);
+    expect(AUDIT_ACTIONS).toHaveLength(44);
     expect(AUDIT_ACTIONS).toContain("auth.signin.success");
     expect(AUDIT_ACTIONS).toContain("auth.signout");
     expect(AUDIT_ACTIONS).toContain("affiliation.move");
     expect(AUDIT_ACTIONS).toContain("accessreview.export");
+    expect(AUDIT_ACTIONS).toContain("litellm.toggles.update");
+    expect(AUDIT_ACTIONS).toContain("litellm.toggles.reset");
+    expect(AUDIT_ACTIONS).toContain("litellm.teamlink.link");
+    expect(AUDIT_ACTIONS).toContain("litellm.teamlink.unlink");
     expect(new Set(AUDIT_ACTIONS).size).toBe(AUDIT_ACTIONS.length);
   });
   it("AuditActionSchema accepts known and rejects unknown actions", () => {

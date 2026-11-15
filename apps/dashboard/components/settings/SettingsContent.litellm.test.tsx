@@ -19,6 +19,17 @@ function stubFetch() {
     "fetch",
     vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes("/api/litellm/toggles")) {
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              version: 0,
+              edition: "oss",
+              operations: { createTeam: { enabled: true, source: "file" } },
+            },
+          }),
+        );
+      }
       if (url.includes("/api/litellm/connection")) {
         return Promise.resolve(
           apiResponse({
@@ -50,6 +61,13 @@ describe("SettingsContent LiteLLM section", () => {
     ).toBeInTheDocument();
     expect(
       await screen.findByText("https://litellm.example.internal"),
+    ).toBeInTheDocument();
+    // L2 (LD19): the operation toggles live in the same section.
+    expect(
+      await screen.findByRole("switch", { name: "createTeam" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /reset to file defaults/i }),
     ).toBeInTheDocument();
   });
 

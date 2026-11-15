@@ -6,8 +6,10 @@ import type { ConnectionTestResult } from "@llm-usage-lens/shared";
 import { env } from "@/env";
 import { getLiteLLMConnection } from "@/lib/data/litellm/connection";
 
-import { LiteLLMError, callLiteLLM, isServiceKeyConfigured } from "./client";
-import type { LiteLLMRequest } from "./client";
+import { LITELLM_SERVICE_KEY_ALLOWED_ROUTES } from "./allowlist";
+import { LiteLLMError, isServiceKeyConfigured } from "./client";
+import { callAllowlisted } from "./gateway";
+import type { AllowlistedRequest } from "./gateway";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Security architecture" item 6
 // and decision LD4 (amended 2026-11-15: the key carries the temporary `/team/*`
@@ -21,43 +23,72 @@ import type { LiteLLMRequest } from "./client";
 // LiteLLM OSS answers it with a 500 that would read as unhealthy. OSS
 // rotation (`/key/generate` then `/key/block`) is not probed: a generate
 // probe would mint a real key.
+// Every probe goes through the gateway's choke point (Gateway guardrails
+// item 1), so only allowlisted method + route templates are ever sent. The
+// result also carries the temporary-wildcard warning (item 6) while the
+// service key's `/team/*` or `/key/*` is present (code-only; LD19).
 
 const NIL_ID = "00000000-0000-0000-0000-000000000000";
+const NIL_TOKEN = "0".repeat(64);
+// Probes are writes to non-existent ids: attributed to a fixed system actor.
+const PROBE_ACTOR = { oid: "connection-test" };
+const MEMBER_PARAMS = { team_id: NIL_ID, user_id: NIL_ID };
 
-const BASE_PROBES: LiteLLMRequest[] = [
-  { method: "GET", path: "/team/list" },
+const BASE_PROBES: AllowlistedRequest[] = [
+  { method: "GET", template: "/team/list" },
   {
     method: "POST",
-    path: `/team/${NIL_ID}/member/${NIL_ID}/reset_spend`,
+    template: "/team/{team_id}/member/{user_id}/reset_spend",
+    params: MEMBER_PARAMS,
     body: {},
+    actor: PROBE_ACTOR,
   },
   {
     method: "POST",
-    path: `/team/${NIL_ID}/member/${NIL_ID}/reset_budget`,
+    template: "/team/{team_id}/member/{user_id}/reset_budget",
+    params: MEMBER_PARAMS,
     body: {},
+    actor: PROBE_ACTOR,
   },
 ];
 
-const REGENERATE_PROBE: LiteLLMRequest = {
+const REGENERATE_PROBE: AllowlistedRequest = {
   method: "POST",
-  path: `/key/${NIL_ID}/regenerate`,
+  template: "/key/{key}/regenerate",
+  params: { key: NIL_TOKEN },
   body: {},
+  actor: PROBE_ACTOR,
 };
 
 // APP_ENV is validated at startup and fixed for the process lifetime.
-const PROBES: readonly LiteLLMRequest[] =
+const PROBES: readonly AllowlistedRequest[] =
   liteLLMEdition(env.APP_ENV) === "enterprise"
     ? [...BASE_PROBES, REGENERATE_PROBE]
     : BASE_PROBES;
 
-const result = (
-  r: ConnectionTestResult["result"],
-  message: string,
-): ConnectionTestResult => ({ result: r, message });
+const TEMPORARY_WILDCARDS = ["/team/*", "/key/*"] as const;
+
+function wildcardWarnings(): string[] {
+  const present = TEMPORARY_WILDCARDS.filter((w) =>
+    LITELLM_SERVICE_KEY_ALLOWED_ROUTES.includes(w),
+  );
+  return present.length === 0
+    ? []
+    : [
+        `service key uses temporary wildcards (${present
+          .map((w) => `\`${w}\``)
+          .join(", ")})`,
+      ];
+}
 
 export async function testLiteLLMConnection(
   candidateBaseUrl?: string,
 ): Promise<ConnectionTestResult> {
+  const warnings = wildcardWarnings();
+  const result = (
+    r: ConnectionTestResult["result"],
+    message: string,
+  ): ConnectionTestResult => ({ result: r, message, warnings });
   if (!isServiceKeyConfigured()) {
     return result("not_configured", "The LiteLLM service key is not set.");
   }
@@ -67,7 +98,7 @@ export async function testLiteLLMConnection(
   }
   for (const probe of PROBES) {
     try {
-      await callLiteLLM(probe, { baseUrl });
+      await callAllowlisted(probe, { baseUrl });
     } catch (error) {
       if (!(error instanceof LiteLLMError)) throw error;
       switch (error.detail) {

@@ -25,7 +25,8 @@ export type LiteLLMErrorDetail =
   | "routes_out_of_date"
   | "upstream_error"
   | "unreachable"
-  | "timeout";
+  | "timeout"
+  | "contract_drift";
 
 const MESSAGES: Record<LiteLLMErrorDetail, string> = {
   not_configured: "LiteLLM is not configured",
@@ -35,6 +36,7 @@ const MESSAGES: Record<LiteLLMErrorDetail, string> = {
   upstream_error: "LiteLLM returned an error",
   unreachable: "LiteLLM is unreachable",
   timeout: "LiteLLM did not answer in time",
+  contract_drift: "LiteLLM returned an unexpected response",
 };
 
 export class LiteLLMError extends Error {
@@ -52,6 +54,8 @@ export type LiteLLMRequest = {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: unknown;
+  // Built by the gateway only (litellm-changed-by); never caller input.
+  headers?: Readonly<Record<string, string>>;
 };
 
 export type LiteLLMResponse = { status: number; body: unknown };
@@ -85,6 +89,7 @@ async function attempt(
     const res = await fetch(url, {
       method: request.method,
       headers: {
+        ...request.headers,
         authorization: `Bearer ${key}`,
         accept: "application/json",
         ...(hasBody ? { "content-type": "application/json" } : {}),
