@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { LITELLM_EDITIONS } from "./litellm";
 import { Iso8601Schema } from "./primitives";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Allowlist (the gateway)" (the
@@ -70,3 +71,19 @@ export const TeamLinkSchema = z.strictObject({
   updatedAt: Iso8601Schema,
 });
 export type TeamLink = z.infer<typeof TeamLinkSchema>;
+
+// GET/PUT /api/litellm/toggles response: each operation's effective value and
+// its source (ui | file | spec). Spec "Guardrail configuration" (LD19).
+export const OperationTogglesViewSchema = z.object({
+  version: z.number().int().min(0),
+  edition: z.enum(LITELLM_EDITIONS),
+  wildcardWarning: z.boolean(),
+  operations: z.record(
+    z.string(),
+    z.object({
+      enabled: z.boolean(),
+      source: z.enum(["ui", "file", "spec"]),
+    }),
+  ),
+});
+export type OperationTogglesView = z.infer<typeof OperationTogglesViewSchema>;

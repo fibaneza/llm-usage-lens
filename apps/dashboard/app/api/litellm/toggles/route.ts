@@ -4,7 +4,10 @@ import {
   LiteLLMOperationNameSchema,
   liteLLMEdition,
 } from "@llm-usage-lens/shared";
-import type { OperationToggles } from "@llm-usage-lens/shared";
+import type {
+  OperationToggles,
+  OperationTogglesView,
+} from "@llm-usage-lens/shared";
 import { z } from "zod";
 
 import { env } from "@/env";
@@ -48,7 +51,7 @@ const PutBodySchema = z.union([
   }),
 ]);
 
-function view(saved: OperationToggles | null) {
+function view(saved: OperationToggles | null): OperationTogglesView {
   const file = loadGatewayConfig();
   return {
     version: saved?.version ?? 0,

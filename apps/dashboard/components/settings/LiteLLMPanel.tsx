@@ -1,9 +1,13 @@
 "use client";
 
-import { LiteLLMConnectionStatusSchema } from "@llm-usage-lens/shared";
+import {
+  ConnectionTestResultSchema,
+  LiteLLMConnectionStatusSchema,
+  OperationTogglesViewSchema,
+} from "@llm-usage-lens/shared";
+import type { OperationTogglesView } from "@llm-usage-lens/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,29 +24,7 @@ const StatusSchema = LiteLLMConnectionStatusSchema.strip();
 const STATUS_KEY = ["litellm", "connection"] as const;
 const TOGGLES_KEY = ["litellm", "toggles"] as const;
 
-// Source: spec "Guardrail configuration" (LD19). Local shapes: the effective
-// value and its source (ui | file | spec) per operation.
-const TogglesSchema = z.object({
-  version: z.number(),
-  edition: z.string(),
-  wildcardWarning: z.boolean(),
-  operations: z.record(
-    z.string(),
-    z.object({
-      enabled: z.boolean(),
-      source: z.enum(["ui", "file", "spec"]),
-    }),
-  ),
-});
-type Toggles = z.infer<typeof TogglesSchema>;
-
-// Connection test result with the optional guardrail warnings (spec "Gateway
-// guardrails" item 6).
-const TestResultSchema = z.object({
-  result: z.string(),
-  message: z.string(),
-  warnings: z.array(z.string()).optional(),
-});
+type Toggles = OperationTogglesView;
 
 const WRITE_OPS = new Set([
   "createTeam",
@@ -234,11 +216,16 @@ function TogglesSection({ canEdit }: { canEdit: boolean }) {
   const [confirming, setConfirming] = useState(false);
   const query = useQuery({
     queryKey: TOGGLES_KEY,
-    queryFn: () => fetchApi("/api/litellm/toggles", TogglesSchema),
+    queryFn: () => fetchApi("/api/litellm/toggles", OperationTogglesViewSchema),
   });
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      mutateApi("/api/litellm/toggles", "PUT", body, TogglesSchema),
+      mutateApi(
+        "/api/litellm/toggles",
+        "PUT",
+        body,
+        OperationTogglesViewSchema,
+      ),
     onSuccess: (next) => {
       queryClient.setQueryData(TOGGLES_KEY, next);
       setConfirming(false);
@@ -351,7 +338,7 @@ function EnforcedInCode() {
 export function LiteLLMPanel({ canEdit = true }: { canEdit?: boolean }) {
   const togglesInfo = useQuery({
     queryKey: TOGGLES_KEY,
-    queryFn: () => fetchApi("/api/litellm/toggles", TogglesSchema),
+    queryFn: () => fetchApi("/api/litellm/toggles", OperationTogglesViewSchema),
   });
   const status = useQuery({
     queryKey: STATUS_KEY,
@@ -359,7 +346,12 @@ export function LiteLLMPanel({ canEdit = true }: { canEdit?: boolean }) {
   });
   const test = useMutation({
     mutationFn: () =>
-      mutateApi("/api/litellm/connection/test", "POST", {}, TestResultSchema),
+      mutateApi(
+        "/api/litellm/connection/test",
+        "POST",
+        {},
+        ConnectionTestResultSchema,
+      ),
   });
 
   if (status.isError) {

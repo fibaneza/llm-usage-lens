@@ -237,11 +237,13 @@ export {
   LiteLLMGatewayConfigSchema,
   LiteLLMOperationNameSchema,
   OperationTogglesSchema,
+  OperationTogglesViewSchema,
   TeamLinkSchema,
 } from "./schemas/litellm-gateway";
 export type {
   LiteLLMGatewayConfig,
   LiteLLMOperationName,
   OperationToggles,
+  OperationTogglesView,
   TeamLink,
 } from "./schemas/litellm-gateway";
