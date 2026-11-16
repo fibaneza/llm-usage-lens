@@ -2,7 +2,11 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { getSyncStatus } from "@/lib/data/sync-status";
 
-import { clearTable, ensureTestTable, putRaw } from "@/test/test-support";
+import {
+  clearTable,
+  ensureTestTable,
+  putRaw,
+} from "@/test/support/test-support";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Entity: SyncStatus";
 // Rule 20.9 (missing item = never synced, not an error); Rule 60.17.

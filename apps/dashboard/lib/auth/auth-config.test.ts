@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   AuthConfigError,
   DEV_LOGIN_PROVIDER_ID,
+  resolveAccessMode,
+  resolveRuntimeAccessMode,
   resolveSignInProviders,
   type AuthEnvInput,
 } from "./auth-config";
@@ -288,5 +290,210 @@ describe("resolveSignInProviders", () => {
       }
       expect(message).not.toContain("super-secret-value");
     });
+  });
+});
+
+describe("access mode and R1 sign-in rules (moved from auth-config.access)", () => {
+  // Source: docs/specs/2026-11-10-access-control.md — Environment; Sign-in
+  // methods; Threat model T7 (no dev login beside Entra) and T21 (APP_ENV
+  // required; open never in prod; prod needs Entra and TOTP for the master
+  // user). Contract R1 decisions 6-8. AuthEnvInput gains `appEnv`,
+  // `masterUsername`, `masterPasswordHash`, `masterTotpSecret`; the result gains
+  // `master: boolean`.
+  const ENTRA = {
+    entraId: "client-id",
+    entraSecret: "client-secret",
+    entraIssuer:
+      "https://login.microsoftonline.com/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d/v2.0",
+  };
+  const MASTER = {
+    masterUsername: "root",
+    masterPasswordHash: "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA",
+  };
+
+  const resolve = (input: Partial<AuthEnvInput>) =>
+    resolveSignInProviders({
+      nodeEnv: "development",
+      appEnv: "dev",
+      ...input,
+    } as AuthEnvInput);
+
+  describe("resolveAccessMode", () => {
+    it("returns open and enforce as given in dev", () => {
+      expect(resolveAccessMode("open", "dev")).toBe("open");
+      expect(resolveAccessMode("enforce", "dev")).toBe("enforce");
+    });
+    it.each([undefined, "", "nope", "OPEN "])(
+      "falls back to enforce for %j",
+      (raw) => {
+        expect(resolveAccessMode(raw, "dev")).toBe("enforce");
+        expect(resolveAccessMode(raw, "prod")).toBe("enforce");
+      },
+    );
+    it("rejects open in prod with a message that names the variable", () => {
+      expect(() => resolveAccessMode("open", "prod")).toThrow(AuthConfigError);
+      expect(() => resolveAccessMode("open", "prod")).toThrow(
+        /AUTH_ACCESS_MODE/,
+      );
+    });
+  });
+
+  describe("resolveSignInProviders (R1 rules)", () => {
+    it("T7: rejects the dev login when Entra is configured", () => {
+      expect(() => resolve({ ...ENTRA, devLogin: "true" })).toThrow(
+        AuthConfigError,
+      );
+      expect(() => resolve({ ...ENTRA, devLogin: "true" })).toThrow(
+        /AUTH_DEV_LOGIN/,
+      );
+    });
+
+    // Access Control T7 / LiteLLM LT21, Rule 50: APP_ENV=prod rejects the dev
+    // login even when NODE_ENV is not "production" (the two flags are independent).
+    it("T7: APP_ENV=prod rejects AUTH_DEV_LOGIN when NODE_ENV is development", () => {
+      const prodWithMaster = {
+        appEnv: "prod",
+        nodeEnv: "development",
+        ...MASTER,
+        masterTotpSecret: "JBSWY3DPEHPK3PXP",
+        devLogin: "true",
+      };
+      expect(() => resolve(prodWithMaster)).toThrow(AuthConfigError);
+      expect(() => resolve(prodWithMaster)).toThrow(/AUTH_DEV_LOGIN/);
+    });
+
+    it("T21: requires APP_ENV", () => {
+      expect(() => resolve({ appEnv: undefined, devLogin: "true" })).toThrow(
+        AuthConfigError,
+      );
+      expect(() =>
+        resolve({ appEnv: "staging" as never, devLogin: "true" }),
+      ).toThrow(AuthConfigError);
+    });
+
+    // Access Control spec — Pre-SSO mode (D19): prod without Entra is valid
+    // only with the master user and TOTP.
+    it("T21: APP_ENV=prod without Entra needs the master user with TOTP", () => {
+      expect(
+        resolve({
+          appEnv: "prod",
+          nodeEnv: "production",
+          ...MASTER,
+          masterTotpSecret: "JBSWY3DPEHPK3PXP",
+        }),
+      ).toMatchObject({ entra: false, master: true, devLogin: false });
+      expect(() => resolve({ appEnv: "prod", nodeEnv: "production" })).toThrow(
+        AuthConfigError,
+      );
+      expect(() =>
+        resolve({ appEnv: "prod", nodeEnv: "production", ...MASTER }),
+      ).toThrow(AuthConfigError);
+    });
+
+    it("T21: prod with the master user requires a TOTP secret", () => {
+      expect(() =>
+        resolve({ appEnv: "prod", nodeEnv: "production", ...ENTRA, ...MASTER }),
+      ).toThrow(/AUTH_MASTER_TOTP_SECRET/);
+      expect(
+        resolve({
+          appEnv: "prod",
+          nodeEnv: "production",
+          ...ENTRA,
+          ...MASTER,
+          masterTotpSecret: "JBSWY3DPEHPK3PXP",
+        }),
+      ).toMatchObject({ entra: true, master: true, devLogin: false });
+    });
+
+    it("master username and hash must be set together", () => {
+      expect(() => resolve({ ...ENTRA, masterUsername: "root" })).toThrow(
+        AuthConfigError,
+      );
+      expect(() =>
+        resolve({ ...ENTRA, masterPasswordHash: MASTER.masterPasswordHash }),
+      ).toThrow(AuthConfigError);
+    });
+
+    it("rejects a master hash that is not argon2id", () => {
+      expect(() =>
+        resolve({ ...ENTRA, ...MASTER, masterPasswordHash: "plaintext" }),
+      ).toThrow(AuthConfigError);
+    });
+
+    it("master provider is off when unset, on when configured", () => {
+      expect(resolve({ ...ENTRA })).toMatchObject({ master: false });
+      expect(resolve({ ...ENTRA, ...MASTER })).toMatchObject({ master: true });
+    });
+
+    it("NODE_ENV=production accepts the master user alone as the production provider", () => {
+      expect(
+        resolve({ nodeEnv: "production", appEnv: "dev", ...MASTER }),
+      ).toMatchObject({ entra: false, master: true, devLogin: false });
+    });
+
+    it("NODE_ENV=production still rejects AUTH_DEV_LOGIN", () => {
+      expect(() =>
+        resolve({ nodeEnv: "production", devLogin: "true", ...MASTER }),
+      ).toThrow(/AUTH_DEV_LOGIN/);
+    });
+
+    it("dev login alone works in dev; error messages never contain values", () => {
+      expect(resolve({ devLogin: "true" })).toMatchObject({
+        devLogin: true,
+        entra: false,
+      });
+      try {
+        resolve({ appEnv: "prod", nodeEnv: "production", ...ENTRA, ...MASTER });
+      } catch (e) {
+        const msg = (e as Error).message;
+        expect(msg).not.toContain(MASTER.masterPasswordHash);
+        expect(msg).not.toContain(ENTRA.entraSecret);
+      }
+    });
+  });
+});
+
+// Source: docs/specs/2026-11-10-access-control.md — Rollout / Environment:
+// unset or invalid -> enforce; `open` never when APP_ENV=prod. Contract R2 §3
+// `resolveRuntimeAccessMode` and §6 carry-in (throws for open + prod at
+// runtime). The build phase runs with placeholder env, so it must not throw.
+describe("resolveRuntimeAccessMode", () => {
+  it("returns open for open in dev at runtime", () => {
+    expect(
+      resolveRuntimeAccessMode({
+        isBuildPhase: false,
+        raw: "open",
+        appEnv: "dev",
+      }),
+    ).toBe("open");
+  });
+
+  it("throws for open in prod at runtime", () => {
+    expect(() =>
+      resolveRuntimeAccessMode({
+        isBuildPhase: false,
+        raw: "open",
+        appEnv: "prod",
+      }),
+    ).toThrow(AuthConfigError);
+  });
+
+  it.each([undefined, "", "enforce", "bogus"])(
+    "returns enforce for raw=%j",
+    (raw) => {
+      expect(
+        resolveRuntimeAccessMode({ isBuildPhase: false, raw, appEnv: "prod" }),
+      ).toBe("enforce");
+    },
+  );
+
+  it("does not throw during the build phase", () => {
+    expect(() =>
+      resolveRuntimeAccessMode({
+        isBuildPhase: true,
+        raw: "open",
+        appEnv: "prod",
+      }),
+    ).not.toThrow();
   });
 });

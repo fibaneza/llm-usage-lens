@@ -72,6 +72,8 @@ describe("access-control storage boundary", () => {
     const offenders = files.filter((f) => {
       if (
         f.startsWith("apps/dashboard/lib/data/access/") ||
+        f === "apps/dashboard/test/support/access-test-support.ts" ||
+        f === "apps/dashboard/test/support/keys-test-support.ts" ||
         f.startsWith("scripts/")
       ) {
         return false;
@@ -84,15 +86,15 @@ describe("access-control storage boundary", () => {
   // Coordinator ruling, 2026-11-16, 4R.5: Playwright cannot load keys.ts
   // through the server-only graph, so e2e seeds use a pure re-export (exempt
   // like keys.ts: no I/O). Spec: Access Control - Storage boundary (D26.1).
-  it("keys-test-support.ts imports nothing except ./keys (coordinator 2026-11-16, 4R.5)", () => {
-    const path = "apps/dashboard/lib/data/access/keys-test-support.ts";
+  it("keys-test-support.ts imports nothing except the access keys module (coordinator 2026-11-16, 4R.5)", () => {
+    const path = "apps/dashboard/test/support/keys-test-support.ts";
     expect(files).toContain(path);
-    expect(importsOf(path)).toEqual(["./keys"]);
+    expect(importsOf(path)).toEqual(["../../lib/data/access/keys"]);
   });
 
-  it('keys-test-support.ts body is only `export { ... } from "./keys"` statements (coordinator 2026-11-16, 4R.5; review W1)', () => {
+  it('keys-test-support.ts body is only `export { ... } from "../../lib/data/access/keys"` statements (coordinator 2026-11-16, 4R.5; review W1)', () => {
     const source = readFileSync(
-      join(ROOT, "apps/dashboard/lib/data/access/keys-test-support.ts"),
+      join(ROOT, "apps/dashboard/test/support/keys-test-support.ts"),
       "utf8",
     );
     const body = source
@@ -100,7 +102,9 @@ describe("access-control storage boundary", () => {
       .replace(/\/\/.*$/gm, "")
       .replace(/\s+/g, " ")
       .trim();
-    expect(body).toMatch(/^(export \{[^{}]*\} from "\.\/keys";? ?)+$/);
+    expect(body).toMatch(
+      /^(export \{[^{}]*\} from "\.\.\/\.\.\/lib\/data\/access\/keys";? ?)+$/,
+    );
   });
 
   it("keys-test-support is imported only from test files, test/** and e2e/** (coordinator 2026-11-16, 4R.5)", () => {

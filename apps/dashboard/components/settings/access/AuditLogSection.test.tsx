@@ -8,8 +8,8 @@ import {
   ok,
   page,
   stubAccessApi,
-} from "@/test/access-ui-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+} from "@/test/fakes/access-ui-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { AuditLogSection } from "./AuditLogSection";
 
@@ -19,7 +19,7 @@ import { AuditLogSection } from "./AuditLogSection";
 // records carry the refusal `code`; audit-log views are themselves audited;
 // before/after hold no secrets and are not displayed here), "API routes
 // (additions)" (/api/audit GET internal-admin or internal-auditor), Rule 20.1
-// (UTC), the committed route (app/api/audit.integration.test.ts: `?day=YYYY-
+// (UTC), the committed route (app/api/__tests__/audit.integration.test.ts: `?day=YYYY-
 // MM-DD` default today UTC, oldest first, `{ items, cursor? }`, opaque cursor).
 // Design System - Settings Page ("Audit log ... for internal-admin and
 // internal-auditor"). Rule 60.24: time is controlled with fake timers.

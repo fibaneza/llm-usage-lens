@@ -8,8 +8,8 @@ import {
   page,
   passwordUserItem,
   stubAccessApi,
-} from "@/test/access-ui-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+} from "@/test/fakes/access-ui-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { PasswordUsersSection } from "./PasswordUsersSection";
 import type { AccessViewer, StepUpActions } from "./types";

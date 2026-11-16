@@ -16,14 +16,14 @@ import {
   vi,
 } from "vitest";
 
-import { createFakeLiteLLM } from "@/test/fake-litellm";
-import type { FakeHandler } from "@/test/fake-litellm";
+import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
+import type { FakeHandler } from "@/test/fakes/fake-litellm";
 import {
   clearTable,
   ensureTestTable,
   testDoc,
   TEST_TABLE_NAME,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Security architecture" items
 // 1, 5, 7, 8 (base URL from the stored connection, allowlist, https in prod,

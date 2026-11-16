@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { litellmPanelCapabilities } from "@/lib/auth/litellm-panel";
-import { apiResponse } from "@/test/api-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+import { apiResponse } from "@/test/fakes/api-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { LiteLLMTab } from "./LiteLLMTab";
 

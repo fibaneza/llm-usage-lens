@@ -181,13 +181,13 @@ done
 
 # Dashboard workspace: type-check + test suite when apps/, packages/ or scripts/ change.
 # shellcheck disable=SC2086
-if git diff --name-only $RANGES 2>/dev/null | grep -qE "^apps/|^packages/|^scripts/|^tsconfig.scripts.json$"; then
+if git diff --name-only $RANGES 2>/dev/null | grep -qE "^apps/|^packages/|^scripts/|^infra/|^tsconfig.scripts.json$"; then
   echo "→ dashboard: typecheck"
   (cd "$REPO_ROOT" && pnpm typecheck)
-  # Unit project only: integration tests need DynamoDB Local, so they run in CI
-  # and via `pnpm test`.
-  echo "→ dashboard: unit tests (integration tests run in CI and via pnpm test)"
-  (cd "$REPO_ROOT" && pnpm exec vitest run --project unit --passWithNoTests)
+  # Unit and infra (CDK) projects only: integration tests need DynamoDB Local,
+  # so they run in CI and via `pnpm test`.
+  echo "→ dashboard: unit + infra tests (integration tests run in CI and via pnpm test)"
+  (cd "$REPO_ROOT" && pnpm exec vitest run --project unit --project infra --passWithNoTests)
 fi
 
 # Simulator: typecheck + tests (mirrors tools/bedrock-simulator/.hooks/pre-push).

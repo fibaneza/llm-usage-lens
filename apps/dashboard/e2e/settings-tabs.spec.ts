@@ -5,7 +5,7 @@ import {
   PROBE_ROLES,
   seedRoleProbe,
   type ProbeRole,
-} from "../test/role-probe-seed";
+} from "../test/fixtures/role-probe-seed";
 
 import {
   DEV_LOGIN_ONLY_REASON,
@@ -27,7 +27,7 @@ import { mockApi } from "./support/settings-api";
 // LD24 (who sees the LiteLLM tab). Implementation-phases unit D Verify.
 // Runs in the role-probe Playwright project (playwright.config.ts): that dev
 // server owns a DynamoDB Local table seeded with one identity per role by
-// test/role-probe-seed.ts (the team admin needs a stored admin scope).
+// test/fixtures/role-probe-seed.ts (the team admin needs a stored admin scope).
 // Sessions are forged like every e2e session; every /api/* call is fulfilled
 // from fixtures (Rule 60.24). The default forged role is now the auditor, so
 // each case names its role.

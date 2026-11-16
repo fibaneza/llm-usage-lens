@@ -7,12 +7,10 @@ vi.mock("hash-wasm", async (orig) => {
   return { ...actual, argon2Verify: verifySpy };
 });
 vi.mock("@/lib/dynamodb", () =>
-  import("@/lib/data/access/access-test-support").then((m) =>
-    m.faultyDynamodb(),
-  ),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 vi.mock("@/lib/auth/secret-envelope", () =>
-  import("@/lib/auth/password-test-support").then((m) => m.fakeEnvelope),
+  import("@/test/support/password-test-support").then((m) => m.fakeEnvelope),
 );
 
 import {
@@ -20,13 +18,8 @@ import {
   OTHER_PASSWORD,
   TOTP_SECRET,
   totpAt,
-} from "@/lib/auth/password-test-support";
-import {
-  NOW,
-  dumpTable,
-  ctxAt,
-  ok,
-} from "@/lib/data/access/access-test-support";
+} from "@/test/support/password-test-support";
+import { NOW, dumpTable, ctxAt, ok } from "@/test/support/access-test-support";
 import {
   createPasswordUser,
   deletePasswordUser,
@@ -39,7 +32,7 @@ import {
   getPasswordCredential,
 } from "@/lib/data/access/password-credentials-store";
 import { grantRole } from "@/lib/data/access/role-grants";
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 import { authorizePasswordUser } from "@/lib/auth/password-credentials";
 import { completePasswordSetup } from "@/lib/auth/password-setup";

@@ -8,8 +8,8 @@ import {
   INTERNAL_ORG_ADMIN_ROLE,
 } from "@/lib/auth/roles";
 import { litellmPanelCapabilities } from "@/lib/auth/litellm-panel";
-import { apiResponse } from "@/test/api-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+import { apiResponse } from "@/test/fakes/api-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { LiteLLMPanel } from "./LiteLLMPanel";
 

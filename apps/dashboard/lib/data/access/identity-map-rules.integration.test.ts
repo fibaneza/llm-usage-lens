@@ -6,10 +6,10 @@ import {
   clearTable,
   ensureTestTable,
   testDoc,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("./access-test-support").then((m) => m.faultyDynamodb()),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 
 import {
@@ -21,7 +21,7 @@ import {
   faults,
   ok,
   resetFaults,
-} from "./access-test-support";
+} from "@/test/support/access-test-support";
 import {
   IDENTITY_MAP_RULES_SK,
   getIdentityMapRules,

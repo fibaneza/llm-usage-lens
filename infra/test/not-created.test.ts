@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-platform.md — "Not created" (the platform
 // reuses the existing VPC, certificate, topic and OIDC provider; no NAT, WAF,
 // CloudFront, cache, RDS); contract rp-contract.md "Not created in any stack".

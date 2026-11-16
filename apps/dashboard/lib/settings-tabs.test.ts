@@ -9,7 +9,7 @@ import {
   ORG_ADMIN,
   PLAIN_VIEWER,
   TEAM_ADMIN,
-} from "@/test/access-viewers";
+} from "@/test/fixtures/access-viewers";
 
 import { settingsTabsFor } from "./settings-tabs";
 

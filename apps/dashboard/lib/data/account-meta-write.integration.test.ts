@@ -23,7 +23,7 @@ import {
   ensureTestTable,
   loadFixtures,
   makeAccount,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 const acct = (n: number) => String(n).padStart(12, "0");
 

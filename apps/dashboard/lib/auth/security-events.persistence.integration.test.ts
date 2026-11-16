@@ -1,11 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("@/lib/data/access/access-test-support").then((m) =>
-    m.faultyDynamodb(),
-  ),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 const m = vi.hoisted(() => ({
   recordException: vi.fn(),
@@ -35,7 +33,7 @@ import {
   auditRecords,
   faults,
   resetFaults,
-} from "@/lib/data/access/access-test-support";
+} from "@/test/support/access-test-support";
 
 // Source: docs/specs/2026-11-10-access-control.md — "Audit log" (security
 // events are security records), threat T20 (each master-user event persists

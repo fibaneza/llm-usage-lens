@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-access-control.md — "Sign-in methods" (master
 // user), "Rollout"; docs/specs/2026-11-10-platform.md — "Runtime" (secrets via
 // task-definition `secrets`; hand-managed SecureStrings, never created by CDK).

@@ -7,10 +7,10 @@ import {
   clearTable,
   ensureTestTable,
   testDoc,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("./access-test-support").then((m) => m.faultyDynamodb()),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 const bind = vi.hoisted(() => vi.fn());
 vi.mock("./sso-binding", () => ({ bindPasswordUserOnEntraSignIn: bind }));
@@ -28,7 +28,7 @@ import {
   faults,
   ok,
   resetFaults,
-} from "./access-test-support";
+} from "@/test/support/access-test-support";
 import { listAdminScopes } from "./admin-scopes";
 import { addMember, getAffiliation } from "./affiliations";
 import { createGroupMapping } from "./group-mappings";

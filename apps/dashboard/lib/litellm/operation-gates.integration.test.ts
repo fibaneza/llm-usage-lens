@@ -9,19 +9,19 @@ import {
   vi,
 } from "vitest";
 
-import { createFakeLiteLLM } from "@/test/fake-litellm";
+import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
 import {
   TEAM_ID,
   TOKEN_A,
   USER_ID,
   gatewayHandler,
-} from "@/test/fake-litellm-gateway";
+} from "@/test/fakes/fake-litellm-gateway";
 import {
   TEST_TABLE_NAME,
   clearTable,
   ensureTestTable,
   testDoc,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Toggles narrow only" (a
 // disabled operation returns 403 OPERATION_DISABLED before any LiteLLM call,

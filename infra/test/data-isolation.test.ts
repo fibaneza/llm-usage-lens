@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-platform.md — "Data isolation" (table resource
 // policy, VPC endpoint constraint, CMK key policy) and "Inputs" (opsRoleArn:
 // prod synth warns, never errors). Placeholder ids only (Rule 50.9).

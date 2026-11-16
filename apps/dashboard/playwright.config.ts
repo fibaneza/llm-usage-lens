@@ -19,7 +19,7 @@ import {
 // The 4R.5 role probe (e2e/role-landing.spec.ts; Phase 4R.5 Verify: "e2e per
 // role; seeded probe per role") is its own Playwright project in the normal
 // run. It needs its own DynamoDB Local table (bedrock-usage-probe-r5, seeded
-// idempotently by test/role-probe-seed.ts), and one dev server has one table,
+// idempotently by test/fixtures/role-probe-seed.ts), and one dev server has one table,
 // so it gets a second dev server on its own port with a distinct distDir
 // (two `next dev` in one directory otherwise collide on .next). Select it with
 // `--project=role-probe`; the default chromium project ignores the spec.

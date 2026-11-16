@@ -33,6 +33,7 @@ The `docs/specs/` directory is the source of truth:
 - `docs/guides/dynamic-workflows.md` — where Opus 4.8 dynamic workflows fit (and don't fit) the phase plan; piloted per implementation-phases — *Workflow pilots*
 - `docs/guides/github-best-practices.md` — general GitHub/Actions practice reconciled to this project's GitHub Flow, SAM, and pnpm conventions
 - `docs/guides/git-hooks.md` — local git-hook strategy: the current simulator pre-push hook and the Phase 1 Husky suite that supersedes it
+- `docs/guides/testing.md` — Vitest layout (unit / integration / infra projects), where a test goes, the `apps/dashboard/test/` folders, how to run one project or file, coverage
 - `docs/guides/learning-path.md` — guided, phase-by-phase walk-through of the whole build (lesson + tracker); start here if you're new to the project
 
 Not in the reading path above, but worth knowing they exist:
@@ -84,13 +85,15 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 | `pnpm dev` | Next.js dev server (`apps/dashboard`) |
 | `pnpm build` | `next build` |
 | `pnpm build:ci` | `pnpm build` with non-secret placeholder auth/env values so env validation still runs (what the CI build job runs) |
-| `pnpm check` | Full local gate, stopping at the first failure: `typecheck`, `lint`, `format:check`, `vitest run` (both projects; DynamoDB Local on `:8000`), `build:ci`, then the bundle scan (`lib/litellm/bundle-output.test.ts` with `REQUIRE_BUILD_OUTPUT=1` — the LiteLLM service key must not reach `.next/static`) — the pre-merge gate in Rule 31 |
+| `pnpm check` | Full local gate, stopping at the first failure: `typecheck`, `lint`, `format:check`, `vitest run` (all three projects; DynamoDB Local on `:8000`), `build:ci`, then the bundle scan (`lib/litellm/bundle-output.test.ts` with `REQUIRE_BUILD_OUTPUT=1` — the LiteLLM service key must not reach `.next/static`) — the pre-merge gate in Rule 31 |
 | `pnpm format:check` | Prettier format check (`pnpm format` to write) |
 | `pnpm lint` | ESLint v9 flat config (`eslint.config.ts`) |
 | `pnpm typecheck` | `tsc --noEmit` across every workspace (`pnpm -r --if-present typecheck`) plus `tsc -p tsconfig.scripts.json` for `scripts/` |
-| `pnpm test` | Unit + integration tests (**Vitest**, not Jest) — root `vitest.config.ts` with two projects; the integration project needs DynamoDB Local on `:8000`; excludes `e2e/` and `tools/` |
+| `pnpm test` | Unit + integration + infra tests (**Vitest**, not Jest) — root `vitest.config.ts` with three projects; the integration project needs DynamoDB Local on `:8000`; excludes `e2e/` and `tools/` ([testing guide](docs/guides/testing.md)) |
 | `pnpm test:unit` | Unit + component tests only (`vitest run --project unit`, jsdom; no DynamoDB needed) |
 | `pnpm test:integration` | Data-access integration tests against DynamoDB Local (`vitest run --project integration`) |
+| `pnpm test:infra` | CDK stack tests (`vitest run --project infra`, node) |
+| `pnpm test:coverage` | All three projects with v8 coverage into `coverage/`; measured, no threshold ([testing guide](docs/guides/testing.md)) |
 | `pnpm db:create-table` | Create the `bedrock-usage` table in DynamoDB Local (idempotent) |
 | `pnpm db:seed` / `db:seed:empty` / `db:seed:large` / `db:seed:ranking` | Load seed data (`seed:empty` resets the table first) |
 | `pnpm exec vitest run path/to/file.test.ts` | Run a single test file |
@@ -99,7 +102,7 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 
 DynamoDB Local (Phase 3.2): `docker compose up -d dynamodb-local` (inside `.devcontainer`; from the host use `docker compose -f .devcontainer/docker-compose.yml up -d dynamodb-local`), then `pnpm db:create-table` and `pnpm db:seed` (variants `db:seed:empty` / `db:seed:large` / `db:seed:ranking`). The scripts default to `http://localhost:8000` and must never target real AWS. The `/seed` slash command wraps this flow. See the [README](README.md) for the macOS volume workaround.
 
-**Git hooks (Husky).** Pre-commit: gitleaks (or grep fallback) secret scan + `lint-staged` (ESLint fix + Prettier on staged files). Commit-msg: `commitlint` (Conventional Commits). Pre-push: when `apps/`/`packages/`/`scripts/`/`infra/`/`tsconfig.scripts.json` change, runs `pnpm typecheck` + `pnpm exec vitest run --project unit --passWithNoTests` (integration tests run in CI and via `pnpm test`); when `tools/bedrock-simulator/` changes, runs that workspace's typecheck + tests; then a gitleaks scan of the pushed range (skipped with a notice if gitleaks is not installed). Never bypass with `--no-verify` (Rule 50.5).
+**Git hooks (Husky).** Pre-commit: gitleaks (or grep fallback) secret scan + `lint-staged` (ESLint fix + Prettier on staged files). Commit-msg: `commitlint` (Conventional Commits). Pre-push: when `apps/`/`packages/`/`scripts/`/`infra/`/`tsconfig.scripts.json` change, runs `pnpm typecheck` + `pnpm exec vitest run --project unit --project infra --passWithNoTests` (integration tests run in CI and via `pnpm test`); when `tools/bedrock-simulator/` changes, runs that workspace's typecheck + tests; then a gitleaks scan of the pushed range (skipped with a notice if gitleaks is not installed). Never bypass with `--no-verify` (Rule 50.5).
 
 ## Slash commands
 
@@ -126,7 +129,7 @@ is the source of truth — read it before touching any workflow.
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| `llm-usage-lens-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (both Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`), `e2e` (Playwright, both projects, production servers, against DynamoDB Local), `e2e-dev` (the dev-login specs on `next dev`) |
+| `llm-usage-lens-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (all three Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`), `e2e` (Playwright, both projects, production servers, against DynamoDB Local), `e2e-dev` (the dev-login specs on `next dev`) |
 | `llm-usage-lens-deploy.yml` | `workflow_dispatch` (user action) | Builds the dashboard image, pushes it to ECR via OIDC and deploys the DashboardServiceStack only |
 | `claude-pr-review.yml` | PR opened / synchronize / ready / reopened | Inline review + security findings; HIGH findings submit a `REQUEST_CHANGES` review |
 | `claude-code-review.yml` | release tag push / `workflow_dispatch` | Release audit scoped to commits since the previous tag; files issues |

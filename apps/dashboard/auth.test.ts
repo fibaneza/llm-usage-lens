@@ -1,6 +1,8 @@
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEV_LOGIN_PROVIDER_ID } from "@/lib/auth/auth-config";
+import { installFakeOtel, recordedSpans } from "@/test/fakes/otel-fake";
 
 // Auth.js is mocked: these tests cover the wiring of the sign-in provider
 // check and the roles callbacks in auth.ts, not Auth.js itself. The config
@@ -2140,6 +2142,603 @@ describe("auth.ts callbacks: Entra sync, audit records, session token (moved fro
         sequence: { next: number };
       };
       expect(event.sequence.next).toBe(3);
+    });
+  });
+});
+
+describe("auth.ts config, local login and callbacks (moved from auth.r1)", () => {
+  // Source: docs/specs/2026-11-10-access-control.md — Identity, SSO mapping and
+  // defaults; Sign-in methods; Threat model T1, T7. Contract R1 decisions 2-5,
+  // 7, 9. Stream B modules are mocked with the agreed signatures.
+  type Rec = Record<string, unknown>;
+  type Config = {
+    pages: Record<string, string>;
+    providers: {
+      options?: { id?: string; authorize: (c: unknown) => Promise<Rec | null> };
+    }[];
+    callbacks: {
+      signIn: (arg: Rec) => Promise<boolean>;
+      jwt: (arg: Rec) => Promise<Rec | null>;
+      session: (arg: Rec) => { user: Rec };
+    };
+  };
+  const upsertIdentity = vi.fn();
+  const authorizeMasterUser = vi.fn();
+  const recordSecurityEvent = vi.fn();
+  const resolveDevIdentity = vi.fn();
+  const TID = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
+  const ENTRA = {
+    AUTH_MICROSOFT_ENTRA_ID_ID: "client-id",
+    AUTH_MICROSOFT_ENTRA_ID_SECRET: "client-secret",
+    AUTH_MICROSOFT_ENTRA_ID_ISSUER: `https://login.microsoftonline.com/${TID}/v2.0`,
+  };
+  const NOW_MS = 1_793_000_000_000;
+  const NOW = NOW_MS / 1000;
+  const H = 3600;
+
+  function stubBase(overrides: Record<string, string>) {
+    const vars: Record<string, string> = {
+      SKIP_ENV_VALIDATION: "1",
+      AUTH_SECRET: "test-secret",
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      NEXT_PHASE: "",
+      NODE_ENV: "development",
+      APP_ENV: "dev",
+      AUTH_ACCESS_MODE: "",
+      AUTH_DEV_LOGIN: "",
+      AUTH_MICROSOFT_ENTRA_ID_ID: "",
+      AUTH_MICROSOFT_ENTRA_ID_SECRET: "",
+      AUTH_MICROSOFT_ENTRA_ID_ISSUER: "",
+      AUTH_MASTER_USERNAME: "",
+      AUTH_MASTER_PASSWORD_HASH: "",
+      AUTH_MASTER_TOTP_SECRET: "",
+      ...overrides,
+    };
+    for (const [k, v] of Object.entries(vars)) vi.stubEnv(k, v);
+    vi.stubGlobal("window", undefined);
+  }
+
+  async function load(env: Record<string, string>) {
+    stubBase(env);
+    vi.resetModules();
+    await import("@/auth");
+    return captured.config as Config;
+  }
+
+  const entraProfile = (over: Record<string, unknown> = {}) => ({
+    oid: "oid-1",
+    tid: TID,
+    email: "Ada@Example.com",
+    name: "Ada",
+    roles: ["internal-auditor"],
+    ...over,
+  });
+  const entraAccount = { provider: "microsoft-entra-id" };
+
+  beforeEach(() => {
+    // File-wide vi.mock would leak into the other describes of auth.test.ts, so
+    // these module mocks are registered per test and removed in afterEach.
+    vi.doMock("@/lib/data/identity", () => ({ upsertIdentity }));
+    vi.doMock("@/lib/auth/dev-identity", () => ({ resolveDevIdentity }));
+    vi.doMock("@/lib/auth/security-events", () => ({ recordSecurityEvent }));
+    vi.doMock("@/lib/data/access/sign-in-sync", () => ({
+      applySignInResolution: vi.fn().mockResolvedValue({}),
+    }));
+    vi.doMock("@/lib/data/access/session-audit", () => ({
+      recordSignIn: vi.fn().mockResolvedValue(undefined),
+      recordSignOut: vi.fn().mockResolvedValue(undefined),
+    }));
+    vi.doMock("@/lib/auth/master-user", () => ({
+      MASTER_USER_PROVIDER_ID: "master-user",
+      authorizeMasterUser,
+    }));
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW_MS);
+    upsertIdentity.mockReset().mockResolvedValue(undefined);
+    authorizeMasterUser.mockReset();
+    recordSecurityEvent.mockReset();
+    resolveDevIdentity.mockReset().mockResolvedValue({
+      ok: true,
+      identity: {
+        oid: "local:dev@localhost",
+        email: "dev@localhost",
+        name: "Local Developer",
+      },
+    });
+  });
+  afterEach(() => {
+    for (const id of [
+      "@/lib/data/identity",
+      "@/lib/auth/dev-identity",
+      "@/lib/auth/security-events",
+      "@/lib/data/access/sign-in-sync",
+      "@/lib/data/access/session-audit",
+      "@/lib/auth/master-user",
+    ]) {
+      vi.doUnmock(id);
+    }
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  describe("auth.ts config", () => {
+    it("sends failed sign-ins to /no-access (pages.error)", async () => {
+      const cfg = await load({ AUTH_DEV_LOGIN: "true" });
+      expect(cfg.pages.error).toBe("/no-access");
+      expect(cfg.pages.signIn).toBe("/sign-in");
+    });
+
+    it("registers the master-user provider only when configured", async () => {
+      const without = await load(ENTRA);
+      expect(
+        without.providers.some(
+          (p: Config["providers"][number]) => p.options?.id === "master-user",
+        ),
+      ).toBe(false);
+      const withMaster = await load({
+        ...ENTRA,
+        AUTH_MASTER_USERNAME: "root",
+        AUTH_MASTER_PASSWORD_HASH:
+          "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA",
+      });
+      expect(
+        withMaster.providers.some(
+          (p: Config["providers"][number]) => p.options?.id === "master-user",
+        ),
+      ).toBe(true);
+    });
+
+    it("does not register the dev login when Entra is configured", async () => {
+      stubBase({ ...ENTRA, AUTH_DEV_LOGIN: "true" });
+      vi.resetModules();
+      await expect(import("@/auth")).rejects.toThrow();
+    });
+  });
+
+  describe("local login (dev only)", () => {
+    const authorize = async (creds: unknown) => {
+      const cfg = await load({ AUTH_DEV_LOGIN: "true" });
+      const p = cfg.providers.find((x) => x.options?.id === "dev-login");
+      if (!p?.options) throw new Error("dev-login provider not registered");
+      return p.options.authorize(creds);
+    };
+
+    it("defaults to internal-admin with a local oid and tid", async () => {
+      const user = await authorize({});
+      expect(user).toMatchObject({
+        oid: "local:dev@localhost",
+        tid: "local",
+        authMethod: "local",
+        roles: ["internal-admin"],
+      });
+    });
+
+    it.each([
+      "internal-admin",
+      "internal-org-admin",
+      "internal-auditor",
+      "internal-viewer",
+    ])("signs in with the chosen role %s", async (role) => {
+      expect(await authorize({ role })).toMatchObject({ roles: [role] });
+    });
+
+    it.each(["Admin", "internal-team-admin", "root", ""])(
+      "fails sign-in for the role %j",
+      async (role) => {
+        const out = await authorize({ role });
+        expect(out ?? null).toBeNull();
+      },
+    );
+
+    // L3c, Access Control - Dev login: the identity option. Resolution itself is
+    // tested in lib/auth/dev-identity.integration.test.ts; here only the wiring.
+    describe("identity option (L3c)", () => {
+      it("declares an identity credential next to role (Dev login)", async () => {
+        const cfg = await load({ AUTH_DEV_LOGIN: "true" });
+        const p = cfg.providers.find((x) => x.options?.id === "dev-login");
+        const options = p?.options as { credentials?: Record<string, unknown> };
+        expect(Object.keys(options.credentials ?? {}).sort()).toEqual([
+          "identity",
+          "role",
+        ]);
+      });
+
+      it.each([[undefined], [""], ["Ada@Example.com"]])(
+        "passes the identity credential %j to the resolver as given (Dev login)",
+        async (identity) => {
+          await authorize({ role: "internal-viewer", identity });
+          expect(resolveDevIdentity).toHaveBeenCalledTimes(1);
+          expect(resolveDevIdentity).toHaveBeenCalledWith(identity);
+        },
+      );
+
+      it("signs in as the resolved identity with authMethod local and its stored roles (Dev login, L3c2)", async () => {
+        resolveDevIdentity.mockResolvedValue({
+          ok: true,
+          identity: {
+            oid: "oid-ada",
+            email: "ada@example.com",
+            name: "Ada",
+            roles: ["internal-auditor"],
+          },
+        });
+        const user = await authorize({
+          role: "internal-viewer",
+          identity: "ada@example.com",
+        });
+        expect(user).toMatchObject({
+          oid: "oid-ada",
+          email: "ada@example.com",
+          name: "Ada",
+          authMethod: "local",
+          roles: ["internal-auditor"],
+        });
+      });
+
+      it("ignores a posted role entirely when the identity carries stored roles, even an invalid or missing one (Dev login, L3c2)", async () => {
+        resolveDevIdentity.mockResolvedValue({
+          ok: true,
+          identity: { oid: "oid-ada", name: "Ada", roles: ["internal-viewer"] },
+        });
+        for (const role of ["internal-admin", "root", "", undefined]) {
+          const user = await authorize({ role, identity: "oid-ada" });
+          expect(user?.roles).toEqual(["internal-viewer"]);
+        }
+      });
+
+      it("uses the posted role when the resolved identity has no stored roles, the Local Developer (Dev login, L3c2)", async () => {
+        const user = await authorize({ role: "internal-auditor" });
+        expect(user).toMatchObject({
+          oid: "local:dev@localhost",
+          roles: ["internal-auditor"],
+        });
+      });
+
+      // Rule 50 / Dev login: authorize refuses a master-prefixed oid, whatever
+      // the resolver returns, so the dev login can never impersonate the master user.
+      it("refuses a master-prefixed oid (Rule 50, Dev login)", async () => {
+        resolveDevIdentity.mockResolvedValue({
+          ok: true,
+          identity: { oid: "master:root", name: "root" },
+        });
+        const out = await authorize({
+          role: "internal-admin",
+          identity: "master:root",
+        });
+        expect(out ?? null).toBeNull();
+      });
+
+      it("still refuses an invalid role when there is no identity (Dev login, R1)", async () => {
+        const out = await authorize({ role: "root" });
+        expect(out ?? null).toBeNull();
+      });
+
+      it("refuses the sign-in when the identity is refused (Dev login)", async () => {
+        resolveDevIdentity.mockResolvedValue({ ok: false });
+        const out = await authorize({
+          role: "internal-admin",
+          identity: "not valid",
+        });
+        expect(out ?? null).toBeNull();
+      });
+    });
+  });
+
+  describe("signIn callback", () => {
+    it("upserts the identity and allows a valid Entra sign-in", async () => {
+      const cfg = await load(ENTRA);
+      const ok = await cfg.callbacks.signIn({
+        user: {},
+        account: entraAccount,
+        profile: entraProfile(),
+      });
+      expect(ok).toBe(true);
+      expect(upsertIdentity).toHaveBeenCalledTimes(1);
+      expect(upsertIdentity.mock.calls[0]?.[0]).toMatchObject({
+        oid: "oid-1",
+        tid: TID,
+        email: "ada@example.com",
+        authMethod: "entra",
+        roles: ["internal-auditor"],
+      });
+      expect(upsertIdentity.mock.calls[0]?.[1]).toBeInstanceOf(Date);
+    });
+
+    it.each([
+      ["no oid", { oid: undefined }],
+      ["foreign tenant", { tid: "11111111-1111-1111-1111-111111111111" }],
+      ["roles not an array", { roles: "internal-admin" }],
+      ["groups not an array", { groups: "g" }],
+    ])("fails closed for %s without touching the store", async (_n, over) => {
+      const cfg = await load(ENTRA);
+      const ok = await cfg.callbacks.signIn({
+        user: {},
+        account: entraAccount,
+        profile: entraProfile(over),
+      });
+      expect(ok).not.toBe(true);
+      expect(upsertIdentity).not.toHaveBeenCalled();
+    });
+
+    it("fails the sign-in when the identity upsert fails", async () => {
+      upsertIdentity.mockRejectedValue(new Error("ddb down"));
+      const cfg = await load(ENTRA);
+      const outcome = await Promise.resolve(
+        cfg.callbacks.signIn({
+          user: {},
+          account: entraAccount,
+          profile: entraProfile(),
+        }),
+      ).catch(() => false);
+      expect(outcome).not.toBe(true);
+    });
+
+    it("emits one id-only auth.signin.error event and still returns false when the upsert throws", async () => {
+      upsertIdentity.mockRejectedValue(new Error("ddb down"));
+      const cfg = await load(ENTRA);
+      const ok = await cfg.callbacks.signIn({
+        user: {},
+        account: entraAccount,
+        profile: entraProfile(),
+      });
+      expect(ok).toBe(false);
+      expect(recordSecurityEvent).toHaveBeenCalledTimes(1);
+      const ev = recordSecurityEvent.mock.calls[0]?.[0] as Rec;
+      expect(ev).toMatchObject({
+        action: "auth.signin.error",
+        result: "failed",
+        oid: "oid-1",
+      });
+      const blob = JSON.stringify(ev);
+      expect(blob).not.toContain("ada@example.com");
+      expect(blob).not.toContain("ddb down");
+    });
+
+    // Rule 60.17 (errors reach OpenTelemetry) / 50.6 (no secrets in telemetry);
+    // security review 2026-11-11 (L5): the swallowed upsert failure is recorded
+    // on the active span, with the exception only — no identity or profile data.
+    it("records the upsert exception on the active span and marks it ERROR, still returning false and emitting the event", async () => {
+      installFakeOtel();
+      recordedSpans.length = 0;
+      const failure = new Error("ddb down");
+      upsertIdentity.mockRejectedValue(failure);
+      const cfg = await load(ENTRA);
+      const ok = await trace
+        .getTracer("test")
+        .startActiveSpan("sign-in", async (span) => {
+          try {
+            return await cfg.callbacks.signIn({
+              user: {},
+              account: entraAccount,
+              profile: entraProfile(),
+            });
+          } finally {
+            span.end();
+          }
+        });
+      expect(ok).toBe(false);
+      expect(recordSecurityEvent).toHaveBeenCalledTimes(1);
+      expect(recordSecurityEvent.mock.calls[0]?.[0]).toMatchObject({
+        action: "auth.signin.error",
+        result: "failed",
+        oid: "oid-1",
+      });
+      const recorded = recordedSpans.filter((s) =>
+        s.exceptions.includes(failure),
+      );
+      expect(recorded).toHaveLength(1);
+      expect(recorded[0]?.status.code).toBe(SpanStatusCode.ERROR);
+      const attrs = JSON.stringify(recordedSpans.map((s) => s.attributes));
+      for (const secret of [
+        "ada@example.com",
+        "Ada",
+        "oid-1",
+        "client-secret",
+      ]) {
+        expect(attrs).not.toContain(secret);
+      }
+    });
+
+    it("emits the error event for a failed local sign-in upsert too", async () => {
+      upsertIdentity.mockRejectedValue(new Error("ddb down"));
+      const cfg = await load({ AUTH_DEV_LOGIN: "true" });
+      const ok = await cfg.callbacks.signIn({
+        user: {
+          oid: "local:dev@localhost",
+          tid: "local",
+          roles: ["internal-viewer"],
+          authMethod: "local",
+        },
+        account: { provider: "dev-login" },
+      });
+      expect(ok).toBe(false);
+      expect(recordSecurityEvent).toHaveBeenCalledTimes(1);
+      expect(recordSecurityEvent.mock.calls[0]?.[0]).toMatchObject({
+        action: "auth.signin.error",
+        result: "failed",
+        oid: "local:dev@localhost",
+      });
+    });
+
+    it("emits no error event when the upsert succeeds", async () => {
+      const cfg = await load(ENTRA);
+      await cfg.callbacks.signIn({
+        user: {},
+        account: entraAccount,
+        profile: entraProfile(),
+      });
+      expect(recordSecurityEvent).not.toHaveBeenCalled();
+    });
+
+    it("upserts local and master sign-ins too", async () => {
+      const cfg = await load({ AUTH_DEV_LOGIN: "true" });
+      const user = {
+        oid: "local:dev@localhost",
+        tid: "local",
+        roles: ["internal-viewer"],
+        authMethod: "local",
+      };
+      expect(
+        await cfg.callbacks.signIn({
+          user,
+          account: { provider: "dev-login" },
+        }),
+      ).toBe(true);
+      expect(upsertIdentity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          oid: "local:dev@localhost",
+          authMethod: "local",
+        }),
+        expect.any(Date),
+      );
+    });
+  });
+
+  describe("jwt callback", () => {
+    it("stores oid, tid, effective roles, authMethod and signedInAt on Entra sign-in", async () => {
+      const cfg = await load(ENTRA);
+      const token = await cfg.callbacks.jwt({
+        token: {},
+        account: entraAccount,
+        profile: entraProfile({ roles: ["internal-org-admin", "bogus"] }),
+      });
+      expect(token).toMatchObject({
+        oid: "oid-1",
+        tid: TID,
+        roles: ["internal-org-admin"],
+        authMethod: "entra",
+        signedInAt: NOW,
+      });
+    });
+
+    it("defaults a roleless Entra user to internal-viewer", async () => {
+      const cfg = await load(ENTRA);
+      const token = await cfg.callbacks.jwt({
+        token: {},
+        account: entraAccount,
+        profile: entraProfile({ roles: undefined }),
+      });
+      expect(token?.roles).toEqual(["internal-viewer"]);
+    });
+
+    it("ignores internal-team-admin in the token", async () => {
+      const cfg = await load(ENTRA);
+      const token = await cfg.callbacks.jwt({
+        token: {},
+        account: entraAccount,
+        profile: entraProfile({ roles: ["internal-team-admin"] }),
+      });
+      expect(token?.roles).toEqual(["internal-viewer"]);
+    });
+
+    it("honours the legacy Admin role in dev but not with APP_ENV=prod", async () => {
+      let cfg = await load(ENTRA);
+      let token = await cfg.callbacks.jwt({
+        token: {},
+        account: entraAccount,
+        profile: entraProfile({ roles: ["Admin"] }),
+      });
+      expect(token?.roles).toEqual(["internal-admin"]);
+      cfg = await load({ ...ENTRA, NODE_ENV: "production", APP_ENV: "prod" });
+      token = await cfg.callbacks.jwt({
+        token: {},
+        account: entraAccount,
+        profile: entraProfile({ roles: ["Admin"] }),
+      });
+      expect(token?.roles).toEqual(["internal-viewer"]);
+    });
+
+    const aged = (roles: string[], authMethod: string, ageSeconds: number) => ({
+      oid: "o",
+      tid: "t",
+      roles,
+      authMethod,
+      signedInAt: NOW - ageSeconds,
+    });
+
+    it("rejects an admin token older than 4 hours, keeps one at 3 hours", async () => {
+      const cfg = await load(ENTRA);
+      expect(
+        await cfg.callbacks.jwt({
+          token: aged(["internal-admin"], "entra", 5 * H),
+        }),
+      ).toBeNull();
+      expect(
+        await cfg.callbacks.jwt({
+          token: aged(["internal-admin"], "entra", 3 * H),
+        }),
+      ).not.toBeNull();
+    });
+
+    it("rejects a master token older than 1 hour", async () => {
+      const cfg = await load(ENTRA);
+      expect(
+        await cfg.callbacks.jwt({
+          token: aged(["internal-admin"], "master", 2 * H),
+        }),
+      ).toBeNull();
+    });
+
+    it("keeps a viewer token for up to 8 hours", async () => {
+      const cfg = await load(ENTRA);
+      expect(
+        await cfg.callbacks.jwt({
+          token: aged(["internal-viewer"], "entra", 7 * H),
+        }),
+      ).not.toBeNull();
+      expect(
+        await cfg.callbacks.jwt({
+          token: aged(["internal-viewer"], "entra", 9 * H),
+        }),
+      ).toBeNull();
+    });
+
+    it("builds the token from the authorize() identity for credentials sign-ins", async () => {
+      const cfg = await load({ AUTH_DEV_LOGIN: "true" });
+      const token = await cfg.callbacks.jwt({
+        token: {},
+        account: { provider: "dev-login" },
+        user: {
+          oid: "local:dev@localhost",
+          tid: "local",
+          roles: ["internal-auditor"],
+          authMethod: "local",
+        },
+      });
+      expect(token).toMatchObject({
+        oid: "local:dev@localhost",
+        tid: "local",
+        roles: ["internal-auditor"],
+        authMethod: "local",
+        signedInAt: NOW,
+      });
+    });
+  });
+
+  describe("session callback", () => {
+    it("exposes oid, tid, roles, authMethod, name and email", async () => {
+      const cfg = await load(ENTRA);
+      const out = cfg.callbacks.session({
+        session: {
+          user: { name: "Ada", email: "ada@example.com" },
+          expires: "x",
+        },
+        token: {
+          oid: "oid-1",
+          tid: TID,
+          roles: ["internal-auditor"],
+          authMethod: "entra",
+        },
+      });
+      expect(out.user).toMatchObject({
+        oid: "oid-1",
+        tid: TID,
+        roles: ["internal-auditor"],
+        authMethod: "entra",
+        name: "Ada",
+        email: "ada@example.com",
+      });
     });
   });
 });

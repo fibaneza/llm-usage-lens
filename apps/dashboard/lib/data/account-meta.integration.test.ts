@@ -13,7 +13,7 @@ import {
   makeAccount,
   makeRollup,
   putRaw,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Entity: AccountMeta" access
 // patterns; Rule 20.6 (paginate), Rule 60.17 (no silent failures).

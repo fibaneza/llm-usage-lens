@@ -1,8 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { ctxAt, ok } from "@/lib/data/access/access-test-support";
+import { ctxAt, ok } from "@/test/support/access-test-support";
 import { grantRole, revokeRole } from "@/lib/data/access/role-grants";
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 import { loadSettingsAccessViewer } from "./settings-access";
 

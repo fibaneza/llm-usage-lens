@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-platform.md — "Inputs" (fail closed on missing
 // or invalid context; import vs create ALB mode); contract rp-contract.md.
 import { describe, expect, it } from "vitest";

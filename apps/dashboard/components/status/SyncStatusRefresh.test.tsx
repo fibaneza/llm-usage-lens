@@ -1,8 +1,8 @@
 import { act, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { apiResponse, stubApi, syncedFixture } from "@/test/api-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+import { apiResponse, stubApi, syncedFixture } from "@/test/fakes/api-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { SyncCountdown } from "./SyncCountdown";
 import { SyncStatusBadge } from "./SyncStatusBadge";

@@ -137,7 +137,9 @@ Dashboard environment variables live in `apps/dashboard/` and follow this preced
 | `pnpm format:check` | Checks formatting with Prettier (`pnpm format` to auto-fix) |
 | `pnpm test:unit` | Runs Vitest unit & component tests (jsdom, no DynamoDB needed) |
 | `pnpm test:integration` | Runs Vitest integration tests against DynamoDB Local on `:8000` |
-| `pnpm test` | Runs both Vitest projects (requires DynamoDB Local) |
+| `pnpm test:infra` | Runs the Vitest CDK stack tests in `infra/` (node) |
+| `pnpm test` | Runs all three Vitest projects (requires DynamoDB Local) |
+| `pnpm test:coverage` | Runs all three projects with v8 coverage into `coverage/` (see the [testing guide](docs/guides/testing.md)) |
 | `pnpm test:e2e` | Runs headless Playwright end-to-end tests in `apps/dashboard/e2e` |
 | `pnpm exec vitest run path/to/file.test.ts` | Runs a single test file |
 | `pnpm --filter @llm-usage-lens/infra synth` | `cdk synth` for the platform stacks (needs the CDK context; never deploys) |
@@ -148,8 +150,8 @@ Dashboard environment variables live in `apps/dashboard/` and follow this preced
 
 - **Pre-commit:** Scans staged files with Gitleaks for secrets, then runs `lint-staged` (ESLint `--fix` + Prettier).
 - **Commit-msg:** Validates commit message format against Conventional Commits via Commitlint.
-- **Pre-push:** Runs `pnpm typecheck` and the Vitest unit project when `apps/`, `packages/`, `scripts/`, or `infra/` change, the simulator's typecheck and tests when `tools/bedrock-simulator/` changes, then a Gitleaks scan of the pushed commits.
-- **CI Workflow:** `llm-usage-lens-build.yml` runs on every push to `main` and on every pull request: `quality` (lint, format, typecheck, Gitleaks), `test` (both Vitest projects against DynamoDB Local), and `build` (`pnpm build:ci`).
+- **Pre-push:** Runs `pnpm typecheck` and the Vitest `unit` and `infra` projects when `apps/`, `packages/`, `scripts/`, or `infra/` change, the simulator's typecheck and tests when `tools/bedrock-simulator/` changes, then a Gitleaks scan of the pushed commits.
+- **CI Workflow:** `llm-usage-lens-build.yml` runs on every push to `main` and on every pull request: `quality` (lint, format, typecheck, Gitleaks), `test` (all three Vitest projects against DynamoDB Local), and `build` (`pnpm build:ci`).
 - **Deploy:** `llm-usage-lens-deploy.yml` is manual (`workflow_dispatch`) only; deploying is always a user action.
 
 Hooks are never bypassed with `--no-verify`. See [Git Hooks](docs/guides/git-hooks.md) and [.github/ACTIONS.md](.github/ACTIONS.md) for every workflow.
@@ -184,6 +186,7 @@ See [.devcontainer/README.md](.devcontainer/README.md) for pipeline details and 
   - [Bedrock Simulator](docs/specs/2026-05-24-bedrock-simulator.md)
 - **Runbooks & Guides:**
   - [Learning Path](docs/guides/learning-path.md) — start here if you are new to the project
+  - [Testing Guide](docs/guides/testing.md) — test layout, projects, how to run, coverage
   - [Auth Setup (Entra ID & AWS Credentials)](docs/guides/auth-setup.md)
   - [Dashboard Deployment Runbook](docs/guides/dashboard-deployment.md)
   - [Operations Runbook](docs/guides/operations.md)

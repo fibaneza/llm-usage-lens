@@ -17,7 +17,7 @@ import {
   stubAccessApi,
   teamsRoute,
   type RouteTable,
-} from "@/test/access-ui-stubs";
+} from "@/test/fakes/access-ui-stubs";
 import {
   ADMIN,
   AUDITOR,
@@ -25,9 +25,9 @@ import {
   ORG_ADMIN,
   PLAIN_VIEWER,
   TEAM_ADMIN,
-} from "@/test/access-viewers";
-import { NEVER } from "@/test/api-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+} from "@/test/fixtures/access-viewers";
+import { NEVER } from "@/test/fakes/api-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { AccessSections } from "./AccessSections";
 import type { AccessViewer, StepUpActions } from "./types";

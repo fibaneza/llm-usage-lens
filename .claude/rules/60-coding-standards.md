@@ -77,8 +77,22 @@ patterns) and current Next.js App Router guidance.
 
 ## Testing (Vitest — not Jest)
 
-20. **Tests live next to the code** as `*.test.ts` / `*.test.tsx`, or under
-    `__tests__/`. E2E specs live in `apps/dashboard/e2e/` (Playwright,
+20. **Tests live next to the code** (layout amended 2026-11-17, test-structure
+    chore; `docs/guides/testing.md`):
+    - `foo.ts` → `foo.test.ts` (unit) or `foo.integration.test.ts`
+      (DynamoDB Local). `<source>.<aspect>.test.ts` only for a named aspect
+      of the source (`AppSidebar.mobile.test.tsx`), never for a run or a
+      review round.
+    - A Route Handler's own test is `route.integration.test.ts` in the
+      route's folder.
+    - A test that covers several routes or modules lives in `__tests__/` at
+      their lowest common directory (`app/api/__tests__/`).
+    - Shared test code lives only in `apps/dashboard/test/` (`setup/`,
+      `fakes/`, `fixtures/`, `support/`; `test/route-registry.ts` stays at
+      the root), never under `lib/` or `components/`.
+    - `infra/test/` is the one exception: CDK tests assert on synthesised
+      stacks and have no one-to-one source file.
+    E2E specs live in `apps/dashboard/e2e/` (Playwright,
     **headless only** — devcontainer has no display; see
     `apps/dashboard/playwright.config.ts`). Smoke specs accrue with UI work
     through the agent loop (Rule 70.11); the full user journeys land in

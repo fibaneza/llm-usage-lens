@@ -9,8 +9,8 @@ import {
   rankingBody,
   rankingRowFixture,
   stubApi,
-} from "@/test/api-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+} from "@/test/fakes/api-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import RankingPage from "./page";
 

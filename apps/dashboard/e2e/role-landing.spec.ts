@@ -6,7 +6,7 @@ import {
   PROBE_TEAM,
   seedRoleProbe,
   type ProbeRole,
-} from "../test/role-probe-seed";
+} from "../test/fixtures/role-probe-seed";
 
 import { collectConsoleErrors } from "./support/console-errors";
 import { waitForHydration } from "./support/hydration";
@@ -20,7 +20,7 @@ import { signInAsTestUser } from "./support/session";
 // collapse button) and Layout (sync badges absent for lead and user);
 // implementation-phases Phase 5 Slice B tests ("one e2e journey per role
 // (admin, lead, user)"); slice B1 brief B1-1..B1-9. The probe identities are
-// seeded into DynamoDB Local by test/role-probe-seed.ts on top of
+// seeded into DynamoDB Local by test/fixtures/role-probe-seed.ts on top of
 // `pnpm db:seed` (team-payments in dept-engineering); sessions are forged like
 // every e2e session (e2e/support/session.ts, no auth bypass). The landing
 // redirect matrix per caller is asserted at the integration layer

@@ -1,9 +1,9 @@
 import { trace } from "@opentelemetry/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createFakeLiteLLM } from "@/test/fake-litellm";
-import { gatewayHandler } from "@/test/fake-litellm-gateway";
-import { installFakeOtel, recordedSpans } from "@/test/otel-fake";
+import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
+import { gatewayHandler } from "@/test/fakes/fake-litellm-gateway";
+import { installFakeOtel, recordedSpans } from "@/test/fakes/otel-fake";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Gateway guardrails" items 1-4
 // (one outbound choke point that checks method + route template against the

@@ -5,14 +5,14 @@ import {
   TOTP_SECRET,
   fakeEnvelope,
   totpAt,
-} from "@/lib/auth/password-test-support";
+} from "@/test/support/password-test-support";
 import {
   NOW,
   dumpTable,
   auditRecords,
   ctxAt,
   ok,
-} from "@/lib/data/access/access-test-support";
+} from "@/test/support/access-test-support";
 import { grantAdminScope } from "@/lib/data/access/admin-scopes";
 import {
   createPasswordUser,
@@ -23,12 +23,10 @@ import {
 } from "@/lib/data/access/password-users";
 import { getPasswordCredential } from "@/lib/data/access/password-credentials-store";
 import { grantRole } from "@/lib/data/access/role-grants";
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("@/lib/data/access/access-test-support").then((m) =>
-    m.faultyDynamodb(),
-  ),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 vi.mock("@/lib/auth/secret-envelope", () => fakeEnvelope);
 

@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-platform.md — "Runtime", "Task role policy",
 // "Ownership", "Load balancer" (import vs create), "Alarms", "CI deploy role",
 // "Not created"; docs/specs/2026-11-10-access-control.md — "API routes"

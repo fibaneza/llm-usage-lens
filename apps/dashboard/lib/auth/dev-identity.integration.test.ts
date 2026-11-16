@@ -16,7 +16,7 @@ import {
   ensureTestTable,
   putRaw,
   testDoc,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 import { resolveDevIdentity } from "./dev-identity";
 

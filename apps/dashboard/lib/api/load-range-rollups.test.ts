@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", async () => {
-  const mod = await import("@/test/next-cache-fake");
+  const mod = await import("@/test/fakes/next-cache-fake");
   return mod.passThroughNextCache;
 });
 const getRollupsByDate = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/data/daily-rollups", () => ({ getRollupsByDate }));
 
 import { loadRangeRollups, utcDaysInRange } from "@/lib/api/load-range-rollups";
-import { buildRollup } from "@/test/rollup-builder";
+import { buildRollup } from "@/test/fixtures/rollup-builder";
 
 const acct = (n: number) => String(n).padStart(12, "0");
 

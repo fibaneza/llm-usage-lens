@@ -4,8 +4,8 @@ import { resolve } from "node:path";
 import { screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { apiError, apiResponse, NEVER } from "@/test/api-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+import { apiError, apiResponse, NEVER } from "@/test/fakes/api-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import MePage from "./page";
 

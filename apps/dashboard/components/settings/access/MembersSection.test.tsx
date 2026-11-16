@@ -12,9 +12,9 @@ import {
   ok,
   page,
   stubAccessApi,
-} from "@/test/access-ui-stubs";
-import { ADMIN, TEAM_ADMIN } from "@/test/access-viewers";
-import { renderWithProviders } from "@/test/render-providers";
+} from "@/test/fakes/access-ui-stubs";
+import { ADMIN, TEAM_ADMIN } from "@/test/fixtures/access-viewers";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { MembersSection } from "./MembersSection";
 

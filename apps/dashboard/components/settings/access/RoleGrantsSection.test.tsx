@@ -9,8 +9,8 @@ import {
   page,
   roleGrantItem,
   stubAccessApi,
-} from "@/test/access-ui-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+} from "@/test/fakes/access-ui-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { RoleGrantsSection } from "./RoleGrantsSection";
 import type { AccessViewer, StepUpActions } from "./types";

@@ -1,12 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GOOD_PASSWORD, fakeEnvelope } from "@/lib/auth/password-test-support";
 import {
-  NOW,
-  ctxAt,
-  dumpTable,
-  ok,
-} from "@/lib/data/access/access-test-support";
+  GOOD_PASSWORD,
+  fakeEnvelope,
+} from "@/test/support/password-test-support";
+import { NOW, ctxAt, dumpTable, ok } from "@/test/support/access-test-support";
 import { grantAdminScope } from "@/lib/data/access/admin-scopes";
 import {
   createPasswordUser,
@@ -16,12 +14,10 @@ import {
   setPasswordSignIn,
 } from "@/lib/data/access/password-users";
 import { grantRole } from "@/lib/data/access/role-grants";
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("@/lib/data/access/access-test-support").then((m) =>
-    m.faultyDynamodb(),
-  ),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 vi.mock("@/lib/auth/secret-envelope", () => fakeEnvelope);
 

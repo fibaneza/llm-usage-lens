@@ -6,13 +6,19 @@ import {
   clearTable,
   ensureTestTable,
   testDoc,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("./access-test-support").then((m) => m.faultyDynamodb()),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 
-import { ACTOR, DAY, NOW, faults, resetFaults } from "./access-test-support";
+import {
+  ACTOR,
+  DAY,
+  NOW,
+  faults,
+  resetFaults,
+} from "@/test/support/access-test-support";
 import {
   appendAuditRecord,
   appendDeniedAudit,

@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-platform.md — "Created resources" (FoundationStack:
 // table, CMK, cluster, ECR, SSM name parameters); contract rp-contract.md.
 import { GSI1_NAME } from "@llm-usage-lens/shared";

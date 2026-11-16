@@ -43,7 +43,7 @@ Read in this order before dispatching any work:
    - `apps/dashboard/auth.ts`
    - `apps/dashboard/lib/auth/{roles,auth-config,session-lifetime}.ts`
    - `apps/dashboard/lib/api/respond.ts` (`withRoute`, `requireAdmin`)
-   - `apps/dashboard/app/api/write-routes.integration.test.ts`
+   - `apps/dashboard/app/api/__tests__/write-routes.integration.test.ts`
    - `apps/dashboard/e2e/support/session.ts`
    - `apps/dashboard/lib/api/load-range-rollups.ts` (caching)
 6. `.claude/rules/10, 20, 30, 50, 60, 70`, and every `temp/report_*.md`.

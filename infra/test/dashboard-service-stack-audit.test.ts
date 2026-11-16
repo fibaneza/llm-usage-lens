@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-platform.md — "Task-role policy" table and
 // "Operations" alarms; docs/specs/2026-11-10-access-control.md — Audit log,
 // threats T19 (append-only audit, never SYSTEM) and T20 (security alarm).

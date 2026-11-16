@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-platform.md — "Inputs" (Entra pair optional,
 // opsRoleArn, dynamodbVpcEndpointId), "Runtime", "Task role policy";
 // docs/specs/2026-11-10-access-control.md — "Pre-SSO mode" (D19).

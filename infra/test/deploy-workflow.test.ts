@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-access-control.md - "Pre-SSO mode" (D19);
 // docs/specs/2026-11-10-platform.md - "Inputs". Text-based structural check;
 // the workflow is never executed.

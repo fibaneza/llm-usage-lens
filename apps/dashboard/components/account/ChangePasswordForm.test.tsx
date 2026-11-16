@@ -2,8 +2,8 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fail, ok, stubAccessApi } from "@/test/access-ui-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+import { fail, ok, stubAccessApi } from "@/test/fakes/access-ui-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { ChangePasswordForm } from "./ChangePasswordForm";
 

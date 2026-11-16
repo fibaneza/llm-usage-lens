@@ -108,16 +108,22 @@ code. Don't re-derive them from CLAUDE.md — they are the source of truth.
 ## Testing
 
 Tests use **Vitest** (not Jest), with React Testing Library for components
-and Playwright for E2E (Phase 5+). See Rule 60 for the testing conventions.
+and Playwright for E2E (Phase 5+). See Rule 60 for the testing conventions
+and the [testing guide](../docs/guides/testing.md) for the layout and commands.
 
-- Tests live next to the code as `*.test.ts` / `*.test.tsx`, or under `__tests__/`.
+- Tests live next to the code: `foo.ts` → `foo.test.ts` (unit) or `foo.integration.test.ts` (DynamoDB Local).
+- `<source>.<aspect>.test.ts` only for a named aspect of the source (`AppSidebar.mobile.test.tsx`), never for a run or a review round.
+- A Route Handler's own test is `route.integration.test.ts` in the route's folder.
+- A test that covers several routes or modules lives in `__tests__/` at their lowest common directory (`app/api/__tests__/`).
+- Shared test code lives only in `apps/dashboard/test/`, never under `lib/` or `components/`.
+- `infra/test/` is the one exception: its CDK tests assert on synthesised stacks and have no one-to-one source file.
 - Test behaviour, not implementation.
 - Zod schemas need both valid and invalid cases.
 - Data-access tests run against DynamoDB Local, not mocks.
-- Route Handler tests must cover the `401` (unauthenticated) and `400` (bad input) paths, plus `403` (no `Admin` role) on the account write routes.
-- 80% coverage minimum.
+- Route Handler tests must cover the `401` (unauthenticated) and `400` (bad input) paths, plus `403` (no `internal-admin` role) on every write route; the cross-cutting cases are asserted once by the shared route-contract suite (Rule 60.23).
+- Coverage is measured with `pnpm test:coverage`; no threshold is enforced yet (the baseline is in the testing guide).
 
-Run tests with `pnpm exec vitest run` (Phase 1+).
+Run tests with `pnpm test` (all three Vitest projects; DynamoDB Local on `:8000`) or `pnpm test:unit`.
 
 ## Security
 

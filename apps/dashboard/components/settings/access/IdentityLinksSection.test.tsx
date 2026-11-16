@@ -10,8 +10,8 @@ import {
   ok,
   page,
   stubAccessApi,
-} from "@/test/access-ui-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+} from "@/test/fakes/access-ui-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { IdentityLinksSection } from "./IdentityLinksSection";
 

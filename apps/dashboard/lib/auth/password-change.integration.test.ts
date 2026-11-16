@@ -4,16 +4,14 @@ import {
   GOOD_PASSWORD,
   OTHER_PASSWORD,
   fakeEnvelope,
-} from "@/lib/auth/password-test-support";
-import { NOW, ctxAt, ok } from "@/lib/data/access/access-test-support";
+} from "@/test/support/password-test-support";
+import { NOW, ctxAt, ok } from "@/test/support/access-test-support";
 import { getPasswordCredential } from "@/lib/data/access/password-credentials-store";
 import { createPasswordUser } from "@/lib/data/access/password-users";
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("@/lib/data/access/access-test-support").then((m) =>
-    m.faultyDynamodb(),
-  ),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 vi.mock("@/lib/auth/secret-envelope", () => fakeEnvelope);
 

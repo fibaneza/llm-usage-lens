@@ -1,9 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("./access-test-support").then((m) => m.faultyDynamodb()),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 
 import {
@@ -18,7 +18,7 @@ import {
   faults,
   ok,
   resetFaults,
-} from "./access-test-support";
+} from "@/test/support/access-test-support";
 import { grantRole, listRoleGrants, revokeRole } from "./role-grants";
 
 // Source: docs/specs/2026-11-10-access-control.md — "Audit log" (role.grant and

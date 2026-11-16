@@ -3,10 +3,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { settingsTabsFor } from "@/lib/settings-tabs";
 import type { AccessSectionSlug } from "@/lib/settings-tabs";
-import { NEVER_SYNCED } from "@/test/api-stubs";
-import { ORG_ROUTES, ok, page, stubAccessApi } from "@/test/access-ui-stubs";
-import { ADMIN, AUDITOR, ORG_ADMIN, PLAIN_VIEWER } from "@/test/access-viewers";
-import { renderWithProviders } from "@/test/render-providers";
+import { NEVER_SYNCED } from "@/test/fakes/api-stubs";
+import {
+  ORG_ROUTES,
+  ok,
+  page,
+  stubAccessApi,
+} from "@/test/fakes/access-ui-stubs";
+import {
+  ADMIN,
+  AUDITOR,
+  ORG_ADMIN,
+  PLAIN_VIEWER,
+} from "@/test/fixtures/access-viewers";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { AccessSections } from "./access/AccessSections";
 import type { AccessViewer, StepUpActions } from "./access/types";

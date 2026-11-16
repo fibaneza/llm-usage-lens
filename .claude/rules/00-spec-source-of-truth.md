@@ -22,6 +22,7 @@ cite it in your response.
 | Dynamic workflows (piloted per implementation-phases — *Workflow pilots*) | `docs/guides/dynamic-workflows.md` | Proposing multi-agent workflow orchestration |
 | GitHub / Actions practice | `docs/guides/github-best-practices.md` | Workflow, branching, or PR changes |
 | Local git hooks (Husky) | `docs/guides/git-hooks.md` | Changing or debugging hooks |
+| Test layout, projects, helpers, coverage | `docs/guides/testing.md` | Writing, moving or running Vitest tests |
 | Guided learning path | `docs/guides/learning-path.md` | Onboarding or explaining the build order |
 
 ## Rules

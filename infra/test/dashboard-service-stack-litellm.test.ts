@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-litellm.md — "Security architecture" items 3-5
 // and "Cloud permissions" (service key in task-definition `secrets`, execution
 // role only, one parameter ARN, no ssm:PutParameter, TaskSecurityGroupId

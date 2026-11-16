@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // `session.user.authTime`. An Entra token without a valid integer `auth_time`
 // gets no authTime but the session is still issued. Threats T31 (client sets
 // authTime) and T32 (SSO reuse / missing claim). Same harness as
-// auth.r1.test.ts: next-auth is mocked to capture the callbacks.
+// auth.test.ts (moved from auth.r1): next-auth is mocked to capture the callbacks.
 type Rec = Record<string, unknown>;
 type Config = {
   callbacks: {

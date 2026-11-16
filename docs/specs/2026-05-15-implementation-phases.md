@@ -810,11 +810,13 @@ before L4, never during a unit that edits the same files (Rule 60.24a).
   `app/api/**` route and one parameterised suite for the `401` shape,
   `403` before parsing, `400` shape, `no-store` and one `denied` audit per
   refused write; remove the per-route copies it supersedes
-- [ ] Merge the per-run files into their canonical test files
+- [x] Merge the per-run files into their canonical test files
   (`auth.r1`/`auth.r2` → `auth.test.ts`, `env.r1`/`env.r2`, `roles.r1`,
   `operations.review`, `connection-test.warnings`), dropping duplicate
-  cases (`auth.r1` stays: its mocks differ from `auth.test.ts`, so the two do not merge cleanly; the fold of
-  `auth.recent-auth` also remains)
+  cases (`auth.r1` was merged last, by the test-structure chore on
+  2026-11-17, as its own describe block with per-test mocks; no per-run
+  file remains. `auth.recent-auth` is kept as a named aspect —
+  `docs/guides/testing.md`)
 - [x] One layer per behaviour: remove component or e2e cases that only
   repeat an integration-level assertion (audited 2026-11-16: five
   `departments.spec.ts` cases that re-ran `DepartmentsContent.test.tsx`

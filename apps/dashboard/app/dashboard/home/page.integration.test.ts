@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CALLERS, seedOrg, signInAs } from "@/test/scope-fixtures";
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { CALLERS, seedOrg, signInAs } from "@/test/fixtures/scope-fixtures";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 import HomePage from "./page";
 
@@ -9,12 +9,12 @@ import HomePage from "./page";
 // admin and org admin -> Cost overview (/dashboard); lead and user -> My usage
 // (/dashboard/me). This replaces the 4R.5 My teams landing for a lead");
 // Auditor -> Cost overview; slice B1 brief B1-3 and B1-4. The page reads the
-// real policy inputs from DynamoDB Local (test/scope-fixtures.ts org); only
+// real policy inputs from DynamoDB Local (test/fixtures/scope-fixtures.ts org); only
 // `@/auth` and the Next redirect are stubbed. /dashboard/home keeps working as
 // the landing redirect for a bookmarked URL.
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("next/cache", async () => {
-  const mod = await import("@/test/next-cache-fake");
+  const mod = await import("@/test/fakes/next-cache-fake");
   return mod.fakeNextCache;
 });
 vi.mock("next/navigation", () => ({
@@ -28,7 +28,7 @@ vi.mock("next/navigation", () => ({
 
 beforeAll(ensureTestTable);
 beforeEach(async () => {
-  const { resetFakeCache } = await import("@/test/next-cache-fake");
+  const { resetFakeCache } = await import("@/test/fakes/next-cache-fake");
   resetFakeCache();
   await clearTable();
   await seedOrg();

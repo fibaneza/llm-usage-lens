@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createFakeLiteLLM, healthyHandler } from "@/test/fake-litellm";
+import { createFakeLiteLLM, healthyHandler } from "@/test/fakes/fake-litellm";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Gateway guardrails" item 6
 // ("The connection test reports 'service key uses temporary wildcards

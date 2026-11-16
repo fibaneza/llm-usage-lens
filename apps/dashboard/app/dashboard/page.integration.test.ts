@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CALLERS, seedOrg, signInAs } from "@/test/scope-fixtures";
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { CALLERS, seedOrg, signInAs } from "@/test/fixtures/scope-fixtures";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 import OverviewPage from "./page";
 
@@ -13,11 +13,11 @@ import OverviewPage from "./page";
 // (`/dashboard` is the sign-in callback target: a non-global caller is
 // redirected to /dashboard/me and the Overview content is never rendered;
 // ?view=overview is removed and has no effect). Real policy inputs from
-// DynamoDB Local (test/scope-fixtures.ts org); only `@/auth` and the Next
+// DynamoDB Local (test/fixtures/scope-fixtures.ts org); only `@/auth` and the Next
 // redirect are stubbed.
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("next/cache", async () => {
-  const mod = await import("@/test/next-cache-fake");
+  const mod = await import("@/test/fakes/next-cache-fake");
   return mod.fakeNextCache;
 });
 vi.mock("next/navigation", () => ({
@@ -31,7 +31,7 @@ vi.mock("next/navigation", () => ({
 
 beforeAll(ensureTestTable);
 beforeEach(async () => {
-  const { resetFakeCache } = await import("@/test/next-cache-fake");
+  const { resetFakeCache } = await import("@/test/fakes/next-cache-fake");
   resetFakeCache();
   await clearTable();
   await seedOrg();

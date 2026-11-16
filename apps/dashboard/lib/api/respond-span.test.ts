@@ -19,7 +19,7 @@ import {
   jsonData,
   withRoute,
 } from "@/lib/api/respond";
-import { installFakeOtel, recordedSpans } from "@/test/otel-fake";
+import { installFakeOtel, recordedSpans } from "@/test/fakes/otel-fake";
 
 // Source: Rule 60.17/60.18 (errors reach OpenTelemetry via a span started in
 // withRoute so recordException always lands); Rule 50.6 (no secrets in

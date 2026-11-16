@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { ADMIN, AUDITOR, ORG_ADMIN, PLAIN_VIEWER } from "@/test/access-viewers";
+import {
+  ADMIN,
+  AUDITOR,
+  ORG_ADMIN,
+  PLAIN_VIEWER,
+} from "@/test/fixtures/access-viewers";
 
 import { resolveSettingsHash } from "./settings-hash";
 import { settingsTabsFor } from "./settings-tabs";

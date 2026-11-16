@@ -11,8 +11,8 @@ import {
   NEVER_SYNCED,
   overviewFixture,
   stubApi,
-} from "@/test/api-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+} from "@/test/fakes/api-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import OverviewPage from "./page";
 

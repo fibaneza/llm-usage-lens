@@ -38,7 +38,7 @@ credentials must never reach the browser.
      `403` `FORBIDDEN` when the session lacks the `internal-admin` role (legacy
      `Admin` alias outside `APP_ENV=prod`), before input parsing
      (`withRoute(..., { requireAdmin: true })`; enforced by
-     `app/api/write-routes.integration.test.ts`). Exceptions follow the
+     `app/api/__tests__/write-routes.integration.test.ts`). Exceptions follow the
      Access Control permission matrix instead, still `403` before
      parsing (`matrixWrite`, registered in `test/route-registry.ts`): the
      4R.4 team-scoped access writes, and the LiteLLM team writes of L4

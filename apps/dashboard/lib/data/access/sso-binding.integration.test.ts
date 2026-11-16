@@ -6,11 +6,15 @@ import {
   GOOD_PASSWORD,
   TENANT,
   fakeEnvelope,
-} from "@/lib/auth/password-test-support";
-import { clearTable, ensureTestTable, putRaw } from "@/test/test-support";
+} from "@/test/support/password-test-support";
+import {
+  clearTable,
+  ensureTestTable,
+  putRaw,
+} from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("./access-test-support").then((m) => m.faultyDynamodb()),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 vi.mock("@/env", async (orig) => ({
   env: {
@@ -31,7 +35,7 @@ import {
   auditRecords,
   ctxAt,
   ok,
-} from "./access-test-support";
+} from "@/test/support/access-test-support";
 import { grantAdminScope, listAdminScopes } from "./admin-scopes";
 import { addMember, getAffiliation } from "./affiliations";
 import { getIdentityLink, putIdentityLink } from "./identity-links";

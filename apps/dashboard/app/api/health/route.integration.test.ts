@@ -2,7 +2,7 @@ import { HealthResponseSchema } from "@llm-usage-lens/shared";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { auth } from "@/auth";
-import { TEST_TABLE_NAME, ensureTestTable } from "@/test/test-support";
+import { TEST_TABLE_NAME, ensureTestTable } from "@/test/support/test-support";
 
 // Source: docs/specs/2026-11-10-access-control.md — "API routes" (/api/health:
 // no session, no data, Cache-Control private no-store); docs/specs/
@@ -12,7 +12,7 @@ import { TEST_TABLE_NAME, ensureTestTable } from "@/test/test-support";
 
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("next/cache", async () => {
-  const mod = await import("@/test/next-cache-fake");
+  const mod = await import("@/test/fakes/next-cache-fake");
   return mod.passThroughNextCache;
 });
 

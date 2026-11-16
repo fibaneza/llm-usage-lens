@@ -6,10 +6,10 @@ import {
   clearTable,
   ensureTestTable,
   testDoc,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("./access-test-support").then((m) => m.faultyDynamodb()),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 
 import {
@@ -20,7 +20,7 @@ import {
   ctxAt,
   dumpTable,
   ok,
-} from "./access-test-support";
+} from "@/test/support/access-test-support";
 import {
   completePasswordSetupWrite,
   getPasswordCredential,

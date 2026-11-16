@@ -12,7 +12,7 @@ import {
   clearTable,
   ensureTestTable,
   testDoc,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 // Source: docs/specs/2026-11-10-access-control.md — "Data model additions"
 // (Identity row), "Sign-in methods" (lockout), "Threat model" T20; contract r1

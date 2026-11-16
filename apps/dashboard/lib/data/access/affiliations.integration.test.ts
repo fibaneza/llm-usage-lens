@@ -1,9 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("./access-test-support").then((m) => m.faultyDynamodb()),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 
 import {
@@ -19,7 +19,7 @@ import {
   ok,
   resetFaults,
   seedSsoAffiliation,
-} from "./access-test-support";
+} from "@/test/support/access-test-support";
 import { grantAdminScope, listAdminScopes } from "./admin-scopes";
 import {
   addMember,

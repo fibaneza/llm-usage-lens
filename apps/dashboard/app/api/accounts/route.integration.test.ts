@@ -4,7 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 const auth = vi.fn();
 vi.mock("@/auth", () => ({ auth: () => auth() }));
 vi.mock("next/cache", async () => {
-  const mod = await import("@/test/next-cache-fake");
+  const mod = await import("@/test/fakes/next-cache-fake");
   return mod.passThroughNextCache;
 });
 
@@ -15,7 +15,7 @@ import {
   ensureTestTable,
   loadFixtures,
   makeAccount,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes" (GET
 // /api/accounts) + "Entity: AccountMeta"; Rule 10.3, Rule 50.4, Rule 60.23.

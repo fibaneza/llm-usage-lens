@@ -2,7 +2,7 @@ import { render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { settingsTabsFor } from "@/lib/settings-tabs";
-import { ADMIN, ORG_ADMIN } from "@/test/access-viewers";
+import { ADMIN, ORG_ADMIN } from "@/test/fixtures/access-viewers";
 
 import { SettingsHashResolver } from "./SettingsHashResolver";
 

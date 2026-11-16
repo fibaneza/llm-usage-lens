@@ -1,8 +1,8 @@
 import { screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { apiError, apiResponse } from "@/test/api-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+import { apiError, apiResponse } from "@/test/fakes/api-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { AccountsTab } from "./AccountsTab";
 

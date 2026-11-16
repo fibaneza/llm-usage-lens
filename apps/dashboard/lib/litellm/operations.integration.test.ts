@@ -14,8 +14,8 @@ import {
   vi,
 } from "vitest";
 
-import { createFakeLiteLLM } from "@/test/fake-litellm";
-import type { FakeCall } from "@/test/fake-litellm";
+import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
+import type { FakeCall } from "@/test/fakes/fake-litellm";
 import {
   AUTO_KEY_TRAP,
   NEW_KEY_VALUE,
@@ -27,14 +27,14 @@ import {
   TOKEN_B,
   USER_ID,
   gatewayHandler,
-} from "@/test/fake-litellm-gateway";
-import type { GatewayFakeOptions } from "@/test/fake-litellm-gateway";
+} from "@/test/fakes/fake-litellm-gateway";
+import type { GatewayFakeOptions } from "@/test/fakes/fake-litellm-gateway";
 import {
   TEST_TABLE_NAME,
   clearTable,
   ensureTestTable,
   testDoc,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Allowlist (the gateway)" (one
 // typed function per row; fixed method and path; strict Zod input schema

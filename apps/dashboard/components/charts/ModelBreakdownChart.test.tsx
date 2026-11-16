@@ -8,7 +8,7 @@ import {
   srOnlyMatches,
   stubSizedResizeObserver,
   teardownChartTest,
-} from "@/test/chart-test-utils";
+} from "@/test/support/chart-test-utils";
 
 import { ModelBreakdownChart } from "./ModelBreakdownChart";
 

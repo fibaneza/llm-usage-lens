@@ -1,6 +1,6 @@
 // Test-only registry of every Route Handler under app/api: one typed entry per
 // METHOD + route file, the single source the shared route-contract suite
-// (app/api/route-contract.integration.test.ts) iterates, and the lists
+// (app/api/__tests__/route-contract.integration.test.ts) iterates, and the lists
 // write-routes.integration.test.ts takes its permission classes from. Not
 // imported by production code.
 //
@@ -23,15 +23,15 @@ import {
 } from "@/lib/data/access/password-users";
 import { grantRole } from "@/lib/data/access/role-grants";
 import { putTeamLink } from "@/lib/data/litellm/team-links";
-import { ok } from "@/lib/data/access/access-test-support";
+import { ok } from "@/test/support/access-test-support";
 import {
   PEOPLE,
   seedAdminScope,
   seedCtx,
   seedMember,
-} from "@/test/matrix-route-support";
-import { accounts } from "@/test/scope-fixtures";
-import { putRaw } from "@/test/test-support";
+} from "@/test/support/matrix-route-support";
+import { accounts } from "@/test/fixtures/scope-fixtures";
+import { putRaw } from "@/test/support/test-support";
 
 export type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type RouteKind =

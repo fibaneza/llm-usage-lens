@@ -2,8 +2,14 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ALICE, fail, ok, page, stubAccessApi } from "@/test/access-ui-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+import {
+  ALICE,
+  fail,
+  ok,
+  page,
+  stubAccessApi,
+} from "@/test/fakes/access-ui-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { PerUserApprovalSection } from "./PerUserApprovalSection";
 

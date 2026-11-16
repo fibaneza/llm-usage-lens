@@ -2,7 +2,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ensureTestTable } from "@/test/test-support";
+import { ensureTestTable } from "@/test/support/test-support";
 
 // Source: docs/specs/2026-11-10-platform.md — "Runtime / Health check";
 // Rule 60.22 (DynamoDB Local, no AWS). checkDynamoDb runs DescribeTable on the

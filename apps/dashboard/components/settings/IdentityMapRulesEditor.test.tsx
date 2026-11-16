@@ -3,8 +3,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { apiError, apiResponse } from "@/test/api-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+import { apiError, apiResponse } from "@/test/fakes/api-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import { IdentityMapRulesEditor } from "./IdentityMapRulesEditor";
 

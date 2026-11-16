@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Source: docs/specs/2026-11-10-platform.md — "IaC layout" (two stacks,
 // region from COLLECTOR_REGION; Rule 50.7); contract rp-contract.md.
 import { App } from "aws-cdk-lib";

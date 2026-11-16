@@ -8,13 +8,19 @@ import {
   clearTable,
   ensureTestTable,
   testDoc,
-} from "@/test/test-support";
+} from "@/test/support/test-support";
 
 vi.mock("@/lib/dynamodb", () =>
-  import("./access-test-support").then((m) => m.faultyDynamodb()),
+  import("@/test/support/access-test-support").then((m) => m.faultyDynamodb()),
 );
 
-import { NOW, dumpTable, auditRecords, ctxAt, ok } from "./access-test-support";
+import {
+  NOW,
+  dumpTable,
+  auditRecords,
+  ctxAt,
+  ok,
+} from "@/test/support/access-test-support";
 import { putIdentityLink } from "./identity-links";
 import {
   changePasswordWrite,

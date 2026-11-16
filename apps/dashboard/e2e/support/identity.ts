@@ -3,4 +3,4 @@
 export {
   deleteStoredIdentity,
   seedStoredIdentity,
-} from "../../test/e2e-identity-seed";
+} from "../../test/fixtures/e2e-identity-seed";

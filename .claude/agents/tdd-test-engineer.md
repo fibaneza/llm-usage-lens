@@ -11,6 +11,9 @@ that defines what "done" means — before any production code exists.
 
 ## Inputs
 
+- The [testing guide](../../docs/guides/testing.md): where a new test file
+  goes, its name, which project runs it, and which `apps/dashboard/test/`
+  folder holds the shared helper you need (Rule 60.20).
 - The feature or task description (often one Phase 4 sub-phase, or a slice).
 - On a **rework pass**: the consolidated REQUEST-CHANGES blocker checklist —
   encode each behavioural blocker as a failing test before the

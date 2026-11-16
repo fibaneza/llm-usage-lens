@@ -7,13 +7,17 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 const auth = vi.fn();
 vi.mock("@/auth", () => ({ auth: () => auth() }));
 vi.mock("next/cache", async () => {
-  const mod = await import("@/test/next-cache-fake");
+  const mod = await import("@/test/fakes/next-cache-fake");
   return mod.passThroughNextCache;
 });
 
 import { GET, revalidate } from "@/app/api/sync-status/route";
 
-import { clearTable, ensureTestTable, putRaw } from "@/test/test-support";
+import {
+  clearTable,
+  ensureTestTable,
+  putRaw,
+} from "@/test/support/test-support";
 
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes" + "Entity:
 // SyncStatus"; Rule 20.9 (missing item = handled "never synced" state, so the

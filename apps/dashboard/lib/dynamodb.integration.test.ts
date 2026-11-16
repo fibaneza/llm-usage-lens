@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 
-import { clearTable, ensureTestTable } from "@/test/test-support";
+import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 // Source: implementation-phases Phase 3.2 — "AWS SDK v3 document client;
 // configurable endpoint (DynamoDB Local vs AWS)"; Rule 10.

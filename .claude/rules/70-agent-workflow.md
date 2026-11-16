@@ -181,8 +181,8 @@ review = quality-reviewer + spec-guardian + ecc reviewers
       so it runs only where it can catch a defect nothing else does:
       - **Shared files** (they affect every page or the e2e harness):
         `e2e/support/**`, `playwright.config.ts`, `scripts/e2e-lock.mjs`,
-        `scripts/seed*.ts`, `test/role-probe-seed.ts`,
-        `test/e2e-identity-seed.ts`, `lib/nav.ts`, `lib/auth/**`,
+        `scripts/seed*.ts`, `test/fixtures/role-probe-seed.ts`,
+        `test/fixtures/e2e-identity-seed.ts`, `lib/nav.ts`, `lib/auth/**`,
         `app/layout.tsx`, `app/dashboard/layout.tsx`, `app/globals.css`,
         `components/layout/**`, `components/ui/**`,
         `components/providers/**`, `auth.ts`, `proxy.ts`, `next.config.ts`.

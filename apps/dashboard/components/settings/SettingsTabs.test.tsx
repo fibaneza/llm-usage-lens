@@ -2,7 +2,12 @@ import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { settingsTabsFor } from "@/lib/settings-tabs";
-import { ADMIN, AUDITOR, ORG_ADMIN, PLAIN_VIEWER } from "@/test/access-viewers";
+import {
+  ADMIN,
+  AUDITOR,
+  ORG_ADMIN,
+  PLAIN_VIEWER,
+} from "@/test/fixtures/access-viewers";
 
 import { SettingsTabs } from "./SettingsTabs";
 

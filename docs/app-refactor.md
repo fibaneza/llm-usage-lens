@@ -2,7 +2,11 @@
 
 A plan to make the Vitest layout of the dashboard workspace consistent and
 documented, without changing application behaviour. Written 2026-11-16 from a
-review of `main` at `2a07115`. Nothing in this plan is done yet.
+review of `main` at `2a07115`.
+
+**Status: done on `chore/test-structure` (2026-11-17).** The resulting layout,
+commands and coverage baseline are in [the testing guide](guides/testing.md).
+The paths below describe the state before the moves.
 
 This is a chore, not a phase: it does not belong to the Rule 30 build order. It
 runs as one goal on one branch (`chore/test-structure`) and lands as one squash

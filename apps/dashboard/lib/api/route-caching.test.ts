@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", async () => {
-  const mod = await import("@/test/next-cache-fake");
+  const mod = await import("@/test/fakes/next-cache-fake");
   return mod.fakeNextCache;
 });
 const auth = vi.hoisted(() => vi.fn());
@@ -50,8 +50,8 @@ import {
   resetFakeCache,
   revalidatedTags,
   revalidations,
-} from "@/test/next-cache-fake";
-import { buildRollup } from "@/test/rollup-builder";
+} from "@/test/fakes/next-cache-fake";
+import { buildRollup } from "@/test/fixtures/rollup-builder";
 
 const acct = (n: number) => String(n).padStart(12, "0");
 

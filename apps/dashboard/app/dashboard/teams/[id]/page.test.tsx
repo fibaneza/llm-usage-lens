@@ -9,8 +9,8 @@ import {
   stubApi,
   teamDetailBody,
   teamDetailFixture,
-} from "@/test/api-stubs";
-import { renderWithProviders } from "@/test/render-providers";
+} from "@/test/fakes/api-stubs";
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import TeamDetailPage from "./page";
 

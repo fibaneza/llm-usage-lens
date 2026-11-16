@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRollup } from "@/test/rollup-builder";
+import { buildRollup } from "@/test/fixtures/rollup-builder";
 
 import { aggregateDepartmentDetail } from "./departments";
 import { aggregateOverview } from "./overview";
