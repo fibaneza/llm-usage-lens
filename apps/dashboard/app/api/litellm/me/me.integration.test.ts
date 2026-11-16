@@ -19,6 +19,8 @@ import {
   stubLiteLLMEnv,
   useEnv,
 } from "@/test/fake-litellm-views";
+import { ctxAt, ok } from "@/lib/data/access/access-test-support";
+import { grantRole } from "@/lib/data/access/role-grants";
 import { installFakeOtel, recordedSpans } from "@/test/otel-fake";
 import { CALLERS, signInAs } from "@/test/scope-fixtures";
 import { clearTable } from "@/test/test-support";
@@ -301,5 +303,80 @@ describe("GET /api/litellm/me", () => {
     signInAs("memberA");
     const { res } = await me();
     expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md -- "Team configuration page (L4)"
+// (Who: a Lead for the teams in its scope, internal-org-admin and
+// internal-admin; the Auditor, Viewers and plain members get no page; entry
+// link only for callers who can open it), LD25; Access Control -- Roles, Rule
+// 50.4 (stored grants count). Contract: each `teams[]` entry carries an
+// optional boolean `configurable`, computed on the server per request; absent
+// means false.
+describe("GET /api/litellm/me teams[].configurable (Team configuration page: Who)", () => {
+  type TeamRow = { teamId: string; configurable?: boolean };
+  const teamsOf = async (): Promise<TeamRow[]> => {
+    const { res, body } = await me();
+    expect(res.status).toBe(200);
+    return body.data.teams;
+  };
+  const flag = (rows: TeamRow[], id: string) =>
+    rows.find((t) => t.teamId === id)?.configurable ?? false;
+
+  it("a team-scope Lead can configure its own team only", async () => {
+    signInAs("teamAdminA");
+    const rows = await teamsOf();
+    expect(flag(rows, "team-a")).toBe(true);
+    expect(rows.filter((t) => t.configurable).map((t) => t.teamId)).toEqual([
+      "team-a",
+    ]);
+  });
+
+  it("a department-scope Lead can configure the teams of its department, not other departments' teams", async () => {
+    signInAs("deptAdminEng");
+    const rows = await teamsOf();
+    expect(flag(rows, "team-a")).toBe(true);
+    expect(flag(rows, "team-b")).toBe(true);
+    expect(flag(rows, "team-c")).toBe(false);
+  });
+
+  it.each(["orgAdmin", "admin"] as const)(
+    "%s can configure every team they are shown",
+    async (who) => {
+      signInAs(who);
+      const rows = await teamsOf();
+      expect(rows.length).toBeGreaterThanOrEqual(4);
+      expect(rows.every((t) => t.configurable === true)).toBe(true);
+    },
+  );
+
+  it("a stored internal-org-admin grant on a viewer claim counts (Rule 50.4)", async () => {
+    ok(
+      await grantRole(
+        {
+          oid: "00000000-0000-4000-8000-0000000009ff",
+          role: "internal-org-admin",
+          reason: "test",
+        },
+        ctxAt(undefined, "req-grant-config"),
+      ),
+    );
+    await signInWithRoles(["internal-viewer"]);
+    const rows = await teamsOf();
+    expect(rows.length).toBeGreaterThanOrEqual(4);
+    expect(rows.every((t) => t.configurable === true)).toBe(true);
+  });
+
+  it("the Auditor sees teams but can configure none (user direction: no page)", async () => {
+    signInAs("auditor");
+    const rows = await teamsOf();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.some((t) => t.configurable === true)).toBe(false);
+  });
+
+  it("a Viewer who is a plain member of a team can configure none (a member-only team is not even listed)", async () => {
+    signInAs("memberA");
+    const rows = await teamsOf();
+    expect(rows.some((t) => t.configurable === true)).toBe(false);
   });
 });

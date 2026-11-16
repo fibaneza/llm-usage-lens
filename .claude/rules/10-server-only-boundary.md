@@ -38,10 +38,16 @@ credentials must never reach the browser.
      `403` `FORBIDDEN` when the session lacks the `internal-admin` role (legacy
      `Admin` alias outside `APP_ENV=prod`), before input parsing
      (`withRoute(..., { requireAdmin: true })`; enforced by
-     `app/api/write-routes.integration.test.ts`). Exception (user,
-     2026-11-16; LiteLLM spec LD24): `PUT /api/litellm/toggles` and the
-     team-links writes also accept `internal-org-admin`; the LiteLLM
-     connection writes stay `internal-admin` only.
+     `app/api/write-routes.integration.test.ts`). Exceptions follow the
+     Access Control permission matrix instead, still `403` before
+     parsing (`matrixWrite`, registered in `test/route-registry.ts`): the
+     4R.4 team-scoped access writes, and the LiteLLM team writes of L4
+     (members, keys, team budget, limits and models: Lead in scope,
+     `internal-org-admin`, `internal-admin`; LiteLLM spec — *Allowlist →
+     Writes*, LD26; amended 2026-11-16). `PUT /api/litellm/toggles` and the
+     team-links writes accept `internal-admin` or `internal-org-admin`
+     (user, 2026-11-16; LD24). The LiteLLM connection writes and LiteLLM
+     team creation stay `internal-admin` only.
    - Validate query/body with Zod (`400` on failure).
    - Return `{ data: T }` on success, `{ error: { code, message } }` on failure.
    - Use the `DateRangeQuerySchema` 90-day cap on custom ranges.

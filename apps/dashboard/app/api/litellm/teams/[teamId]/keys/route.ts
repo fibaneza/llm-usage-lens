@@ -1,14 +1,38 @@
 import { LiteLLMKeysResponseSchema } from "@llm-usage-lens/shared";
+import { z } from "zod";
 
 import { IdParamSchema } from "@/lib/api/id-param";
-import { jsonData, parseInput, withRoute } from "@/lib/api/respond";
-import { listKeys } from "@/lib/litellm/operations";
+import {
+  NOT_FOUND_MESSAGE,
+  NotFoundError,
+  jsonData,
+  parseInput,
+  withRoute,
+} from "@/lib/api/respond";
+import {
+  resolveLiteLLMUserId,
+  emailsOf,
+  snapshot,
+} from "@/lib/litellm/member-write";
+import {
+  Duration,
+  generateMemberKey,
+  listKeys,
+} from "@/lib/litellm/operations";
 import {
   keyView,
   liteLLMResponse,
+  reduceMembers,
   resolveLiteLLMTeam,
 } from "@/lib/litellm/read-views";
 import { openModeRefusal } from "@/lib/litellm/route-guard";
+import {
+  KeySettingsShape,
+  assertNotPrivileged,
+  checkKeySettings,
+  defined,
+  teamWriteRoute,
+} from "@/lib/litellm/team-write";
 
 // Source: docs/specs/2026-11-10-litellm.md — "API routes" (/api/litellm/teams/
 // [teamId]/keys GET in scope), "Roles and rights" (keys' metadata, never key
@@ -50,3 +74,57 @@ export const GET = withRoute(async (_request, { params }, session) => {
     );
   });
 });
+
+// ---- POST: generateMemberKey ----------------------------------------------
+
+// Source: docs/specs/2026-11-10-litellm.md - "Writes" (generateMemberKey: Lead
+// + Admin; models <= team, limits <= member and team; the audit names the new
+// token id with alias, models and limits, never the value), "Privileged
+// targets are refused", "Budgets and limits", LT4, LT5, LT9, LT10, LT14, LT18.
+// The key value is in this one response only; the audit, DynamoDB, logs and
+// any later response never carry it.
+const GenerateBodySchema = z.strictObject({
+  oid: IdParamSchema,
+  ...KeySettingsShape,
+  duration: Duration.optional(),
+});
+
+export const POST = teamWriteRoute(
+  {
+    action: "litellm.key.generate",
+    pattern: "/api/litellm/teams/[teamId]/keys",
+    toggle: "generateMemberKey",
+    status: 201,
+    body: GenerateBodySchema,
+  },
+  async ({ actor, teamId, litellmTeamId, body, teamInfo }) => {
+    const info = await teamInfo();
+    const litellmUserId = await resolveLiteLLMUserId(body.oid);
+    const member = litellmUserId
+      ? reduceMembers(info.team_memberships, emailsOf(info)).find(
+          (m) => m.userId === litellmUserId,
+        )
+      : undefined;
+    if (!litellmUserId || !member) throw new NotFoundError(NOT_FOUND_MESSAGE);
+    await assertNotPrivileged(litellmUserId);
+
+    const { oid, ...settings } = body;
+    await checkKeySettings(settings, info, litellmUserId);
+    const given = defined(settings);
+    const issued = await generateMemberKey(
+      { litellmTeamId, litellmUserId, dashboardTeamId: teamId, ...given },
+      { actor },
+    );
+    return {
+      data: {
+        tokenId: issued.tokenId,
+        key: issued.key,
+        oid,
+        litellmUserId,
+        ...given,
+      },
+      target: { type: "litellm-key", id: issued.tokenId },
+      after: snapshot({ litellmUserId, ...given }),
+    };
+  },
+);

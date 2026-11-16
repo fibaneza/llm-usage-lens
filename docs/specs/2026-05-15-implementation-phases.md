@@ -726,8 +726,10 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)
 
-- [ ] Write routes for every allowlisted write (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list (workflow pilot candidate — *Workflow pilots*)
-- [ ] Team members (LiteLLM spec — LD10, LD16; amended 2026-11-14): Leads create, update and delete members (`removeTeamMember` default on); the LiteLLM team join link is added as `inviteTeamMember` only after the operators confirm the endpoint and the snapshot is refreshed — until then the UI invites through `addTeamMember`
+- [x] Write routes for every allowlisted write (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list route `/api/litellm/orphans` (workflow pilot candidate — *Workflow pilots*); its Settings display goes to unit A with the panel (agent decision, 2026-11-16: `components/settings/**` belongs to unit A)
+- [x] Team configuration page `/dashboard/litellm/team-config`, interim until ui-compact Slice B mounts the same `components/litellm/team/*` on Management → Team (LiteLLM spec — *Team configuration page*, LD25; user, 2026-11-16): Lead in scope, org-admin, Admin; Viewer, member, Auditor and out-of-scope `404`; a "Configure team" link in the *Team* tab; no `lib/nav.ts` edit
+- [x] Team members: Leads create, update and delete members (`addTeamMember` with the add-member candidates picker, `removeTeamMember` default on; LD10, LD16, LD26)
+- [ ] Team join link: `inviteTeamMember`, added only after the operators confirm the endpoint and the snapshot is refreshed (LD16); until then the UI invites through `addTeamMember` — not built (waits on the operators)
 - [ ] Verify: write matrix; LT5, LT9, LT10, LT13, LT16, LT18 (privileged member → `409`, no key or membership write); one audit record per success/failure, one `denied` per authorization refusal (incl. `409 PRIVILEGED_TARGET`) and none on other rejections; structural write-route test includes every LiteLLM write route; e2e probe
 
 > **Note (2026-11-16, mock-up review).** The Team page (Management → Team;

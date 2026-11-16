@@ -43,6 +43,14 @@ export function TeamArea() {
             </option>
           ))}
         </select>
+        {team.configurable === true ? (
+          <a
+            href={`/dashboard/litellm/team-config?team=${encodeURIComponent(team.teamId)}`}
+            className="text-primary text-sm font-medium underline-offset-4 hover:underline"
+          >
+            Configure team
+          </a>
+        ) : null}
       </div>
       {team.linked ? (
         <>

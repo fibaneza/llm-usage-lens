@@ -12,6 +12,11 @@ import { env } from "@/env";
 import { NOT_FOUND_MESSAGE, NotFoundError } from "@/lib/api/respond";
 import { scopeFor } from "@/lib/api/scoped-rollups";
 import type { Scope } from "@/lib/auth/policy";
+import {
+  INTERNAL_ADMIN_ROLE,
+  INTERNAL_AUDITOR_ROLE,
+  INTERNAL_ORG_ADMIN_ROLE,
+} from "@/lib/auth/roles";
 import { getAllAccounts } from "@/lib/data/account-meta";
 import { getOperationToggles } from "@/lib/data/litellm/toggles";
 import { getTeamLink, listTeamLinks } from "@/lib/data/litellm/team-links";
@@ -120,7 +125,15 @@ export type ViewableTeam = {
   teamId: string;
   teamName: string;
   linked: boolean;
+  // May open the team configuration page for this team (LD25): a Lead in
+  // scope, org-admin or Admin; never the Auditor.
+  configurable: boolean;
 };
+
+const CONFIGURING_ROLES: readonly string[] = [
+  INTERNAL_ADMIN_ROLE,
+  INTERNAL_ORG_ADMIN_ROLE,
+];
 
 // The teams the caller may open as Lead, Admin or Auditor, with whether each
 // is linked to LiteLLM; plus the LiteLLM ids of every linked team.
@@ -128,12 +141,14 @@ export async function viewableTeams(session: Session): Promise<{
   teams: ViewableTeam[];
   linkedLiteLLMTeamIds: Set<string>;
 }> {
-  const [accounts, links, scope] = await Promise.all([
+  const [accounts, links, scope, roles] = await Promise.all([
     getAllAccounts(),
     listTeamLinks(),
     scopeFor(session, [], {}),
+    globalRolesFor(session),
   ]);
   const linked = new Set(links.map((l) => l.teamId));
+  const writesAnyTeam = !!roles?.some((r) => CONFIGURING_ROLES.includes(r));
   const byId = new Map<string, ViewableTeam>();
   for (const a of accounts) {
     if (byId.has(a.teamId)) continue;
@@ -142,6 +157,10 @@ export async function viewableTeams(session: Session): Promise<{
       teamId: a.teamId,
       teamName: a.teamName,
       linked: linked.has(a.teamId),
+      configurable:
+        writesAnyTeam ||
+        scope.teamScopes.has(a.teamId) ||
+        scope.departmentScopes.has(a.departmentId),
     });
   }
   return {
@@ -170,9 +189,9 @@ export type TeamAccess = {
 };
 
 const ORG_WIDE_ROLES: readonly string[] = [
-  "internal-admin",
-  "internal-org-admin",
-  "internal-auditor",
+  INTERNAL_ADMIN_ROLE,
+  INTERNAL_ORG_ADMIN_ROLE,
+  INTERNAL_AUDITOR_ROLE,
 ];
 
 // Roles come from globalRolesFor (stored grants count); the team list from
@@ -325,6 +344,7 @@ const MembershipRow = z.object({
       budget_duration: Text,
       rpm_limit: Num,
       tpm_limit: Num,
+      max_parallel_requests: Num,
     })
     .nullish(),
 });
@@ -337,6 +357,7 @@ export type MemberRow = {
   budgetDuration: string | null;
   rpmLimit: number | null;
   tpmLimit: number | null;
+  maxParallelRequests: number | null;
 };
 
 export function reduceMembers(
@@ -351,6 +372,7 @@ export function reduceMembers(
     budgetDuration: m.litellm_budget_table?.budget_duration ?? null,
     rpmLimit: m.litellm_budget_table?.rpm_limit ?? null,
     tpmLimit: m.litellm_budget_table?.tpm_limit ?? null,
+    maxParallelRequests: m.litellm_budget_table?.max_parallel_requests ?? null,
   }));
 }
 

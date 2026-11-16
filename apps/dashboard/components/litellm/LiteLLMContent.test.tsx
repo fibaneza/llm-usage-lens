@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -635,5 +635,64 @@ describe("LiteLLMContent /api/litellm/me date range (B4)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md -- "Team configuration page (L4)"
+// (Entry point: a "Configure team" link in the Team tab, rendered only for
+// callers who can open the page), LD25. Server signal: `configurable` on each
+// `me.teams[]` entry (optional boolean, absent = false), computed by the me
+// route from the caller's scope/role; the link targets
+// /dashboard/litellm/team-config?team=<selected team id>.
+describe("LiteLLMContent Configure team link (L4, LD25)", () => {
+  const TEAMS = [
+    { teamId: "t1", teamName: "Payments", linked: true, configurable: true },
+    { teamId: "t2", teamName: "Risk", linked: true, configurable: false },
+  ];
+  const meWithTeams = (teams: unknown[]) => ({ ...ME_LINKED, teams });
+
+  it("links to the team configuration page for a configurable team", async () => {
+    stub(teamRoutes({ "/api/litellm/me": ok(meWithTeams(TEAMS)) }));
+    renderPage(ALL, "team");
+    expect(
+      await screen.findByRole("link", { name: "Configure team" }),
+    ).toHaveAttribute("href", "/dashboard/litellm/team-config?team=t1");
+  });
+
+  it("is absent when the selected team is not configurable, and follows the picker", async () => {
+    stub(
+      teamRoutes({
+        "/api/litellm/me": ok(meWithTeams(TEAMS)),
+        "/api/litellm/teams/t2": ok(TEAM_DETAIL),
+        "/api/litellm/teams/t2/members": ok(MEMBERS),
+        "/api/litellm/teams/t2/keys": ok(KEYS),
+      }),
+    );
+    renderPage(ALL, "team");
+    await screen.findByRole("link", { name: "Configure team" });
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Team" }),
+      "t2",
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("link", { name: "Configure team" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("is absent for a caller whose teams carry no configurable flag (fail closed: Auditor, Viewer)", async () => {
+    stub(
+      teamRoutes({
+        "/api/litellm/me": ok(
+          meWithTeams([{ teamId: "t1", teamName: "Payments", linked: true }]),
+        ),
+      }),
+    );
+    renderPage(ALL, "team");
+    await region("Members");
+    expect(
+      screen.queryByRole("link", { name: "Configure team" }),
+    ).not.toBeInTheDocument();
   });
 });

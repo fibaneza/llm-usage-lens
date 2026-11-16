@@ -251,7 +251,34 @@ describe("audit schemas", () => {
   it("lists every audited action", () => {
     // LD15: viewing the LiteLLM audit is itself audited; D27 adds the mapping-rules action;
     // LD24/LT22 add the denied-only connection-test action.
-    expect(AUDIT_ACTIONS).toHaveLength(47);
+    // L4 slice 1 adds the eight member-write actions (LiteLLM spec - Writes).
+    // L4 slices 2 and 3 add six key actions and four team actions.
+    expect(AUDIT_ACTIONS).toHaveLength(65);
+    for (const op of [
+      "add",
+      "remove",
+      "budget",
+      "limits",
+      "reset-spend",
+      "reset-budget",
+      "disable",
+      "enable",
+    ]) {
+      expect(AUDIT_ACTIONS).toContain(`litellm.member.${op}`);
+    }
+    for (const op of [
+      "generate",
+      "update",
+      "block",
+      "unblock",
+      "delete",
+      "rotate",
+    ]) {
+      expect(AUDIT_ACTIONS).toContain(`litellm.key.${op}`);
+    }
+    for (const op of ["create", "budget", "limits", "models"]) {
+      expect(AUDIT_ACTIONS).toContain(`litellm.team.${op}`);
+    }
     expect(AUDIT_ACTIONS).toContain("litellm.connection.test");
     expect(AUDIT_ACTIONS).toContain("litellm.audit.view");
     expect(AUDIT_ACTIONS).toContain("auth.signin.success");
@@ -390,6 +417,27 @@ describe("sanitizeAuditSnapshot (T17)", () => {
     expect(
       sanitizeAuditSnapshot({ teamId: "t1", source: "ui", version: 2 }),
     ).toMatchObject({ teamId: "t1", source: "ui" });
+  });
+  // LiteLLM spec - Writes (key and team audit "sanitised fields"), L4 slices 2-3.
+  it("keeps the LiteLLM key and team setting fields, but never a key value (LT9)", () => {
+    const fields = {
+      keyAlias: "ci",
+      models: ["claude-sonnet"],
+      maxBudget: 10,
+      budgetDuration: "30d",
+      softBudget: 8,
+      maxParallelRequests: 2,
+      duration: "30d",
+      modelRpmLimit: ["claude-sonnet=20"],
+      modelTpmLimit: ["claude-sonnet=2000"],
+      teamMemberRpmLimit: 10,
+      teamMemberTpmLimit: 1000,
+      teamAlias: "Alpha",
+      tokenIds: ["a".repeat(64)],
+    };
+    expect(sanitizeAuditSnapshot({ ...fields, key: "sk-secret" })).toEqual(
+      fields,
+    );
   });
   it("drops secrets and claim-like keys", () => {
     const out = sanitizeAuditSnapshot({

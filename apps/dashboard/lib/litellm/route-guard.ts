@@ -6,6 +6,11 @@ import { env } from "@/env";
 import { jsonError } from "@/lib/api/respond";
 import { globalRolesOf } from "@/lib/auth/policy";
 import type { ResolveScopeInput } from "@/lib/auth/policy";
+import {
+  INTERNAL_ADMIN_ROLE,
+  INTERNAL_AUDITOR_ROLE,
+  INTERNAL_ORG_ADMIN_ROLE,
+} from "@/lib/auth/roles";
 import type { GlobalRole } from "@/lib/auth/roles";
 import { loadAuthorization } from "@/lib/data/access/authorization";
 
@@ -65,7 +70,9 @@ export async function adminOrAuditorRefusal(
   session: Session | null,
 ): Promise<Response | null> {
   const roles = await globalRolesFor(session);
-  return roles?.some((r) => r === "internal-admin" || r === "internal-auditor")
+  return roles?.some(
+    (r) => r === INTERNAL_ADMIN_ROLE || r === INTERNAL_AUDITOR_ROLE,
+  )
     ? null
     : jsonError(403, "FORBIDDEN", "Admin or Auditor role required");
 }
@@ -78,9 +85,9 @@ export async function litellmReadRefusal(
   const roles = await globalRolesFor(session);
   return roles?.some(
     (r) =>
-      r === "internal-admin" ||
-      r === "internal-org-admin" ||
-      r === "internal-auditor",
+      r === INTERNAL_ADMIN_ROLE ||
+      r === INTERNAL_ORG_ADMIN_ROLE ||
+      r === INTERNAL_AUDITOR_ROLE,
   )
     ? null
     : jsonError(403, "FORBIDDEN", "Admin, Org Admin or Auditor role required");
@@ -94,7 +101,8 @@ export async function permitAdminOrOrgAdmin(
 ): Promise<boolean> {
   const roles = await globalRolesFor(session);
   return (
-    roles?.some((r) => r === "internal-admin" || r === "internal-org-admin") ??
-    false
+    roles?.some(
+      (r) => r === INTERNAL_ADMIN_ROLE || r === INTERNAL_ORG_ADMIN_ROLE,
+    ) ?? false
   );
 }

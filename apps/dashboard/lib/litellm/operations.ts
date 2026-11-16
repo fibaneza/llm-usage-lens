@@ -42,15 +42,15 @@ const DashboardTeamId = z
   .min(1)
   .max(128)
   .regex(/^[\x21-\x7e]+$/);
-const Budget = z.number().finite().min(0);
-const Limit = z.number().int().min(0);
-const Duration = z.string().regex(/^\d{1,4}(s|m|h|d|w|mo)$/);
-const KeyAlias = z
+export const Budget = z.number().finite().min(0);
+export const Limit = z.number().int().min(0);
+export const Duration = z.string().regex(/^\d{1,4}(s|m|h|d|w|mo)$/);
+export const KeyAlias = z
   .string()
   .min(1)
   .max(255)
   .regex(/^[\x20-\x7e]+$/);
-const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$/;
+export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$/;
 // Names that make LiteLLM treat a list as "every model" (LT4).
 const WIDENING_MODELS: ReadonlySet<string> = new Set([
   "all-proxy-models",
@@ -61,7 +61,7 @@ const ModelName = z
   .regex(MODEL_RE)
   .refine((n) => !WIDENING_MODELS.has(n), "Model list would widen access");
 // An empty list means every model to LiteLLM, so it is refused (LT4).
-const Models = z.array(ModelName).min(1).max(200);
+export const Models = z.array(ModelName).min(1).max(200);
 const ModelLimits = z.record(z.string().regex(MODEL_RE), Limit);
 const Email = z.string().trim().toLowerCase().pipe(z.email().max(254));
 const PageNumber = z.number().int().min(1).max(10_000);
@@ -189,6 +189,7 @@ const TeamInfoResponse = z.object({
     models: z.array(z.string()).nullish(),
     rpm_limit: z.number().nullish(),
     tpm_limit: z.number().nullish(),
+    max_parallel_requests: z.number().nullish(),
     members_with_roles: z
       .array(
         z.object({

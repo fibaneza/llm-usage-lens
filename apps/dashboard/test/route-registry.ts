@@ -31,6 +31,7 @@ import {
   seedMember,
 } from "@/test/matrix-route-support";
 import { accounts } from "@/test/scope-fixtures";
+import { putRaw } from "@/test/test-support";
 
 export type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type RouteKind =
@@ -356,6 +357,7 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     badQuery: BAD_RANGE,
   }),
   read("litellm/models/route.ts", { family: "litellm" }),
+  read("litellm/orphans/route.ts", { family: "litellm" }),
   read("litellm/team-links/route.ts", { family: "litellm" }),
   read("litellm/team-links/[teamId]/route.ts", {
     family: "litellm",
@@ -587,6 +589,161 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     family: "litellm",
     action: "litellm.toggles.update",
     validBody: { version: null, toggles: { getTeam: false } },
+  }),
+
+  // ---- litellm member writes (L4; LiteLLM spec - Writes, Roles and rights):
+  // a Lead in scope, org-admin and Admin write, so they register as matrix
+  // writes (the Lead and out-of-scope rows live in each route's own file).
+  // The routes without a body are refused on their path parameter instead.
+  matrixWrite("POST", "litellm/teams/[teamId]/members/route.ts", {
+    family: "litellm",
+    action: "litellm.member.add",
+    validParams: { teamId: "team-a" },
+    validBody: { oid: alice.oid },
+  }),
+  matrixWrite("DELETE", "litellm/teams/[teamId]/members/[oid]/route.ts", {
+    family: "litellm",
+    action: "litellm.member.remove",
+    validParams: { teamId: "team-a", oid: alice.oid },
+    badInput: { params: { teamId: "team-a", oid: LONG } },
+  }),
+  matrixWrite("PATCH", "litellm/teams/[teamId]/members/[oid]/budget/route.ts", {
+    family: "litellm",
+    action: "litellm.member.budget",
+    validParams: { teamId: "team-a", oid: alice.oid },
+    validBody: { maxBudgetInTeam: 5 },
+  }),
+  matrixWrite("PATCH", "litellm/teams/[teamId]/members/[oid]/limits/route.ts", {
+    family: "litellm",
+    action: "litellm.member.limits",
+    validParams: { teamId: "team-a", oid: alice.oid },
+    validBody: { rpmLimit: 5 },
+  }),
+  matrixWrite(
+    "POST",
+    "litellm/teams/[teamId]/members/[oid]/reset-spend/route.ts",
+    {
+      family: "litellm",
+      action: "litellm.member.reset-spend",
+      validParams: { teamId: "team-a", oid: alice.oid },
+      // resetMemberSpend defaults off (LD10); the permitted call must reach the
+      // handler rather than be stopped by the toggle.
+      seed: async () => {
+        await putRaw({
+          PK: "LITELLM#CONFIG",
+          SK: "TOGGLES",
+          version: 1,
+          toggles: { resetMemberSpend: true },
+          updatedAt: "2026-01-02T03:04:05.000Z",
+        });
+      },
+      validBody: {},
+      badInput: { params: { teamId: "team-a", oid: LONG } },
+    },
+  ),
+  matrixWrite(
+    "POST",
+    "litellm/teams/[teamId]/members/[oid]/reset-budget/route.ts",
+    {
+      family: "litellm",
+      action: "litellm.member.reset-budget",
+      validParams: { teamId: "team-a", oid: alice.oid },
+      validBody: {},
+      badInput: { params: { teamId: "team-a", oid: LONG } },
+    },
+  ),
+  matrixWrite("POST", "litellm/teams/[teamId]/members/[oid]/disable/route.ts", {
+    family: "litellm",
+    action: "litellm.member.disable",
+    validParams: { teamId: "team-a", oid: alice.oid },
+    validBody: {},
+    badInput: { params: { teamId: "team-a", oid: LONG } },
+  }),
+  matrixWrite("POST", "litellm/teams/[teamId]/members/[oid]/enable/route.ts", {
+    family: "litellm",
+    action: "litellm.member.enable",
+    validParams: { teamId: "team-a", oid: alice.oid },
+    validBody: {},
+    badInput: { params: { teamId: "team-a", oid: LONG } },
+  }),
+
+  // ---- litellm key and team-setting writes (L4 slices 2 and 3; LiteLLM spec -
+  // Writes, Roles and rights): a Lead in scope, org-admin and Admin write, so
+  // they register as matrix writes. createTeam stays Admin only (LD24).
+  matrixWrite("POST", "litellm/teams/[teamId]/keys/route.ts", {
+    family: "litellm",
+    action: "litellm.key.generate",
+    validParams: { teamId: "team-a" },
+    validBody: { oid: alice.oid },
+  }),
+  matrixWrite("PATCH", "litellm/teams/[teamId]/keys/[tokenId]/route.ts", {
+    family: "litellm",
+    action: "litellm.key.update",
+    validParams: { teamId: "team-a", tokenId: "a".repeat(64) },
+    validBody: { rpmLimit: 3 },
+  }),
+  matrixWrite("DELETE", "litellm/teams/[teamId]/keys/[tokenId]/route.ts", {
+    family: "litellm",
+    action: "litellm.key.delete",
+    validParams: { teamId: "team-a", tokenId: "a".repeat(64) },
+    // deleteKey defaults off (LD10); the permitted call must reach the handler.
+    seed: async () => {
+      await putRaw({
+        PK: "LITELLM#CONFIG",
+        SK: "TOGGLES",
+        version: 1,
+        toggles: { deleteKey: true },
+        updatedAt: "2026-01-02T03:04:05.000Z",
+      });
+    },
+    badInput: { params: { teamId: "team-a", tokenId: LONG } },
+  }),
+  matrixWrite("POST", "litellm/teams/[teamId]/keys/[tokenId]/block/route.ts", {
+    family: "litellm",
+    action: "litellm.key.block",
+    validParams: { teamId: "team-a", tokenId: "a".repeat(64) },
+    validBody: {},
+    badInput: { params: { teamId: "team-a", tokenId: LONG } },
+  }),
+  matrixWrite(
+    "POST",
+    "litellm/teams/[teamId]/keys/[tokenId]/unblock/route.ts",
+    {
+      family: "litellm",
+      action: "litellm.key.unblock",
+      validParams: { teamId: "team-a", tokenId: "a".repeat(64) },
+      validBody: {},
+      badInput: { params: { teamId: "team-a", tokenId: LONG } },
+    },
+  ),
+  matrixWrite("POST", "litellm/teams/[teamId]/keys/[tokenId]/rotate/route.ts", {
+    family: "litellm",
+    action: "litellm.key.rotate",
+    validParams: { teamId: "team-a", tokenId: "a".repeat(64) },
+    validBody: {},
+  }),
+  matrixWrite("PATCH", "litellm/teams/[teamId]/budget/route.ts", {
+    family: "litellm",
+    action: "litellm.team.budget",
+    validParams: { teamId: "team-a" },
+    validBody: { maxBudget: 50 },
+  }),
+  matrixWrite("PATCH", "litellm/teams/[teamId]/limits/route.ts", {
+    family: "litellm",
+    action: "litellm.team.limits",
+    validParams: { teamId: "team-a" },
+    validBody: { rpmLimit: 30 },
+  }),
+  matrixWrite("PUT", "litellm/teams/[teamId]/models/route.ts", {
+    family: "litellm",
+    action: "litellm.team.models",
+    validParams: { teamId: "team-a" },
+    validBody: { models: ["claude-sonnet"] },
+  }),
+  adminWrite("POST", "litellm/teams/route.ts", {
+    family: "litellm",
+    action: "litellm.team.create",
+    validBody: { teamId: "team-u", teamAlias: "U team" },
   }),
 
   // ---- matrix writes (Access Control spec - Permission matrix) ----

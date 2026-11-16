@@ -27,6 +27,7 @@ const TeamRefSchema = z.object({
   teamId: z.string(),
   teamName: z.string(),
   linked: z.boolean(),
+  configurable: z.boolean().optional(),
 });
 
 export const LiteLLMMeResponseSchema = z.discriminatedUnion("linked", [
@@ -81,8 +82,18 @@ const MemberSchema = z.object({
   name: z.string().optional(),
 });
 
+const MemberCandidateSchema = z.object({
+  oid: z.string(),
+  name: z.string(),
+  email: z.string(),
+});
+
 export const LiteLLMMembersResponseSchema = z.discriminatedUnion("connected", [
-  z.object({ connected: z.literal(true), items: z.array(MemberSchema) }),
+  z.object({
+    connected: z.literal(true),
+    items: z.array(MemberSchema),
+    candidates: z.array(MemberCandidateSchema).optional(),
+  }),
   z.object({ connected: z.literal(false), items: z.array(z.never()) }),
 ]);
 

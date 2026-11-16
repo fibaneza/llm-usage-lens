@@ -30,7 +30,8 @@
    when unauthenticated (except `GET /api/health`), and every write route
    returns `403` without its required permission (the `internal-admin` role today,
    or `internal-admin`/`internal-org-admin` for the LiteLLM toggles and team
-   links, LiteLLM spec LD24;
+   links, LiteLLM spec LD24; the LiteLLM team writes follow the LiteLLM spec's
+   *Allowlist → Writes* roles;
    the Access Control spec's permission matrix from Phase 4R), before any
    DynamoDB call. Global roles are never granted by group mappings; only an
    `internal-admin` grants `internal-admin` or `internal-org-admin` in the

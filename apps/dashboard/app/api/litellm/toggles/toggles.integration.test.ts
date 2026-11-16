@@ -239,6 +239,18 @@ describe("PUT /api/litellm/toggles", () => {
     },
   );
 
+  // LD24 / Rule 60.23: the `permit` gate's fixed refusal text, moved here from
+  // the shared matrix-write sweep (which stays generic).
+  it("an org-less caller (an Auditor) is refused with the permit gate's fixed message (LD24)", async () => {
+    authMock.mockResolvedValue(AUDITOR);
+    const { PUT } = await load();
+    const res = await PUT(put({ version: null, toggles: {} }), ctx);
+    await expectError(res, 403, "FORBIDDEN");
+    expect((await res.clone().json()).error.message).toBe(
+      "Insufficient permission",
+    );
+  });
+
   it("a refused reset (no Admin role) records litellm.toggles.reset, not litellm.toggles.update", async () => {
     authMock.mockResolvedValue(AUDITOR);
     const { PUT } = await load();

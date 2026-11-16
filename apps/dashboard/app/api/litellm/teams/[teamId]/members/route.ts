@@ -1,15 +1,44 @@
 import { LiteLLMMembersResponseSchema } from "@llm-usage-lens/shared";
+import type { Session } from "next-auth";
+import { z } from "zod";
 
 import { IdParamSchema } from "@/lib/api/id-param";
-import { jsonData, parseInput, withRoute } from "@/lib/api/respond";
+import {
+  NOT_FOUND_MESSAGE,
+  NotFoundError,
+  jsonData,
+  parseInput,
+  withRoute,
+} from "@/lib/api/respond";
+import { loadManager } from "@/lib/api/matrix-route";
+import { decideWrite } from "@/lib/auth/write-policy";
+import {
+  getIdentityRecord,
+  listAllTeamMemberOids,
+} from "@/lib/data/access/team-member-lookup";
+import { getAllAccounts } from "@/lib/data/account-meta";
 import { mapTeamMembers } from "@/lib/data/litellm/team-members";
-import { getTeam } from "@/lib/litellm/operations";
+import {
+  NON_PRIVILEGED_ROLES,
+  PrivilegedTargetError,
+  badRequest,
+  memberWriteRoute,
+  snapshot,
+} from "@/lib/litellm/member-write";
+import {
+  Duration,
+  addTeamMember,
+  findUserByEmail,
+  getTeam,
+  getUser,
+} from "@/lib/litellm/operations";
 import {
   liteLLMResponse,
   reduceMembers,
   resolveLiteLLMTeam,
 } from "@/lib/litellm/read-views";
 import { openModeRefusal } from "@/lib/litellm/route-guard";
+import { PositiveBudget } from "@/lib/litellm/team-write";
 
 // Source: docs/specs/2026-11-10-litellm.md — "API routes" (/api/litellm/teams/
 // [teamId]/members GET in scope), "Roles and rights" (a Lead sees members'
@@ -44,8 +73,115 @@ export const GET = withRoute(async (_request, { params }, session) => {
         ...(person ? { oid: person.oid, name: person.name } : {}),
       };
     });
+    const candidates = await addCandidates(session, teamId, items);
     return jsonData(
-      LiteLLMMembersResponseSchema.parse({ connected: true, items }),
+      LiteLLMMembersResponseSchema.parse({
+        connected: true,
+        items,
+        ...(candidates ? { candidates } : {}),
+      }),
     );
   });
 });
+
+// Source: docs/specs/2026-11-10-litellm.md - "Team configuration page (L4)",
+// LD23: dashboard members of the team not yet in the LiteLLM team (matched by
+// email), identities only, for callers who may write members.
+async function addCandidates(
+  session: Session,
+  teamId: string,
+  items: ReadonlyArray<{ email: string }>,
+): Promise<Array<{ oid: string; name: string; email: string }> | null> {
+  const actor = await loadManager(session);
+  if (!actor) return null;
+  const meta = (await getAllAccounts()).find((a) => a.teamId === teamId);
+  if (
+    !meta ||
+    decideWrite(actor, {
+      operation: "member",
+      team: { teamId, departmentId: meta.departmentId },
+    }) !== "allow"
+  ) {
+    return null;
+  }
+  const inLiteLLM = new Set(items.map((m) => m.email.toLowerCase()));
+  const oids = await listAllTeamMemberOids(teamId);
+  const people = await Promise.all(
+    oids.map(async (oid) => {
+      const identity = await getIdentityRecord(oid);
+      const email = identity?.email?.trim().toLowerCase();
+      if (!identity || !email || inLiteLLM.has(email)) return [];
+      return [{ oid, name: identity.displayName ?? email, email }];
+    }),
+  );
+  return people.flat();
+}
+
+// ---- POST: add a dashboard member to the linked LiteLLM team ----------------
+
+// Source: docs/specs/2026-11-10-litellm.md - "Writes" (addTeamMember: Lead
+// (existing dashboard members only) and Admin; user and member bodies),
+// "Identity mapping and members" (OSS creates a missing user, Enterprise never
+// does: 409), "Budgets and limits" (member budget <= team max_budget),
+// "Allowlist" (privileged targets: 409 PRIVILEGED_TARGET), LT13, LT16, LT18.
+const AddBodySchema = z.strictObject({
+  oid: IdParamSchema,
+  maxBudgetInTeam: PositiveBudget.optional(),
+  budgetDuration: Duration.optional(),
+});
+
+export const POST = memberWriteRoute(
+  {
+    action: "litellm.member.add",
+    pattern: "/api/litellm/teams/[teamId]/members",
+    toggle: "addTeamMember",
+    status: 201,
+    target: "dashboard-member",
+    oidFrom: (body) => body.oid,
+    body: AddBodySchema,
+  },
+  async ({ actor, litellmTeamId, oid, body, teamInfo }) => {
+    const ceiling = teamInfo.team_info.max_budget;
+    if (
+      body.maxBudgetInTeam !== undefined &&
+      ceiling !== null &&
+      ceiling !== undefined &&
+      body.maxBudgetInTeam > ceiling
+    ) {
+      throw badRequest("The member budget is above the team's budget");
+    }
+    const email = (await getIdentityRecord(oid))?.email?.trim().toLowerCase();
+    if (!email) throw new NotFoundError(NOT_FOUND_MESSAGE);
+
+    const { users } = await findUserByEmail({ email });
+    const existing = users.find((u) => u.user_email?.toLowerCase() === email);
+    if (existing) {
+      const info = await getUser({ litellmUserId: existing.user_id });
+      const role = info.user_info?.user_role;
+      if (!role || !NON_PRIVILEGED_ROLES.includes(role)) {
+        throw new PrivilegedTargetError(existing.user_id);
+      }
+    }
+    const { litellmUserId } = await addTeamMember(
+      {
+        litellmTeamId,
+        email,
+        ...(body.maxBudgetInTeam === undefined
+          ? {}
+          : { maxBudgetInTeam: body.maxBudgetInTeam }),
+        ...(body.budgetDuration === undefined
+          ? {}
+          : { budgetDuration: body.budgetDuration }),
+      },
+      { actor },
+    );
+    return {
+      data: { oid, litellmUserId },
+      targetId: litellmUserId,
+      after: snapshot({
+        litellmUserId,
+        maxBudgetInTeam: body.maxBudgetInTeam,
+      }),
+    };
+  },
+);
