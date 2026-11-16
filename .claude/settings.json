@@ -46,6 +46,8 @@
       "Bash(gitleaks *)",
       "Bash(git checkout -- *)",
       "Bash(git branch -D*)",
+      "Bash(git push*)",
+      "Bash(gh api *)",
       "Bash(aws sts get-caller-identity *)",
       "Bash(aws sso login *)",
       "Bash(aws dynamodb list-tables --endpoint-url http://localhost:8000*)",
@@ -114,7 +116,6 @@
       "Bash(sed -i*)"
     ],
     "ask": [
-      "Bash(git push*)",
       "Bash(gh pr create*)",
       "Bash(gh pr merge*)",
       "Bash(gh pr ready*)",
@@ -123,7 +124,6 @@
       "Edit(/.claude/settings.local.json)",
       "Edit(/.husky/**)",
       "Edit(/.gitleaks.toml)",
-      "Bash(gh api *)",
       "Bash(git clean*)",
       "Bash(git restore*)",
       "Bash(git stash drop*)",
