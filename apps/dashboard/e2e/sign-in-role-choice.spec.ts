@@ -1,10 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 import { signInAsTestUser } from "./support/session";
+import {
+  DEV_LOGIN_ONLY_REASON,
+  E2E_PRODUCTION_SERVERS,
+} from "./support/constants";
 
 // Contract R1 decision 7: the local login offers a role choice (the four
 // global roles); the chosen role decides what the session can do.
 test.describe("local login role choice", () => {
+  test.skip(E2E_PRODUCTION_SERVERS, DEV_LOGIN_ONLY_REASON);
   test("offers the four global roles, defaulting to internal-admin", async ({
     page,
   }) => {

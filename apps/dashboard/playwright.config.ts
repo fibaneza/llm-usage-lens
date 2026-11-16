@@ -11,6 +11,7 @@ import {
   E2E_PROBE_DIST_DIR,
   E2E_PROBE_PORT,
   E2E_PROBE_TABLE,
+  E2E_PRODUCTION_SERVERS,
   E2E_TABLE,
 } from "./e2e/support/constants";
 
@@ -25,6 +26,12 @@ import {
 // probe's stored admin scope.
 const PROBE_SPEC = /(role-landing|settings-tabs)\.spec\.ts$/;
 
+// `next dev` compiles every route cold, which overloads the 2-vCPU CI runner,
+// so CI serves production builds (E2E_PRODUCTION_SERVERS). Production refuses
+// the dev-only login, so those servers configure the master user instead, with
+// a dummy Argon2id hash no password matches; forged sessions verify the same.
+const UNUSABLE_ARGON2ID_HASH = "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA";
+
 // Headless Playwright E2E for the dashboard. The devcontainer has no display
 // server, so headless is forced — never pass --headed or --ui here. Smoke
 // specs accrue with UI work through the agent loop (Rule 70); the full Phase 5
@@ -33,7 +40,7 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 2 : undefined,
   // No auto-opened HTML report — there is no browser to open it in.
   reporter: [
@@ -42,8 +49,9 @@ export default defineConfig({
     ...(process.env.CI ? ([["github"]] as const) : []),
   ],
   // First dev-server compile of a route can be slow; keep generous timeouts
-  // rather than flaky wall-clock sleeps (Rule 60.24).
-  timeout: 60_000,
+  // rather than flaky wall-clock sleeps (Rule 60.24). Production servers do
+  // not compile on request, so CI fails a stuck test sooner.
+  timeout: E2E_PRODUCTION_SERVERS ? 30_000 : 60_000,
   outputDir: "test-results",
   use: {
     baseURL: E2E_BASE_URL,
@@ -98,12 +106,15 @@ function devServer({
   distDir?: string;
 }) {
   return {
-    command: `pnpm exec next dev --port ${port}`,
+    command: E2E_PRODUCTION_SERVERS
+      ? `pnpm exec next build && pnpm exec next start --port ${port}`
+      : `pnpm exec next dev --port ${port}`,
     url: baseUrl,
     // Dedicated ports so a developer's `pnpm dev` on 3000 (and the observability
     // stack on 3001/3100/9090) is never reused with the wrong env.
     reuseExistingServer: false,
-    timeout: 180_000,
+    // Both production builds run at once before any test starts.
+    timeout: E2E_PRODUCTION_SERVERS ? 600_000 : 180_000,
     env: {
       // Process env beats Next's .env loading, so pin every var the suite
       // depends on: a developer's gitignored .env/.env.local must not leak in.
@@ -118,7 +129,12 @@ function devServer({
       // same way the vitest suite does (see vitest.config.ts).
       SKIP_ENV_VALIDATION: "1",
       // Dev-only local login (auth guide); no Entra vars are set in E2E.
-      AUTH_DEV_LOGIN: "true",
+      ...(E2E_PRODUCTION_SERVERS
+        ? {
+            AUTH_MASTER_USERNAME: "e2e-master",
+            AUTH_MASTER_PASSWORD_HASH: UNUSABLE_ARGON2ID_HASH,
+          }
+        : { AUTH_DEV_LOGIN: "true" }),
       APP_ENV: "dev",
       // The session-forging helper signs JWTs with this same value — the
       // Auth.js proxy and authorized() callback run unchanged (no bypass).

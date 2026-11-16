@@ -1,9 +1,11 @@
 import { type BrowserContext, expect, test } from "@playwright/test";
 
 import {
+  DEV_LOGIN_ONLY_REASON,
   E2E_BASE_URL,
   E2E_LITELLM_BASE_URL,
   E2E_LITELLM_USER,
+  E2E_PRODUCTION_SERVERS,
 } from "./support/constants";
 import { deleteStoredIdentity, seedStoredIdentity } from "./support/identity";
 import { signInAsTestUser } from "./support/session";
@@ -11,6 +13,7 @@ import { signInAsTestUser } from "./support/session";
 // Runs against the E2E dev server, which sets AUTH_DEV_LOGIN=true and no Entra
 // vars (playwright.config.ts). Auth guide — Dev-only local login.
 test.describe("dev-only local login", () => {
+  test.skip(E2E_PRODUCTION_SERVERS, DEV_LOGIN_ONLY_REASON);
   test("/sign-in offers only the local developer button", async ({ page }) => {
     await page.goto("/sign-in");
 
@@ -71,6 +74,7 @@ async function ensureFakeLiteLLMConnection(context: BrowserContext) {
 // seeds its Identity row in DynamoDB Local first (support/identity.ts). The Role
 // select is disabled while an identity is typed, so no case picks a role.
 test.describe("dev login identity option (L3c, L3c2)", () => {
+  test.skip(E2E_PRODUCTION_SERVERS, DEV_LOGIN_ONLY_REASON);
   // Both LiteLLM tests save the one shared connection; run them in order.
   test.describe.configure({ mode: "serial" });
 

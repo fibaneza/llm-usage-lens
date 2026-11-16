@@ -10,6 +10,10 @@ import {
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 import { mockApi } from "./support/settings-api";
+import {
+  DEV_LOGIN_ONLY_REASON,
+  E2E_PRODUCTION_SERVERS,
+} from "./support/constants";
 
 // Source: Design System "Settings Page" (unit D, 2026-11-16): tabs are routes
 // (/dashboard/settings/{accounts,sync,litellm,access,audit}), the Access tab
@@ -368,6 +372,7 @@ test.describe("settings tabs - 375px tab row scrolls", () => {
 // The forged session is a stale dev-login ("local") session so the dialog
 // offers 'Confirm with dev login', which calls stepUpWithDevLogin("role-grants").
 test.describe("settings tabs - step-up returns to the right tab", () => {
+  test.skip(E2E_PRODUCTION_SERVERS, DEV_LOGIN_ONLY_REASON);
   test("stepUpWithDevLogin(role-grants) from Roles and mapping lands on the Roles and mapping tab", async ({
     page,
     context,

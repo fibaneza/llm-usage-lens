@@ -57,27 +57,32 @@ servers' env is pinned in `apps/dashboard/playwright.config.ts`.
   `~/.cache/ms-playwright`, keyed on the `@playwright/test` version.
 - **Artifacts:** on failure only, `apps/dashboard/test-results` and
   `apps/dashboard/playwright-report`, kept 7 days.
-- **Measured (run 43882190808, 2026-11-16):** about 1.3 min of setup
-  (install, browser install from cache, table and seed), then about
-  22.5 min of tests for 330 of 350 cases on 1 worker. The run stopped at
-  23m53s on a runner shutdown signal, so a full run on 1 worker is about
-  24-25 min. The same run's `test` job (Vitest) took 13m44s. CI now runs
-  Playwright on 2 workers (`playwright.config.ts`, CI-only); re-measure
-  on the first green run and replace these figures.
-- **Timeouts:** `e2e` 45 min and `test` 25 min. The measured times came
-  close to the earlier 30 and 15 min limits.
-- **Cost:** with 2 workers, expect roughly 13-16 min for `e2e`, plus
-  about 14 min for `test` and 2-3 min for `quality` and `build`. That is
-  about 30-35 runner-minutes per push or pull-request run (each job bills
-  its own minutes). The repository is private, so the minutes count
-  against the GitHub free tier (2,000 min/month on Free): about 55-65
-  runs a month. The cost is accepted, not avoided (CLAUDE.md, *Cost
-  posture*).
-- **Next speed lever (follow-up, not evaluated yet):** run CI e2e against
-  a production build (`next build` + `next start`) instead of `next dev`.
-  This removes the per-route first-compile time that dominates on CI. It
-  needs the dev-login and env pinning in `playwright.config.ts` checked
-  against a production server first.
+- **Servers (2026-11-17):** under `CI`, each of the two web servers runs
+  `next build` then `next start` (its own distDir, so the two tables never
+  share a data cache) instead of `next dev`, which compiled every route
+  cold on the 2-vCPU runner. Production refuses the dev-only login, so
+  these servers configure the master user with a dummy Argon2id hash that
+  no password matches. The specs that need the dev login
+  (`dev-login.spec.ts`, `sign-in-role-choice.spec.ts`, the settings-tabs
+  step-up case) skip under CI; local `next dev` runs still cover them.
+  The CI-only settings are `retries: 1` (was 2) and a 30 s test timeout
+  (60 s locally). Local runs are unchanged.
+- **History on `next dev`, 2026-11-16:** run 43882190808 (1 worker)
+  spent about 22.5 min on 330 of 350 cases, then stopped at 23m53s on a
+  runner shutdown signal. Run 43922339732 (2 workers) finished 354 of
+  411 cases in about 14.5 min before a newer push cancelled it. Two
+  role-landing cases passed only on retry (`page.goto: net::ERR_ABORTED`).
+  Run 43926308954 (2 workers) stayed in the E2E step for more than 55 min,
+  past the 45-min job timeout. The runner had stopped responding, and its
+  logs were unavailable. Two dev servers plus two browsers likely
+  exhausted the runner's memory. The `test` job (Vitest) takes 11-14 min.
+- **Timeouts:** `e2e` 45 min and `test` 25 min.
+- **Cost:** about 14 min for `test` and 2-3 min for `quality` and
+  `build`, plus `e2e` (re-measure on the first green run on production
+  servers and record it here). The repository is private, so the minutes
+  count against the GitHub free tier (2,000 min/month on Free), and each
+  job bills its own minutes. The cost is accepted, not avoided
+  (CLAUDE.md, *Cost posture*).
 
 ### `bedrock-simulator-build.yml` job graph
 
