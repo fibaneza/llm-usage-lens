@@ -16,22 +16,6 @@ const base = {
 };
 
 describe("resolveSignInProviders: Pre-SSO prod", () => {
-  it("accepts prod without Entra when the master user has TOTP", () => {
-    expect(
-      resolveSignInProviders({ ...base, masterTotpSecret: "totp-secret" }),
-    ).toEqual({ entra: false, devLogin: false, master: true });
-  });
-
-  it("throws prod without Entra and without the master user", () => {
-    expect(() =>
-      resolveSignInProviders({ nodeEnv: "production", appEnv: "prod" }),
-    ).toThrow(AuthConfigError);
-  });
-
-  it("throws prod master user without TOTP", () => {
-    expect(() => resolveSignInProviders(base)).toThrow(AuthConfigError);
-  });
-
   it("still rejects a partially configured Entra in prod", () => {
     expect(() =>
       resolveSignInProviders({

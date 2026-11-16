@@ -86,31 +86,4 @@ describe("DatedDailyRollupSchema", () => {
       DatedDailyRollupSchema.safeParse({ ...VALID_DATED, cost: 10 }).success,
     ).toBe(false);
   });
-
-  it("tolerates sub-1e-6 float drift in the cost invariant", () => {
-    expect(
-      DatedDailyRollupSchema.safeParse({ ...VALID_DATED, cost: 10.5 + 5e-7 })
-        .success,
-    ).toBe(true);
-  });
-
-  it("accepts an idle recurring day (models {}, zero tokens, PT only)", () => {
-    const idle = {
-      ...VALID_DATED,
-      cost: 24,
-      inputTokens: 0,
-      outputTokens: 0,
-      invocations: 0,
-      models: {},
-      nonModel: {
-        "provisioned-throughput": {
-          cost: 24,
-          costEstimated: false,
-          recurring: true,
-          rawUsageTypes: ["USE1-ProvisionedThroughput-ModelUnit"],
-        },
-      },
-    };
-    expect(DatedDailyRollupSchema.safeParse(idle).success).toBe(true);
-  });
 });

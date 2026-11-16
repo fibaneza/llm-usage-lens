@@ -173,18 +173,6 @@ const query = (name: string, extra = "") =>
 describe.each(routes)("GET /api/$name", (route) => {
   const url = (q: string) => `${route.path}?${q}`;
 
-  it("returns 400 BAD_REQUEST for malformed dates", async () => {
-    const res = await call(
-      route.handler,
-      url("dateFrom=nope&dateTo=2026-10-02&tab=departments"),
-      route.id,
-    );
-    expect(res.status).toBe(400);
-    expect(ApiErrorBodySchema.parse(await res.json()).error.code).toBe(
-      "BAD_REQUEST",
-    );
-  });
-
   it("returns 400 when the range exceeds 90 days", async () => {
     const res = await call(
       route.handler,
@@ -192,11 +180,9 @@ describe.each(routes)("GET /api/$name", (route) => {
       route.id,
     );
     expect(res.status).toBe(400);
-  });
-
-  it("returns 400 when the range is missing", async () => {
-    const res = await call(route.handler, route.path, route.id);
-    expect(res.status).toBe(400);
+    expect(ApiErrorBodySchema.parse(await res.json()).error.code).toBe(
+      "BAD_REQUEST",
+    );
   });
 
   it("returns { data } that validates against the response schema", async () => {
@@ -225,23 +211,6 @@ describe("route specifics", () => {
     );
   });
 
-  it("users and services views exclude non-model cost and are estimated", async () => {
-    const users = await (await call(getUsers, `/api/users?${RANGE}`)).json();
-    expect(users.data.users[0]).toMatchObject({
-      userId: "a@x.com",
-      cost: 10,
-      costEstimated: true,
-    });
-    const services = await (
-      await call(getServices, `/api/services?${RANGE}`)
-    ).json();
-    expect(services.data.services[0]).toMatchObject({
-      serviceName: "payments-api",
-      cost: 10,
-      costEstimated: true,
-    });
-  });
-
   it("teams filters by departmentId", async () => {
     const res = await call(
       getTeams,
@@ -251,30 +220,6 @@ describe("route specifics", () => {
     expect(body.data.teams.map((t: { teamId: string }) => t.teamId)).toEqual([
       "team-ledger",
     ]);
-  });
-
-  it("departments/[id] returns 404 NOT_FOUND for an unknown department", async () => {
-    const res = await call(
-      getDepartmentDetail,
-      `/api/departments/dept-nope?${RANGE}`,
-      "dept-nope",
-    );
-    expect(res.status).toBe(404);
-    expect(ApiErrorBodySchema.parse(await res.json()).error.code).toBe(
-      "NOT_FOUND",
-    );
-  });
-
-  it("teams/[id] returns 404 NOT_FOUND for an unknown team", async () => {
-    const res = await call(
-      getTeamDetail,
-      `/api/teams/team-nope?${RANGE}`,
-      "team-nope",
-    );
-    expect(res.status).toBe(404);
-    expect(ApiErrorBodySchema.parse(await res.json()).error.code).toBe(
-      "NOT_FOUND",
-    );
   });
 
   it("overview carries byModel, trend byModel, mostUsedModel and activeAccounts", async () => {

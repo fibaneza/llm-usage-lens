@@ -16,15 +16,21 @@
 // is on the frozen list: the suite gives them only today's sweep parity
 // (401, 403 before parsing, Origin 403, no-store) and no new assertion.
 import { createGroupMapping } from "@/lib/data/access/group-mappings";
+import { completePasswordSetupWrite } from "@/lib/data/access/password-credentials-store";
+import {
+  createPasswordUser,
+  sha256Hex,
+} from "@/lib/data/access/password-users";
+import { grantRole } from "@/lib/data/access/role-grants";
 import { putTeamLink } from "@/lib/data/litellm/team-links";
 import { ok } from "@/lib/data/access/access-test-support";
 import {
+  PEOPLE,
   seedAdminScope,
   seedCtx,
   seedMember,
 } from "@/test/matrix-route-support";
 import { accounts } from "@/test/scope-fixtures";
-import { PEOPLE } from "@/test/matrix-route-support";
 
 export type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type RouteKind =
@@ -235,6 +241,37 @@ const newAccount = {
   region: "ap-southeast-2",
 };
 
+async function seedPasswordUser(): Promise<void> {
+  ok(
+    await createPasswordUser(
+      { email: "alice@example.com", displayName: "Alice" },
+      seedCtx(),
+    ),
+  );
+}
+
+// A TOTP-enrolled user: the Origin-refusal snapshot of the totp-reset route
+// then proves the enrolment is left untouched (Access Control spec - TOTP D23).
+async function seedEnrolledPasswordUser(): Promise<void> {
+  const created = ok(
+    await createPasswordUser(
+      { email: "alice@example.com", displayName: "Alice" },
+      seedCtx(),
+    ),
+  );
+  ok(
+    await completePasswordSetupWrite(
+      {
+        email: "alice@example.com",
+        tokenHash: sha256Hex(created.setupToken),
+        passwordHash: "$argon2id$v=19$SEED-PASSWORD-HASH",
+        totp: { cipher: "SEED-TOTP-CIPHER", step: 7 },
+      },
+      seedCtx(),
+    ),
+  );
+}
+
 async function seedGroupMapping(): Promise<void> {
   ok(
     await createGroupMapping(
@@ -277,14 +314,16 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   read("governance/password-sign-in/route.ts"),
   read("governance/per-user-approval/route.ts"),
   read("group-mappings/route.ts"),
-  read("identities/route.ts", { frozen: true }),
-  read("identities/[oid]/links/route.ts", { frozen: true }),
+  read("identities/route.ts"),
+  read("identities/[oid]/links/route.ts", {
+    validParams: { oid: PEOPLE.alice.oid },
+  }),
   read("me/route.ts"),
   read("me/usage/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
   read("overview/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
-  read("password-users/route.ts", { frozen: true }),
+  read("password-users/route.ts"),
   read("ranking/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
-  read("role-grants/route.ts", { frozen: true }),
+  read("role-grants/route.ts"),
   read("services/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
   read("sync-status/route.ts"),
   read("teams/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
@@ -417,52 +456,94 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     successStatuses: [200],
   }),
 
-  // ---- admin-only writes, frozen (their own test files are frozen) ----
+  // ---- admin-only access-control writes (4R.4) ----
   adminWrite("PUT", "identities/[oid]/links/route.ts", {
-    frozen: true,
     accessControl: true,
-    validBody: {},
+    action: "identity.link.update",
+    validParams: { oid: PEOPLE.alice.oid },
+    validBody: {
+      usageIdentities: ["alice@company.com"],
+      aliases: [],
+      version: 0,
+    },
+    successStatuses: [200],
   }),
   adminWrite("POST", "password-users/route.ts", {
-    frozen: true,
     accessControl: true,
     reauth: true,
-    validBody: {},
+    action: "localuser.create",
+    validBody: { email: "bob@example.com", displayName: "Bob" },
+    successStatuses: [200, 201],
   }),
   adminWrite("PATCH", "password-users/[email]/route.ts", {
-    frozen: true,
     accessControl: true,
-    validBody: {},
+    action: "localuser.update",
+    validParams: { email: "alice@example.com" },
+    seed: seedPasswordUser,
+    validBody: { enabled: false, version: 1 },
+    successStatuses: [200],
   }),
   adminWrite("DELETE", "password-users/[email]/route.ts", {
-    frozen: true,
     accessControl: true,
     reauth: true,
-    validBody: {},
+    action: "localuser.delete",
+    validParams: { email: "alice@example.com" },
+    seed: seedPasswordUser,
+    validBody: { version: 1 },
+    successStatuses: [200],
   }),
   adminWrite("POST", "password-users/[email]/reset/route.ts", {
-    frozen: true,
     accessControl: true,
     reauth: true,
+    action: "localuser.update",
+    validParams: { email: "alice@example.com" },
+    seed: seedPasswordUser,
+    // The handler parses no body; the path email is what it refuses.
+    badInput: { params: { email: "not-an-email" } },
     validBody: {},
+    successStatuses: [200],
   }),
   adminWrite("POST", "password-users/[email]/totp-reset/route.ts", {
-    frozen: true,
     accessControl: true,
     reauth: true,
+    action: "localuser.update",
+    validParams: { email: "alice@example.com" },
+    seed: seedEnrolledPasswordUser,
+    // The handler parses no body; the path email is what it refuses.
+    badInput: { params: { email: "not-an-email" } },
     validBody: {},
+    successStatuses: [200],
   }),
   adminWrite("POST", "role-grants/route.ts", {
-    frozen: true,
     accessControl: true,
     reauth: true,
-    validBody: {},
+    action: "role.grant",
+    validBody: {
+      oid: PEOPLE.alice.oid,
+      role: "internal-org-admin",
+      reason: "quarterly review",
+    },
+    successStatuses: [200, 201],
   }),
   adminWrite("DELETE", "role-grants/[oid]/[role]/route.ts", {
-    frozen: true,
     accessControl: true,
     reauth: true,
-    validBody: {},
+    action: "role.revoke",
+    validParams: { oid: PEOPLE.alice.oid, role: "internal-org-admin" },
+    seed: async () => {
+      ok(
+        await grantRole(
+          {
+            oid: PEOPLE.alice.oid,
+            role: "internal-org-admin",
+            reason: "quarterly review",
+          },
+          seedCtx(),
+        ),
+      );
+    },
+    validBody: { version: 1 },
+    successStatuses: [200],
   }),
 
   // ---- litellm writes: connection stays admin-only; toggles and team links

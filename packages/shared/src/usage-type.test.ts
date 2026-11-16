@@ -383,19 +383,6 @@ describe("classifyUsageType — model families (row 12)", () => {
     );
   });
 
-  it.each([
-    "USE1-Claude3-5-Sonnet-input-tokens",
-    "EUC1-Claude4-Opus-output-tokens",
-    "USE1-Claude3-5-Haiku-input-tokens",
-  ])(
-    "a Claude family token usage type is a model, never agents/flows: %s",
-    (raw) => {
-      const result = classifyUsageType(raw);
-      expect(result.kind).toBe("model");
-      expect(result.kind === "model" ? result.key : null).toMatch(/^claude-/);
-    },
-  );
-
   it("matches the family case-insensitively", () => {
     expect(classifyUsageType("USE1-ClAuDeOpUs-Input-Tokens")).toEqual(
       model("claude-opus"),

@@ -216,14 +216,6 @@ afterEach(() => vi.useRealTimers());
 
 describe("POST /api/account/password", { timeout: 60_000 }, () => {
   describe("session, identity and origin gates", () => {
-    it("401 UNAUTHORIZED without a session, before anything is read", async () => {
-      await seedUser();
-      const before = await credentialOf();
-      signInAs(null);
-      await expectError(await change(body()), 401, "UNAUTHORIZED");
-      expect(await credentialOf()).toEqual(before);
-    });
-
     const NOT_PASSWORD_USERS: [string, Record<string, unknown>][] = [
       [
         "an Entra admin with the same email",
@@ -830,16 +822,12 @@ describe("POST /api/account/password", { timeout: 60_000 }, () => {
   });
 
   describe("no-store on every status", () => {
-    it("401, 403, 400, 409 and 200 all carry Cache-Control: private, no-store", async () => {
+    // 401, 403 and 400 carry it by the route-contract suite; the 409 and the
+    // 200 are this route's own statuses.
+    it("409 and 200 carry Cache-Control: private, no-store", async () => {
       const alice = await seedUser();
       const heads: (string | null)[] = [];
-      signInAs(null);
-      heads.push((await change(body())).headers.get("cache-control"));
       signInAsPasswordUser(alice);
-      heads.push(
-        (await change(body(), { origin: null })).headers.get("cache-control"),
-      );
-      heads.push((await change("{not json")).headers.get("cache-control"));
       heads.push(
         (await change(body({ currentPassword: OTHER_PASSWORD }))).headers.get(
           "cache-control",

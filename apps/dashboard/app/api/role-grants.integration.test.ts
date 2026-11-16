@@ -50,15 +50,6 @@ beforeEach(async () => {
 });
 
 describe("GET /api/role-grants", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(
-      await invoke(GET, { method: "GET", path: LIST }),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
-
   it.each(["viewer", "orgAdmin", "noRoles"] as const)(
     "403 FORBIDDEN for %s, and the body carries no grant data",
     async (caller) => {

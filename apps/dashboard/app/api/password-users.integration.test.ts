@@ -205,11 +205,6 @@ afterEach(() => vi.unstubAllEnvs());
 describe("GET /api/password-users", () => {
   const list = () => invoke(GET, { method: "GET", path: LIST });
 
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await list(), 401, "UNAUTHORIZED");
-  });
-
   it.each(["viewer", "orgAdmin", "noRoles"] as const)(
     "403 FORBIDDEN for %s, with no user data in the body",
     async (caller) => {
@@ -459,22 +454,6 @@ describe("POST /api/password-users", () => {
     });
   });
 
-  it("401 without a session, before anything is read or written", async () => {
-    signInAs(null);
-    await expectError(await create(input()), 401, "UNAUTHORIZED");
-    expect(await nonAuditItems()).toEqual([]);
-    expect(await auditToday()).toEqual([]);
-  });
-
-  it("403 for an admin write with a missing or foreign Origin, before parsing; the table is untouched", async () => {
-    for (const origin of [null, "https://evil.example.test", "null"]) {
-      for (const body of [input(), "{not json"]) {
-        await expectError(await create(body, { origin }), 403, "FORBIDDEN");
-      }
-    }
-    expect(await nonAuditItems()).toEqual([]);
-  });
-
   it("400 for a wrong content type; accepts application/json with a charset", async () => {
     await expectError(
       await create(input(), { contentType: "text/plain" }),
@@ -710,30 +689,6 @@ describe("PATCH /api/password-users/[email]", () => {
     expect(await auditToday()).toEqual([]);
   });
 
-  it("401 without a session", async () => {
-    await seedUser();
-    signInAs(null);
-    await expectError(
-      await patch("alice@example.com", { enabled: false, version: 1 }),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
-
-  it("403 for an admin write with a foreign Origin, before parsing", async () => {
-    await seedUser();
-    await expectError(
-      await patch(
-        "alice@example.com",
-        { enabled: false, version: 1 },
-        { origin: "https://evil.example.test" },
-      ),
-      403,
-      "FORBIDDEN",
-    );
-    expect((await rows())[0]).toMatchObject({ version: 1 });
-  });
-
   it("400 for a wrong content type", async () => {
     await seedUser();
     await expectError(
@@ -930,23 +885,6 @@ describe("DELETE /api/password-users/[email]", () => {
     expect(JSON.stringify(a)).not.toContain("ghost");
     expect(await auditToday()).toEqual([]);
   });
-
-  it("401 without a session; the user remains", async () => {
-    await seedUser();
-    signInAs(null);
-    await expectError(await del("alice@example.com"), 401, "UNAUTHORIZED");
-    expect(await rows()).toHaveLength(1);
-  });
-
-  it("403 for an admin write with no Origin, before anything is read; the user remains", async () => {
-    await seedUser();
-    await expectError(
-      await del("alice@example.com", { origin: null }),
-      403,
-      "FORBIDDEN",
-    );
-    expect(await rows()).toHaveLength(1);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1047,22 +985,6 @@ describe("POST /api/password-users/[email]/reset", () => {
     expect(JSON.stringify(a)).not.toContain("ghost");
     expect(await auditToday()).toEqual([]);
   });
-
-  it("401 without a session", async () => {
-    await seedUser();
-    signInAs(null);
-    await expectError(await reset("alice@example.com"), 401, "UNAUTHORIZED");
-  });
-
-  it("403 for an admin write with a foreign Origin; the old link still works", async () => {
-    const { user, setupToken } = await seedUser();
-    await expectError(
-      await reset(user.email, { origin: "https://evil.example.test" }),
-      403,
-      "FORBIDDEN",
-    );
-    expect(await findSetupLink(sha256Hex(setupToken))).not.toBeNull();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1147,27 +1069,6 @@ describe("POST /api/password-users/[email]/totp-reset", () => {
     expect(a).toEqual(b);
     expect(JSON.stringify(a)).not.toContain("ghost");
     expect(await auditToday()).toEqual([]);
-  });
-
-  it("401 without a session; the enrolment remains", async () => {
-    await seedActiveUser();
-    signInAs(null);
-    await expectError(
-      await totpReset("alice@example.com"),
-      401,
-      "UNAUTHORIZED",
-    );
-    expect((await rows())[0]).toMatchObject({ totpEnrolled: true });
-  });
-
-  it("403 for an admin write with no Origin; the enrolment remains", async () => {
-    await seedActiveUser();
-    await expectError(
-      await totpReset("alice@example.com", { origin: null }),
-      403,
-      "FORBIDDEN",
-    );
-    expect((await rows())[0]).toMatchObject({ totpEnrolled: true });
   });
 });
 
@@ -1303,27 +1204,6 @@ describe.each(WRITES)("$name: authorization order and audit", (w) => {
     (caller: Caller) => {
       beforeEach(() => signInAs(caller));
 
-      it("403 FORBIDDEN, the table is untouched, exactly one denied record with the fixed route pattern and no email", async () => {
-        await seedActiveUser();
-        const before = await nonAuditItems();
-        const audit0 = (await auditToday()).length;
-        await expectError(await call(), 403, "FORBIDDEN");
-        expect(await nonAuditItems()).toEqual(before);
-        expect(await auditToday()).toHaveLength(audit0 + 1);
-        const denied = await deniedToday();
-        expect(denied).toHaveLength(1);
-        expect(denied[0]).toMatchObject({
-          action: w.action,
-          result: "denied",
-          category: "security",
-          code: "FORBIDDEN",
-          actor: `oid-${caller.toLowerCase()}`,
-          route: { method: w.method, pattern: w.pattern },
-        });
-        expect(JSON.stringify(denied[0])).not.toContain("alice@example.com");
-        expect(JSON.stringify(denied[0])).not.toContain("new@example.com");
-      });
-
       it("403 comes before parsing and any read: a malformed path email, body, content type and origin all stay 403", async () => {
         await seedActiveUser();
         const before = await nonAuditItems();
@@ -1340,26 +1220,6 @@ describe.each(WRITES)("$name: authorization order and audit", (w) => {
       });
     },
   );
-
-  it("401 without a session: nothing read, written or audited", async () => {
-    await seedActiveUser();
-    const before = await nonAuditItems();
-    const audit0 = (await auditToday()).length;
-    signInAs(null);
-    await expectError(await call(), 401, "UNAUTHORIZED");
-    expect(await nonAuditItems()).toEqual(before);
-    expect((await auditToday()).length).toBe(audit0);
-    expect(await deniedToday()).toEqual([]);
-  });
-
-  it("401 beats 403: no session with a foreign Origin is still 401", async () => {
-    signInAs(null);
-    await expectError(
-      await call({ origin: "https://evil.example.test" }),
-      401,
-      "UNAUTHORIZED",
-    );
-  });
 });
 
 describe.each(WRITES.filter((w) => w.byEmail))(

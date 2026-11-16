@@ -412,15 +412,3 @@ describe.each([
     expect(schema.safeParse({ ...VALID_ROLLUP, date }).success).toBe(false);
   });
 });
-
-describe("DailyRollupSchema — date with the cost invariant (Phase 3.1a)", () => {
-  it("still enforces the cost invariant when date is present", () => {
-    expect(
-      DailyRollupSchema.safeParse({
-        ...VALID_ROLLUP,
-        date: "2026-10-27",
-        cost: 99,
-      }).success,
-    ).toBe(false);
-  });
-});

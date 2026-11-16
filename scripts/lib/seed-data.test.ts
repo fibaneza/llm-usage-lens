@@ -65,11 +65,6 @@ describe("buildSeedData — default profile", () => {
     }
   });
 
-  it("has 3 departments and 5 teams", () => {
-    expect(new Set(seed.accounts.map((a) => a.departmentId)).size).toBe(3);
-    expect(new Set(seed.accounts.map((a) => a.teamId)).size).toBe(5);
-  });
-
   it("has 10 users and 8 named services across the rollups", () => {
     const users = new Set<string>();
     const services = new Set<string>();

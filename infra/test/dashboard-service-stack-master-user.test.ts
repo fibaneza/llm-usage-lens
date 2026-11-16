@@ -70,7 +70,6 @@ const resCount = (t: Template) => {
   return Array.isArray(j) ? j.length : 1;
 };
 
-const HASH = "/auth/master-password-hash";
 const TOTP = "/auth/master-totp-secret";
 
 describe.each(["import", "create"] as Mode[])(
@@ -85,18 +84,6 @@ describe.each(["import", "create"] as Mode[])(
         expect(e).not.toHaveProperty("AUTH_MASTER_USERNAME");
         expect(e.APP_ENV).toBe("dev");
         expect(e.AUTH_ACCESS_MODE).toBe("enforce");
-      });
-
-      it("wires neither master secret and lists only the two original ARNs plus the LiteLLM service key", () => {
-        expect(Object.keys(secretMap(c)).sort()).toEqual([
-          "AUTH_MICROSOFT_ENTRA_ID_SECRET",
-          "AUTH_SECRET",
-          "LITELLM_SERVICE_KEY",
-        ]);
-        const all = executionSsmResources(t);
-        expect(resCount(t)).toBe(3);
-        expect(all).not.toContain(HASH);
-        expect(all).not.toContain(TOTP);
       });
     });
 

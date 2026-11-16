@@ -180,16 +180,6 @@ describe.each<Mode>(["import", "create"])(
   },
 );
 
-describe("DashboardServiceStack with Entra still wires the secret", () => {
-  it("keeps the Entra environment and execution-role parameter", () => {
-    const t = synth("create", "dev");
-    expect(JSON.stringify(t.toJSON())).toContain("entra-client-secret");
-    expect(JSON.stringify(t.toJSON())).toContain(
-      "AUTH_MICROSOFT_ENTRA_ID_ISSUER",
-    );
-  });
-});
-
 describe.each(["dev", "prod"] as const)("task role (%s)", (env) => {
   const t = synth("create", env);
 

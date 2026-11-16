@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { GroupMappingBaseSchema, GroupMappingSchema } from "./group-mapping";
 import { GroupMappingInputSchema } from "./index";
 
 // Source: docs/specs/2026-11-10-access-control.md — Threat model T4 (a group
@@ -78,5 +79,49 @@ describe("GroupMappingInputSchema", () => {
         target: { type: "department", id: "d".repeat(129) },
       }).success,
     ).toBe(false);
+  });
+});
+
+// Source: docs/specs/2026-11-10-access-control.md — "Data model additions"
+// (GroupMapping row), T4; contract R2 §3 "Changes to existing shared files".
+const memberOnDept = {
+  groupId: "g-1",
+  target: { type: "department", id: "d1" },
+  scopedRole: "member",
+};
+const stored = {
+  groupId: "g-1",
+  target: { type: "team", id: "t1" },
+  scopedRole: "member",
+  version: 1,
+  updatedAt: "2026-11-12T00:00:00.000Z",
+};
+
+describe("GroupMappingBaseSchema", () => {
+  it("is unrefined: it parses member on a department", () => {
+    expect(GroupMappingBaseSchema.safeParse(memberOnDept).success).toBe(true);
+  });
+});
+
+describe("GroupMappingSchema", () => {
+  it("accepts a stored mapping", () => {
+    expect(GroupMappingSchema.safeParse(stored).success).toBe(true);
+  });
+
+  it("keeps the member-on-team-only refinement", () => {
+    expect(
+      GroupMappingSchema.safeParse({ ...stored, ...memberOnDept }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["missing version", { version: undefined }],
+    ["negative version", { version: -1 }],
+    ["missing updatedAt", { updatedAt: undefined }],
+    ["bad updatedAt", { updatedAt: "yesterday" }],
+  ])("rejects %s", (_name, patch) => {
+    expect(GroupMappingSchema.safeParse({ ...stored, ...patch }).success).toBe(
+      false,
+    );
   });
 });

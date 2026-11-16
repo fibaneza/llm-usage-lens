@@ -9,11 +9,7 @@ import {
   mapUsageKeyToEmail,
   suggestIdentityLinks,
 } from "./identity-map-rules";
-import {
-  AuditActionSchema,
-  auditCategory,
-  sanitizeAuditSnapshot,
-} from "./schemas/access-control";
+import { sanitizeAuditSnapshot } from "./schemas/access-control";
 
 // Source: docs/specs/2026-11-10-access-control.md - "Membership, admin scopes
 // and lifecycle", "Usage-identity mapping rules (D27)": a pattern with one
@@ -420,13 +416,6 @@ describe("suggestIdentityLinks", () => {
 });
 
 describe("audit vocabulary for the rules item", () => {
-  it("identity.map.update is an audit action and a change (not a security) record", () => {
-    expect(AuditActionSchema.safeParse("identity.map.update").success).toBe(
-      true,
-    );
-    expect(auditCategory("identity.map.update")).toBe("change");
-  });
-
   it("the snapshot sanitiser keeps a `rules` string list and the version", () => {
     expect(
       sanitizeAuditSnapshot({

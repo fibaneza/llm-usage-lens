@@ -58,3 +58,42 @@ describe("IdentityRecordSchema", () => {
     );
   });
 });
+
+// Source: docs/specs/2026-11-10-access-control.md — "Data model additions"
+// (Identity row), T4; contract R2 §3 "Changes to existing shared files".
+describe("IdentityRecordSchema optional R2 fields", () => {
+  const base = {
+    oid: "00000000-0000-4000-8000-000000000001",
+    tid: "00000000-0000-4000-8000-000000000002",
+    lastSignInAt: "2026-11-12T00:00:00.000Z",
+    lastSeenRoles: [],
+    authMethod: "entra",
+    version: 0,
+  };
+
+  it("parses without the new fields", () => {
+    expect(IdentityRecordSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("accepts the flags and lockout fields", () => {
+    const parsed = IdentityRecordSchema.parse({
+      ...base,
+      ambiguousMembership: true,
+      groupsOverage: false,
+      failedAttempts: 2,
+      lockedUntil: "2026-11-12T00:15:00.000Z",
+    });
+    expect(parsed.ambiguousMembership).toBe(true);
+    expect(parsed.groupsOverage).toBe(false);
+    expect(parsed.failedAttempts).toBe(2);
+  });
+
+  it("rejects non-boolean flags and a negative failedAttempts", () => {
+    expect(
+      IdentityRecordSchema.safeParse({ ...base, groupsOverage: "yes" }).success,
+    ).toBe(false);
+    expect(
+      IdentityRecordSchema.safeParse({ ...base, failedAttempts: -1 }).success,
+    ).toBe(false);
+  });
+});

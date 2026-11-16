@@ -49,7 +49,6 @@ vi.mock("next/cache", async () => {
 
 const LIST = "/api/role-grants";
 const item = (oid: string, role: string) => `/api/role-grants/${oid}/${role}`;
-const DELETE_PATTERN = "/api/role-grants/[oid]/[role]";
 type CallExtra = Partial<Parameters<typeof invoke>[1]>;
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 const FRESH = () => nowSeconds() - 10;
@@ -160,37 +159,6 @@ describe("POST /api/role-grants", () => {
     ]);
   });
 
-  it("401 without a session, before anything else", async () => {
-    signInAs(null);
-    await expectError(await post(), 401, "UNAUTHORIZED");
-  });
-
-  describe.each(["auditor", "orgAdmin", "viewer", "noRoles"] as const)(
-    "as %s with a fresh sign-in (authorization refusal)",
-    (caller) => {
-      beforeEach(() => signInAs(caller, { authTime: FRESH() }));
-
-      it("403 FORBIDDEN, nothing stored, exactly one denied record naming the fixed pattern", async () => {
-        const before = await nonAuditItems();
-        await expectError(await post(), 403, "FORBIDDEN");
-        expect(await nonAuditItems()).toEqual(before);
-        const denied = await deniedToday();
-        expect(denied).toHaveLength(1);
-        expect(denied[0]).toMatchObject({
-          action: "role.grant",
-          result: "denied",
-          category: "security",
-          code: "FORBIDDEN",
-          route: { method: "POST", pattern: LIST },
-        });
-      });
-
-      it("403 comes before parsing: a malformed body stays 403", async () => {
-        await expectError(await post("{not json"), 403, "FORBIDDEN");
-      });
-    },
-  );
-
   it.each([
     ["a body that is not JSON", "{not json", {}],
     ["an empty object", {}, {}],
@@ -248,39 +216,6 @@ describe("DELETE /api/role-grants/[oid]/[role]", () => {
       target: { type: "identity", id: "oid-target" },
     });
   });
-
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await del(), 401, "UNAUTHORIZED");
-  });
-
-  describe.each(["auditor", "orgAdmin", "viewer", "noRoles"] as const)(
-    "as %s with a fresh sign-in (authorization refusal)",
-    (caller) => {
-      beforeEach(() => signInAs(caller, { authTime: FRESH() }));
-
-      it("403 FORBIDDEN, the grant stays, one denied record with the fixed pattern and no raw path", async () => {
-        await seed("oid-secret-target");
-        const before = await nonAuditItems();
-        await expectError(
-          await del("oid-secret-target", "internal-org-admin"),
-          403,
-          "FORBIDDEN",
-        );
-        expect(await nonAuditItems()).toEqual(before);
-        const denied = await deniedToday();
-        expect(denied).toHaveLength(1);
-        expect(denied[0]).toMatchObject({
-          action: "role.revoke",
-          result: "denied",
-          category: "security",
-          code: "FORBIDDEN",
-          route: { method: "DELETE", pattern: DELETE_PATTERN },
-        });
-        expect(JSON.stringify(denied[0])).not.toContain("oid-secret-target");
-      });
-    },
-  );
 
   it("404 NOT_FOUND for a grant that does not exist, with no audit record", async () => {
     const audit0 = (await auditToday()).length;
@@ -501,11 +436,6 @@ describe.each(METHODS)("%s role grant: recent authentication", (method) => {
   });
 
   describe("order of checks", () => {
-    it("no session is 401 first", async () => {
-      signInAs(null);
-      await expectError(await send(method), 401, "UNAUTHORIZED");
-    });
-
     it("a stale non-admin gets 403 FORBIDDEN (never REAUTH_REQUIRED) and exactly one denied record", async () => {
       signInAs("viewer", { authTime: STALE() });
       const body = await expectError(await send(method), 403, "FORBIDDEN");

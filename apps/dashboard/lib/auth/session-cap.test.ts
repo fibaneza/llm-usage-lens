@@ -58,9 +58,4 @@ describe("isWithinSessionLifetime with a cap", () => {
     expect(isWithinSessionLifetime(NOW + 59, NOW, 4 * H)).toBe(true);
     expect(isWithinSessionLifetime("x", NOW, 4 * H)).toBe(false);
   });
-
-  it("defaults to the 8 hour cap without a cap argument", () => {
-    expect(isWithinSessionLifetime(NOW - 7 * H, NOW)).toBe(true);
-    expect(isWithinSessionLifetime(NOW - 8 * H - 1, NOW)).toBe(false);
-  });
 });

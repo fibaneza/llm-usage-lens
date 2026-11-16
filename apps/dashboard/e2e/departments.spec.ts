@@ -149,8 +149,6 @@ function content(page: Page): Locator {
   return page.locator("main > :not(header)");
 }
 
-const SKELETONS = 'main > :not(header) [data-slot="skeleton"]';
-
 // Each card is a link to a department's detail page.
 function cards(page: Page): Locator {
   return content(page).getByRole("link");
@@ -257,119 +255,6 @@ test.describe("departments page", () => {
     expect(requests).toContainEqual(PREVIOUS);
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
-  });
-
-  test("keeps the API order (cost descending)", async ({ page }) => {
-    await mockApi(page);
-    await openDepartments(page);
-
-    const texts = await cards(page).allTextContents();
-    const order = CURRENT.map((d) =>
-      texts.findIndex((text) => text.includes(d.departmentName)),
-    );
-
-    expect(order).toEqual([0, 1, 2, 3, 4, 5]);
-  });
-
-  test("shows no model name on a card whose top model is null", async ({
-    page,
-  }) => {
-    await mockApi(page);
-    await openDepartments(page);
-
-    const legal = cardNamed(page, "Legal");
-
-    await expect(legal).toContainText("$40.00");
-    await expect(legal).not.toContainText(/Claude|Other models/);
-    await expect(legal).not.toContainText(/null|undefined|NaN/);
-    await expect(legal).toContainText(/—|no model usage|none|n\/a/i);
-  });
-
-  test("shows the change vs the previous period only where there is a previous cost", async ({
-    page,
-  }) => {
-    await mockApi(page);
-    await openDepartments(page);
-
-    await expect(
-      cardNamed(page, "Engineering").getByRole("img", {
-        name: "Up 20.0% vs previous period",
-      }),
-    ).toBeVisible();
-    await expect(
-      cardNamed(page, "Data Science").getByRole("img", {
-        name: "Down 50.0% vs previous period",
-      }),
-    ).toBeVisible();
-    for (const name of ["Marketing", "Legal", "Support"]) {
-      await expect(
-        cardNamed(page, name).getByRole("img", { name: /vs previous period/ }),
-      ).toHaveCount(0);
-    }
-  });
-
-  test("shows the empty state, and no cards, when there are no departments", async ({
-    page,
-  }) => {
-    await mockApi(page, { current: [], previous: [] });
-
-    await page.goto(PAGE_URL);
-    await waitForHydration(page);
-
-    await expect(
-      content(page)
-        .getByText(/\bno (departments?|usage|data|cost)/i)
-        .first(),
-    ).toBeVisible();
-    await expect(cards(page)).toHaveCount(0);
-    await expect(content(page).getByRole("alert")).toHaveCount(0);
-    await expect(page.locator(SKELETONS)).toHaveCount(0);
-  });
-
-  test("shows an alert with Retry when the request fails, and a successful Retry recovers", async ({
-    page,
-  }) => {
-    let failing = true;
-    await page.route(SYNC_STATUS_URL, (route) =>
-      route.fulfill({ json: { data: { state: "never-synced" } } }),
-    );
-    // A 400 is not retried by the query client, so the error shows at once.
-    await page.route(DEPARTMENTS_URL, async (route) => {
-      if (failing) {
-        await route.fulfill({
-          status: 400,
-          json: { error: { code: "BAD_REQUEST", message: "bad range" } },
-        });
-        return;
-      }
-      const url = new URL(route.request().url());
-      await route.fulfill({
-        json: {
-          data: {
-            departments:
-              url.searchParams.get("dateFrom") === PREVIOUS.dateFrom
-                ? PREVIOUS_ROWS
-                : CURRENT,
-          },
-        },
-      });
-    });
-
-    await page.goto(PAGE_URL);
-    await waitForHydration(page);
-    const alert = content(page).getByRole("alert");
-    await expect(alert).toBeVisible();
-    await expect(alert).toContainText(/couldn.t load/i);
-    await expect(cards(page)).toHaveCount(0);
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Department breakdown" }),
-    ).toBeVisible();
-
-    failing = false;
-    await alert.getByRole("button", { name: /retry/i }).click();
-
-    await expect(cards(page)).toHaveCount(CURRENT.length);
-    await expect(content(page).getByRole("alert")).toHaveCount(0);
   });
 
   test("a card link opens that department's detail route with the date range carried", async ({

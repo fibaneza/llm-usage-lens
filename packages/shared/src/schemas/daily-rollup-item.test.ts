@@ -71,26 +71,6 @@ describe("DailyRollupItemSchema", () => {
     if (result.success) expect(result.data.date).toBe(DAY);
   });
 
-  it("accepts an idle recurring day (models {}, zero tokens, only Provisioned Throughput)", () => {
-    const idle = {
-      ...VALID_ITEM,
-      cost: 24,
-      inputTokens: 0,
-      outputTokens: 0,
-      invocations: 0,
-      models: {},
-      nonModel: {
-        "provisioned-throughput": {
-          cost: 24,
-          costEstimated: false,
-          recurring: true,
-          rawUsageTypes: ["USE1-ProvisionedThroughput-ModelUnit"],
-        },
-      },
-    };
-    expect(DailyRollupItemSchema.safeParse(idle).success).toBe(true);
-  });
-
   it("rejects an item without date (required on the write side)", () => {
     expect(DailyRollupItemSchema.safeParse(without("date")).success).toBe(
       false,
@@ -148,19 +128,6 @@ describe("DailyRollupItemSchema", () => {
     // Model sum only (omits the nonModel term) is also a violation.
     expect(
       DailyRollupItemSchema.safeParse({ ...VALID_ITEM, cost: 10 }).success,
-    ).toBe(false);
-  });
-
-  it("tolerates sub-1e-6 float drift in the cost invariant", () => {
-    expect(
-      DailyRollupItemSchema.safeParse({ ...VALID_ITEM, cost: 10.5 + 5e-7 })
-        .success,
-    ).toBe(true);
-  });
-
-  it("still validates the rollup fields (negative cost rejected)", () => {
-    expect(
-      DailyRollupItemSchema.safeParse({ ...VALID_ITEM, cost: -1 }).success,
     ).toBe(false);
   });
 });

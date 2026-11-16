@@ -116,11 +116,6 @@ const CANNOT_READ: CallerName[] = [
 const CANNOT_WRITE: CallerName[] = ["auditor", ...CANNOT_READ];
 
 describe("GET /api/identities", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await listIdentities(), 401, "UNAUTHORIZED");
-  });
-
   it.each(CANNOT_READ)(
     "%s: 403 FORBIDDEN with no data in the body, and no denied record (reads are metric-only)",
     async (caller) => {
@@ -216,11 +211,6 @@ describe("GET /api/identities", () => {
 });
 
 describe("GET /api/identities/[oid]/links", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await getLink(alice.oid), 401, "UNAUTHORIZED");
-  });
-
   it.each(CANNOT_READ)(
     "%s: 403 FORBIDDEN with no data in the body",
     async (caller) => {
@@ -350,12 +340,6 @@ describe("PUT /api/identities/[oid]/links", () => {
     await expectData(await putLink(alice.oid, link(0, { oid: alice.oid })));
   });
 
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await putLink(alice.oid, link(0)), 401, "UNAUTHORIZED");
-    expect(await getIdentityLink(alice.oid)).toBeNull();
-  });
-
   describe.each(CANNOT_WRITE)("as %s (no write permission)", (caller) => {
     beforeEach(() => signInAs(caller));
 
@@ -402,17 +386,6 @@ describe("PUT /api/identities/[oid]/links", () => {
       });
       expect(await getIdentityLink(alice.oid)).toBeNull();
     });
-  });
-
-  it("403 for an admin with a missing or foreign Origin, before parsing; nothing is stored", async () => {
-    for (const origin of [null, "https://evil.example.test", "null"]) {
-      await expectError(
-        await putLink(alice.oid, link(0), { origin }),
-        403,
-        "FORBIDDEN",
-      );
-    }
-    expect(await getIdentityLink(alice.oid)).toBeNull();
   });
 
   it("404 NOT_FOUND for an identity that does not exist; nothing is claimed and nothing is audited", async () => {

@@ -379,15 +379,4 @@ describe("parseJsonBody content type (M2)", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("BAD_REQUEST");
   });
-
-  it("maps a missing content type to 400 BAD_REQUEST through withRoute", async () => {
-    const req = post(null);
-    req.headers.delete("content-type");
-    const res = await withRoute(async (r) => {
-      await parseJsonBody(r, schema);
-      return jsonData(1);
-    })(req, ctx);
-    expect(res.status).toBe(400);
-    expect((await res.json()).error.code).toBe("BAD_REQUEST");
-  });
 });

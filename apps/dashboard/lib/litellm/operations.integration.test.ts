@@ -21,6 +21,7 @@ import {
   NEW_KEY_VALUE,
   NEW_TOKEN,
   OTHER_TEAM_ID,
+  OTHER_USER_ID,
   TEAM_ID,
   TOKEN_A,
   TOKEN_B,
@@ -1569,5 +1570,306 @@ describe("responses are Zod-parsed", () => {
     expect(text).not.toContain("updated_values");
     expect(text).not.toContain("changed_by_api_key");
     expect(text).toContain("llm-usage-lens:jane@company.com");
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md — the `rotateKey` row (OSS
+// carry-over, L2 review 2026-11-15: team_id/user_id must match or the
+// rotation is refused with no write; `models` carried exactly, any
+// unparseable old model refuses as contract drift with no write; expiry and
+// blocked state carried), "Security architecture" item 2 (gate order: toggle
+// -> edition -> input validation), "Gateway guardrails" item 4, threats LT4,
+// LT7, LT14; Rule 60.17 (no silent failures).
+describe("L2 review carry-overs: rotateKey, generateMemberKey, memberKeyTokens", () => {
+  const REVIEW_NOW = "2026-11-14T10:00:00.000Z";
+  const REVIEW_CTX = {
+    actor: { oid: "oid-actor-1", email: "admin@company.com" },
+  };
+  const loadOps = async (): Promise<Ops> => (await load()).ops;
+  const writes = () => fake.calls.filter((c) => c.method === "POST");
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(REVIEW_NOW));
+    await clearTable();
+    await storeConnection();
+    install();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const ROTATE_BASE = {
+    litellmTeamId: TEAM_ID,
+    litellmUserId: USER_ID,
+    dashboardTeamId: "team-a",
+  };
+  const ROTATE = {
+    tokenId: TOKEN_A,
+    litellmTeamId: TEAM_ID,
+    litellmUserId: USER_ID,
+    dashboardTeamId: "team-a",
+  };
+
+  describe("OSS rotateKey carries the old key's models exactly (LT4, LT14)", () => {
+    it("the new key's models are the old key's list, in order", async () => {
+      install({
+        keyInfo: { models: ["claude-sonnet", "claude-haiku"] },
+        teamModels: ["claude-sonnet", "claude-haiku"],
+        proxyModels: ["claude-sonnet", "claude-haiku"],
+      });
+      const ops = await loadOps();
+      await ops.rotateKey!(ROTATE, REVIEW_CTX);
+      const generate = writes().find((c) => c.path === "/key/generate")!;
+      expect((generate.body as { models?: unknown }).models).toEqual([
+        "claude-sonnet",
+        "claude-haiku",
+      ]);
+    });
+
+    it.each([
+      ["one bad name among good ones", ["claude-sonnet", "bad name!"]],
+      ["a widening name among good ones", ["claude-sonnet", "all-team-models"]],
+      ["every name unparseable", ["bad name!", "also/../bad name"]],
+      ["an over-long name", ["a".repeat(201)]],
+    ])(
+      "refuses as contract drift with no write when the old models contain %s",
+      async (_n, models) => {
+        install({ keyInfo: { models } });
+        const ops = await loadOps();
+        const err = await ops.rotateKey!(ROTATE, REVIEW_CTX).catch(
+          (e: unknown) => e,
+        );
+        expect(err).toMatchObject({
+          code: "LITELLM_UNAVAILABLE",
+          detail: "contract_drift",
+        });
+        expect(writes()).toHaveLength(0);
+      },
+    );
+  });
+
+  describe("OSS rotateKey carries expiry and blocked state, and checks ownership", () => {
+    it("the new key takes the old key's remaining lifetime", async () => {
+      install({
+        keyInfo: {
+          models: ["claude-sonnet"],
+          expires: "2026-12-14T10:00:00.000Z",
+        },
+      });
+      const ops = await loadOps();
+      await ops.rotateKey!(ROTATE, REVIEW_CTX);
+      const generate = writes().find((c) => c.path === "/key/generate")!;
+      // 30 days from the frozen clock, in any whole unit the Duration schema allows.
+      expect((generate.body as { duration?: string }).duration).toMatch(
+        /^(30d|720h)$/,
+      );
+    });
+
+    it("a key without an expiry gives the new key no duration", async () => {
+      install({ keyInfo: { models: ["claude-sonnet"], expires: null } });
+      const ops = await loadOps();
+      await ops.rotateKey!(ROTATE, REVIEW_CTX);
+      const generate = writes().find((c) => c.path === "/key/generate")!;
+      expect(
+        (generate.body as { duration?: unknown }).duration,
+      ).toBeUndefined();
+    });
+
+    it("a blocked old key: generate (no `blocked` in the body), block the new key, then block the old key (rotateKey row, LT4)", async () => {
+      install({ keyInfo: { models: ["claude-sonnet"], blocked: true } });
+      const ops = await loadOps();
+      await ops.rotateKey!(ROTATE, REVIEW_CTX);
+      const sequence = writes().map((c) => [
+        c.path,
+        (c.body as { key?: string }).key,
+      ]);
+      expect(sequence).toEqual([
+        ["/key/generate", undefined],
+        ["/key/block", NEW_TOKEN],
+        ["/key/block", TOKEN_A],
+      ]);
+      expect("blocked" in (writes()[0]!.body as Record<string, unknown>)).toBe(
+        false,
+      );
+    });
+
+    it("an unblocked old key does not mark the new key blocked", async () => {
+      install({ keyInfo: { models: ["claude-sonnet"], blocked: false } });
+      const ops = await loadOps();
+      await ops.rotateKey!(ROTATE, REVIEW_CTX);
+      const generate = writes().find((c) => c.path === "/key/generate")!;
+      expect([undefined, false]).toContainEqual(
+        (generate.body as { blocked?: unknown }).blocked,
+      );
+    });
+
+    it.each([
+      ["another team", { team_id: OTHER_TEAM_ID }],
+      ["another user", { user_id: OTHER_USER_ID }],
+      ["no team", { team_id: null }],
+    ])(
+      "refuses with no write when the old key belongs to %s",
+      async (_n, owner) => {
+        install({ keyInfo: { models: ["claude-sonnet"], ...owner } });
+        const ops = await loadOps();
+        await expect(ops.rotateKey!(ROTATE, REVIEW_CTX)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+        expect(writes()).toHaveLength(0);
+      },
+    );
+  });
+
+  // rotateKey row (spec audit 2026-11-15): expiry is the remaining life rounded
+  // DOWN to the duration unit, capped at the ceiling; no expiry stays none.
+  describe("OSS rotateKey expiry rounds down and is capped (rotateKey row)", () => {
+    const duration = async (expires: string) => {
+      install({ keyInfo: { models: ["claude-sonnet"], expires } });
+      const ops = await loadOps();
+      await ops.rotateKey!(ROTATE, REVIEW_CTX);
+      return (
+        writes().find((c) => c.path === "/key/generate")!.body as {
+          duration?: string;
+        }
+      ).duration;
+    };
+
+    it.each([
+      [
+        "30 days 12 hours left is 30d, not 31d",
+        "2026-12-14T22:00:00.000Z",
+        "30d",
+      ],
+      [
+        "1 hour 30 minutes left is 1h, not 2h",
+        "2026-11-14T11:30:00.000Z",
+        "1h",
+      ],
+    ])("%s", async (_n, expires, expected) => {
+      const got = await duration(expires);
+      expect(got).toBe(expected);
+    });
+
+    it("a life beyond the 4-digit duration ceiling is capped at 9999d", async () => {
+      expect(await duration("2100-01-01T00:00:00.000Z")).toBe("9999d");
+    });
+  });
+
+  // rotateKey row: the copied models are re-checked against the current team
+  // models and /models (LT14); a mismatch is 409 CONFLICT with no write.
+  describe("OSS rotateKey re-checks the copied models (LT14)", () => {
+    it.each([
+      [
+        "a model the team no longer has",
+        {
+          teamModels: ["claude-sonnet"],
+          proxyModels: ["claude-sonnet", "claude-opus"],
+        },
+      ],
+      [
+        "a model the proxy no longer lists",
+        {
+          teamModels: ["claude-sonnet", "claude-opus"],
+          proxyModels: ["claude-sonnet"],
+        },
+      ],
+    ])(
+      "refuses with 409 CONFLICT and no write when the old key has %s",
+      async (_n, drift) => {
+        install({
+          keyInfo: { models: ["claude-sonnet", "claude-opus"] },
+          ...drift,
+        });
+        const ops = await loadOps();
+        await expect(ops.rotateKey!(ROTATE, REVIEW_CTX)).rejects.toMatchObject({
+          code: "CONFLICT",
+        });
+        expect(writes()).toHaveLength(0);
+      },
+    );
+  });
+
+  // Writes table + LT4: `blocked` is no field of the /key/generate builder.
+  describe("generateMemberKey does not accept `blocked` (LT4)", () => {
+    it("rejects it with no call", async () => {
+      const ops = await loadOps();
+      await expect(
+        ops.generateMemberKey!(
+          { ...ROTATE_BASE, models: ["claude-sonnet"], blocked: true },
+          REVIEW_CTX,
+        ),
+      ).rejects.toThrow();
+      expect(fake.calls).toHaveLength(0);
+    });
+  });
+
+  describe("memberKeyTokens (disableMember / enableMember)", () => {
+    const MEMBER = { litellmTeamId: TEAM_ID, litellmUserId: USER_ID };
+
+    it.each(["disableMember", "enableMember"])(
+      "%s throws instead of silently truncating when LiteLLM never reaches the last page (100-page cap)",
+      async (name) => {
+        const base = gatewayHandler();
+        fake.setHandler((call, n) => {
+          if (call.method === "GET" && call.path === "/key/list") {
+            return {
+              status: 200,
+              body: {
+                keys: [{ token: TOKEN_A, team_id: TEAM_ID, user_id: USER_ID }],
+                total_count: 100_000,
+                current_page: 1,
+                total_pages: 1000,
+              },
+            };
+          }
+          return base(call, n);
+        });
+        const ops = await loadOps();
+        await expect(ops[name]!(MEMBER, REVIEW_CTX)).rejects.toBeDefined();
+        expect(
+          fake.calls.filter((c) => c.path === "/key/list").length,
+        ).toBeLessThanOrEqual(100);
+        expect(writes()).toHaveLength(0);
+      },
+    );
+
+    it("exactly 100 pages that end on the last page is not an error", async () => {
+      const base = gatewayHandler();
+      fake.setHandler((call, n) => {
+        if (call.method === "GET" && call.path === "/key/list") {
+          return {
+            status: 200,
+            body: {
+              keys: [],
+              total_count: 0,
+              current_page: 1,
+              total_pages: 100,
+            },
+          };
+        }
+        return base(call, n);
+      });
+      const ops = await loadOps();
+      await expect(ops.disableMember!(MEMBER, REVIEW_CTX)).resolves.toEqual({
+        tokenIds: [],
+      });
+    });
+
+    it("a matching row whose token is not a token hash is contract drift (LITELLM_UNAVAILABLE), not a raw validation error", async () => {
+      install({
+        keys: [{ token: "sk-not-a-hash", team_id: TEAM_ID, user_id: USER_ID }],
+      });
+      const ops = await loadOps();
+      const err = await ops.disableMember!(MEMBER, REVIEW_CTX).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toMatchObject({
+        code: "LITELLM_UNAVAILABLE",
+        detail: "contract_drift",
+      });
+      expect((err as Error).name).toBe("LiteLLMError");
+      expect(writes()).toHaveLength(0);
+    });
   });
 });

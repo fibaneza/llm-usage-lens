@@ -117,21 +117,6 @@ const UNAVAILABLE = { code: "OPERATION_UNAVAILABLE", status: 403 };
 describe("edition gate (LT15)", () => {
   const input = { startDate: "2026-11-01", endDate: "2026-11-14" };
 
-  it("getGlobalSpendReport on OSS (APP_ENV=dev): 403 OPERATION_UNAVAILABLE, no call", async () => {
-    const ops = await load({ APP_ENV: "dev" });
-    await expect(ops.getGlobalSpendReport!(input)).rejects.toMatchObject(
-      UNAVAILABLE,
-    );
-    expect(fake.calls).toHaveLength(0);
-  });
-
-  it("getGlobalSpendReport on Enterprise (APP_ENV=prod) is called", async () => {
-    install({ edition: "enterprise" });
-    const ops = await load({ APP_ENV: "prod" });
-    await ops.getGlobalSpendReport!(input);
-    expect(fake.calls).toHaveLength(1);
-  });
-
   it("the edition gate also applies when the operation is toggled on (a flag can only enable operations already allowed)", async () => {
     await storeToggles({ getGlobalSpendReport: true });
     const ops = await load({ APP_ENV: "dev" });
@@ -148,25 +133,6 @@ describe("edition gate (LT15)", () => {
       status: 403,
     });
     expect(fake.calls).toHaveLength(0);
-  });
-
-  it("rotateKey on OSS composes (it is not refused); on Enterprise it regenerates", async () => {
-    const rotate = {
-      tokenId: TOKEN_A,
-      litellmTeamId: TEAM_ID,
-      litellmUserId: USER_ID,
-      dashboardTeamId: "team-a",
-    };
-    const oss = await load({ APP_ENV: "dev" });
-    await oss.rotateKey!(rotate, CTX);
-    expect(fake.calls.some((c) => c.path.endsWith("/regenerate"))).toBe(false);
-
-    install({ edition: "enterprise" });
-    const ent = await load({ APP_ENV: "prod" });
-    await ent.rotateKey!(rotate, CTX);
-    expect(fake.calls.map((c) => c.path)).toEqual([
-      `/key/${TOKEN_A}/regenerate`,
-    ]);
   });
 });
 
@@ -188,21 +154,6 @@ describe("LD10 defaults: destructive operations are off, everything else on", ()
       ops.deleteKey!({ tokenId: TOKEN_A }, CTX),
     ).rejects.toMatchObject(DISABLED);
     expect(fake.calls).toHaveLength(0);
-  });
-
-  it("removeTeamMember is on by default (amended 2026-11-14)", async () => {
-    const ops = await load();
-    await ops.removeTeamMember!(
-      { litellmTeamId: TEAM_ID, litellmUserId: USER_ID },
-      CTX,
-    );
-    expect(fake.calls).toHaveLength(1);
-  });
-
-  it("reads are on by default", async () => {
-    const ops = await load();
-    await ops.getTeam!({ litellmTeamId: TEAM_ID });
-    expect(fake.calls).toHaveLength(1);
   });
 });
 
@@ -288,14 +239,6 @@ describe("config file layer and precedence UI > file > LD10", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
-  it("a file entry enabled:false disables a read", async () => {
-    const ops = await load({}, { getTeam: { enabled: false } });
-    await expect(
-      ops.getTeam!({ litellmTeamId: TEAM_ID }),
-    ).rejects.toMatchObject(DISABLED);
-    expect(fake.calls).toHaveLength(0);
-  });
-
   it("a saved UI value overrides the file and LD10 (the only way to switch a default-off operation on)", async () => {
     await storeToggles({ createTeam: true, deleteKey: true, blockKey: false });
     const ops = await load({}, { createTeam: { enabled: false } });
@@ -307,16 +250,58 @@ describe("config file layer and precedence UI > file > LD10", () => {
     ).rejects.toMatchObject(DISABLED);
     expect(fake.calls).toHaveLength(2);
   });
+});
 
-  it("an operation absent from both layers follows LD10", async () => {
-    const ops = await load({}, { createTeam: { enabled: false } });
+// Source: docs/specs/2026-11-10-litellm.md — "Security architecture" item 2 (gate
+// order: toggle -> edition -> input validation); moved from the L2 review file.
+describe("gate order is toggle -> edition -> input validation (Security architecture item 2)", () => {
+  const BAD: Array<[string, unknown]> = [
+    ["createTeam", {}],
+    ["setTeamBudget", { litellmTeamId: "../x", maxBudget: -1 }],
+    ["getTeam", { litellmTeamId: "" }],
+    ["getKey", { tokenId: "not-a-hash" }],
+    ["deleteKey", { tokenId: "not-a-hash", extra: 1 }],
+    ["rotateKey", { tokenId: "nope" }],
+  ];
+
+  it.each(BAD)(
+    "%s disabled by its toggle with invalid input is 403 OPERATION_DISABLED, no call",
+    async (name, input) => {
+      await storeToggles({ [name]: false });
+      const ops = await load();
+      await expect(ops[name]!(input, CTX)).rejects.toMatchObject({
+        code: "OPERATION_DISABLED",
+        status: 403,
+      });
+      expect(fake.calls).toHaveLength(0);
+    },
+  );
+
+  it("an Enterprise-only operation on OSS with invalid input is OPERATION_UNAVAILABLE, not a validation error", async () => {
+    const ops = await load();
     await expect(
-      ops.resetMemberSpend!(
-        { litellmTeamId: TEAM_ID, litellmUserId: USER_ID },
-        CTX,
-      ),
-    ).rejects.toMatchObject(DISABLED);
-    await ops.blockKey!({ tokenId: TOKEN_A }, CTX);
-    expect(fake.calls).toHaveLength(1);
+      ops.getGlobalSpendReport!({ startDate: "nope", endDate: "nope" }),
+    ).rejects.toMatchObject({ code: "OPERATION_UNAVAILABLE", status: 403 });
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("the toggle is checked before the edition: a disabled Enterprise-only operation on OSS is OPERATION_DISABLED", async () => {
+    await storeToggles({ getGlobalSpendReport: false });
+    const ops = await load();
+    await expect(
+      ops.getGlobalSpendReport!({
+        startDate: "2026-11-01",
+        endDate: "2026-11-02",
+      }),
+    ).rejects.toMatchObject({ code: "OPERATION_DISABLED", status: 403 });
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("valid input on an enabled operation still validates (bad input is a validation error)", async () => {
+    const ops = await load();
+    await expect(
+      ops.getKey!({ tokenId: "not-a-hash" }),
+    ).rejects.not.toMatchObject({ code: "OPERATION_DISABLED" });
+    expect(fake.calls).toHaveLength(0);
   });
 });

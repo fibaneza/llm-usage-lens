@@ -487,31 +487,6 @@ describe("GET /api/governance/identity-map-rules/suggestions", () => {
     expect(after.items.map((i) => i.usageKey)).toEqual(["bob-sso"]);
   });
 
-  it("confirming a suggestion that someone else has since claimed is the link route's 409", async () => {
-    await seedWorld({ rules: [SSO], keys: ["alice-sso"] });
-    ok(
-      await putIdentityLink(
-        {
-          oid: PEOPLE.bob.oid,
-          usageIdentities: [],
-          aliases: ["alice-sso"],
-          version: null,
-        },
-        seedCtx(),
-      ),
-    );
-    await expectError(
-      await invoke(putLink, {
-        method: "PUT",
-        path: `/api/identities/${alice.oid}/links`,
-        params: { oid: alice.oid },
-        body: { usageIdentities: [], aliases: ["alice-sso"], version: 0 },
-      }),
-      409,
-      "CONFLICT",
-    );
-  });
-
   it("the auditor may read the suggestions", async () => {
     await seedWorld({ rules: [SSO], keys: ["alice-sso"] });
     signInAs("auditor");

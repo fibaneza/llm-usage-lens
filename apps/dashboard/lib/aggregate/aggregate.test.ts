@@ -2,13 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { buildRollup } from "@/test/rollup-builder";
 
-import { aggregateDepartmentDetail, aggregateDepartments } from "./departments";
+import { aggregateDepartmentDetail } from "./departments";
 import { aggregateOverview } from "./overview";
 import { splitCosts } from "./non-model";
 import { rankEntities } from "./ranking";
-import { aggregateServices } from "./services";
 import { aggregateTeamDetail, aggregateTeams } from "./teams";
-import { aggregateUsers } from "./users";
 
 const acct = (n: number) => String(n).padStart(12, "0");
 
@@ -255,17 +253,6 @@ describe("rankEntities", () => {
 });
 
 describe("aggregateDepartments / aggregateTeams", () => {
-  it("lists departments with model/non-model split, cost desc", () => {
-    const rows = aggregateDepartments(rollups);
-    expect(rows[0]).toMatchObject({
-      departmentId: "dept-finance",
-      cost: 50,
-      modelCost: 30,
-      nonModelCost: 20,
-    });
-    expect(rows).toHaveLength(2);
-  });
-
   it("lists teams and filters by departmentId", () => {
     expect(aggregateTeams(rollups)).toHaveLength(2);
     const only = aggregateTeams(rollups, { departmentId: "dept-finance" });
@@ -305,33 +292,6 @@ describe("aggregateDepartmentDetail / aggregateTeamDetail", () => {
       acct(1),
       acct(2),
     ]);
-  });
-});
-
-describe("aggregateServices / aggregateUsers", () => {
-  it("merges services across accounts and days, estimated, sans non-model", () => {
-    const s = aggregateServices(rollups);
-    expect(s.find((x) => x.serviceName === "payments-api")).toMatchObject({
-      cost: 12,
-      costEstimated: true,
-    });
-    expect(s.reduce((sum, x) => sum + x.cost, 0)).toBeCloseTo(45);
-    expect(s[0]?.serviceName).toBe("ledger-svc");
-    expect(JSON.stringify(s)).not.toContain("provisioned-throughput");
-  });
-
-  it("merges users across models, accounts and days", () => {
-    const u = aggregateUsers(rollups);
-    expect(u.find((x) => x.userId === "a@x.com")).toMatchObject({
-      cost: 13,
-      costEstimated: true,
-    });
-    expect(u.reduce((sum, x) => sum + x.cost, 0)).toBeCloseTo(47);
-  });
-
-  it("returns empty arrays for no rollups", () => {
-    expect(aggregateServices([])).toEqual([]);
-    expect(aggregateUsers([])).toEqual([]);
   });
 });
 

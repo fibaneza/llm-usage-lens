@@ -769,18 +769,24 @@ weakens a security control, a threat-model mitigation or the test bar
 Runs as its own `chore/test-consolidation` branch once 4R.4 has landed and
 before L4, never during a unit that edits the same files (Rule 60.24a).
 
-- [ ] Shared route-contract suite (Rule 60.23): a registry of every
+- [x] Shared route-contract suite (Rule 60.23): a registry of every
   `app/api/**` route and one parameterised suite for the `401` shape,
   `403` before parsing, `400` shape, `no-store` and one `denied` audit per
   refused write; remove the per-route copies it supersedes
 - [ ] Merge the per-run files into their canonical test files
   (`auth.r1`/`auth.r2` → `auth.test.ts`, `env.r1`/`env.r2`, `roles.r1`,
-  `operations.review`, `connection-test.warnings`), dropping duplicate cases
-- [ ] One layer per behaviour: remove component or e2e cases that only
-  repeat an integration-level assertion
-- [ ] Verify: `pnpm check` and the full `pnpm test:e2e` green; no spec rule,
-  rule item or threat item loses its last test (a coverage list per removed
-  case in the PR body); test lines and run time before and after reported
+  `operations.review`, `connection-test.warnings`), dropping duplicate
+  cases (`auth.r1` stays: its mocks differ from `auth.test.ts`, so the two do not merge cleanly; the fold of
+  `auth.recent-auth` also remains)
+- [x] One layer per behaviour: remove component or e2e cases that only
+  repeat an integration-level assertion (audited 2026-11-16: five
+  `departments.spec.ts` cases that re-ran `DepartmentsContent.test.tsx`
+  with a stubbed API were removed; the other e2e specs assert shell,
+  navigation, responsive or axe behaviour a component test cannot see)
+- [ ] Verify: `pnpm check` and the full `pnpm test:e2e` green (run in CI on
+  push); no spec rule, rule item or threat item loses its last test (coverage
+  list per removed case: done, in the finish report); test lines and run time
+  before and after reported
 
 ## Workflow pilots (decided 2026-11-15, user)
 

@@ -229,11 +229,6 @@ beforeEach(async () => {
 afterEach(() => vi.useRealTimers());
 
 describe("GET /api/access/pending", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await pending(), 401, "UNAUTHORIZED");
-  });
-
   it.each(["memberA", "viewerNone"] as CallerName[])(
     "%s: 403 FORBIDDEN with no item in the body, and no denied record (reads are metric-only)",
     async (caller) => {
@@ -322,11 +317,6 @@ describe("GET /api/access/pending", () => {
 });
 
 describe("GET /api/access/stale", () => {
-  it("401 without a session", async () => {
-    signInAs(null);
-    await expectError(await stale(), 401, "UNAUTHORIZED");
-  });
-
   it.each(["memberA", "viewerNone"] as CallerName[])(
     "%s: 403 FORBIDDEN with no row in the body",
     async (caller) => {

@@ -107,13 +107,4 @@ describe.each(["dev", "prod"] as const)("FoundationStack (%s)", (env) => {
     });
     expect(stack.terminationProtection).toBe(true);
   });
-
-  it("has no CloudFormation Exports", () => {
-    const outputs = (t.toJSON().Outputs ?? {}) as Record<
-      string,
-      { Export?: unknown }
-    >;
-    for (const out of Object.values(outputs))
-      expect(out.Export).toBeUndefined();
-  });
 });

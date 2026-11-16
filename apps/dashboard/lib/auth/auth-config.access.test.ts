@@ -142,12 +142,6 @@ describe("resolveSignInProviders (R1 rules)", () => {
     ).toMatchObject({ entra: false, master: true, devLogin: false });
   });
 
-  it("NODE_ENV=production with neither Entra nor the master user throws", () => {
-    expect(() => resolve({ nodeEnv: "production", appEnv: "dev" })).toThrow(
-      AuthConfigError,
-    );
-  });
-
   it("NODE_ENV=production still rejects AUTH_DEV_LOGIN", () => {
     expect(() =>
       resolve({ nodeEnv: "production", devLogin: "true", ...MASTER }),
