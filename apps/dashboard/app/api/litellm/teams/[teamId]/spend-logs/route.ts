@@ -44,7 +44,12 @@ export const GET = withRoute(async (request, { params }, session) => {
       page,
       pageSize,
     });
-    const items = reduceSpendLogs(res.data);
+    const items = reduceSpendLogs(res.data).map((row) => {
+      if (!team.perUserCostHidden) return row;
+      const { user, ...rest } = row;
+      void user;
+      return rest;
+    });
     return jsonData(
       LiteLLMSpendLogsResponseSchema.parse({
         connected: true,

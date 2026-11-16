@@ -585,3 +585,55 @@ describe("LiteLLMContent Organisation and Users tabs (Views by role)", () => {
     ).toBeInTheDocument();
   });
 });
+
+// B4: /api/litellm/me parses DateRangeQuerySchema (Rule 20.8), so every
+// caller must send the page's UTC range -- the URL range when set, else the
+// app default (Rule 20.1; lib/date-range defaultDateRange).
+describe("LiteLLMContent /api/litellm/me date range (B4)", () => {
+  function captureMeQueries() {
+    const queries: URLSearchParams[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = new URL(String(input), "http://localhost");
+        if (url.pathname === "/api/litellm/me") queries.push(url.searchParams);
+        const route = teamRoutes()[url.pathname];
+        if (!route) throw new Error(`unexpected ${url.pathname}`);
+        return Promise.resolve(route());
+      }),
+    );
+    return queries;
+  }
+
+  it("sends the URL date range with every me request, on My usage and Team (Rule 20.8)", async () => {
+    const queries = captureMeQueries();
+    renderWithProviders(<LiteLLMContent tabs={ALL} />, {
+      searchParams: { dateFrom: "2026-11-01", dateTo: "2026-11-14" },
+    });
+    await region("My usage");
+    await openTab("team");
+    await region("Team spend & budgets");
+    expect(queries.length).toBeGreaterThan(0);
+    for (const q of queries) {
+      expect(q.get("dateFrom")).toBe("2026-11-01");
+      expect(q.get("dateTo")).toBe("2026-11-14");
+    }
+  });
+
+  it("falls back to the default 30-day UTC range when the URL has none (Rule 20.1)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-14T10:00:00.000Z"));
+    try {
+      const queries = captureMeQueries();
+      renderPage(ALL);
+      await region("My usage");
+      expect(queries.length).toBeGreaterThan(0);
+      for (const q of queries) {
+        expect(q.get("dateFrom")).toBe("2026-10-16");
+        expect(q.get("dateTo")).toBe("2026-11-14");
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

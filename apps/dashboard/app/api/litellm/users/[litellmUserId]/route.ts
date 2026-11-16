@@ -46,7 +46,10 @@ export const GET = withRoute(async (request, { params }, session) => {
   const { dateFrom, dateTo } = parseSearchParams(request, DateRangeQuerySchema);
   return liteLLMResponse(async () => {
     const enabled = await enabledOperations();
-    requireEnabled(enabled, ["getUser", "getUserDailySpend"]);
+    requireEnabled(
+      enabled,
+      access.perUserCostHidden ? ["getUser"] : ["getUser", "getUserDailySpend"],
+    );
     const info = await getUser({ litellmUserId }).catch((error: unknown) => {
       if (error instanceof LiteLLMError && error.status === 404) {
         throw notFound();
@@ -59,6 +62,16 @@ export const GET = withRoute(async (request, { params }, session) => {
         (t) => typeof t.team_id === "string" && inScope.has(t.team_id),
       );
       if (!member) throw notFound();
+    }
+    // Organisation cap: identity only, no cost read at all (LD23, T16).
+    if (access.perUserCostHidden) {
+      return jsonData(
+        LiteLLMUserDetailResponseSchema.parse({
+          userId: litellmUserId,
+          email: info.user_info?.user_email ?? litellmUserId,
+          enabledOperations: enabled,
+        }),
+      );
     }
     const daily = await getUserDailySpend({
       litellmUserId,

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   LTEAM,
+  enterProd,
   call,
   defineTeamReadContract,
   expectNoSentinels,
@@ -77,5 +78,50 @@ describe("GET /api/litellm/teams/[teamId]/members", () => {
     for (const banned of ["budget_id", "created_by", "litellm_budget_table"]) {
       expect(JSON.stringify(body)).not.toContain(banned);
     }
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md LD23 (per-user LiteLLM cost obeys
+// the Organisation cap), "Roles and rights"; Access Control - "Organisation
+// cap", T16. Decision: capped member items keep identity and limits (email,
+// userId, rpmLimit, tpmLimit, oid, name) and OMIT `spend`, `maxBudget` and
+// `budgetDuration` (absent keys). The team-level totals are not per-user and
+// are untouched.
+describe("GET /api/litellm/teams/[teamId]/members - Organisation cap (LD23, T16)", () => {
+  it.each([
+    "admin",
+    "orgAdmin",
+    "auditor",
+    "teamAdminA",
+    "deptAdminEng",
+  ] as const)(
+    "%s in prod without the approval gets member identities but no per-user spend or budget",
+    async (who) => {
+      await enterProd();
+      signInAs(who);
+      const { res, body } = await call(
+        await load(),
+        "/api/litellm/teams/team-a/members",
+        { teamId: "team-a" },
+      );
+      expect(res.status).toBe(200);
+      expect(body.data.items).toHaveLength(1);
+      const item = body.data.items[0];
+      expect(item.email).toBe("a1@company.com");
+      for (const field of ["spend", "maxBudget", "budgetDuration"]) {
+        expect(item, field).not.toHaveProperty(field);
+      }
+    },
+  );
+
+  it("with the approval recorded, spend and budget are present again (LD23)", async () => {
+    await enterProd({ approved: true });
+    signInAs("teamAdminA");
+    const { body } = await call(
+      await load(),
+      "/api/litellm/teams/team-a/members",
+      { teamId: "team-a" },
+    );
+    expect(body.data.items[0]).toMatchObject({ spend: 3.25, maxBudget: 10 });
   });
 });

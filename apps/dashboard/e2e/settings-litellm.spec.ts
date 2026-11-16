@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
 import { waitForHydration } from "./support/hydration";
@@ -64,6 +65,65 @@ test.describe("settings LiteLLM tabs (L3b)", () => {
     await expect(
       page.getByRole("searchbox", { name: /search users/i }),
     ).toBeVisible();
+  });
+});
+
+// L3b review (UI warning): the Settings -> LiteLLM data tabs get an axe scan
+// (WCAG 2.1 AA, serious or critical only); fixtures only (Rule 60.24).
+test.describe("settings LiteLLM tabs accessibility (L3b)", () => {
+  async function scanTab(page: Page, tab: string, ready: () => Promise<void>) {
+    await page.route(/\/api\/litellm\/team-links(\?|$)/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            items: [
+              {
+                teamId: "payments",
+                litellmTeamId: "ll-111",
+                version: 1,
+                updatedAt: "2026-11-01T00:00:00Z",
+              },
+            ],
+          },
+        },
+      }),
+    );
+    await page.getByRole("tab", { name: tab }).click();
+    await ready();
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => v.id),
+    ).toEqual([]);
+  }
+
+  test("the Users tab has no serious or critical axe violations", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await openSettings(page);
+    await scanTab(page, "Users", () =>
+      expect(
+        page.getByRole("searchbox", { name: /search users/i }),
+      ).toBeVisible(),
+    );
+  });
+
+  test("the Team links tab has no serious or critical axe violations", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await openSettings(page);
+    await scanTab(page, "Team links", () =>
+      expect(page.getByText("ll-111")).toBeVisible(),
+    );
   });
 });
 

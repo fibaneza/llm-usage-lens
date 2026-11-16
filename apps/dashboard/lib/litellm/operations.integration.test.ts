@@ -1466,6 +1466,25 @@ describe("read inputs are bounded (Reads table)", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
+  // Source: docs/specs/2026-11-10-litellm.md "Reads" (getTeamDailySpend
+  // team_ids), L3b review nit: an oversized list is refused with a message
+  // naming the limit, not a bare schema error.
+  it("getTeamDailySpend with 201 team ids is rejected naming the 200-team limit, no call", async () => {
+    const { ops } = await load();
+    const ids = Array.from(
+      { length: 201 },
+      (_, i) => `${String(i).padStart(8, "0")}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+    );
+    await expect(
+      ops.getTeamDailySpend!({
+        litellmTeamIds: ids,
+        startDate: D1,
+        endDate: D2,
+      }),
+    ).rejects.toThrow(/at most 200 teams/i);
+    expect(fake.calls).toHaveLength(0);
+  });
+
   it("listKeys accepts a user-only filter", async () => {
     const { ops } = await load();
     await ops.listKeys!({ litellmUserId: USER_ID });

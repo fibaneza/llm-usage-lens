@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   LTEAM,
+  enterProd,
   call,
   expectError,
   expectNoSentinels,
@@ -251,5 +252,118 @@ describe("GET /api/litellm/users?q=", () => {
     signInAs("admin");
     const { res } = await get();
     await expectError(res, 403, "OPERATION_UNAVAILABLE");
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md LD23 (per-user LiteLLM cost obeys the
+// Organisation cap), LT21; Access Control - "Organisation cap" (prod, until the
+// per-user approval is recorded every caller sees per-user counts and
+// identities only), T16. Decision: capped rows OMIT `spend` and `maxBudget`
+// (absent keys, not null/0, so no number can be mistaken for "no spend").
+describe("GET /api/litellm/users?q= - Organisation cap (LD23, T16)", () => {
+  const CAPPED_CALLERS = [
+    "admin",
+    "orgAdmin",
+    "auditor",
+    "teamAdminA",
+    "deptAdminEng",
+  ] as const;
+
+  it.each(CAPPED_CALLERS)(
+    "%s in prod without the approval gets identities and teams but no spend or budget",
+    async (who) => {
+      await enterProd();
+      signInAs(who);
+      const { res, body } = await get("?q=ab");
+      expect(res.status).toBe(200);
+      expect(ids(body)).toEqual(["ab@company.com"]);
+      const row = body.data.users[0];
+      expect(row.email).toBe("ab@company.com");
+      expect(row.teams.length).toBeGreaterThan(0);
+      expect(row).not.toHaveProperty("spend");
+      expect(row).not.toHaveProperty("maxBudget");
+    },
+  );
+
+  it("with the approval recorded, spend and budget are present again (LD23: reversible)", async () => {
+    await enterProd({ approved: true });
+    signInAs("teamAdminA");
+    const { body } = await get("?q=ab");
+    expect(body.data.users[0]).toMatchObject({ spend: 6, maxBudget: 10 });
+  });
+
+  it("outside prod the cap does not apply (dev keeps per-user cost)", async () => {
+    signInAs("admin");
+    const { body } = await get("?q=ab");
+    expect(body.data.users[0]).toMatchObject({ spend: 6, maxBudget: 10 });
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - "Reads" searchUsers row (a Lead's
+// merged results are capped at 25 rows per page), LT21. Decision: a Lead's
+// per-team calls forward `page` and `pageSize` (page N of each team's list);
+// the de-duplicated merge is sorted by email (ascending) and cut to `pageSize`
+// rows, so one page never exceeds 25 rows however many teams are linked. Users
+// cut from a page are reached by refining the search (stated limit, no
+// hasMore flag in v1).
+describe("GET /api/litellm/users?q= - Lead merged page cap (searchUsers)", () => {
+  const rows = (prefix: string, team: string) =>
+    Array.from({ length: 30 }, (_, i) => {
+      const id = `${prefix}${String(i).padStart(2, "0")}@company.com`;
+      return {
+        user_id: id,
+        user_email: id,
+        spend: 1,
+        max_budget: null,
+        teams: [team],
+      };
+    });
+  const bulk = () => {
+    installFake(state, {
+      extraUsers: [
+        ...rows("bulka", LTEAM["team-a"]),
+        ...rows("bulkb", LTEAM["team-b"]),
+      ],
+    });
+  };
+  const idsOf = (body: { data?: unknown }) =>
+    (body.data as { users: Array<{ userId: string }> }).users.map(
+      (u) => u.userId,
+    );
+
+  it("a Lead with two linked teams gets at most 25 rows on page 1, sorted by email", async () => {
+    bulk();
+    signInAs("deptAdminEng");
+    const { body } = await get("?q=bulk");
+    const list = idsOf(body);
+    expect(list).toHaveLength(25);
+    expect(list).toEqual([...list].sort());
+    expect(list[0]).toBe("bulka00@company.com");
+  });
+
+  it("page 2 is page 2 of each team's list, merged, sorted and capped (rows 26-30 of each team)", async () => {
+    bulk();
+    signInAs("deptAdminEng");
+    const { body } = await get("?q=bulk&page=2");
+    expect(body.data.page).toBe(2);
+    expect(idsOf(body)).toEqual([
+      ...[25, 26, 27, 28, 29].map((n) => `bulka${n}@company.com`),
+      ...[25, 26, 27, 28, 29].map((n) => `bulkb${n}@company.com`),
+    ]);
+    for (const c of listCalls()) {
+      expect(new URL(c.url).searchParams.get("page")).toBe("2");
+    }
+  });
+
+  it("a smaller pageSize caps the merged list at that size", async () => {
+    bulk();
+    signInAs("deptAdminEng");
+    const { body } = await get("?q=bulk&pageSize=10");
+    expect(idsOf(body)).toEqual(
+      Array.from(
+        { length: 10 },
+        (_, i) => `bulka${String(i).padStart(2, "0")}@company.com`,
+      ),
+    );
   });
 });

@@ -34,11 +34,13 @@ export const GET = withRoute(async (_request, { params }, session) => {
     );
     const dashboardMembers = await mapTeamMembers(teamId);
     const items = reduceMembers(info.team_memberships, emails).map((m) => {
+      const { spend, maxBudget, budgetDuration, ...identity } = m;
       const person =
         dashboardMembers.get(m.userId.toLowerCase()) ??
         dashboardMembers.get(m.email.toLowerCase());
       return {
-        ...m,
+        ...identity,
+        ...(team.perUserCostHidden ? {} : { spend, maxBudget, budgetDuration }),
         ...(person ? { oid: person.oid, name: person.name } : {}),
       };
     });

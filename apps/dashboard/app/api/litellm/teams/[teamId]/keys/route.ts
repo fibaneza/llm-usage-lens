@@ -42,7 +42,10 @@ export const GET = withRoute(async (_request, { params }, session) => {
     return jsonData(
       LiteLLMKeysResponseSchema.parse({
         connected: true,
-        items: items.map(keyView),
+        items: items.map((k) => {
+          const { userId, ...rest } = keyView(k);
+          return team.perUserCostHidden ? rest : { userId, ...rest };
+        }),
       }),
     );
   });

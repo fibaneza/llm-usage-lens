@@ -86,10 +86,15 @@ function canReadTeamViews(scope: Scope, teamId: string, departmentId: string) {
   );
 }
 
+// Organisation cap (Access Control - "Organisation cap"; LiteLLM LD23): in
+// prod until the per-user approval is recorded, per-user cost is not shown.
+export const hidesPerUserCost = (scope: Scope) => scope.userLevelCap !== "all";
+
 export type LiteLLMTeamRef = {
   teamId: string;
   teamName: string;
   litellmTeamId: string | null;
+  perUserCostHidden: boolean;
 };
 
 // Out-of-scope and missing teams throw the same NotFoundError.
@@ -107,6 +112,7 @@ export async function resolveLiteLLMTeam(
     teamId,
     teamName: meta.teamName,
     litellmTeamId: link?.litellmTeamId ?? null,
+    perUserCostHidden: hidesPerUserCost(scope),
   };
 }
 
@@ -159,6 +165,8 @@ export type TeamAccess = {
   lead: boolean;
   // Linked teams the caller may read, by dashboard team.
   linked: LinkedTeam[];
+  // Organisation cap in force: per-user LiteLLM cost stays hidden (LD23).
+  perUserCostHidden: boolean;
 };
 
 const ORG_WIDE_ROLES: readonly string[] = [
@@ -196,7 +204,12 @@ export async function teamAccess(session: Session): Promise<TeamAccess> {
     }
   }
   linked.sort((x, y) => x.teamName.localeCompare(y.teamName));
-  return { orgWide, lead: !orgWide && readable > 0, linked };
+  return {
+    orgWide,
+    lead: !orgWide && readable > 0,
+    linked,
+    perUserCostHidden: hidesPerUserCost(scope),
+  };
 }
 
 // ---- query parsing ---------------------------------------------------------

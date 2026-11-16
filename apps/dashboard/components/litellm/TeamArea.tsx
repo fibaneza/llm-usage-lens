@@ -8,9 +8,8 @@ import { KeysSection } from "./KeysSection";
 import { LiteLLMSection, NotConnected } from "./LiteLLMSection";
 import { MembersSection } from "./MembersSection";
 import { ModelAccessSection } from "./ModelAccessSection";
-import { LiteLLMMeResponseSchema } from "@llm-usage-lens/shared";
 import { TeamSpendSection } from "./TeamSpendSection";
-import { useLiteLLMQueryState } from "./use-litellm-query";
+import { useMeQuery } from "./use-me-query";
 
 // The team sections appear only for a caller with teams (LiteLLM spec -- Roles
 // and rights). They share the `me` query with My usage; a failure there is
@@ -18,11 +17,7 @@ import { useLiteLLMQueryState } from "./use-litellm-query";
 export function TeamArea() {
   const selectId = useId();
   const [picked, setPicked] = useState<string | null>(null);
-  const me = useLiteLLMQueryState(
-    ["me"],
-    "/api/litellm/me",
-    LiteLLMMeResponseSchema,
-  );
+  const me = useMeQuery();
 
   if (me.isPending) return <Skeleton className="h-40 w-full" />;
   const teams = me.data?.status === "ok" ? me.data.data.teams : [];

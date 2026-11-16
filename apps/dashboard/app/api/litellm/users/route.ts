@@ -52,6 +52,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
         }),
       ),
     );
+    const hidden = access.perUserCostHidden;
     const merged = new Map<
       string,
       {
@@ -78,11 +79,20 @@ export const GET = withRoute(async (request, _ctx, session) => {
       for (const t of teams) entry.teams.set(t.teamId, t);
       merged.set(row.user_id, entry);
     }
+    // A Lead's per-team pages merge into one list: sorted by email and cut to
+    // pageSize so a page never exceeds 25 rows (Reads - searchUsers).
+    const rows = [...merged.values()];
+    const ordered = access.orgWide
+      ? rows
+      : rows
+          .sort((a, b) => a.email.localeCompare(b.email, "en"))
+          .slice(0, pageSize);
     return jsonData(
       LiteLLMUserSearchResponseSchema.parse({
-        users: [...merged.values()].map((u) => ({
-          ...u,
-          teams: [...u.teams.values()],
+        users: ordered.map(({ spend, maxBudget, ...identity }) => ({
+          ...identity,
+          teams: [...identity.teams.values()],
+          ...(hidden ? {} : { spend, maxBudget }),
         })),
         page,
         pageSize,

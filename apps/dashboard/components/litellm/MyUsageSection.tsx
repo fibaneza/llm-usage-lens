@@ -8,16 +8,11 @@ import { MetricCard } from "@/components/display/MetricCard";
 
 import { DailySpend } from "./DailySpend";
 import { KeysTable } from "./KeysTable";
-import { LiteLLMMeResponseSchema } from "@llm-usage-lens/shared";
 import { Unavailable } from "./LiteLLMSection";
-import { useLiteLLMQuery } from "./use-litellm-query";
+import { useMeSuspenseQuery } from "./use-me-query";
 
 export function MyUsageSection() {
-  const result = useLiteLLMQuery(
-    ["me"],
-    "/api/litellm/me",
-    LiteLLMMeResponseSchema,
-  );
+  const result = useMeSuspenseQuery();
   if (result.status === "unavailable") return <Unavailable />;
   const me = result.data;
   if (!me.linked) {

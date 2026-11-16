@@ -325,6 +325,19 @@ describe("LiteLLMPanel tabs (L3b)", () => {
     return calls;
   }
 
+  // Source: WCAG 2.1.1; L3b review B3. The tablist is keyboard operable.
+  it("the tablist responds to the arrow keys and shows the next tab's panel", async () => {
+    stubAll();
+    renderWithProviders(<LiteLLMPanel />);
+    const first = await screen.findByRole("tab", { name: "Connection" });
+    first.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    const second = screen.getByRole("tab", { name: "Guardrails" });
+    expect(second).toHaveFocus();
+    expect(second).toHaveAttribute("aria-selected", "true");
+    expect(first).toHaveAttribute("aria-selected", "false");
+  });
+
   it("offers the four tabs in order, Connection selected first", async () => {
     stubAll();
     renderWithProviders(<LiteLLMPanel />);

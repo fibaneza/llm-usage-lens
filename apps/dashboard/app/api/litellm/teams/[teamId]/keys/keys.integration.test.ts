@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   LTEAM,
+  LUSER,
   TOKEN_A,
   TOKEN_B,
   TOKEN_C,
   call,
   defineTeamReadContract,
+  enterProd,
   expectNoSentinels,
   setupViewsSuite,
   stubLiteLLMEnv,
@@ -84,5 +86,53 @@ describe("GET /api/litellm/teams/[teamId]/keys", () => {
     expect(q.get("team_id")).toBe(LTEAM["team-a"]);
     expect(q.get("return_full_object")).toBe("true");
     expect(Number(q.get("size") ?? 100)).toBeLessThanOrEqual(100);
+  });
+});
+
+// LD23, T16: while the Organisation cap applies (prod, no per-user approval)
+// the cost stays but the person goes: key rows omit `userId` (absent, not null).
+describe("GET /api/litellm/teams/[teamId]/keys - Organisation cap (LD23, T16)", () => {
+  const get = async () =>
+    call(await load(), "/api/litellm/teams/team-a/keys", { teamId: "team-a" });
+
+  it.each([
+    "admin",
+    "orgAdmin",
+    "auditor",
+    "teamAdminA",
+    "deptAdminEng",
+  ] as const)(
+    "%s in prod without the approval gets key spend but no userId",
+    async (who) => {
+      await enterProd();
+      signInAs(who);
+      const { res, body } = await get();
+      expect(res.status).toBe(200);
+      expect(body.data.items.length).toBeGreaterThan(0);
+      for (const item of body.data.items) {
+        expect(item, "userId").not.toHaveProperty("userId");
+        expect(item.spend).toBe(2.5);
+        expect(item.tokenId).toBeTruthy();
+      }
+    },
+  );
+
+  it.each(["admin", "teamAdminA"] as const)(
+    "%s in prod with the approval recorded gets userId again (LD23)",
+    async (who) => {
+      await enterProd({ approved: true });
+      signInAs(who);
+      const { body } = await get();
+      expect(body.data.items[0]).toMatchObject({
+        userId: LUSER.memberA,
+        spend: 2.5,
+      });
+    },
+  );
+
+  it("outside prod (dev) userId is present without any approval (LD23)", async () => {
+    signInAs("teamAdminA");
+    const { body } = await get();
+    expect(body.data.items[0].userId).toBe(LUSER.memberA);
   });
 });

@@ -357,7 +357,11 @@ const TeamDailyInput = withRange(
   z
     .strictObject({
       litellmTeamId: LiteLLMId.optional(),
-      litellmTeamIds: z.array(LiteLLMId).min(1).max(200).optional(),
+      litellmTeamIds: z
+        .array(LiteLLMId)
+        .min(1)
+        .max(200, "At most 200 teams per request")
+        .optional(),
       startDate: UtcDaySchema,
       endDate: UtcDaySchema,
     })

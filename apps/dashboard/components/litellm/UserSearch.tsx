@@ -3,6 +3,11 @@
 import { CircleDollarSign, Wallet } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 
+import {
+  LiteLLMUserDetailResponseSchema,
+  LiteLLMUserSearchResponseSchema,
+} from "@llm-usage-lens/shared";
+
 import { formatUsd } from "@/components/charts/chart-data";
 import { MetricCard } from "@/components/display/MetricCard";
 import { Input } from "@/components/ui/input";
@@ -16,10 +21,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiRequestError } from "@/lib/query/fetch-api";
-import {
-  LiteLLMUserDetailResponseSchema,
-  LiteLLMUserSearchResponseSchema,
-} from "@llm-usage-lens/shared";
 
 import { DailySpend } from "./DailySpend";
 import { LiteLLMReportedBadge } from "./LiteLLMReportedBadge";
@@ -30,9 +31,13 @@ import { useLiteLLMQueryState } from "./use-litellm-query";
 const MIN_TERM = 2;
 const MAX_TERM = 100;
 const DEBOUNCE_MS = 500;
+// Per-user cost is absent until per-user reporting is approved (LD23).
+const HIDDEN = "Hidden until per-user reporting is approved";
 
-const budget = (value: number | null) =>
-  value === null ? "No limit" : formatUsd(value);
+const budget = (value: number | null | undefined) =>
+  value === undefined ? HIDDEN : value === null ? "No limit" : formatUsd(value);
+const spend = (value: number | undefined) =>
+  value === undefined ? HIDDEN : formatUsd(value);
 
 function QueryFailure({ error }: { error: unknown }) {
   return (
@@ -71,7 +76,7 @@ function UserDetail({ userId }: { userId: string }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <MetricCard
             title="Spend"
-            value={formatUsd(user.spend)}
+            value={spend(user.spend)}
             icon={CircleDollarSign}
           />
           <MetricCard
@@ -80,7 +85,7 @@ function UserDetail({ userId }: { userId: string }) {
             icon={Wallet}
           />
         </div>
-        <DailySpend daily={user.daily} />
+        {user.daily ? <DailySpend daily={user.daily} /> : null}
       </div>
     );
   }
@@ -148,7 +153,7 @@ function Results({
                 {user.teams.map((team) => team.teamName).join(", ")}
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">
-                {formatUsd(user.spend)}
+                {spend(user.spend)}
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">
                 {budget(user.maxBudget)}

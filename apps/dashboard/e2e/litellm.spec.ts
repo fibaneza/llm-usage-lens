@@ -30,6 +30,18 @@ async function mockApi(page: Page, me: unknown = ME) {
   await page.route(/\/api\/litellm\//, (route) => {
     const path = new URL(route.request().url()).pathname;
     hits.push(path);
+    // Like the real route, /me answers 400 without a valid UTC range (B4;
+    // Rule 20.8).
+    const query = new URL(route.request().url()).searchParams;
+    if (
+      path === "/api/litellm/me" &&
+      !(query.get("dateFrom") && query.get("dateTo"))
+    ) {
+      return route.fulfill({
+        status: 400,
+        json: { error: { code: "BAD_REQUEST", message: "Invalid query" } },
+      });
+    }
     const body: Record<string, unknown> = {
       "/api/litellm/me": me,
       "/api/litellm/teams/t1": {
@@ -163,6 +175,19 @@ test.describe("LiteLLM page", () => {
     ).toContainText("AEDT");
   });
 
+  test("My usage shows the LiteLLM-reported spend, not a load error, when the route needs a range (B4)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-viewer"] });
+    await mockApi(page, { ...ME, teams: [] });
+    await openPage(page);
+
+    const usage = page.getByRole("region", { name: "My usage" });
+    await expect(usage).toContainText("$12.50");
+    await expect(usage).not.toContainText("Couldn't load");
+  });
+
   test("shows a Viewer My usage but not LiteLLM audit, and never requests it", async ({
     page,
     context,
@@ -246,8 +271,15 @@ test.describe("LiteLLM page tabs", () => {
     const tabs = await names(page);
     expect(tabs).toContain("Team");
     expect(tabs).toContain("Users");
+    expect(tabs).toContain("Organisation");
     expect(tabs).not.toContain("Audit");
     expect(hits).not.toContain("/api/litellm/audit");
+
+    // Views by role: an org-admin opens the Organisation tab (L3b review).
+    await page.getByRole("tab", { name: "Organisation" }).click();
+    await expect(
+      page.getByRole("region", { name: "Organisation" }),
+    ).toContainText("Payments");
   });
 
   test("a Viewer sees only My usage, and a direct ?tab=audit link falls back to it", async ({

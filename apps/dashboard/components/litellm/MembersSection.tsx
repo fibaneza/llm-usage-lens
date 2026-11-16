@@ -1,5 +1,7 @@
 "use client";
 
+import { LiteLLMMembersResponseSchema } from "@llm-usage-lens/shared";
+
 import { formatUsd } from "@/components/charts/chart-data";
 import { UserAvatar } from "@/components/display/UserAvatar";
 import {
@@ -13,7 +15,6 @@ import {
 } from "@/components/ui/table";
 
 import { Empty, NotConnected, Unavailable } from "./LiteLLMSection";
-import { LiteLLMMembersResponseSchema } from "@llm-usage-lens/shared";
 import { useLiteLLMQuery } from "./use-litellm-query";
 
 const limit = (value: number | null) =>
@@ -59,12 +60,14 @@ export function MembersSection({ teamId }: { teamId: string }) {
               </span>
             </TableCell>
             <TableCell className="text-right font-mono tabular-nums">
-              {formatUsd(member.spend)}
+              {member.spend === undefined ? "-" : formatUsd(member.spend)}
             </TableCell>
             <TableCell className="text-right font-mono tabular-nums">
-              {member.maxBudget === null
-                ? "No limit"
-                : formatUsd(member.maxBudget)}
+              {member.maxBudget === undefined
+                ? "-"
+                : member.maxBudget === null
+                  ? "No limit"
+                  : formatUsd(member.maxBudget)}
             </TableCell>
             <TableCell className="text-right font-mono tabular-nums">
               {limit(member.rpmLimit)}

@@ -71,8 +71,9 @@ export const LiteLLMTeamDetailResponseSchema = z.discriminatedUnion(
 const MemberSchema = z.object({
   userId: z.string(),
   email: z.string(),
-  spend: z.number(),
-  maxBudget: z.number().nullable(),
+  // Absent while the Organisation cap hides per-user cost (LD23).
+  spend: z.number().optional(),
+  maxBudget: z.number().nullable().optional(),
   budgetDuration: z.string().nullish(),
   rpmLimit: z.number().nullable(),
   tpmLimit: z.number().nullable(),
@@ -98,7 +99,7 @@ const SpendLogSchema = z.object({
   promptTokens: z.number().nullable(),
   completionTokens: z.number().nullable(),
   totalTokens: z.number().nullable(),
-  user: z.string().nullable(),
+  user: z.string().nullable().optional(),
   status: z.string().nullable(),
 });
 
@@ -159,8 +160,9 @@ export const LiteLLMUserSearchResponseSchema = z.object({
     z.object({
       userId: z.string(),
       email: z.string(),
-      spend: z.number(),
-      maxBudget: z.number().nullable(),
+      // Absent while the Organisation cap hides per-user cost (LD23).
+      spend: z.number().optional(),
+      maxBudget: z.number().nullable().optional(),
       teams: z.array(z.object({ teamId: z.string(), teamName: z.string() })),
     }),
   ),
@@ -172,8 +174,9 @@ export const LiteLLMUserSearchResponseSchema = z.object({
 export const LiteLLMUserDetailResponseSchema = z.object({
   userId: z.string(),
   email: z.string(),
-  spend: z.number(),
-  maxBudget: z.number().nullable(),
-  daily: DailySchema,
+  // Absent while the Organisation cap hides per-user cost (LD23).
+  spend: z.number().optional(),
+  maxBudget: z.number().nullable().optional(),
+  daily: DailySchema.optional(),
   enabledOperations: EnabledOperations,
 });

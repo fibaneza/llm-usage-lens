@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DATES,
   LTEAM,
+  LUSER,
   call,
   defineTeamReadContract,
+  enterProd,
   expectError,
   expectNoSentinels,
   setupViewsSuite,
@@ -101,4 +103,54 @@ describe("GET /api/litellm/teams/[teamId]/spend-logs", () => {
       expect(state.fake.calls).toHaveLength(0);
     },
   );
+});
+
+// LD23, T16: while the Organisation cap applies the cost stays, the person goes:
+// spend-log rows omit `user` (absent, not null).
+describe("GET /api/litellm/teams/[teamId]/spend-logs - Organisation cap (LD23, T16)", () => {
+  const get = async () =>
+    call(await load(), `/api/litellm/teams/team-a/spend-logs?${DATES}`, {
+      teamId: "team-a",
+    });
+
+  it.each([
+    "admin",
+    "orgAdmin",
+    "auditor",
+    "teamAdminA",
+    "deptAdminEng",
+  ] as const)(
+    "%s in prod without the approval gets request spend but no user",
+    async (who) => {
+      await enterProd();
+      signInAs(who);
+      const { res, body } = await get();
+      expect(res.status).toBe(200);
+      expect(body.data.items.length).toBeGreaterThan(0);
+      for (const item of body.data.items) {
+        expect(item, "user").not.toHaveProperty("user");
+        expect(item.spend).toBe(0.01);
+        expect(item.requestId).toBe("req-1");
+      }
+    },
+  );
+
+  it.each(["admin", "teamAdminA"] as const)(
+    "%s in prod with the approval recorded gets user again (LD23)",
+    async (who) => {
+      await enterProd({ approved: true });
+      signInAs(who);
+      const { body } = await get();
+      expect(body.data.items[0]).toMatchObject({
+        user: LUSER.memberA,
+        spend: 0.01,
+      });
+    },
+  );
+
+  it("outside prod (dev) user is present without any approval (LD23)", async () => {
+    signInAs("teamAdminA");
+    const { body } = await get();
+    expect(body.data.items[0].user).toBe(LUSER.memberA);
+  });
 });

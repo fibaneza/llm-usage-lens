@@ -75,6 +75,38 @@ describe("LiteLLMPage (/dashboard/litellm)", () => {
     );
   });
 
+  // Source: Access Control spec - "Enforcement" (a suspended SSO admin scope,
+  // groupsOverage, grants nothing; the routes drop it) and LiteLLM spec -
+  // Views by role: the tab set must use the same live-scope resolution as
+  // the routes, else the tabs show and every call answers 403.
+  it.each([
+    ["suspended (sso scope, groupsOverage)", "sso", true, "my-usage"],
+    [
+      "live sso scope without groupsOverage",
+      "sso",
+      false,
+      "my-usage,team,users",
+    ],
+    ["manual scope is never suspended", "manual", true, "my-usage,team,users"],
+  ])(
+    "a Lead whose only admin scope is %s gets the expected tabs",
+    async (_name, source, groupsOverage, expected) => {
+      auth.mockResolvedValue({
+        user: { oid: "o", roles: ["internal-viewer"] },
+      });
+      loadAuthorization.mockResolvedValue({
+        appEnv: "dev",
+        roleGrants: [],
+        identity: { groupsOverage },
+        adminScopes: [{ source, scopeType: "team", scopeId: "t1" }],
+      });
+      render(await LiteLLMPage());
+      expect(screen.getByTestId("content")).toHaveTextContent(
+        new RegExp(`^${expected}$`),
+      );
+    },
+  );
+
   it("a stored internal-admin grant opens every tab for a claim without the role (Rule 50.4)", async () => {
     auth.mockResolvedValue({ user: { oid: "o", roles: ["internal-viewer"] } });
     loadAuthorization.mockResolvedValue({

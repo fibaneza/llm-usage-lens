@@ -4,7 +4,6 @@ import { parseAsStringLiteral, useQueryState } from "nuqs";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LiteLLMMeResponseSchema } from "@llm-usage-lens/shared";
 
 import { AuditSection } from "./AuditSection";
 import { LiteLLMSection } from "./LiteLLMSection";
@@ -12,7 +11,7 @@ import { MyUsageSection } from "./MyUsageSection";
 import { OrganisationSection } from "./OrganisationSection";
 import { TeamArea } from "./TeamArea";
 import { UserSearch } from "./UserSearch";
-import { useLiteLLMQueryState } from "./use-litellm-query";
+import { useMeQuery } from "./use-me-query";
 
 export const LITELLM_TAB_IDS = [
   "my-usage",
@@ -41,11 +40,7 @@ const tabParser = parseAsStringLiteral(LITELLM_TAB_IDS);
 export function LiteLLMContent({ tabs }: { tabs: readonly LiteLLMTabId[] }) {
   const [requested, setRequested] = useQueryState("tab", tabParser);
   const wantsTeam = tabs.includes("team");
-  const me = useLiteLLMQueryState(
-    ["me"],
-    "/api/litellm/me",
-    LiteLLMMeResponseSchema,
-  );
+  const me = useMeQuery();
 
   if (wantsTeam && me.isPending) return <Skeleton className="h-40 w-full" />;
 

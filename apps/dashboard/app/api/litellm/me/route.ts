@@ -1,14 +1,16 @@
+import { trace } from "@opentelemetry/api";
 import { DateRangeQuerySchema } from "@llm-usage-lens/shared";
 import { z } from "zod";
 
 import { jsonData, parseSearchParams, withRoute } from "@/lib/api/respond";
 import { getIdentityLink } from "@/lib/data/access/identity-links";
+import { defaultDateRange } from "@/lib/date-range";
+import { LiteLLMError } from "@/lib/litellm/client";
 import {
   findUserByEmail,
   getUser,
   getUserDailySpend,
 } from "@/lib/litellm/operations";
-import { openModeRefusal } from "@/lib/litellm/route-guard";
 import {
   enabledOperations,
   keyView,
@@ -17,6 +19,7 @@ import {
   requireEnabled,
   viewableTeams,
 } from "@/lib/litellm/read-views";
+import { openModeRefusal } from "@/lib/litellm/route-guard";
 
 // Source: docs/specs/2026-11-10-litellm.md — "API routes" (/api/litellm/me,
 // any signed-in role, own data), "Roles and rights" (Viewer: through the
@@ -32,7 +35,13 @@ export const dynamic = "force-dynamic";
 export const GET = withRoute(async (request, _ctx, session) => {
   const refused = openModeRefusal();
   if (refused) return refused;
-  const { dateFrom, dateTo } = parseSearchParams(request, DateRangeQuerySchema);
+  // No range at all means the default 30-day UTC preset; a lone param is
+  // still a 400 and the 90-day cap applies.
+  const params = new URL(request.url).searchParams;
+  const { dateFrom, dateTo } =
+    params.has("dateFrom") || params.has("dateTo")
+      ? parseSearchParams(request, DateRangeQuerySchema)
+      : defaultDateRange();
   const [link, enabled, { teams, linkedLiteLLMTeamIds }] = await Promise.all([
     getIdentityLink(session.user.oid),
     enabledOperations(),
@@ -46,10 +55,17 @@ export const GET = withRoute(async (request, _ctx, session) => {
     const parsedEmail = EmailSchema.safeParse(session.user.email);
     const email = parsedEmail.success ? parsedEmail.data : undefined;
     if (!litellmUserId && email && enabled.includes("findUserByEmail")) {
-      const found = await findUserByEmail({ email });
-      litellmUserId = found.users.find(
-        (u) => u.user_email?.toLowerCase() === email,
-      )?.user_id;
+      // An unlinked caller keeps their teams through an outage: the lookup
+      // is best effort and degrades to "no match" (teams never need LiteLLM).
+      try {
+        const found = await findUserByEmail({ email });
+        litellmUserId = found.users.find(
+          (u) => u.user_email?.toLowerCase() === email,
+        )?.user_id;
+      } catch (error) {
+        if (!(error instanceof LiteLLMError)) throw error;
+        trace.getActiveSpan()?.addEvent("litellm.find_user_by_email_failed");
+      }
     }
     if (!litellmUserId) {
       return jsonData({ linked: false, teams, enabledOperations: enabled });

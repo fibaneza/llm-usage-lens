@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DATES,
   GHOST_USER_ID,
+  enterProd,
   call,
   expectError,
   expectNoSentinels,
@@ -209,5 +210,49 @@ describe("GET /api/litellm/users/[litellmUserId]", () => {
     signInAs("admin");
     const { res } = await get("a1@company.com");
     await expectError(res, 403, "OPERATION_UNAVAILABLE");
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md LD23 (per-user LiteLLM cost obeys
+// the Organisation cap), LT21; Access Control - "Organisation cap", T16.
+// Decision: capped detail is { userId, email, enabledOperations } - `spend`,
+// `maxBudget` and `daily` are ABSENT keys, and getUserDailySpend is never
+// called. Scope (404 parity) is unchanged by the cap.
+describe("GET /api/litellm/users/[litellmUserId] - Organisation cap (LD23, T16)", () => {
+  it.each([
+    "admin",
+    "orgAdmin",
+    "auditor",
+    "teamAdminA",
+    "deptAdminEng",
+  ] as const)(
+    "%s in prod without the approval gets identity only: no spend, budget or daily, no daily call",
+    async (who) => {
+      await enterProd();
+      signInAs(who);
+      const { res, body } = await get("ab@company.com");
+      expect(res.status).toBe(200);
+      expect(body.data.userId).toBe("ab@company.com");
+      expect(body.data.email).toBe("ab@company.com");
+      for (const field of ["spend", "maxBudget", "daily"]) {
+        expect(body.data, field).not.toHaveProperty(field);
+      }
+      expect(dailyCalls()).toHaveLength(0);
+    },
+  );
+
+  it("an out-of-scope user is still the 404 in prod (cap does not widen scope)", async () => {
+    await enterProd();
+    signInAs("teamAdminA");
+    const { res } = await get("c1@company.com");
+    await expectError(res, 404, "NOT_FOUND");
+  });
+
+  it("with the approval recorded, spend, budget and daily are present again (LD23)", async () => {
+    await enterProd({ approved: true });
+    signInAs("teamAdminA");
+    const { body } = await get("ab@company.com");
+    expect(body.data).toMatchObject({ spend: 6, maxBudget: 10 });
+    expect(body.data.daily.length).toBeGreaterThan(0);
   });
 });

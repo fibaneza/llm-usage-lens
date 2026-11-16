@@ -79,6 +79,8 @@ export type ViewsFakeOptions = {
   ignoreTeamFilter?: boolean;
   teamModels?: string[];
   extraKeys?: Array<Record<string, unknown>>;
+  // Extra rows for GET /user/list (LiteLLM-shaped; `teams` are LiteLLM ids).
+  extraUsers?: Array<Record<string, unknown>>;
 };
 
 // L3b: LiteLLM users known to the fake. `id` differs from the email for the
@@ -231,7 +233,10 @@ export function viewsHandler(opts: ViewsFakeOptions = {}): FakeHandler {
         const email = q.get("user_email")?.toLowerCase();
         const search = q.get("search")?.toLowerCase();
         const team = q.get("team");
-        const users = USER_ROWS.filter(
+        const all = [...USER_ROWS, ...(opts.extraUsers ?? [])] as Array<
+          (typeof USER_ROWS)[number]
+        >;
+        const matching = all.filter(
           (u) =>
             (!email || u.user_email === email) &&
             (!search ||
@@ -239,14 +244,18 @@ export function viewsHandler(opts: ViewsFakeOptions = {}): FakeHandler {
               u.user_email.toLowerCase().includes(search)) &&
             (!team || opts.ignoreTeamFilter || u.teams.includes(team)),
         );
+        // LiteLLM pages its own list (page, page_size).
+        const page = Number(q.get("page") ?? 1);
+        const pageSize = Number(q.get("page_size") ?? 25);
+        const users = matching.slice((page - 1) * pageSize, page * pageSize);
         return {
           status: 200,
           body: {
             users,
-            total: users.length,
-            page: 1,
-            page_size: 25,
-            total_pages: 1,
+            total: matching.length,
+            page,
+            page_size: pageSize,
+            total_pages: Math.max(1, Math.ceil(matching.length / pageSize)),
           },
         };
       }
@@ -464,6 +473,45 @@ export async function seedViews(opts: { connection?: boolean } = {}) {
   }
 }
 
+// Production mode for the Organisation cap tests: APP_ENV=prod (read by the
+// route at request time through useEnv) and an https connection, which prod
+// requires (base-url: https when APP_ENV=prod). `approved` records the
+// per-user approval; without it every caller is capped (T16).
+export async function enterProd(opts: { approved?: boolean } = {}) {
+  overrideEnv({ APP_ENV: "prod" });
+  await testDoc().send(
+    new PutCommand({
+      TableName: TEST_TABLE_NAME,
+      Item: {
+        PK: "LITELLM#CONFIG",
+        SK: "CONNECTION",
+        baseUrl: "https://litellm.test:4000",
+        version: 1,
+        updatedAt: "2026-11-14T10:00:00.000Z",
+      },
+    }),
+  );
+  if (opts.approved) await approvePerUser();
+}
+
+// Records the per-user approval (GOVERNANCE/PER_USER), lifting the
+// Organisation cap in prod (Access Control - "Organisation cap", T16).
+export async function approvePerUser() {
+  await testDoc().send(
+    new PutCommand({
+      TableName: TEST_TABLE_NAME,
+      Item: {
+        PK: "GOVERNANCE",
+        SK: "PER_USER",
+        approvedBy: CALLERS.admin.oid,
+        approvedAt: "2026-11-14T10:00:00.000Z",
+        reference: "works-council-1",
+        version: 1,
+      },
+    }),
+  );
+}
+
 export async function setToggles(toggles: Record<string, boolean>) {
   await testDoc().send(
     new PutCommand({
@@ -482,8 +530,11 @@ export async function setToggles(toggles: Record<string, boolean>) {
 let envOverride: Record<string, string> = {};
 // Route loaders call this with no argument; a test that needs another mode
 // calls `useEnv` first.
-export function useEnv(env: Record<string, string>) {
+function overrideEnv(env: Record<string, string>) {
   envOverride = env;
+}
+export function useEnv(env: Record<string, string>) {
+  overrideEnv(env);
 }
 
 export function stubLiteLLMEnv() {

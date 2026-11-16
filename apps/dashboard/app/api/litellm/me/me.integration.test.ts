@@ -19,6 +19,7 @@ import {
   stubLiteLLMEnv,
   useEnv,
 } from "@/test/fake-litellm-views";
+import { installFakeOtel, recordedSpans } from "@/test/otel-fake";
 import { CALLERS, signInAs } from "@/test/scope-fixtures";
 import { clearTable } from "@/test/test-support";
 
@@ -103,6 +104,22 @@ describe("GET /api/litellm/me", () => {
     expect(res.status).toBe(200);
     expect(body.data.linked).toBe(false);
     expect(state.fake.calls.some((c) => c.path === "/user/list")).toBe(false);
+  });
+
+  // Rule 60.17: a swallowed LiteLLMError must still reach OpenTelemetry.
+  // Contract: addEvent("litellm.find_user_by_email_failed") on the active span.
+  it("an unlinked caller whose email lookup throws LiteLLMError still gets 200 unlinked and the failure is recorded as a span event (Rule 60.17)", async () => {
+    installFakeOtel();
+    installFake(state, { outage: true });
+    signInAs("teamAdminA");
+    const before = recordedSpans.length;
+    const { res, body } = await me();
+    expect(res.status).toBe(200);
+    expect(body.data.linked).toBe(false);
+    const events = recordedSpans
+      .slice(before)
+      .flatMap((s) => s.events.map((e) => e.name));
+    expect(events).toContain("litellm.find_user_by_email_failed");
   });
 
   it("the fallback is read only: it writes no IdentityLink (Views: Own usage without a stored link)", async () => {
@@ -207,6 +224,22 @@ describe("GET /api/litellm/me", () => {
     expect(text).not.toContain("fetch failed");
   });
 
+  // Source: docs/specs/2026-11-10-litellm.md "Views by role" (Own usage
+  // without a stored link; the teams a caller may open come from DynamoDB),
+  // error codes. Decision: for an UNLINKED caller a LiteLLM failure on the
+  // email lookup degrades to 200 { linked: false, teams, enabledOperations }
+  // (same payload as "no match"); `teams` never depends on LiteLLM.
+  it("an unlinked caller keeps their teams when the email lookup fails (LiteLLM outage)", async () => {
+    installFake(state, { outage: true });
+    signInAs("teamAdminA");
+    const { res, body } = await me();
+    expect(res.status).toBe(200);
+    expect(body.data.linked).toBe(false);
+    expect(body.data.teams.map((t: { teamId: string }) => t.teamId)).toContain(
+      "team-a",
+    );
+  });
+
   it("no stored connection is 503 LITELLM_UNAVAILABLE for a linked caller (error codes: not configured)", async () => {
     await clearTable();
     await seedViews({ connection: false });
@@ -225,6 +258,41 @@ describe("GET /api/litellm/me", () => {
   it("400 BAD_REQUEST for a range over 90 days, no LiteLLM call (Rule 20.8)", async () => {
     signInAs("memberA");
     const { res } = await me("?dateFrom=2026-01-01&dateTo=2026-06-01");
+    await expectError(res, 400, "BAD_REQUEST");
+    expect(state.fake.calls).toHaveLength(0);
+  });
+
+  // B4: a bare call must never 400 (Rule 20.1, 20.8; LD20). The default is the
+  // app's standard range, defaultDateRange (30 UTC days ending today); the
+  // clock is frozen at 2026-11-14.
+  it("no dateFrom/dateTo defaults to the last 30 UTC days ending today, not 400 (Rule 20.1)", async () => {
+    signInAs("memberA");
+    const { res } = await me("");
+    expect(res.status).toBe(200);
+    const daily = state.fake.calls.find(
+      (c) => c.path === "/user/daily/activity",
+    )!;
+    const q = new URL(daily.url).searchParams;
+    expect(q.get("start_date")).toBe("2026-10-16");
+    expect(q.get("end_date")).toBe("2026-11-14");
+    expect(q.get("timezone")).toBe("0");
+  });
+
+  it("an explicit valid range is honoured, not replaced by the default (Rule 20.8)", async () => {
+    signInAs("memberA");
+    const { res } = await me("?dateFrom=2026-09-01&dateTo=2026-09-10");
+    expect(res.status).toBe(200);
+    const daily = state.fake.calls.find(
+      (c) => c.path === "/user/daily/activity",
+    )!;
+    const q = new URL(daily.url).searchParams;
+    expect(q.get("start_date")).toBe("2026-09-01");
+    expect(q.get("end_date")).toBe("2026-09-10");
+  });
+
+  it("a lone dateFrom or dateTo is a 400, not a half default (Rule 20.8)", async () => {
+    signInAs("memberA");
+    const { res } = await me("?dateFrom=2026-11-01");
     await expectError(res, 400, "BAD_REQUEST");
     expect(state.fake.calls).toHaveLength(0);
   });
