@@ -19,7 +19,7 @@ import { GET } from "./audit/route";
 // "Data model additions" (audit by day: Query PK=AUDIT#{day}, UTC),
 // "Enforcement" items 2, 4 and the error-code registry (a bad or foreign list
 // cursor is 400 BAD_REQUEST; read refusals are metric-only, no `denied`
-// record). Contract: temp/run-r4/run-r4/contract-slice3.md. Decisions: the
+// record). Spec: Access Control "API routes (additions)". Decisions: the
 // day is `?day=YYYY-MM-DD` (UTC, default today, an impossible date is 400);
 // the list is `data: { items, cursor? }` oldest first; one `audit.view`
 // record (category change) per successful view, none on 400/401/403. Only

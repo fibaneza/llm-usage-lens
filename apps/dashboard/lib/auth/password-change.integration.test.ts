@@ -21,8 +21,7 @@ import { changeOwnPassword } from "@/lib/auth/password-change";
 import { completePasswordSetup } from "@/lib/auth/password-setup";
 
 // Source: docs/specs/2026-11-10-access-control.md - "Password users"
-// (Passwords: a signed-in user changes their own password), F7
-// (temp/run-r4b/decisions.md): a successful change raises the credentialVersion
+// (Passwords: a signed-in user changes their own password), D29: a successful change raises the credentialVersion
 // (older sessions end) and records the changing session's `signedInAt` so that
 // one session is re-keyed by the jwt callback and stays signed in. Assumed API:
 // changeOwnPassword({ oid, email, currentPassword, newPassword, totp?,

@@ -72,7 +72,7 @@ function routes(extra: Record<string, unknown> = {}) {
 }
 
 describe("VisibilitySection", () => {
-  // F10 (temp/run-r4b/decisions.md): the Scope picker lists the account
+  // D37: the Scope picker lists the account
   // registry scoped to the caller, so a team with no recent usage is editable.
   it("takes its team and department scopes from /api/access/org-units, including a team with no usage, and never from /api/teams or /api/departments", async () => {
     const api = stubAccessApi(

@@ -14,19 +14,28 @@ import {
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
 import { withDateRange } from "@/lib/date-range-search-params";
-import { NAV_ITEMS } from "@/lib/nav";
+import {
+  NAV_ITEMS,
+  navGroupsFor,
+  SETTINGS_NAV_ITEM,
+  type NavScope,
+} from "@/lib/nav";
 
 // Cmd+K quick-jump menu. The trigger is styled as a search box; the dialog is
 // also toggled by a global ⌘K / Ctrl+K listener. v1 is a skeleton search over
 // the nav destinations only — real department/team/user/service entries are
 // populated in Phase 5 (design-system — CommandMenu; implementation-phases
 // Phase 2.2). Pure client UI: no AWS/data imports (Rule 10).
-export function CommandMenu() {
+export function CommandMenu({ scope }: { scope?: NavScope }) {
   const router = useRouter();
   // Quick-jumps carry the active global date range too, matching the sidebar
   // links so the filter survives navigation (issue #75).
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
+  // No scope shows the full set; a scope lists only the caller's destinations.
+  const items = scope
+    ? [...navGroupsFor(scope).flatMap((g) => g.items), SETTINGS_NAV_ITEM]
+    : NAV_ITEMS;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -65,7 +74,7 @@ export function CommandMenu() {
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Pages">
-            {NAV_ITEMS.map((item) => {
+            {items.map((item) => {
               const Icon = item.icon;
               return (
                 <CommandItem

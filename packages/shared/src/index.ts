@@ -287,3 +287,4 @@ export type {
   IdentityMapRule,
   IdentityMapRules,
 } from "./identity-map-rules";
+export { MeResponseSchema, MeUsageResponseSchema } from "./schemas/me";

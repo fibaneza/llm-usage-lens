@@ -188,8 +188,12 @@ const placeOf = (
 
 const BATCH_GET_MAX = 100;
 
+const BATCH_GET_MAX_ATTEMPTS = 5;
+const BATCH_GET_BACKOFF_MS = 50;
+
 // One BatchGetItem per 100 distinct identities; UnprocessedKeys are retried
-// until none remain. The result is keyed by oid.
+// with backoff, at most 5 attempts, then the read fails (Rule 60.17: no silent
+// partial result). The result is keyed by oid.
 async function identitiesOf(
   oids: readonly string[],
 ): Promise<Map<string, z.infer<typeof IdentityRecordSchema>>> {
@@ -200,7 +204,17 @@ async function identitiesOf(
     let keys: Record<string, unknown>[] | undefined = unique
       .slice(i, i + BATCH_GET_MAX)
       .map((oid) => ({ PK: identPk(oid), SK: META_SK }));
-    while (keys && keys.length > 0) {
+    for (let attempt = 1; keys && keys.length > 0; attempt++) {
+      if (attempt > BATCH_GET_MAX_ATTEMPTS) {
+        throw new Error(
+          `BatchGetItem left keys unprocessed after ${BATCH_GET_MAX_ATTEMPTS} attempts`,
+        );
+      }
+      if (attempt > 1) {
+        await new Promise((r) =>
+          setTimeout(r, BATCH_GET_BACKOFF_MS * 2 ** (attempt - 2)),
+        );
+      }
       const res: BatchGetCommandOutput = await getDocumentClient().send(
         new BatchGetCommand({ RequestItems: { [table]: { Keys: keys } } }),
       );

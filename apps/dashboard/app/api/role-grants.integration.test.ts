@@ -19,7 +19,7 @@ import { GET } from "./role-grants/route";
 // (/api/role-grants GET internal-admin or internal-auditor; POST and
 // DELETE need re-auth and ship in a later slice), "Enforcement" items 2 and 4
 // (403 before any read; private, no-store), D17 (a denied record is for
-// writes). Contract: temp/run-r4/contract-slice1.md. Only `@/auth` is mocked.
+// writes). Spec: Access Control "API routes (additions)". Only `@/auth` is mocked.
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("next/cache", async () => {
   const mod = await import("@/test/next-cache-fake");

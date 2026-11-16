@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Source: temp/run-r4b/decisions.md F9 (Account page at /dashboard/account: a
+// Source: Access Control D30 (Account page at /dashboard/account: a
 // password user gets the change-password form; other sign-in methods see their
 // method and no form); Access Control spec - "Password users" (POST
 // /api/account/password is for password sessions only: Entra, master and

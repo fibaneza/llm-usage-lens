@@ -68,8 +68,8 @@ describe("GroupMappingsSection", () => {
     ).toBeInTheDocument();
   });
 
-  // F10 (temp/run-r4b/decisions.md; coordinator ruling: Group mappings moves
-  // too): the Target options are the registry, not teams with recent usage.
+  // D37 (Group mappings uses the
+  // same registry): the Target options are the registry, not teams with recent usage.
   it("offers team and department targets from /api/access/org-units, including a team with no usage, and never calls /api/teams or /api/departments", async () => {
     const user = userEvent.setup();
     const api = stubAccessApi(

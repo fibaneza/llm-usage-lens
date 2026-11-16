@@ -4,34 +4,17 @@ import {
   canonicalUsageIdentity,
   canonicaliseByUser,
 } from "@llm-usage-lens/shared";
-import type { DatedDailyRollup } from "@llm-usage-lens/shared";
-import { z } from "zod";
+import type {
+  DatedDailyRollup,
+  MeUsageResponseSchema,
+} from "@llm-usage-lens/shared";
+import type { z } from "zod";
 
 import type { Scope } from "@/lib/auth/policy";
 
-// Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)"
-// (/api/me, /api/me/usage: any signed-in role) and "Canonical usage
-// identity". Own usage is matched by canonical key only; usage alone never
+// Source: docs/specs/2026-11-10-access-control.md - "Canonical usage
+// identity". The response schemas live in packages/shared (client-safe). Own usage is matched by canonical key only; usage alone never
 // grants anything (T6).
-
-export const MeResponseSchema = z.object({
-  oid: z.string(),
-  email: z.string().nullable(),
-  roles: z.array(z.string()),
-  usageIdentities: z.array(z.string()),
-});
-
-const TotalsSchema = z.object({
-  cost: z.number(),
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  invocations: z.number(),
-});
-
-export const MeUsageResponseSchema = z.object({
-  totals: TotalsSchema,
-  daily: z.array(TotalsSchema.extend({ date: z.string() })),
-});
 
 const ZERO = { cost: 0, inputTokens: 0, outputTokens: 0, invocations: 0 };
 

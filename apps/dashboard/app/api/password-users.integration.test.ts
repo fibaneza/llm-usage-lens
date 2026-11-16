@@ -62,7 +62,7 @@ import { GET, POST } from "./password-users/route";
 // 404), 4 (private, no-store), 6 (same-origin, Zod, version -> 409), "Audit
 // log" (every write audited; one `denied` record per authorization refusal,
 // none on 400/404/409, D17/T22), threats T24, T26, T28.
-// Contract: temp/run-r4/contract-slice2.md. Only `@/auth` is mocked.
+// Spec: Access Control "API routes (additions)". Only `@/auth` is mocked.
 //
 // Response shapes this suite fixes (the contract leaves them open):
 //   list item   { email, displayName, status, totpEnrolled, createdAt, version }

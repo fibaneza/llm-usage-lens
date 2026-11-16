@@ -296,7 +296,7 @@ describe("password sign-in switch (D24, T28)", () => {
   });
 });
 
-// F7 / D29 (temp/run-r4b/decisions.md; Access Control spec - "Password users",
+// D29 (Access Control spec - "Password users",
 // Credential version): `credentialVersion` on the LOCALUSER item reads 0 while
 // absent, and each of these raises it by exactly 1 so older sessions stop
 // matching: completing setup, an own password change, an admin reset link and

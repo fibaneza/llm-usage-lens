@@ -130,4 +130,54 @@ describe("CommandMenu", () => {
 
     expect(dialog).not.toBeInTheDocument();
   });
+
+  // Phase 4R.5 / Design System - Access states and scoped labels (4R.5 review
+  // UI-B3): a scoped caller's list leaves out out-of-scope destinations and its
+  // Overview item is the ?view=overview link (a bare /dashboard redirects them).
+  describe("for a scoped caller", () => {
+    const scope = {
+      global: false,
+      memberTeamId: "team-a",
+      teamScopes: new Set<string>(),
+      departmentScopes: new Set<string>(),
+    };
+
+    it("lists only in-scope destinations and opens the scoped Overview link", async () => {
+      const user = userEvent.setup();
+      render(<CommandMenu scope={scope} />);
+
+      await user.keyboard("{Meta>}k{/Meta}");
+      await screen.findByRole("dialog");
+
+      expect(
+        screen.queryByRole("option", { name: "Departments" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: "Teams" }),
+      ).not.toBeInTheDocument();
+      expect(
+        await screen.findByRole("option", { name: "My teams" }),
+      ).toBeInTheDocument();
+
+      await user.click(
+        await screen.findByRole("option", { name: /overview/i }),
+      );
+
+      expect(mockPush).toHaveBeenCalledWith("/dashboard?view=overview");
+    });
+
+    it("lists only My usage and LiteLLM for a no-team viewer", async () => {
+      const user = userEvent.setup();
+      render(<CommandMenu scope={{ ...scope, memberTeamId: null }} />);
+
+      await user.keyboard("{Meta>}k{/Meta}");
+      await screen.findByRole("dialog");
+
+      expect(screen.queryByRole("option", { name: /overview/i })).toBeNull();
+      expect(screen.queryByRole("option", { name: /ranking/i })).toBeNull();
+      expect(
+        await screen.findByRole("option", { name: "My usage" }),
+      ).toBeInTheDocument();
+    });
+  });
 });

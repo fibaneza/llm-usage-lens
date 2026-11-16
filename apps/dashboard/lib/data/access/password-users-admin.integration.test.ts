@@ -40,8 +40,7 @@ import {
 // secret is never returned, a reset forces re-enrolment at the next sign-in),
 // "API routes (additions)" (/api/password-users GET, .../totp-reset POST),
 // "Enforcement" item 4 (auth data is read uncached), "Audit log" (every write
-// one record; a failure writes none), threat T24. Contract:
-// temp/run-r4/contract-slice2.md.
+// one record; a failure writes none), threat T24. Spec: Access Control "API routes (additions)".
 // Assumed API (tdd-test-engineer, slice 2; both are server-only, uncached):
 //   listPasswordUsers({ cursorSecret, cursor?, limit? })
 //     -> AccessResult<Page<PasswordUserListItem>>  (BAD_CURSOR for a bad cursor)

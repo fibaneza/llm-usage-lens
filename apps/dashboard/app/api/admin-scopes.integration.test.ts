@@ -41,8 +41,7 @@ import { GET as GET_TEAM, POST as POST_TEAM } from "./teams/[id]/admins/route";
 // internal-team-admin: internal-admin and internal-org-admin only), "Roles"
 // (team-scope admin grants never on themselves), "Identity, SSO mapping and
 // defaults" (SSO > UI: 409 MANAGED_BY_SSO), "Enforcement" items 2, 4, 6,
-// "Audit log" (D17/T22), threats T3, T10, T15. Contract:
-// temp/run-r4/contract-slice1.md. A caller who holds the permission class but
+// "Audit log" (D17/T22), threats T3, T10, T15. Spec: Access Control "API routes (additions)". A caller who holds the permission class but
 // not the target scope gets the identical 404 (and one denied NOT_FOUND
 // record); a caller with no such permission gets 403 whatever the target.
 vi.mock("@/auth", () => ({ auth: vi.fn() }));

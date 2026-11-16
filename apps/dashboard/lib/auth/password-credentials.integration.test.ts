@@ -105,7 +105,7 @@ describe("authorizePasswordUser", { timeout: 60_000 }, () => {
     });
   });
 
-  // F7 (temp/run-r4b/decisions.md): the identity carries the stored
+  // D29: the identity carries the stored
   // credentialVersion so the session can be matched against it per request.
   it("returns the stored credentialVersion, which an own password change raises (F7)", async () => {
     const { email } = await activeUser();

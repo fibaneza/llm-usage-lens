@@ -12,13 +12,23 @@ export const E2E_USER = {
   email: "e2e@example.test",
 };
 
+// Default forged role: `internal-auditor`, the least-privileged global role that
+// reads every usage page (Access Control spec - Roles: "Everything, read-only";
+// writes return 403). `internal-viewer`/[] is membership-gated and lands on
+// My usage, so it would break every page-level spec. Coordinator ruling
+// 2026-11-16 (4R.5 review UI-B1).
+export const DEFAULT_TEST_ROLES: readonly string[] = ["internal-auditor"];
+
 export type TestUserOptions = {
   // Epoch seconds of the forged sign-in. Defaults to now. `null` omits the
   // claim, which the dev server's jwt callback must reject (a token without a
   // sign-in time fails closed; System Architecture — Account-mutation role).
   signedInAt?: number | null;
   // Role claims carried in the forged token (`token.roles`, mapped to
-  // `session.user.roles` by auth.ts). Defaults to none, i.e. a non-admin.
+  // `session.user.roles` by auth.ts). Defaults to DEFAULT_TEST_ROLES, a global
+  // read-only reader that sees every usage page. Pass `roles: []` (or
+  // `["internal-viewer"]`) explicitly for the no-team viewer, who is redirected
+  // to /dashboard/me and gets a trimmed sidebar (Phase 4R.5).
   roles?: string[];
   // Epoch seconds of the last full sign-in (`token.authTime`, Access Control
   // spec - Recent authentication). Defaults to none; a value older than 15
@@ -39,7 +49,7 @@ export async function signInAsTestUser(
   context: BrowserContext,
   {
     signedInAt = Math.floor(Date.now() / 1000),
-    roles = [],
+    roles = [...DEFAULT_TEST_ROLES],
     authTime,
     oid = "e2e-user",
     tid = "e2e-tenant",

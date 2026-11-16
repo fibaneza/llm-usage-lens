@@ -56,6 +56,7 @@ export default defineConfig({
             "**/*.integration.test.ts",
             "**/node_modules/**",
             "**/.next/**",
+            "**/.next-probe-r5/**",
             "**/cdk.out/**",
             "**/e2e/**",
             "tools/**",
@@ -63,6 +64,9 @@ export default defineConfig({
         },
       },
       {
+        // JSX transform so an integration test can import a Server Component
+        // page (app/dashboard/page.integration.test.ts, Phase 4R.5).
+        plugins: [react()],
         resolve: {
           alias: {
             ...alias,
@@ -83,7 +87,12 @@ export default defineConfig({
             "packages/**/*.integration.test.ts",
             "scripts/**/*.integration.test.ts",
           ],
-          exclude: ["**/node_modules/**", "**/.next/**", "tools/**"],
+          exclude: [
+            "**/node_modules/**",
+            "**/.next/**",
+            "**/.next-probe-r5/**",
+            "tools/**",
+          ],
           fileParallelism: false,
           globalSetup: ["./apps/dashboard/test/integration-global-setup.ts"],
           // Seed-reset tests write and delete thousands of items against

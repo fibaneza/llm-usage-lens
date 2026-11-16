@@ -673,7 +673,7 @@ describe("PUT /api/identities/[oid]/links", () => {
           litellmUserId: undefined,
         }),
       );
-      expect([400, 409]).toContain(res.status);
+      expect(res.status).toBe(409);
       expect(await getIdentityLink(alice.oid)).toBeNull();
       expect(await auditToday()).toEqual([]);
     });

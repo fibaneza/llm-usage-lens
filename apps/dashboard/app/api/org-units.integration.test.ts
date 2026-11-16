@@ -18,7 +18,7 @@ import {
 
 import { GET } from "./access/org-units/route";
 
-// Source: temp/run-r4b/decisions.md F10 (access pickers list from the account
+// Source: Access Control D37 (access pickers list from the account
 // registry, not rollups, scoped to what the caller can manage); Access Control
 // spec - "Permission matrix" (scopes: a team-scope admin manages its teams, a
 // department-scope admin its departments and their teams, internal-admin and

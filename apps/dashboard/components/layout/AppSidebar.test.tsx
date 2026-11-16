@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { NAV_GROUPS } from "@/lib/nav";
+import type { NavScope } from "@/lib/nav";
 import { AppSidebar } from "./AppSidebar";
 
 const mockUsePathname = vi.fn<() => string>();
@@ -295,5 +296,68 @@ describe("AppSidebar - Gateway group (LD9)", () => {
     expect(labels.indexOf("Gateway")).toBe(labels.indexOf("Attribution") + 1);
     const item = NAV_GROUPS.find((g) => g.label === "Gateway")?.items[0];
     expect(item?.pageTitle).toBe("LiteLLM usage & administration");
+  });
+});
+
+// Phase 4R.5 (Design System: No team; ruling 2026-11-16): the sidebar renders
+// navGroupsFor(scope); no scope means the unfiltered full set. The rest of
+// this file keeps the default (no scope) expectations.
+describe("AppSidebar - scope-filtered navigation (Phase 4R.5)", () => {
+  const scoped = (over: Partial<NavScope>): NavScope => ({
+    global: false,
+    memberTeamId: null,
+    teamScopes: new Set<string>(),
+    departmentScopes: new Set<string>(),
+    ...over,
+  });
+
+  function renderScoped(scope: NavScope, search = "") {
+    mockUsePathname.mockReturnValue("/dashboard/me");
+    mockUseSearchParams.mockReturnValue(new URLSearchParams(search));
+    return render(
+      <SidebarProvider>
+        <AppSidebar scope={scope} />
+      </SidebarProvider>,
+    );
+  }
+
+  it("a viewer with no team sees only My usage and LiteLLM (plus Settings)", () => {
+    renderScoped(scoped({}));
+    expect(screen.getByRole("link", { name: "My usage" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "LiteLLM" })).toBeInTheDocument();
+    for (const gone of [
+      "Overview",
+      "Ranking",
+      "Departments",
+      "Teams",
+      "My teams",
+      "Services",
+      "Users",
+    ]) {
+      expect(screen.queryByRole("link", { name: gone })).toBeNull();
+    }
+  });
+
+  it("a member's Overview link opts out of the landing redirect and still carries the date range", () => {
+    renderScoped(
+      scoped({ memberTeamId: "team-a" }),
+      "dateFrom=2026-01-01&dateTo=2026-01-31",
+    );
+    const href = screen
+      .getByRole("link", { name: "Overview" })
+      .getAttribute("href");
+    const url = new URL(href ?? "", "http://x");
+    expect(url.pathname).toBe("/dashboard");
+    expect(url.searchParams.get("view")).toBe("overview");
+    expect(url.searchParams.get("dateFrom")).toBe("2026-01-01");
+    expect(url.searchParams.get("dateTo")).toBe("2026-01-31");
+  });
+
+  it("a global scope keeps Overview at /dashboard", () => {
+    renderScoped(scoped({ global: true }));
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
+      "href",
+      "/dashboard",
+    );
   });
 });

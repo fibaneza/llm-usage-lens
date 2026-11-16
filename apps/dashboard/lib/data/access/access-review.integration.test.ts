@@ -29,8 +29,7 @@ import { grantRole } from "./role-grants";
 // ambiguous, overage, stale, Entra role removed while an in-app grant remains),
 // "Password users" (enabled-password-user), "Data model additions" (access
 // review reads Query GSI1=IDENTS, then each identity's items; never cached),
-// D2 (stale = 90 days inactive), Rule 20.6. Contract:
-// temp/run-r4/run-r4/contract-slice3.md. Assumed API:
+// D2 (stale = 90 days inactive), Rule 20.6. Spec: Access Control "API routes (additions)". Assumed API:
 //   listAccessReviewRows(now: Date): Promise<AccessReviewRow[]>
 // one row per identity in GSI1=IDENTS (all of them, not one page), with
 //   { oid, email, displayName, authMethod, lastSignInAt,

@@ -81,12 +81,46 @@ describe("access-control storage boundary", () => {
     expect(offenders).toEqual([]);
   });
 
+  // Coordinator ruling, 2026-11-16, 4R.5: Playwright cannot load keys.ts
+  // through the server-only graph, so e2e seeds use a pure re-export (exempt
+  // like keys.ts: no I/O). Spec: Access Control - Storage boundary (D26.1).
+  it("keys-test-support.ts imports nothing except ./keys (coordinator 2026-11-16, 4R.5)", () => {
+    const path = "apps/dashboard/lib/data/access/keys-test-support.ts";
+    expect(files).toContain(path);
+    expect(importsOf(path)).toEqual(["./keys"]);
+  });
+
+  it('keys-test-support.ts body is only `export { ... } from "./keys"` statements (coordinator 2026-11-16, 4R.5; review W1)', () => {
+    const source = readFileSync(
+      join(ROOT, "apps/dashboard/lib/data/access/keys-test-support.ts"),
+      "utf8",
+    );
+    const body = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    expect(body).toMatch(/^(export \{[^{}]*\} from "\.\/keys";? ?)+$/);
+  });
+
+  it("keys-test-support is imported only from test files, test/** and e2e/** (coordinator 2026-11-16, 4R.5)", () => {
+    const offenders = files.filter(
+      (f) =>
+        !/\.test\.tsx?$/.test(f) &&
+        !/^apps\/dashboard\/(test|e2e)\//.test(f) &&
+        !f.endsWith("/keys-test-support.ts") &&
+        importsOf(f).some((s) => /(^|\/)keys-test-support$/.test(s)),
+    );
+    expect(offenders).toEqual([]);
+  });
+
   it("every storage module (all but the pure keys, result and cursor modules) is server-only", () => {
     const modules = files.filter(
       (f) =>
         /^apps\/dashboard\/lib\/data\/access\/[^/]+\.ts$/.test(f) &&
         !/\.test\.ts$/.test(f) &&
         !f.endsWith("/keys.ts") &&
+        !f.endsWith("/keys-test-support.ts") &&
         !f.endsWith("/access-test-support.ts") &&
         !f.endsWith("/result.ts") &&
         !f.endsWith("/cursor.ts"),

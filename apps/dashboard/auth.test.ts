@@ -6,14 +6,18 @@ import { DEV_LOGIN_PROVIDER_ID } from "@/lib/auth/auth-config";
 // check and the roles callbacks in auth.ts, not Auth.js itself. The config
 // auth.ts passes to NextAuth() is captured so its callbacks can be driven
 // directly. Rule 50.3; docs/guides/auth-setup.md.
-const captured = vi.hoisted(() => ({ config: undefined as unknown }));
+const captured = vi.hoisted(() => ({
+  config: undefined as unknown,
+  signIn: undefined as unknown as ReturnType<typeof vi.fn>,
+}));
 vi.mock("next-auth", () => ({
   default: (config: unknown) => {
     captured.config = config;
+    captured.signIn = vi.fn();
     return {
       handlers: {},
       auth: vi.fn(),
-      signIn: vi.fn(),
+      signIn: captured.signIn,
       signOut: vi.fn(),
     };
   },
@@ -105,6 +109,26 @@ describe("auth.ts runtime sign-in provider check", () => {
     const mod = (await loadAuth()) as unknown as Record<string, unknown>;
     expect(typeof mod.signInWithEntra).toBe("function");
     expect(typeof mod.signInWithDevLogin).toBe("function");
+  });
+
+  // Phase 4R.5 ruling 2026-11-16: auth.ts is owned elsewhere and stays as is;
+  // every sign-in redirects to /dashboard and app/dashboard/page.tsx does the
+  // role-aware landing (covered in app/dashboard/page.integration.test.ts).
+  it.each([
+    ["signInWithEntra", () => new FormData()],
+    // dev login: owned and tested by L3c
+    ["signInWithMasterUser", () => new FormData()],
+  ])("%s redirects to /dashboard", async (action, form) => {
+    stubBase({ NODE_ENV: "development", AUTH_DEV_LOGIN: "true" });
+    const mod = (await loadAuth()) as unknown as Record<
+      string,
+      (data?: FormData) => Promise<unknown>
+    >;
+    await mod[action]?.(form());
+    expect(captured.signIn).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ redirectTo: "/dashboard" }),
+    );
   });
 });
 
@@ -1237,7 +1261,7 @@ describe("auth.ts per-session lifetime caps", () => {
 });
 
 // ---------------------------------------------------------------------------
-// F7 (temp/run-r4b/decisions.md) / D29, T34 - docs/specs/2026-11-10-access-control.md,
+// D29, T34 - docs/specs/2026-11-10-access-control.md,
 // "Password users" (Credential version): a password session carries the
 // user's `credentialVersion` from sign-in and is checked against the stored
 // value on every request, uncached (Rule 60.10, ASVS 3.3). A lower token

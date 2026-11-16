@@ -7,7 +7,7 @@ import { renderWithProviders } from "@/test/render-providers";
 
 import { ChangePasswordForm } from "./ChangePasswordForm";
 
-// Source: temp/run-r4b/decisions.md F9 (an Account page where a password user
+// Source: Access Control D30 (an Account page where a password user
 // changes their own password: current password, new password, confirm, TOTP
 // when enrolled, via POST /api/account/password); Access Control spec -
 // "Password users" (Passwords: 12-128 characters, no composition rules, common

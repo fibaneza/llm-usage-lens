@@ -14,6 +14,16 @@ import { renderWithProviders } from "@/test/render-providers";
 
 import RankingPage from "./page";
 
+// 4R.5 review B2: the shell reads the caller's scope for the "your teams"
+// notice (covered in scope-notice.integration.test.ts); here the caller is a
+// global reader so only rendering is tested.
+vi.mock("@/auth", () => ({
+  auth: vi.fn(async () => ({ user: { oid: "u", roles: ["internal-admin"] } })),
+}));
+vi.mock("@/lib/api/scoped-rollups", () => ({
+  scopeFor: vi.fn(async () => ({ global: true })),
+}));
+
 // Source: Rule 60.7 (pages and layouts stay Server Components; the client
 // boundary sits as deep as possible); implementation-phases Phase 4.2.
 afterEach(() => {

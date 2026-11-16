@@ -88,7 +88,7 @@ describe("TeamAdminsSection", () => {
     expect(api.to("GET /api/departments/dept-eng/admins")).toHaveLength(1);
   });
 
-  // F10 (temp/run-r4b/decisions.md).
+  // D37.
   it("takes its team and department scopes from /api/access/org-units, including a team with no usage, and never from /api/teams or /api/departments", async () => {
     const api = stubAccessApi(
       routes({
@@ -111,7 +111,7 @@ describe("TeamAdminsSection", () => {
     expect(api.to("GET /api/departments")).toEqual([]);
   });
 
-  // F11 (temp/run-r4b/decisions.md): a scoped admin cannot read the directory.
+  // D37: a scoped admin cannot read the directory.
   it("shows the name with the email from the row when /api/identities is refused, and the oid when the row has no name", async () => {
     stubAccessApi(
       routes({

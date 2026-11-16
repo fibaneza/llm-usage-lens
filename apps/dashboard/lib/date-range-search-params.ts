@@ -29,5 +29,6 @@ export function withDateRange(href: string, params: ReadableParams): string {
     if (value) carried.set(key, value);
   }
   const query = carried.toString();
-  return query ? `${href}?${query}` : href;
+  if (!query) return href;
+  return `${href}${href.includes("?") ? "&" : "?"}${query}`;
 }

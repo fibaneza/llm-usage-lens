@@ -38,7 +38,7 @@ import {
 // 409, same-origin, JSON content type), "Audit log" (governance.approval.update:
 // one success record in the transaction; 400 and 409 write none; one `denied`
 // record per authorization refusal with a fixed route pattern, D17/T22),
-// threat T16. Contract: temp/run-r4/run-r4/contract-slice3.md. Only `@/auth`
+// threat T16. Spec: Access Control "API routes (additions)". Only `@/auth`
 // is mocked. Decisions: `version` is the stored version (0 when nothing is
 // recorded); who is always the session oid (a body `approvedBy` is ignored);
 // withdrawing the approval is not defined by the spec and is out of scope.

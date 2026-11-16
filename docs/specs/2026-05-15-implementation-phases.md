@@ -654,8 +654,8 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### Phase 4R.5 — UI gating and copy (`feature/phase-4r-5-rbac-ui`)
 
-- [ ] *My usage* page (`/dashboard/me`) and *My teams* landing; scoped labels, "not visible" / "no team" / "no access" states, role-aware landing, no dead links
-- [ ] Verify: e2e per role; seeded probe per role
+- [x] *My usage* page (`/dashboard/me`) and *My teams* landing; scoped labels, "not visible" / "no team" / "no access" states, role-aware landing, no dead links
+- [x] Verify: e2e per role; seeded probe per role
 
 ## LiteLLM units (L0–L8; decided 2026-11-10)
 

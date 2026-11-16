@@ -28,7 +28,7 @@ import { GET } from "./access-review/route";
 // audited"), "API routes (additions)" (/api/access-review GET internal-admin
 // or internal-auditor, audited), "Audit log" ("access-review exports are
 // themselves audited"), "Enforcement" items 2, 4, 5 (exports are scoped; here
-// admin/auditor only). Contract: temp/run-r4/run-r4/contract-slice3.md.
+// admin/auditor only). Spec: Access Control "API routes (additions)".
 // Decisions: columns are exactly HEADER below; composite cells join items with
 // "; " as `role (source)`, `teamId (source)`, `type:id (source)`; the LiteLLM
 // link column is present and empty (owned by the LiteLLM units); a cell

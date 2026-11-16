@@ -122,7 +122,7 @@ describe("UserMenu identity and sign out (unchanged)", () => {
   });
 });
 
-// F9 (temp/run-r4b/decisions.md): the Account page (/dashboard/account) is
+// D30: the Account page (/dashboard/account) is
 // reached from the user menu, for every sign-in method (non-password users see
 // their method there).
 describe("UserMenu account link", () => {

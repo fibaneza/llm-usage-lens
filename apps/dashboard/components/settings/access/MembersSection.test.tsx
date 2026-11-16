@@ -56,7 +56,7 @@ function routes(extra: Record<string, unknown> = {}) {
 }
 
 describe("MembersSection", () => {
-  // F10 (temp/run-r4b/decisions.md): the picker lists the account registry
+  // D37: the picker lists the account registry
   // scoped to the caller, so a team with no recent usage is selectable.
   it("takes its teams from /api/access/org-units, including a team with no usage, and never from /api/teams", async () => {
     const user = userEvent.setup();
@@ -80,7 +80,7 @@ describe("MembersSection", () => {
     expect(api.to("GET /api/teams")).toEqual([]);
   });
 
-  // F11 (temp/run-r4b/decisions.md): a scoped admin cannot read the people
+  // D37: a scoped admin cannot read the people
   // directory, so the row's own displayName and email are shown.
   it("shows the name with the email from the row when /api/identities is refused, and the oid when the row has no name", async () => {
     stubAccessApi(

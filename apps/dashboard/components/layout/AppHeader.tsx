@@ -8,6 +8,7 @@ import { SyncCountdown } from "@/components/status/SyncCountdown";
 import { SyncStatusBadge } from "@/components/status/SyncStatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import type { NavScope } from "@/lib/nav";
 import { UserMenu } from "./UserMenu";
 
 // Top bar sitting inside the content inset, to the right of the sidebar (the
@@ -15,7 +16,7 @@ import { UserMenu } from "./UserMenu";
 // status badge sit together on the left; sync countdown and the account menu
 // sit on the right (design reference — TopBar). Server component so it can read
 // the Auth.js session.
-export async function AppHeader() {
+export async function AppHeader({ scope }: { scope?: NavScope } = {}) {
   const session = await auth();
 
   async function signOutAction() {
@@ -49,7 +50,7 @@ export async function AppHeader() {
             range onto quick-jumps (issue #75), so it too needs a Suspense
             boundary for static prerender (Rule 60.12). */}
         <Suspense fallback={<CommandMenuSkeleton />}>
-          <CommandMenu />
+          <CommandMenu scope={scope} />
         </Suspense>
         <SyncCountdown />
         <UserMenu user={session?.user ?? null} signOutAction={signOutAction} />

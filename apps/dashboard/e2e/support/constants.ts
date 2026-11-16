@@ -21,3 +21,13 @@ export const E2E_LITELLM_USER = {
   email: "ada.lovelace@example.test",
   spend: 42.5,
 };
+
+// Role probe project (e2e/role-landing.spec.ts, Phase 4R.5 Verify "seeded probe
+// per role"): a second dev server on its own port, table and distDir, so the
+// probe's seed never touches the shared bedrock-usage table and two
+// `next dev` processes do not share .next. 3212 is the fake LiteLLM above.
+export const E2E_TABLE = "bedrock-usage";
+export const E2E_PROBE_PORT = 3213;
+export const E2E_PROBE_BASE_URL = `http://127.0.0.1:${E2E_PROBE_PORT}`;
+export const E2E_PROBE_TABLE = "bedrock-usage-probe-r5";
+export const E2E_PROBE_DIST_DIR = ".next-probe-r5";

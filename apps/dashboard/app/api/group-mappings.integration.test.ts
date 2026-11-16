@@ -31,8 +31,7 @@ import { GET, POST } from "./group-mappings/route";
 // type, body id equals path id -> 400), "Audit log" (one success record per
 // write; a 409, 400 or 404 writes none; one `denied` record per authorization
 // refusal with a fixed route pattern, D17/T22), threat T4 (a mapping never
-// grants a global role), T15 (identical 404 bodies). Contract:
-// temp/run-r4/contract-slice1.md. Only `@/auth` is mocked.
+// grants a global role), T15 (identical 404 bodies). Spec: Access Control "API routes (additions)". Only `@/auth` is mocked.
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("next/cache", async () => {
   const mod = await import("@/test/next-cache-fake");

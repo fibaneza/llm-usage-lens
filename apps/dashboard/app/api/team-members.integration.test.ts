@@ -39,7 +39,7 @@ import { GET, POST } from "./teams/[id]/members/route";
 // same-origin, JSON content type, body teamId equals path -> 400), "Audit log"
 // (one success record per write; a 400, a 404 for a missing target and a 409
 // write none; one `denied` per authorization refusal incl. an out-of-scope
-// 404, D17/T22), threats T3, T10, T15. Contract: temp/run-r4/contract-slice1.md.
+// 404, D17/T22), threats T3, T10, T15. Spec: Access Control "API routes (additions)".
 // Org (test/scope-fixtures.ts): team-a, team-b in dept-eng; team-c in dept-ops.
 // Callers: admin, orgAdmin, teamAdminA (scope team-a), deptAdminEng (scope
 // dept-eng), memberA/memberB (member only), viewerNone, auditor. Only `@/auth`

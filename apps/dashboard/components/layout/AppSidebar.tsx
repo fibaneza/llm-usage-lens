@@ -20,7 +20,13 @@ import {
 } from "@/components/ui/sidebar";
 import { env } from "@/env";
 import { withDateRange } from "@/lib/date-range-search-params";
-import { isNavItemActive, NAV_GROUPS, SETTINGS_NAV_ITEM } from "@/lib/nav";
+import {
+  isNavItemActive,
+  NAV_GROUPS,
+  navGroupsFor,
+  SETTINGS_NAV_ITEM,
+  type NavScope,
+} from "@/lib/nav";
 
 // Active nav links render as a filled indigo pill (design reference). twMerge
 // lets these override the primitive's default `sidebar-accent` active styling.
@@ -36,20 +42,28 @@ type ToHref = (href: string) => string;
 // filter survives navigation between menus (issue #75). `useSearchParams` opts
 // the subtree into client rendering, so the dashboard layout renders this inside
 // a Suspense boundary with `AppSidebarFallback` (Rule 60.12).
-export function AppSidebar() {
+export function AppSidebar({ scope }: { scope?: NavScope }) {
   const searchParams = useSearchParams();
-  return <SidebarNav toHref={(href) => withDateRange(href, searchParams)} />;
+  return (
+    <SidebarNav
+      toHref={(href) => withDateRange(href, searchParams)}
+      scope={scope}
+    />
+  );
 }
 
 // Suspense fallback: the same rail with bare hrefs, shown only until the search
 // params resolve on the client. Carries no params (none are known yet), so there
 // is no layout shift versus the resolved sidebar.
-export function AppSidebarFallback() {
-  return <SidebarNav toHref={(href) => href} />;
+export function AppSidebarFallback({ scope }: { scope?: NavScope }) {
+  return <SidebarNav toHref={(href) => href} scope={scope} />;
 }
 
-function SidebarNav({ toHref }: { toHref: ToHref }) {
+function SidebarNav({ toHref, scope }: { toHref: ToHref; scope?: NavScope }) {
   const pathname = usePathname();
+  // No scope (signed out, or a bare render) shows the full set; the pages
+  // enforce access regardless.
+  const navGroups = scope ? navGroupsFor(scope) : NAV_GROUPS;
   const { state, isMobile, toggleSidebar, setOpenMobile } = useSidebar();
 
   // The toggle is named for the action it performs (WCAG 4.1.2, Rule 60.30). In
@@ -91,7 +105,7 @@ function SidebarNav({ toHref }: { toHref: ToHref }) {
       </SidebarHeader>
 
       <SidebarContent>
-        {NAV_GROUPS.map((group) => (
+        {navGroups.map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>

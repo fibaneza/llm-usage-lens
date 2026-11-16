@@ -34,4 +34,23 @@ describe("withDateRange", () => {
       "/dashboard?dateFrom=2026-01-01",
     );
   });
+
+  // Phase 4R.5 scoped Overview link, decision D-R5-1: an href that already has
+  // a query joins the carried range with "&", not a second "?".
+  it("joins the range with & when the href already has a query (D-R5-1)", () => {
+    const params = new URLSearchParams("dateFrom=2026-01-01&dateTo=2026-01-31");
+
+    expect(withDateRange("/dashboard?view=overview", params)).toBe(
+      "/dashboard?view=overview&dateFrom=2026-01-01&dateTo=2026-01-31",
+    );
+  });
+
+  // Phase 4R.5 scoped Overview link, decision D-R5-1: a plain href takes "?".
+  it("uses ? for a plain href with no query (D-R5-1)", () => {
+    const params = new URLSearchParams("dateFrom=2026-01-01&dateTo=2026-01-31");
+
+    expect(withDateRange("/dashboard", params)).toBe(
+      "/dashboard?dateFrom=2026-01-01&dateTo=2026-01-31",
+    );
+  });
 });

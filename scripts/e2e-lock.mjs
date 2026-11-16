@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-// Cross-worktree semaphore for `pnpm test:e2e`: concurrent runs share port 3211
-// and one DynamoDB Local table, so they must take turns. Dev tooling, so it
-// reads process.env directly (Rule 50.2).
+// Cross-worktree semaphore for `pnpm test:e2e`: concurrent runs share the dev
+// servers (3211 app on table bedrock-usage, 3213 role-probe on table
+// bedrock-usage-probe-r5; 3212 is the fake LiteLLM) and DynamoDB Local, so they
+// must take turns. The lock wraps the whole `playwright test` command, both
+// projects included, so the probe server never runs outside it. Dev tooling,
+// so it reads process.env directly (Rule 50.2).
 import { execFileSync, spawn } from "node:child_process";
 import {
   mkdirSync,

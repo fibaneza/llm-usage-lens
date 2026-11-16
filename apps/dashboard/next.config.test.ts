@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import nextConfig from "./next.config";
 
@@ -63,5 +63,26 @@ describe("next.config response security headers", () => {
 
   it("keeps the existing standalone output setting", () => {
     expect(nextConfig.output).toBe("standalone");
+  });
+});
+
+// 4R.5 review UI-B2: the role-probe Playwright project runs a second dev server
+// from this directory with NEXT_DIST_DIR set (playwright.config.ts), so the two
+// `next dev` processes do not collide on .next. Unset keeps the default.
+describe("next.config distDir override (e2e role-probe server)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("honours NEXT_DIST_DIR and defaults to .next", async () => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_DIST_DIR", ".next-probe-r5");
+    const overridden = (await import("./next.config")).default;
+    expect(overridden.distDir).toBe(".next-probe-r5");
+
+    vi.resetModules();
+    vi.stubEnv("NEXT_DIST_DIR", "");
+    const defaulted = (await import("./next.config")).default;
+    expect([undefined, ".next"]).toContain(defaulted.distDir);
   });
 });

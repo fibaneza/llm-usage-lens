@@ -813,6 +813,17 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/governance/per-user-approval` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` |
 | `/api/audit`, `/api/access-review` | GET | `internal-admin`, `internal-auditor` (audited) |
 
+**`/api/me` scope fields (agent decision D-R5-3, 2026-11-16).** `GET
+/api/me` also returns the caller's own resolved scope: `global` (boolean),
+`memberTeamId` (string or `null`), `memberTeamVisible` (boolean),
+`teamScopes` and `departmentScopes` (id arrays). Reason: the My usage page
+and the client navigation share one source and no new route is needed (so
+nothing new to register). No other person's data appears. The scope is
+authorization data and is read per request on the server; the client hook
+caches it for at most 60 seconds, so a role or scope change shows in the
+navigation and notices within that bound, while every page and route
+enforces the current scope regardless.
+
 **Names in management lists (D37).** The `GET` rows of
 `/api/teams/[id]/members`, `/api/teams/[id]/admins` and
 `/api/departments/[id]/admins` carry `displayName` and `email` from each

@@ -103,7 +103,7 @@ export const BOB = identityItem({
   displayName: "Bob Brown",
 });
 
-// Access Control spec - Members and Team admins (D35): in-scope member and admin rows carry the
+// Access Control spec - Members and Team admins (D37): in-scope member and admin rows carry the
 // person's displayName and email, null when the identity is unknown.
 const KNOWN_PEOPLE: Record<
   string,
@@ -308,7 +308,7 @@ export const teamsRoute = (rows: unknown[] = TEAM_ROWS): Handler =>
 export const departmentsRoute = (rows: unknown[] = DEPARTMENT_ROWS): Handler =>
   orgList(DateRangeQuerySchema, { departments: rows });
 
-// Access Control spec - Org units (D35): the Members, Team admins and Visibility
+// Access Control spec - Org units (D37): the Members, Team admins and Visibility
 // pickers read the registry-backed, scope-filtered GET /api/access/org-units,
 // which needs no date range. The route name is provisional until the Access
 // Control spec fixes it.

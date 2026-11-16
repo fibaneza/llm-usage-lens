@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { putIdentityLink } from "@/lib/data/access/identity-links";
 import { ctxAt, ok } from "@/lib/data/access/access-test-support";
+import { putTeamVisibility } from "@/lib/data/access/visibility";
 import {
   CALLERS,
   RANGE,
@@ -21,8 +22,10 @@ import { GET as getTeams } from "./teams/route";
 // Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)"
 // (/api/me, /api/me/usage: any signed-in role), "Enforcement" items 3-5,
 // "Membership..." (SSO scopes suspended during overage), threats T6, T14.
-// /api/me response fields are unspecced: only the {data} shape and that no
-// other person's data appears are asserted. CSV, search and the command menu
+// /api/me carries the caller's own scope for the UI (Phase 4R.5; agent decision
+// D-R5-3, Access Control spec - "API routes (additions)"): `global`, `memberTeamId`,
+// `memberTeamVisible`, `teamScopes`, `departmentScopes`. No other person's
+// data appears. CSV, search and the command menu
 // have no server route today (they serialise or filter already-scoped rows
 // client-side), so nothing server-side is asserted for them.
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
@@ -155,6 +158,54 @@ describe("/api/me and /api/me/usage", () => {
       expect(text).not.toContain(CALLERS[other].oid);
       expect(text).not.toContain(CALLERS[other].email);
     }
+  });
+
+  // Phase 4R.5 (implementation-phases): role-aware landing, nav gating and the
+  // "no team" / "not visible" states read the caller's own scope from /api/me.
+  it.each([
+    ["admin", true, null, [], []],
+    ["orgAdmin", true, null, [], []],
+    ["auditor", true, null, [], []],
+    ["memberA", false, "team-a", [], []],
+    ["viewerNone", false, null, [], []],
+    ["teamAdminA", false, null, ["team-a"], []],
+    ["deptAdminEng", false, null, [], ["dept-eng"]],
+  ] as const)(
+    "/api/me exposes the scope of %s (global, member team, admin scopes)",
+    async (name, global, memberTeamId, teamScopes, departmentScopes) => {
+      const handler = await load("me");
+      signInAs(name);
+      const { body } = await get(handler, "/api/me");
+      expect(body.data).toMatchObject({
+        global,
+        memberTeamId,
+        teamScopes,
+        departmentScopes,
+      });
+    },
+  );
+
+  it("/api/me marks a member's hidden team not visible (Design System: Not visible), a visible one visible", async () => {
+    const handler = await load("me");
+    signInAs("memberA");
+    expect((await get(handler, "/api/me")).body.data).toMatchObject({
+      memberTeamVisible: true,
+    });
+    ok(
+      await putTeamVisibility(
+        {
+          teamId: "team-a",
+          teamLevel: "hidden",
+          userLevel: "own",
+          version: null,
+        },
+        ctxAt(undefined, "req-hide"),
+      ),
+    );
+    expect((await get(handler, "/api/me")).body.data).toMatchObject({
+      memberTeamId: "team-a",
+      memberTeamVisible: false,
+    });
   });
 
   it("/api/me/usage returns only the caller's own usage (member)", async () => {

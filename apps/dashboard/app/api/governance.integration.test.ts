@@ -39,7 +39,7 @@ import { GET as getApproval } from "./governance/per-user-approval/route";
 // while Entra is not configured: 409 CONFLICT), "Enforcement" items 2, 4, 6,
 // "Audit log" (governance.passwordsignin.update: one success record; a 409 or
 // 400 writes none; one `denied` record per authorization refusal, D17/T22),
-// threat T28. Contract: temp/run-r4/contract-slice1.md.
+// threat T28. Spec: Access Control "API routes (additions)".
 // Only `@/auth` is mocked; "Entra configured" is the three
 // AUTH_MICROSOFT_ENTRA_ID_* variables being set, read live (the `@/env` stand-in
 // below is a live view of process.env so the suite does not depend on how the

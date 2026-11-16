@@ -1,5 +1,6 @@
 import {
   Boxes,
+  CircleUser,
   Building2,
   Cable,
   LayoutDashboard,
@@ -9,6 +10,8 @@ import {
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
+
+import type { Scope } from "@/lib/auth/policy";
 
 export type NavItem = {
   // Short label shown in the sidebar rail.
@@ -34,6 +37,12 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   {
     label: "Main",
     items: [
+      {
+        title: "My usage",
+        pageTitle: "My usage",
+        href: "/dashboard/me",
+        icon: CircleUser,
+      },
       {
         title: "Overview",
         pageTitle: "Cost overview",
@@ -114,8 +123,66 @@ export const NAV_ITEMS: readonly NavItem[] = [
 // Overview owns the exact "/dashboard" path; every other link also matches its
 // nested detail routes (e.g. /dashboard/teams/123 highlights Teams).
 export function isNavItemActive(pathname: string, href: string): boolean {
-  if (href === "/dashboard") {
+  const path = href.split("?")[0] ?? href;
+  if (path === "/dashboard") {
     return pathname === "/dashboard";
   }
-  return pathname === href || pathname.startsWith(`${href}/`);
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
+
+export type NavScope = Pick<
+  Scope,
+  "global" | "memberTeamId" | "teamScopes" | "departmentScopes"
+>;
+
+// Source: implementation-phases Phase 4R.5; Design System - Access states and
+// scoped labels. Non-global callers reach the Overview through ?view=overview
+// because a bare /dashboard sends them to their landing page.
+const OVERVIEW_HREF = "/dashboard";
+const SCOPED_OVERVIEW_HREF = "/dashboard?view=overview";
+const NO_TEAM_HREFS: ReadonlySet<string> = new Set([
+  "/dashboard/me",
+  "/dashboard/litellm",
+]);
+
+const hasAnyScope = (scope: NavScope) =>
+  scope.memberTeamId !== null ||
+  scope.teamScopes.size > 0 ||
+  scope.departmentScopes.size > 0;
+
+export function navGroupsFor(scope: NavScope): readonly NavGroup[] {
+  if (scope.global) return NAV_GROUPS;
+  const scoped = hasAnyScope(scope);
+  return NAV_GROUPS.map((group) => ({
+    label: group.label,
+    items: group.items
+      .filter((item) => {
+        if (!scoped) return NO_TEAM_HREFS.has(item.href);
+        return (
+          item.href !== "/dashboard/departments" ||
+          scope.departmentScopes.size > 0
+        );
+      })
+      .map((item) => {
+        if (scoped && item.href === "/dashboard/teams") {
+          return { ...item, title: "My teams" };
+        }
+        if (scoped && item.href === OVERVIEW_HREF) {
+          return { ...item, href: SCOPED_OVERVIEW_HREF };
+        }
+        return item;
+      }),
+  })).filter((group) => group.items.length > 0);
+}
+
+export function landingPathFor(scope: NavScope): string {
+  if (scope.global) return "/dashboard";
+  const [onlyDepartment] = scope.departmentScopes;
+  if (onlyDepartment !== undefined) {
+    return scope.departmentScopes.size === 1
+      ? `/dashboard/departments/${encodeURIComponent(onlyDepartment)}`
+      : "/dashboard/departments";
+  }
+  if (scope.teamScopes.size > 0) return "/dashboard/teams";
+  return "/dashboard/me";
 }

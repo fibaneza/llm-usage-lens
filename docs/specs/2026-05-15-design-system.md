@@ -435,7 +435,10 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 - **No team** (`internal-viewer` without a member team or admin scope): *My usage* plus "Ask your team lead for access".
 - **Not visible** (a team or department hidden by visibility): a neutral inline notice, never a zero.
 - **Scoped labels:** callers below `internal-org-admin` see "your teams" on organisation-wide KPIs, rankings and charts; no organisation total includes out-of-scope cost.
-- **Role-aware landing:** `internal-viewer` and members → *My usage*; `internal-team-admin` → *My teams*; `internal-org-admin`, `internal-admin`, `internal-auditor` → Overview.
+- **Role-aware landing:** `internal-viewer` and members → *My usage*; `internal-team-admin` → *My teams*; `internal-org-admin`, `internal-admin`, `internal-auditor` → Overview. The landing is decided on the stored scope (global > department > team > *My usage*), not on the role claim, because the scope is what the pages filter on (agent decision D-R5-2a, 2026-11-16).
+- **Department-only admins (agent decision D-R5-2, 2026-11-16, coordinator ruling):** an admin whose only scopes are departments lands on their department (one scope) or on Departments (several), not on *My teams*. Reason: the narrowest view of the caller's scope; a department scope has no team list of its own.
+- **Overview opt-out and scoped Overview link (agent decision D-R5-1, 2026-11-16):** the landing redirect runs in `app/dashboard/page.tsx` (not `auth.ts`): a non-global caller requesting `/dashboard` without `?view=overview` is redirected to their landing page, and their Overview nav and command-menu link is `/dashboard?view=overview`. Reason: one behaviour for every sign-in method with no `auth.ts` change, while the Overview stays reachable for scoped callers. Rejected: a separate Overview route (larger link and test churn).
+- **Access-state copy (agent decision D-R5-4, 2026-11-16):** the page and nav label is "My usage"; its heading is "Your Bedrock usage"; the no-team state says "Ask your team lead for access"; a hidden team or department reads "not visible" with no zero shown; an empty period reads "No Bedrock usage". Reason: the empty-state precedent in this spec. The "your teams" notice is not shown to a caller with no team or admin scope (there is nothing to scope).
 
 ## Responsive Tables
 

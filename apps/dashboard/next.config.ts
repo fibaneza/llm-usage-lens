@@ -37,6 +37,9 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // The role-probe e2e server builds into its own dir so it never clashes with
+  // the main dev server's .next (tool config; Rule 50.2).
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   headers: async () => [{ source: "/:path*", headers: SECURITY_HEADERS }],
   // Self-contained server bundle for the ECS container image; the tracing root
   // is the monorepo root so the workspace package is traced.
