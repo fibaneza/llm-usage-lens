@@ -802,8 +802,7 @@ before L4, never during a unit that edits the same files (Rule 60.24a).
   with a stubbed API were removed; the other e2e specs assert shell,
   navigation, responsive or axe behaviour a component test cannot see)
 - [ ] Verify: `pnpm check` green in CI on push and the full `pnpm test:e2e`
-  green on the `main` candidate before push (in CI once Phase 5 *Add
-  Playwright to GitHub Actions CI* lands; Rule 70.12 — *E2E budget*); no spec
+  green in CI (Rule 70.12 — *E2E budget*); no spec
   rule, rule item or threat item loses its last test (coverage
   list per removed case: done, in the finish report); test lines and run time
   before and after reported
@@ -909,7 +908,7 @@ up building inside a unit; it never merges or skips the review.
   - Department → detail drill-down
   - Settings CRUD flow
   - Date filter changes update all data
-- [ ] Add Playwright to GitHub Actions CI
+- [x] Add Playwright to GitHub Actions CI (pulled forward 2026-11-17, branch `ci/playwright-e2e`)
 
 ### Dependencies
 
@@ -1105,7 +1104,7 @@ jobs:
       - Start DynamoDB Local (Docker service)
       - Create table + seed data
       - Unit + component tests (vitest run)
-      - E2E tests (playwright test) — smoke specs exist from Phase 2+; wired into CI in Phase 5
+      - E2E tests (playwright test) — smoke specs exist from Phase 2+; wired into CI (`llm-usage-lens-build.yml` job `e2e`, pulled forward from Phase 5)
 
   build:
     needs: [quality, test]

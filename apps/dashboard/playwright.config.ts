@@ -37,6 +37,7 @@ export default defineConfig({
   reporter: [
     ["list"],
     ["html", { open: "never", outputFolder: "playwright-report" }],
+    ...(process.env.CI ? ([["github"]] as const) : []),
   ],
   // First dev-server compile of a route can be slow; keep generous timeouts
   // rather than flaky wall-clock sleeps (Rule 60.24).

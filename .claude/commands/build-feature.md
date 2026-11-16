@@ -36,8 +36,7 @@ the task touches UI — Rule 70.12, *E2E budget*) are green — without editing 
 disputes a test, re-dispatch the `tdd-test-engineer` for a ruling (UPHOLD /
 AMEND), then resume. Both agents run only new and impacted tests (the files
 they work on, then `vitest run --changed <merge-base>`) and read results, not
-logs; the full suite runs in CI, and the full e2e once per push batch on the
-`main` candidate until CI runs it (Rule 70.12).
+logs; the full suite and the full e2e run in CI (Rule 70.12).
 
 ## Step 3 — Review (once per phase)
 

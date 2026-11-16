@@ -126,7 +126,7 @@ is the source of truth — read it before touching any workflow.
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| `llm-usage-lens-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (both Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`) |
+| `llm-usage-lens-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (both Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`), `e2e` (Playwright, both projects, against DynamoDB Local) |
 | `llm-usage-lens-deploy.yml` | `workflow_dispatch` (user action) | Builds the dashboard image, pushes it to ECR via OIDC and deploys the DashboardServiceStack only |
 | `claude-pr-review.yml` | PR opened / synchronize / ready / reopened | Inline review + security findings; HIGH findings submit a `REQUEST_CHANGES` review |
 | `claude-code-review.yml` | release tag push / `workflow_dispatch` | Release audit scoped to commits since the previous tag; files issues |

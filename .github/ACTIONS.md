@@ -4,6 +4,7 @@ This folder holds the project's GitHub-side automation.
 
 | File | Trigger | Purpose |
 | --- | --- | --- |
+| [`workflows/llm-usage-lens-build.yml`](workflows/llm-usage-lens-build.yml) | Push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), then `test` (Vitest against DynamoDB Local), `build` (`pnpm build:ci`) and `e2e` (headless Playwright, both projects, against DynamoDB Local) in parallel |
 | [`workflows/llm-usage-lens-deploy.yml`](workflows/llm-usage-lens-deploy.yml) | `workflow_dispatch` (environment = dev or prod) | Builds the dashboard image, pushes it to ECR (tag = commit SHA) and runs `cdk deploy` of the DashboardServiceStack only, assuming `vars.DEPLOY_ROLE_ARN` via GitHub OIDC (no static keys). Never deploys the FoundationStack. **Running it is a user action.** |
 | [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) | Pull request events | Inline review comments + PR comment with HIGH/MEDIUM security findings; HIGH findings submit a REQUEST_CHANGES review and fail the check |
 | [`workflows/claude-code-review.yml`](workflows/claude-code-review.yml) | Push of release tags (`v*`, `*-rc*`, `*-beta*`) and `workflow_dispatch` | Release audit (code review + security) scoped to commits since the previous release tag; files GitHub issues for HIGH/MEDIUM security and HIGH code-review findings |
@@ -28,6 +29,26 @@ claude-code-action **agent mode** (a `prompt` is supplied) rather than tag
 mode: tag mode always compares `main...<branch>` at the end, which 404s on
 Q&A runs where nothing is pushed. The rest of this document walks through the
 **automated review workflows** in detail.
+
+### `llm-usage-lens-build.yml` job graph
+
+`quality` runs first; `test`, `build` and `e2e` need it and run in parallel
+(`quality → test | build | e2e`). The `e2e` job (implementation-phases
+Phase 5, *Add Playwright to GitHub Actions CI*) starts a `dynamodb-local`
+service (same image as `test`), creates and seeds the table, installs
+Chromium and runs `pnpm test:e2e` (both Playwright projects) with
+`E2E_LOCK=off`, since CI has no other session. It uses no secrets: the dev
+servers' env is pinned in `apps/dashboard/playwright.config.ts`.
+
+- **Caches:** the pnpm store (`node-setup`) and the Playwright browsers in
+  `~/.cache/ms-playwright`, keyed on the `@playwright/test` version.
+- **Artifacts:** on failure only, `apps/dashboard/test-results` and
+  `apps/dashboard/playwright-report`, kept 7 days.
+- **Cost:** about 2-3 min of tests plus 2-4 min of installs and browser
+  setup, so roughly 5-8 runner-minutes per run on `ubuntu-latest`. The
+  repository is private, so the minutes count against the GitHub free tier
+  (2,000 min/month on Free). The cost is accepted, not avoided (CLAUDE.md,
+  *Cost posture*).
 
 ### `bedrock-simulator-build.yml` job graph
 

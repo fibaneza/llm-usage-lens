@@ -1,6 +1,6 @@
 name: "llm-usage-lens: ci - build"
 
-# Pipeline: quality + test + build. The test job (Vitest) landed in Phase 3.1 and
+# Pipeline: quality + test + build + e2e. The test job (Vitest) landed in Phase 3.1 and
 # gained DynamoDB Local in Phase 3.2; deploy-collector arrives in Phase 6.
 # Source: docs/specs/2026-05-15-implementation-phases.md §CI/CD — GitHub Actions.
 
@@ -91,3 +91,60 @@ jobs:
         # validates the env schema (defaults and the sign-in provider checks)
         # instead of being skipped (Rule 50.2).
         run: pnpm build:ci
+
+  # Source: docs/specs/2026-05-15-implementation-phases.md Phase 5 — Add Playwright to GitHub Actions CI.
+  e2e:
+    name: e2e
+    needs: [quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      dynamodb-local:
+        image: amazon/dynamodb-local:2.5.4
+        ports:
+          - 8000:8000
+    env:
+      E2E_LOCK: "off"
+      DYNAMODB_ENDPOINT: http://localhost:8000
+      AWS_REGION: us-east-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Node setup
+        uses: ./.github/actions/node-setup
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Read Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('./apps/dashboard/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright browser
+        working-directory: apps/dashboard
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Wait for DynamoDB Local
+        run: |
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null http://localhost:8000 && exit 0
+            sleep 1
+          done
+          echo "DynamoDB Local did not become ready" >&2
+          exit 1
+      - name: Create table
+        run: pnpm db:create-table
+      - name: Seed
+        run: pnpm db:seed
+      - name: E2E
+        run: pnpm test:e2e
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-artifacts
+          path: |
+            apps/dashboard/test-results
+            apps/dashboard/playwright-report
+          retention-days: 7

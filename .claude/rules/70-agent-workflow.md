@@ -203,19 +203,18 @@ review = quality-reviewer + spec-guardian + ecc reviewers
         run no e2e unless the delta touched UI or `e2e/` files.
       - **Merging `main` in** needs no e2e re-run unless `main` brought a
         change to a shared file; then the targeted specs only.
-      - **Safety net, until CI runs e2e.** CI runs no Playwright yet
-        (implementation-phases Phase 5 — *Add Playwright to GitHub Actions
-        CI*). Until it does, the coordinator runs **one** full
-        `pnpm test:e2e` on the `main` candidate before each push — one run
-        per push batch, not per unit — and a red run goes back to a `fix/`
-        branch before the push. Once CI runs e2e, that run moves to CI.
+      - **Safety net: CI (amended 2026-11-17, coordinator under the user's delegation).** CI (`llm-usage-lens-build.yml`, job `e2e`) runs
+        the full e2e on every push to `main` and every pull request. A red
+        run goes back into the loop on a `fix/` branch. The coordinator's
+        local full `pnpm test:e2e` is only the fallback, when CI is red for
+        an unrelated reason or unavailable.
       - Otherwise the coordinator does not run e2e, except to produce
         evidence a worker can no longer produce (an unreachable run).
     - **The full suite runs in CI (amended 2026-11-15, user).** Sessions
       run the branch gate (above) with `main` merged in; the coordinator
       does not re-run tests and relies on that evidence. The full
-      `pnpm check` runs in GitHub Actions on the user's push (e2e: see
-      *E2E budget* — local until CI runs it) (or on a PR, Rule 31's optional path). A red CI run goes back
+      `pnpm check` and the full `pnpm test:e2e` run in GitHub Actions on the
+      user's push (or on a PR, Rule 31's optional path). A red CI run goes back
       into the loop on a `fix/` branch; `main` is never committed to
       directly (Rule 30.5). Previously the full suite ran once locally on
       the `main` candidate.
