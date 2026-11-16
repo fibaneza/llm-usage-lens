@@ -42,7 +42,7 @@ describe("DepartmentsPage (/dashboard/departments)", () => {
     expect(source).not.toMatch(/^\s*["']use client["']/m);
   });
 
-  it("renders the department cards instead of the placeholder", async () => {
+  it("renders the departments table instead of the placeholder", async () => {
     stubApi({
       departments: () =>
         apiResponse(

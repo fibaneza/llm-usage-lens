@@ -23,7 +23,11 @@ export function DepartmentDetailContent({ id }: { id: string }) {
       title="the department"
       resetKeys={[id, range.dateFrom, range.dateTo]}
     >
-      <DepartmentDetailBody id={id} range={range} />
+      <DepartmentDetailBody
+        id={id}
+        range={range}
+        urlRange={{ dateFrom, dateTo }}
+      />
     </SectionBoundary>
   );
 }

@@ -11,9 +11,9 @@ type MetricCardProps = {
   description?: ReactNode;
 };
 
-// Design System -- Component Inventory, `MetricCard`: KPI card with value,
-// trend indicator and icon on the shadcn Card; the value uses the numeric
-// face (Rule 40.7).
+// Design System -- Component Inventory, `MetricCard`: compact KPI card with a
+// 12px label, one 20px value (numeric face, Rule 40.7) with the delta inline,
+// and a 12px footnote on the shadcn Card.
 export function MetricCard({
   title,
   value,
@@ -24,19 +24,19 @@ export function MetricCard({
   const titleId = useId();
 
   return (
-    <Card role="group" aria-labelledby={titleId} className="gap-3 py-4">
-      <CardHeader className="flex flex-row items-center justify-between gap-2 px-4">
+    <Card role="group" aria-labelledby={titleId} className="gap-1 px-4 py-3">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 px-0">
         <CardTitle
           id={titleId}
-          className="text-muted-foreground text-sm font-medium"
+          className="text-muted-foreground text-xs font-medium"
         >
           {title}
         </CardTitle>
-        <Icon className="text-muted-foreground size-4 shrink-0" aria-hidden />
+        <Icon className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
       </CardHeader>
-      <CardContent className="flex flex-col gap-1 px-4">
+      <CardContent className="flex flex-col gap-1 px-0">
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="font-mono text-2xl font-semibold tabular-nums">
+          <span className="text-kpi font-mono font-semibold tabular-nums">
             {value}
           </span>
           {trend}

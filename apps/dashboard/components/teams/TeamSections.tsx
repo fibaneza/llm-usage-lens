@@ -2,13 +2,13 @@
 
 import type { TeamDetailResponse } from "@llm-usage-lens/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useId, type ReactNode } from "react";
 
 import { LazyModelUsageBarChart } from "@/components/charts/LazyCharts";
 import { toModelBreakdownSlices } from "@/components/charts/chart-data";
 import { CostEstimateIndicator } from "@/components/display/CostEstimateIndicator";
-import { SectionBoundary } from "@/components/display/SectionBoundary";
+import { Panel } from "@/components/display/Panel";
 import { UserAvatar } from "@/components/display/UserAvatar";
+import { numericColumn } from "@/components/table/column-helpers";
 import { CountFigure, UsdFigure } from "@/components/table/figures";
 import { UsageTable } from "@/components/table/UsageTable";
 import type { DateRange } from "@/lib/date-range";
@@ -18,43 +18,35 @@ type ServiceRow = TeamDetailResponse["services"][number];
 type UserRow = TeamDetailResponse["users"][number];
 type Attribution = ServiceRow | UserRow;
 
-const NUMERIC = "font-mono tabular-nums";
-
 function metricColumns<T extends Attribution>(): ColumnDef<T>[] {
   return [
-    {
+    numericColumn<T>({
       accessorKey: "cost",
       header: "Cost",
       cell: ({ row }) => (
         <span className="inline-flex items-center gap-1.5">
-          <UsdFigure value={row.original.cost} className={NUMERIC} />
+          <UsdFigure value={row.original.cost} />
           {row.original.costEstimated ? (
             <CostEstimateIndicator compact />
           ) : null}
         </span>
       ),
-    },
-    {
+    }),
+    numericColumn<T>({
       accessorKey: "inputTokens",
       header: "Input Tokens",
-      cell: ({ row }) => (
-        <CountFigure value={row.original.inputTokens} className={NUMERIC} />
-      ),
-    },
-    {
+      cell: ({ row }) => <CountFigure value={row.original.inputTokens} />,
+    }),
+    numericColumn<T>({
       accessorKey: "outputTokens",
       header: "Output Tokens",
-      cell: ({ row }) => (
-        <CountFigure value={row.original.outputTokens} className={NUMERIC} />
-      ),
-    },
-    {
+      cell: ({ row }) => <CountFigure value={row.original.outputTokens} />,
+    }),
+    numericColumn<T>({
       accessorKey: "invocations",
       header: "Invocations",
-      cell: ({ row }) => (
-        <CountFigure value={row.original.invocations} className={NUMERIC} />
-      ),
-    },
+      cell: ({ row }) => <CountFigure value={row.original.invocations} />,
+    }),
   ];
 }
 
@@ -90,27 +82,6 @@ const USER_COLUMNS: ColumnDef<UserRow>[] = [
   ...metricColumns<UserRow>(),
 ];
 
-type SectionProps = {
-  title: string;
-  resetKey: unknown;
-  children: ReactNode;
-};
-
-function Section({ title, resetKey, children }: SectionProps) {
-  const headingId = useId();
-
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <h2 id={headingId} className="text-lg font-semibold">
-        {title}
-      </h2>
-      <SectionBoundary title={title.toLowerCase()} resetKeys={[resetKey]}>
-        {children}
-      </SectionBoundary>
-    </section>
-  );
-}
-
 function Empty({ children }: { children: string }) {
   return <p className="text-muted-foreground py-6 text-sm">{children}</p>;
 }
@@ -129,7 +100,11 @@ export function TeamSections({ team, range }: TeamSectionsProps) {
 
   return (
     <>
-      <Section title="Services breakdown" resetKey={resetKey}>
+      <Panel
+        title="Services breakdown"
+        boundaryTitle="services breakdown"
+        resetKeys={[resetKey]}
+      >
         {team.services.length === 0 ? (
           <Empty>No services in this period.</Empty>
         ) : (
@@ -141,8 +116,12 @@ export function TeamSections({ team, range }: TeamSectionsProps) {
             caption="Services used by this team"
           />
         )}
-      </Section>
-      <Section title="Users breakdown" resetKey={resetKey}>
+      </Panel>
+      <Panel
+        title="Users breakdown"
+        boundaryTitle="users breakdown"
+        resetKeys={[resetKey]}
+      >
         {team.users.length === 0 ? (
           <Empty>No users in this period.</Empty>
         ) : (
@@ -154,12 +133,16 @@ export function TeamSections({ team, range }: TeamSectionsProps) {
             caption="Users in this team"
           />
         )}
-      </Section>
-      <Section title="Model usage" resetKey={resetKey}>
+      </Panel>
+      <Panel
+        title="Model usage"
+        boundaryTitle="model usage"
+        resetKeys={[resetKey]}
+      >
         <LazyModelUsageBarChart
           slices={toModelBreakdownSlices(team.byModel, 0)}
         />
-      </Section>
+      </Panel>
     </>
   );
 }

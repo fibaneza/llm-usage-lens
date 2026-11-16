@@ -487,19 +487,24 @@ test.describe("fluid workspace", () => {
     });
   }
 
-  function expectPadding(insets: Awaited<ReturnType<typeof contentInsets>>) {
+  function expectPadding(
+    insets: Awaited<ReturnType<typeof contentInsets>>,
+    vertical = 16,
+  ) {
     for (const v of [...insets.lefts, ...insets.rights]) near(v, 16);
-    near(insets.top, 16);
-    near(insets.bottom, 16);
-    expect(insets.bottomClearance).toBeGreaterThanOrEqual(15);
+    near(insets.top, vertical);
+    near(insets.bottom, vertical);
+    expect(insets.bottomClearance).toBeGreaterThanOrEqual(vertical - 1);
   }
 
-  test("KPI cards have 16px padding on all four sides", async ({ page }) => {
+  test("KPI cards have 12px vertical and 16px horizontal padding (Design System — Panels and density)", async ({
+    page,
+  }) => {
     await open(page, `/dashboard?${QUERY}`);
     const insets = await contentInsets(
       page.getByRole("group", { name: "Total Tokens", exact: true }),
     );
-    expectPadding(insets);
+    expectPadding(insets, 12);
   });
 
   for (const title of [

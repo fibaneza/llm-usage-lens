@@ -1,8 +1,11 @@
 "use client";
 
-import { Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 
 import { ChartEmptyState } from "./ChartEmptyState";
+import { ChartLegend } from "./ChartLegend";
 import { formatUsd, type ModelBreakdownSlice } from "./chart-data";
 
 type ModelBreakdownChartProps = {
@@ -10,6 +13,8 @@ type ModelBreakdownChartProps = {
 };
 
 export function ModelBreakdownChart({ slices }: ModelBreakdownChartProps) {
+  const reducedMotion = usePrefersReducedMotion();
+
   if (slices.length === 0) return <ChartEmptyState />;
 
   // Recharts 3 deprecates `Cell`; each segment carries its own token fill.
@@ -35,6 +40,8 @@ export function ModelBreakdownChart({ slices }: ModelBreakdownChartProps) {
               outerRadius="85%"
               paddingAngle={2}
               stroke="var(--color-card)"
+              isAnimationActive={!reducedMotion}
+              animationDuration={250}
             />
             <Tooltip
               formatter={(value) => formatUsd(Number(value))}
@@ -42,13 +49,19 @@ export function ModelBreakdownChart({ slices }: ModelBreakdownChartProps) {
                 backgroundColor: "var(--color-popover)",
                 color: "var(--color-popover-foreground)",
                 border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-md, 6px)",
+                borderRadius: "var(--radius-card)",
               }}
             />
-            <Legend />
           </PieChart>
         </ResponsiveContainer>
       </div>
+      <ChartLegend
+        items={slices.map((slice) => ({
+          key: slice.key,
+          label: slice.label,
+          colorVar: slice.colorVar,
+        }))}
+      />
       <div className="sr-only">
         <table>
           <caption>Model distribution by cost, USD</caption>

@@ -208,14 +208,61 @@ describe("DepartmentDetailContent -- header", () => {
     ).toHaveTextContent(/1,200|1\.2K/);
   });
 
-  it("carries the 'Bedrock service charges only' scope note on the Total cost card (Data Model -- Dashboard impact (v1))", async () => {
+  it("shows the 'Bedrock service charges only' scope note in the page header, above the KPI row (Design System -- Department Detail Page, 2026-11-16; Data Model -- Dashboard impact (v1))", async () => {
     stubApi({ departmentDetail: detailFor() });
     renderWithProviders(<DepartmentDetailContent id="dept-eng" />, URL_PARAMS);
     await loaded();
 
-    expect(screen.getByRole("group", { name: "Total cost" })).toHaveTextContent(
-      "Bedrock service charges only",
+    const note = screen.getByText(/bedrock service charges only/i);
+    const totalCost = screen.getByRole("group", { name: "Total cost" });
+    expect(totalCost).not.toContainElement(note);
+    expect(
+      note.compareDocumentPosition(totalCost) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("leads with a breadcrumb 'Departments / <name>' whose first crumb links to the list with the date range carried (Design System -- Page frame; DPD-04)", async () => {
+    stubApi({ departmentDetail: detailFor() });
+    renderWithProviders(<DepartmentDetailContent id="dept-eng" />, URL_PARAMS);
+    await loaded();
+
+    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const link = within(crumbs).getByRole("link", { name: "Departments" });
+    const href = new URL(link.getAttribute("href") ?? "", "http://localhost");
+    expect(href.pathname).toBe("/dashboard/departments");
+    expect(href.searchParams.get("dateFrom")).toBe(RANGE.dateFrom);
+    expect(href.searchParams.get("dateTo")).toBe(RANGE.dateTo);
+    expect(within(crumbs).getByText("Engineering")).toHaveAttribute(
+      "aria-current",
+      "page",
     );
+  });
+
+  it("names the department with an h2 entity title; the page h1 stays in the top bar (Design System -- Page frame; DPD-04)", async () => {
+    stubApi({ departmentDetail: detailFor() });
+    renderWithProviders(<DepartmentDetailContent id="dept-eng" />, URL_PARAMS);
+    await loaded();
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Engineering" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+  });
+
+  it("renders the PeriodComparison as a compact strip inside the KPI row, not as a separate block (Design System -- Department Detail Page)", async () => {
+    stubApi({ departmentDetail: detailFor() });
+    renderWithProviders(<DepartmentDetailContent id="dept-eng" />, URL_PARAMS);
+    await loaded();
+
+    const kpiRow = screen.getByRole("group", { name: "Total cost" })
+      .parentElement as HTMLElement;
+    expect(
+      within(kpiRow).getByRole("group", { name: /period comparison/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(kpiRow).getByRole("group", { name: "Invocations" }),
+    ).toBeInTheDocument();
   });
 
   it("shows a DeltaBadge per stat vs the previous period", async () => {
@@ -412,6 +459,28 @@ describe("DepartmentDetailContent -- top users", () => {
       within(section("Top users")).getByText(/no users/i),
     ).toBeInTheDocument();
   });
+});
+
+// Design System -- Layout, Panels and density (2026-11-16): every section is a
+// Panel -- a card-surface region named by its heading (DPD-10; Rule 60.12).
+describe("DepartmentDetailContent -- sections are Panels", () => {
+  it.each(["Teams breakdown", "Cost by team over time", "Top users"])(
+    "renders %s as a Panel region with a card-title heading",
+    async (name) => {
+      stubApi({ departmentDetail: detailFor() });
+      renderWithProviders(
+        <DepartmentDetailContent id="dept-eng" />,
+        URL_PARAMS,
+      );
+      await loaded();
+
+      const region = section(name);
+      expect(region).toHaveAttribute("data-slot", "card");
+      expect(
+        within(region).getByRole("heading", { name, level: 2 }),
+      ).toHaveAttribute("data-slot", "card-title");
+    },
+  );
 });
 
 describe("DepartmentDetailContent -- loading, empty, not found and errors", () => {

@@ -110,6 +110,18 @@ test.describe("team detail page", () => {
 
     await openDetail(page);
 
+    // Page frame (Design System -- Layout, 2026-11-16): breadcrumb back to the
+    // list with the date range carried.
+    await expect(
+      page
+        .getByRole("navigation", { name: "Breadcrumb" })
+        .getByRole("link", { name: "Teams" }),
+    ).toHaveAttribute(
+      "href",
+      new RegExp(
+        `^/dashboard/teams\\?.*dateFrom=${RANGE.dateFrom}.*dateTo=${RANGE.dateTo}`,
+      ),
+    );
     await expect(page.getByText("Engineering").first()).toBeVisible();
     await expect(page.getByText("123-456-789-012")).toBeVisible();
     await expect(

@@ -7,13 +7,12 @@ import {
   UsdFigure,
   useFigureFormat,
 } from "@/components/table/figures";
+import { numericColumn } from "@/components/table/column-helpers";
 import { PercentOfTotalBar } from "@/components/table/PercentOfTotalBar";
 import { RankCell } from "@/components/table/RankingList";
 import type { CsvColumn } from "@/lib/csv";
 
 import { changeVsPrevious, type RankingTableRow } from "./ranking-rows";
-
-const NUMERIC = "font-mono tabular-nums";
 
 // The Estimated marker shortens to "Est." beside abbreviated figures, where
 // width is scarce.
@@ -22,7 +21,7 @@ function CostCell({ row }: { row: RankingTableRow }) {
 
   return (
     <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-      <UsdFigure value={row.cost} className={NUMERIC} />
+      <UsdFigure value={row.cost} />
       {row.costEstimated ? <CostEstimateIndicator compact={compact} /> : null}
     </span>
   );
@@ -49,32 +48,26 @@ export const RANKING_COLUMNS: ColumnDef<RankingTableRow>[] = [
       </span>
     ),
   },
-  {
+  numericColumn<RankingTableRow>({
     accessorKey: "cost",
     header: "Cost",
     cell: ({ row }) => <CostCell row={row.original} />,
-  },
-  {
+  }),
+  numericColumn<RankingTableRow>({
     accessorKey: "inputTokens",
     header: "Input Tokens",
-    cell: ({ row }) => (
-      <CountFigure value={row.original.inputTokens} className={NUMERIC} />
-    ),
-  },
-  {
+    cell: ({ row }) => <CountFigure value={row.original.inputTokens} />,
+  }),
+  numericColumn<RankingTableRow>({
     accessorKey: "outputTokens",
     header: "Output Tokens",
-    cell: ({ row }) => (
-      <CountFigure value={row.original.outputTokens} className={NUMERIC} />
-    ),
-  },
-  {
+    cell: ({ row }) => <CountFigure value={row.original.outputTokens} />,
+  }),
+  numericColumn<RankingTableRow>({
     accessorKey: "invocations",
     header: "Invocations",
-    cell: ({ row }) => (
-      <CountFigure value={row.original.invocations} className={NUMERIC} />
-    ),
-  },
+    cell: ({ row }) => <CountFigure value={row.original.invocations} />,
+  }),
   {
     accessorKey: "share",
     header: "% of Total",

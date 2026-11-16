@@ -1,17 +1,29 @@
 "use client";
 
+import { RANKING_TABS, type RankingTab } from "@llm-usage-lens/shared";
 import { useQueryStates } from "nuqs";
 import { useMemo } from "react";
 
 import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { ModelFilter } from "@/components/filters/ModelFilter";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageTabs } from "@/components/layout/PageTabs";
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 import { rankingSearchParams } from "@/lib/ranking-search-params";
 
 import { ModelUsageNote } from "./ModelUsageNote";
 import { RankingBody } from "./RankingBody";
-import { RankingTabs } from "./RankingTabs";
+
+const TAB_ITEMS = RANKING_TABS.map((tab) => ({
+  value: tab,
+  label: {
+    departments: "Departments",
+    teams: "Teams",
+    services: "Services",
+    users: "Users",
+  }[tab],
+}));
 
 // Ranking page body (Design System -- Ranking Page; implementation-phases
 // Phase 4.2): tabs and the model filter live in the URL (nuqs) beside the
@@ -31,23 +43,41 @@ export function RankingContent() {
     [dateFrom, dateTo],
   );
 
+  const modelFilter = (
+    <ModelFilter
+      value={model ?? "all"}
+      onChange={(next) =>
+        void setParams({ model: next === "all" ? null : next })
+      }
+    />
+  );
+
   return (
-    <RankingTabs value={tab} onChange={(next) => void setParams({ tab: next })}>
-      <div className="flex flex-wrap items-center gap-2">
-        <ModelFilter
-          value={model ?? "all"}
-          onChange={(next) =>
-            void setParams({ model: next === "all" ? null : next })
-          }
-        />
-      </div>
-      {tab === "users" || tab === "services" ? <ModelUsageNote /> : null}
-      <SectionBoundary
-        title="the ranking"
-        resetKeys={[range.dateFrom, range.dateTo, tab, model]}
+    <div className="flex flex-col gap-4">
+      <PageHeader description="Who spends the most, by department, team, service or user." />
+      <PageTabs<RankingTab>
+        label="Ranking by"
+        panelId="ranking-tabpanel"
+        value={tab}
+        onValueChange={(next) => void setParams({ tab: next })}
+        items={TAB_ITEMS}
       >
-        <RankingBody range={range} tab={tab} model={model} />
-      </SectionBoundary>
-    </RankingTabs>
+        <div className="flex min-w-0 flex-col gap-3">
+          {tab === "users" || tab === "services" ? <ModelUsageNote /> : null}
+          <SectionBoundary
+            title="the ranking"
+            resetKeys={[range.dateFrom, range.dateTo, tab, model]}
+            errorControls={modelFilter}
+          >
+            <RankingBody
+              range={range}
+              tab={tab}
+              model={model}
+              modelFilter={modelFilter}
+            />
+          </SectionBoundary>
+        </div>
+      </PageTabs>
+    </div>
   );
 }

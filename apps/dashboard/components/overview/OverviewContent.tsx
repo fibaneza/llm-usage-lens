@@ -12,13 +12,13 @@ import {
   LazyModelBreakdownChart,
   LazyTopDepartmentsChart,
 } from "@/components/charts/LazyCharts";
+import { Panel } from "@/components/display/Panel";
 import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 
 import { KpiRow } from "./KpiRow";
 import { OverviewChartBody } from "./OverviewChartBody";
-import { OverviewSectionCard } from "./OverviewSectionCard";
 import { SyncStatusSection } from "./SyncStatusSection";
 
 // Overview page body (Design System — Overview Page; implementation-phases
@@ -39,21 +39,21 @@ export function OverviewContent() {
   const onRetry = useCallback(() => setAttempt((n) => n + 1), []);
   const boundary = {
     resetKeys: [range.dateFrom, range.dateTo, attempt],
-    onRetry,
   };
+  const panelBoundary = { ...boundary, onReset: onRetry };
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionBoundary title="key metrics" {...boundary}>
+      <SectionBoundary title="key metrics" {...boundary} onRetry={onRetry}>
         <KpiRow range={range} />
       </SectionBoundary>
 
       <div className="grid gap-4 lg:grid-cols-12">
-        <OverviewSectionCard
+        <Panel
           title="Cost trend"
           boundaryTitle="cost trend"
           className="lg:col-span-8"
-          {...boundary}
+          {...panelBoundary}
         >
           <OverviewChartBody
             range={range}
@@ -61,13 +61,13 @@ export function OverviewContent() {
               <LazyCostTrendChart data={overview.dailyTrend} groupBy="model" />
             )}
           />
-        </OverviewSectionCard>
+        </Panel>
 
-        <OverviewSectionCard
+        <Panel
           title="Model distribution"
           boundaryTitle="model distribution"
           className="lg:col-span-4"
-          {...boundary}
+          {...panelBoundary}
         >
           <OverviewChartBody
             range={range}
@@ -80,15 +80,15 @@ export function OverviewContent() {
               />
             )}
           />
-        </OverviewSectionCard>
+        </Panel>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">
-        <OverviewSectionCard
+        <Panel
           title="Top 5 departments"
           boundaryTitle="top departments"
           className="lg:col-span-8"
-          {...boundary}
+          {...panelBoundary}
         >
           <OverviewChartBody
             range={range}
@@ -98,16 +98,16 @@ export function OverviewContent() {
               />
             )}
           />
-        </OverviewSectionCard>
+        </Panel>
 
-        <OverviewSectionCard
+        <Panel
           title="Sync status"
           boundaryTitle="sync status"
           className="lg:col-span-4"
-          {...boundary}
+          {...panelBoundary}
         >
           <SyncStatusSection />
-        </OverviewSectionCard>
+        </Panel>
       </div>
     </div>
   );

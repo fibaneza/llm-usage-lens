@@ -21,6 +21,12 @@ The Phase 5 *UI refresh — fluid workspace* task may run before Phases 4R.2–4
 and the LiteLLM units at the user's direction (decided 2026-11-11;
 implementation-phases — *Phase 5*). The rest of Phase 5 keeps its place.
 
+The Phase 5 *UI refresh — compact workspace* task (Slice A built, Slice B
+not) may likewise run before the rest of Phase 5, on
+`feature/ui-compact-workspace`, at the user's direction (decided 2026-11-15;
+implementation-phases — *Phase 5*); it lands only after the user validates
+the UI in person.
+
 LiteLLM units L1 and L2 may run in parallel with Phases 4R.3–4R.5 at the
 user's direction (decided 2026-11-14): they need only 4R.1–4R.2 and the
 Phase 4.9 Settings shell. L3 and later keep their dependencies (L3 needs

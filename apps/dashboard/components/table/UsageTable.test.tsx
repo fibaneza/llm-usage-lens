@@ -231,9 +231,11 @@ describe("UsageTable pagination", () => {
 
   it("fits exactly 20 rows on a single page and spills row 21 onto a second", () => {
     const { unmount } = renderTable(manyRows(20));
-    expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
+    expect(screen.queryByText(/Page 1 of 1/)).not.toBeInTheDocument();
     expect(bodyRows()).toHaveLength(20);
-    expect(nextPage()).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: /next/i }),
+    ).not.toBeInTheDocument();
     unmount();
 
     renderTable(manyRows(21));
@@ -324,7 +326,8 @@ describe("UsageTable search", () => {
     search("beta");
     advance(300);
 
-    expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
+    expect(screen.queryByText(/Page 1 of 1/)).not.toBeInTheDocument();
+    expect(screen.getByText(/15 rows/)).toBeInTheDocument();
     expect(bodyRows()).toHaveLength(15);
     expect(bodyNames()[0]).toBe("Beta 45");
   });
@@ -580,6 +583,59 @@ describe("UsageTable toolbarActions slot", () => {
   });
 });
 
+// Design System -- Table spec (2026-11-16): row count always shown; numeric
+// columns right-aligned in the mono face with tabular figures, header aligned
+// with its column; the toolbar is one row that page filters join.
+describe("UsageTable compact additions", () => {
+  it("always shows the visible row range and total, and the controls from two pages", () => {
+    renderTable(manyRows(45));
+
+    expect(screen.getByText("1\u201320 of 45 rows")).toBeInTheDocument();
+    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+  });
+
+  it("right-aligns columns marked meta.align right in the mono face, header included", () => {
+    const numeric: ColumnDef<Row>[] = [
+      { accessorKey: "name", header: "Name", enableHiding: false },
+      {
+        accessorKey: "cost",
+        header: "Cost",
+        meta: { align: "right", numeric: true },
+      },
+    ];
+    renderTable(FEW, { columns: numeric });
+
+    for (const el of [
+      header(/cost/i),
+      screen.getAllByRole("cell", { name: "30" })[0] as HTMLElement,
+    ]) {
+      expect(el).toHaveClass("text-right", "font-mono", "tabular-nums");
+    }
+    expect(header(/name/i)).not.toHaveClass("text-right");
+    expect(screen.getByRole("cell", { name: "Alpha" })).not.toHaveClass(
+      "font-mono",
+    );
+  });
+
+  it("renders toolbarStart in the same toolbar row as Columns and the search", () => {
+    const { container } = renderTable(FEW, {
+      searchKey: "name",
+      searchPlaceholder: "Search by name",
+      toolbarStart: <button type="button">Model filter</button>,
+    });
+
+    const toolbar = container.querySelector('[data-slot="table-toolbar"]');
+    expect(toolbar).not.toBeNull();
+    for (const el of [
+      screen.getByRole("button", { name: "Model filter" }),
+      screen.getByRole("button", { name: "Columns" }),
+      screen.getByPlaceholderText("Search by name"),
+    ]) {
+      expect(toolbar?.contains(el)).toBe(true);
+    }
+  });
+});
+
 describe("UsageTable root", () => {
   it('is marked data-slot="usage-table" and contains the toolbar and the table', () => {
     const { container } = renderTable(FEW);
@@ -596,7 +652,8 @@ describe("UsageTable root", () => {
 // Design System -- Responsive Tables: below `md` (768px) each row collapses
 // into a card -- the entity name is the title, Cost is prominent, the other
 // metrics are label-value pairs -- driven by the same data, sorting and
-// pagination; SearchInput, ColumnToggle and Pagination stay available; no
+// pagination; SearchInput and Pagination stay available (ColumnToggle is hidden
+// in card-list mode, Table spec 2026-11-16); no
 // horizontal scroll. The `name` and `cost` columns (the ids used by every
 // dashboard table) are the card title and the prominent figure. The card list
 // is a `list` named by the caption. useIsMobile reads window.innerWidth.
@@ -760,24 +817,51 @@ describe("UsageTable mobile card layout (viewport below 768px)", () => {
     });
 
     expect(cards()).toHaveLength(15);
-    expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
+    expect(screen.queryByText(/Page 1 of 1/)).not.toBeInTheDocument();
+    expect(screen.getByText(/15 rows/)).toBeInTheDocument();
     expect(cardNames()[0]).toBe("Beta 31");
   });
 
-  it("hides a column's label-value pair when it is unchecked in Columns", async () => {
-    const user = userEvent.setup();
+  // Table spec (2026-11-16): the Columns toggle is hidden in card-list mode;
+  // the column set still drives the card fields, so every visible column shows.
+  it("does not offer the Columns toggle in card-list mode and shows every column's pair", () => {
     renderTable(FEW);
-    expect(cardText(cards()[0] as HTMLElement)).toMatch(/Invocations/);
 
-    await user.click(screen.getByRole("button", { name: "Columns" }));
-    await user.click(
-      await screen.findByRole("menuitemcheckbox", { name: "Invocations" }),
-    );
-
+    expect(
+      screen.queryByRole("button", { name: "Columns" }),
+    ).not.toBeInTheDocument();
     const text = cardText(cards()[0] as HTMLElement);
-    expect(text).not.toMatch(/Invocations/);
-    expect(text).not.toContain("111");
+    expect(text).toMatch(/Invocations/);
     expect(text.startsWith("Alpha")).toBe(true);
+  });
+
+  // Table spec (2026-11-16): the card title is the non-hideable column, even
+  // when its id is not `name` or it renders a link (Teams cards).
+  it("titles each card with the non-hideable column even when its id is not name", () => {
+    const teamColumns: ColumnDef<Row>[] = [
+      {
+        id: "team",
+        header: "Team",
+        enableHiding: false,
+        cell: ({ row }) => (
+          <a href={`/t/${row.original.id}`}>{row.original.name}</a>
+        ),
+      },
+      { accessorKey: "cost", header: "Cost" },
+      { accessorKey: "invocations", header: "Invocations" },
+    ];
+    renderTable(FEW, { columns: teamColumns });
+
+    const first = cards()[0] as HTMLElement;
+    expect(cardText(first).startsWith("Alpha")).toBe(true);
+    expect(
+      within(first).getByRole("link", { name: "Alpha" }),
+    ).toBeInTheDocument();
+    const labels = Array.from(first.querySelectorAll("dt")).map((dt) =>
+      dt.textContent?.trim(),
+    );
+    expect(labels).not.toContain("Team");
+    expect(labels).toContain("Invocations");
   });
 
   it("renders the emptyState instead of cards when there are no rows", () => {

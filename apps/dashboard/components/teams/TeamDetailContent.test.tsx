@@ -201,6 +201,86 @@ describe("TeamDetailContent -- header", () => {
   });
 });
 
+// Design System -- Team Detail Page and Layout, Page frame (2026-11-16):
+// PageHeader with a breadcrumb "Teams / <name>", the team name as h2, and one
+// meta line holding the department, the account IDs and the scope note.
+describe("TeamDetailContent -- page header", () => {
+  it("leads with a breadcrumb 'Teams / <name>' whose first crumb links to the list with the date range carried (TMD-02)", async () => {
+    stubApi({ teamDetail: detailFor() });
+    renderWithProviders(<TeamDetailContent id="team-a" />, URL_PARAMS);
+    await loaded();
+
+    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const link = within(crumbs).getByRole("link", { name: "Teams" });
+    const href = new URL(link.getAttribute("href") ?? "", "http://localhost");
+    expect(href.pathname).toBe("/dashboard/teams");
+    expect(href.searchParams.get("dateFrom")).toBe(RANGE.dateFrom);
+    expect(href.searchParams.get("dateTo")).toBe(RANGE.dateTo);
+    expect(within(crumbs).getByText("Platform")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("names the team with an h2 entity title; the page h1 stays in the top bar (TMD-02)", async () => {
+    stubApi({ teamDetail: detailFor() });
+    renderWithProviders(<TeamDetailContent id="team-a" />, URL_PARAMS);
+    await loaded();
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Platform" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+  });
+
+  it("keeps the department, the account IDs and the scope note on one meta line beside the title (Team Detail Page)", async () => {
+    stubApi({ teamDetail: detailFor() });
+    renderWithProviders(<TeamDetailContent id="team-a" />, URL_PARAMS);
+    await loaded();
+
+    const titleRow = screen.getByRole("heading", { level: 2, name: "Platform" })
+      .parentElement as HTMLElement;
+    expect(within(titleRow).getByText("Engineering")).toBeInTheDocument();
+    expect(within(titleRow).getByText("123-456-789-012")).toBeInTheDocument();
+    expect(within(titleRow).getByText("111-122-223-333")).toBeInTheDocument();
+    expect(
+      within(titleRow).getByText(/bedrock service charges only/i),
+    ).toBeInTheDocument();
+  });
+
+  // Design System -- Team Detail Page; 4R.5 "no dead links": a team-scoped
+  // caller gets 404 on the department route, so the name is never a link.
+  it("renders the department name as plain text, not a link", async () => {
+    stubApi({ teamDetail: detailFor() });
+    renderWithProviders(<TeamDetailContent id="team-a" />, URL_PARAMS);
+    await loaded();
+
+    expect(screen.getByText("Engineering")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Engineering" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+// Design System -- Layout, Panels and density: every section is a Panel -- a
+// card-surface region named by its heading (TMD-04..06).
+describe("TeamDetailContent -- sections are Panels", () => {
+  it.each(["Services breakdown", "Users breakdown", "Model usage"])(
+    "renders %s as a Panel region with a card-title heading",
+    async (name) => {
+      stubApi({ teamDetail: detailFor() });
+      renderWithProviders(<TeamDetailContent id="team-a" />, URL_PARAMS);
+      await loaded();
+
+      const region = section(name);
+      expect(region).toHaveAttribute("data-slot", "card");
+      expect(
+        within(region).getByRole("heading", { name, level: 2 }),
+      ).toHaveAttribute("data-slot", "card-title");
+    },
+  );
+});
+
 describe("TeamDetailContent -- services table", () => {
   it("lists one row per service, sorted by cost descending", async () => {
     stubApi({ teamDetail: detailFor() });
@@ -269,21 +349,28 @@ describe("TeamDetailContent -- services table", () => {
 });
 
 describe("TeamDetailContent -- users table", () => {
-  it("lists one row per user with a UserAvatar next to the name", async () => {
+  it("lists one row per user with a neutral UserAvatar next to the name (Avatar Colors, amended 2026-11-16)", async () => {
     stubApi({ teamDetail: detailFor() });
     renderWithProviders(<TeamDetailContent id="team-a" />, URL_PARAMS);
     await loaded();
 
     const table = within(section("Users breakdown")).getByRole("table");
     const rows = rowTexts(table);
+    const userRows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(2);
     expect(rows[0]).toContain("alice.smith");
     expect(rows[0]).toContain("$120.00");
     expect(rows[1]).toContain("bob");
-    const avatars = table.querySelectorAll('[style*="--color-avatar-"]');
-    expect(avatars).toHaveLength(2);
-    expect(avatars[0]).toHaveTextContent("AS");
-    expect(avatars[1]).toHaveTextContent("B");
+    // Neutral 20px avatar, no per-user colour (Design System -- Avatar Colors,
+    // amended 2026-11-16): decorative initials beside the id.
+    const alice = within(userRows[0] as HTMLElement).getByText("AS");
+    const bob = within(userRows[1] as HTMLElement).getByText("B");
+    for (const avatar of [alice, bob]) {
+      expect(avatar).toHaveAttribute("aria-hidden", "true");
+      expect(avatar.getAttribute("style") ?? "").not.toContain(
+        "--color-avatar-",
+      );
+    }
   });
 
   it("marks every user's cost as estimated (Rule 20.3)", async () => {

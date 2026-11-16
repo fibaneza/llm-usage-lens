@@ -344,6 +344,165 @@ describe("RankingContent — model filter", () => {
       expect(request).not.toHaveProperty("model");
     }
   });
+
+  // WCAG 2.4.3 (focus order); Design System -- Ranking Page (one-row toolbar).
+  // Review round 1 B1: choosing a model must not unmount the focused trigger
+  // while the next request is pending.
+  it("keeps keyboard focus on the Model trigger while the next request is pending", async () => {
+    const current = rankingFor();
+    stubApi({
+      ranking: (url) =>
+        url.searchParams.has("model") ? NEVER() : current(url),
+    });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    await loadedTable();
+    const user = userEvent.setup();
+
+    screen.getByRole("combobox", { name: "Model" }).focus();
+    await user.keyboard("{Enter}");
+    await screen.findByRole("option", { name: "All models" });
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "Model" }),
+      ).not.toHaveTextContent("All models"),
+    );
+    expect(screen.getByRole("combobox", { name: "Model" })).toHaveFocus();
+  });
+});
+
+// Round 2 B1b: a selection change must not leave the previous selection's rows
+// on screen as if they were the new one. Source: Design System -- States /
+// Loading (a pending section shows a skeleton or a busy region, never stale
+// data under new labels); WCAG 2.4.3 (focus order); Rule 60.24 (deferred
+// promises, no timers).
+describe("RankingContent — pending state after a selection change (round 2 B1b)", () => {
+  type Pending = { url: URL; resolve: (rows: RankingRow[]) => void };
+
+  // Serves the default data until `held` matches, then parks that request
+  // until the test resolves it.
+  function holdWhen(held: (url: URL) => boolean) {
+    const current = rankingFor();
+    const pending: Pending[] = [];
+    stubApi({
+      ranking: (url) => {
+        if (!held(url)) return current(url);
+        const tab = (url.searchParams.get("tab") ??
+          "departments") as RankingTab;
+        return new Promise<Response>((resolve) => {
+          pending.push({
+            url,
+            resolve: (rows) => resolve(apiResponse(rankingBody(tab, rows))),
+          });
+        });
+      },
+    });
+    return pending;
+  }
+
+  async function chooseFirstModel(user: ReturnType<typeof userEvent.setup>) {
+    screen.getByRole("combobox", { name: "Model" }).focus();
+    await user.keyboard("{Enter}");
+    await screen.findByRole("option", { name: "All models" });
+    await user.keyboard("{ArrowDown}{Enter}");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "Model" }),
+      ).not.toHaveTextContent("All models"),
+    );
+  }
+
+  // Old rows may stay mounted only inside a busy region; otherwise they go.
+  function expectPendingPresentation(container: HTMLElement) {
+    const table = screen.queryByRole("table");
+    if (table) {
+      expect(table.closest('[aria-busy="true"]')).not.toBeNull();
+    } else {
+      expect(screen.queryByText("Engineering")).not.toBeInTheDocument();
+      expect(container.querySelectorAll(SKELETON).length).toBeGreaterThan(0);
+    }
+  }
+
+  function expectExportUnavailable() {
+    const exportButton = screen.queryByRole("button", { name: /export csv/i });
+    if (exportButton) expect(exportButton).toBeDisabled();
+  }
+
+  it("marks the old rows busy (or swaps in skeleton rows) and disables Export CSV while a model change is pending", async () => {
+    const pending = holdWhen((url) => url.searchParams.has("model"));
+    const view = renderWithProviders(<RankingContent />, URL_PARAMS);
+    await loadedTable();
+
+    await chooseFirstModel(userEvent.setup());
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+
+    expectPendingPresentation(view.container);
+    expectExportUnavailable();
+    expect(screen.getByRole("combobox", { name: "Model" })).toHaveFocus();
+  });
+
+  it("marks the old rows busy (or swaps in skeleton rows) and disables Export CSV while a tab change is pending", async () => {
+    const pending = holdWhen((url) => url.searchParams.get("tab") === "teams");
+    const view = renderWithProviders(<RankingContent />, URL_PARAMS);
+    await loadedTable();
+
+    await userEvent.setup().click(screen.getByRole("tab", { name: "Teams" }));
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+
+    expectPendingPresentation(view.container);
+    expectExportUnavailable();
+  });
+
+  it("keeps focus on the Model trigger when the next result is empty (rows to empty transition)", async () => {
+    const pending = holdWhen((url) => url.searchParams.has("model"));
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    await loadedTable();
+
+    await chooseFirstModel(userEvent.setup());
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+    await act(async () => {
+      for (const request of pending) request.resolve([]);
+    });
+
+    expect(
+      await screen.findByText("No usage in this period"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Model" })).toHaveFocus();
+  });
+
+  it("shows no trend from the old selection's previous period while the new previous period is pending", async () => {
+    const pending = holdWhen((url) => url.searchParams.has("model"));
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    const table = await loadedTable();
+    await waitFor(() =>
+      expect(
+        within(rowFor(table, "Engineering")).getByRole("img", {
+          name: "Up 20.0% vs previous period",
+        }),
+      ).toBeInTheDocument(),
+    );
+
+    await chooseFirstModel(userEvent.setup());
+    await waitFor(() => expect(pending.length).toBeGreaterThan(1));
+
+    // Only the new current range answers; its previous range stays pending.
+    await act(async () => {
+      for (const request of pending) {
+        if (request.url.searchParams.get("dateFrom") === RANGE.dateFrom) {
+          request.resolve(DEPARTMENTS);
+        }
+      }
+    });
+
+    const loaded = await loadedTable();
+    expect(
+      within(loaded).queryByRole("img", { name: /vs previous period/ }),
+    ).not.toBeInTheDocument();
+    expect(rowFor(loaded, "Engineering").lastElementChild).toHaveTextContent(
+      "—",
+    );
+  });
 });
 
 describe("RankingContent — table", () => {
@@ -811,13 +970,17 @@ describe("RankingContent — mobile card layout (viewport below 768px)", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("keeps search, Columns, Export CSV and a Sort control available", async () => {
+  // Design System -- Responsive Tables (amended 2026-11-16): the Columns toggle
+  // is hidden in card-list mode; search, Export CSV and Sort stay.
+  it("keeps search, Export CSV and a Sort control available, without the Columns toggle", async () => {
     stubApi({ ranking: rankingFor() });
     renderWithProviders(<RankingContent />, URL_PARAMS);
     await screen.findByRole("list", { name: "Cost ranking" });
 
     expect(screen.getByLabelText(/search/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Columns" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Columns" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Export CSV" }),
     ).toBeInTheDocument();
@@ -965,6 +1128,22 @@ describe("RankingContent — 'model usage only' note", () => {
     },
   );
 
+  // Design System -- Layout, Page frame / design plan G2: ModelUsageNote is the
+  // shared one-line Alert; it keeps role=note (RK-04), so it never counts as a
+  // role=alert error.
+  it("renders the note as the shared Alert while keeping role=note", async () => {
+    stubApi({ ranking: rankingFor({ users: POPULATED.users }) });
+    renderWithProviders(<RankingContent />, {
+      searchParams: { ...RANGE, tab: "users" },
+    });
+    await loadedTable();
+
+    const note = await screen.findByRole("note");
+    expect(note).toHaveAttribute("data-slot", "alert");
+    expect(note).toHaveTextContent(NOTE);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it.each(ROLLUP_TABS)("shows no such note on the %s tab", async (tab) => {
     stubApi({
       ranking: rankingFor(tab === "teams" ? { teams: POPULATED.teams } : {}),
@@ -1070,6 +1249,39 @@ describe("RankingContent — loading, empty and error states", () => {
     const table = await loadedTable();
     expect(orderedNames(table)).toEqual(NAMES);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  // Behaviour preservation (ui-inventory RK-*; goal rule "every control and
+  // filter that exists today still exists and does the same thing"): on main
+  // the Model filter sat outside the section boundary and survived a failed
+  // ranking request.
+  it("keeps the Model filter present and usable when the ranking request fails (RK model filter preserved)", async () => {
+    const stub = stubApi({ ranking: () => apiError(500) });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/couldn.t load/i);
+    expect(
+      within(alert).getByRole("button", { name: /retry/i }),
+    ).toBeInTheDocument();
+
+    const filter = screen.getByRole("combobox", { name: "Model" });
+    expect(filter).toBeEnabled();
+
+    const user = userEvent.setup();
+    await user.click(filter);
+    await user.click(
+      await screen.findByRole("option", { name: "Claude Opus" }),
+    );
+
+    expect(screen.getByRole("combobox", { name: "Model" })).toHaveTextContent(
+      "Claude Opus",
+    );
+    await waitFor(() => {
+      expect(requestParams(stub.rankingRequests())).toContainEqual(
+        expect.objectContaining({ ...RANGE, model: "claude-opus" }),
+      );
+    });
   });
 });
 
@@ -1183,5 +1395,123 @@ describe("RankingContent -- figure format by layout", () => {
       expect(within(card).getByText("Estimated")).toBeVisible();
       expect(within(card).queryByText("Est.")).not.toBeInTheDocument();
     });
+  });
+});
+
+// Design System -- Layout, Page frame and Ranking Page: the page opens with a
+// one-line description, the tabs strip is the shared PageTabs, and one toolbar
+// row holds search, the Model filter, then Columns and Export CSV.
+describe("RankingContent — compact workspace page frame", () => {
+  it("opens with a one-line description above the tabs and no entity title (list page, plan 2.2)", async () => {
+    stubApi({ ranking: rankingFor() });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    await loadedTable();
+
+    const description = screen.getByText(/department, team, service or user/i);
+    const tablist = screen.getByRole("tablist", { name: "Ranking by" });
+    expect(
+      description.compareDocumentPosition(tablist) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+  });
+
+  it("uses the shared PageTabs strip and keeps the ranking-tabpanel panel labelled by the active tab (RK-02)", async () => {
+    stubApi({ ranking: rankingFor() });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    await loadedTable();
+
+    expect(screen.getByRole("tablist", { name: "Ranking by" })).toHaveAttribute(
+      "data-slot",
+      "tabs-list",
+    );
+    const panel = screen.getByRole("tabpanel");
+    expect(panel).toHaveAttribute("id", "ranking-tabpanel");
+    expect(panel).toHaveAccessibleName("Departments");
+  });
+
+  it("moves between tabs with Arrow keys (wrapping), Home and End (RK-02)", async () => {
+    stubApi({ ranking: rankingFor() });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    await loadedTable();
+    const user = userEvent.setup();
+    const selected = (name: string) =>
+      waitFor(() =>
+        expect(screen.getByRole("tab", { name })).toHaveAttribute(
+          "aria-selected",
+          "true",
+        ),
+      );
+
+    await user.click(screen.getByRole("tab", { name: "Departments" }));
+    await user.keyboard("{ArrowLeft}");
+    await selected("Users");
+    await user.keyboard("{Home}");
+    await selected("Departments");
+    await user.keyboard("{End}");
+    await selected("Users");
+  });
+
+  it("holds search, the Model filter, Columns and Export CSV in one toolbar row, in that order (plan 2.4)", async () => {
+    stubApi({ ranking: rankingFor() });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    const table = await loadedTable();
+
+    const toolbar = table
+      .closest('[data-slot="usage-table"]')
+      ?.querySelector<HTMLElement>('[data-slot="table-toolbar"]');
+    if (!toolbar) throw new Error("no table toolbar");
+    const search = within(toolbar).getByLabelText(/search/i);
+    const model = within(toolbar).getByRole("combobox", { name: "Model" });
+    const columns = within(toolbar).getByRole("button", { name: "Columns" });
+    const exportCsv = within(toolbar).getByRole("button", {
+      name: "Export CSV",
+    });
+    const follows = (before: Node, after: Node) =>
+      (before.compareDocumentPosition(after) &
+        Node.DOCUMENT_POSITION_FOLLOWING) !==
+      0;
+    expect(follows(search, model)).toBe(true);
+    expect(follows(model, columns)).toBe(true);
+    expect(follows(columns, exportCsv)).toBe(true);
+  });
+
+  // RK-03 / RK-09: the filter is the way out of an empty or slow model view.
+  it("keeps the Model filter available while the ranking loads", () => {
+    stubApi({ ranking: NEVER });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+
+    expect(screen.getByRole("combobox", { name: "Model" })).toBeInTheDocument();
+  });
+
+  it("keeps the Model filter available when the period has no rows", async () => {
+    stubApi({
+      ranking: rankingFor({ departments: { current: [], previous: [] } }),
+    });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    await screen.findByText("No usage in this period");
+
+    expect(screen.getByRole("combobox", { name: "Model" })).toBeInTheDocument();
+  });
+
+  // Design System -- Table spec: numeric columns are right-aligned in the mono
+  // face with tabular figures, header included; Name stays left.
+  it("right-aligns Cost, token and invocation columns in the mono face, header and cells", async () => {
+    stubApi({ ranking: rankingFor() });
+    renderWithProviders(<RankingContent />, URL_PARAMS);
+    const table = await loadedTable();
+    const cells = within(rowFor(table, "Engineering")).getAllByRole("cell");
+
+    for (const [name, index] of [
+      [/cost/i, 2],
+      [/input tokens/i, 3],
+      [/output tokens/i, 4],
+      [/invocations/i, 5],
+    ] as const) {
+      expect(header(name)).toHaveClass("text-right", "font-mono");
+      expect(cells[index]).toHaveClass("text-right", "font-mono");
+    }
+    expect(header(/^name/i)).not.toHaveClass("text-right");
+    expect(cells[1]).not.toHaveClass("text-right");
   });
 });

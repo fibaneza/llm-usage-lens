@@ -126,6 +126,18 @@ test.describe("department detail page", () => {
 
     await openDetail(page);
 
+    // Page frame (Design System -- Layout, 2026-11-16): breadcrumb back to the
+    // list with the date range carried.
+    await expect(
+      page
+        .getByRole("navigation", { name: "Breadcrumb" })
+        .getByRole("link", { name: "Departments" }),
+    ).toHaveAttribute(
+      "href",
+      new RegExp(
+        `^/dashboard/departments\\?.*dateFrom=${RANGE.dateFrom}.*dateTo=${RANGE.dateTo}`,
+      ),
+    );
     await expect(page.getByRole("group", { name: "Total cost" })).toContainText(
       "$600.00",
     );

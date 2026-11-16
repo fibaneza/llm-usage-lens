@@ -9,6 +9,7 @@ type ExportButtonProps<T> = {
   filename: string;
   columns: CsvColumn<T>[];
   rows: T[];
+  disabled?: boolean;
 };
 
 // Design System -- Component Inventory, `ExportButton`: export table data to
@@ -17,6 +18,7 @@ export function ExportButton<T>({
   filename,
   columns,
   rows,
+  disabled = false,
 }: ExportButtonProps<T>) {
   function download() {
     const blob = new Blob([toCsv(columns, rows)], {
@@ -33,7 +35,13 @@ export function ExportButton<T>({
   }
 
   return (
-    <Button type="button" variant="outline" size="sm" onClick={download}>
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={download}
+      disabled={disabled}
+    >
       <Download aria-hidden />
       Export CSV
     </Button>

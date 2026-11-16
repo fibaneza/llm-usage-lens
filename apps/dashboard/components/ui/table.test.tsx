@@ -80,6 +80,38 @@ describe("Table", () => {
     expect(screen.getByText("Alpha")).toHaveClass("custom-cell");
   });
 
+  // Design System -- Layout, Panels and density + Table spec (2026-11-16):
+  // bordered 8px container, no shadow, 32px sticky 12px muted header row,
+  // 13px cells with 12px horizontal padding.
+  it("is a bordered 8px container with no shadow", () => {
+    renderTable();
+
+    const container = screen.getByRole("table").parentElement;
+    expect(container).toHaveClass("rounded-card", "border");
+    expect(container?.className).not.toMatch(/(^|\s)shadow(-|\s|$)/);
+  });
+
+  it("renders the header row 32px tall, 12px medium muted and sticky", () => {
+    renderTable();
+
+    const head = screen.getByRole("columnheader", { name: "Cost" });
+    expect(head).toHaveClass("text-xs", "font-medium", "text-muted-foreground");
+    expect(head.className).toMatch(
+      /(^|\s)h-(row-head|\(--spacing-row-head\))(\s|$)/,
+    );
+    expect(head).toHaveClass("sticky");
+  });
+
+  it("renders body cells at 13px with 12px horizontal padding", () => {
+    renderTable();
+
+    expect(screen.getByRole("cell", { name: "12.5" })).toHaveClass(
+      "text-cell",
+      "px-3",
+      "py-2",
+    );
+  });
+
   it("scrolls horizontally inside its own container, not the page", () => {
     renderTable();
 

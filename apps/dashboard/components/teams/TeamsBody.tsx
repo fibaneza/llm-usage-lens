@@ -4,6 +4,7 @@ import { Users } from "lucide-react";
 import { useMemo } from "react";
 
 import { EmptyState } from "@/components/display/EmptyState";
+import { ExportButton } from "@/components/table/ExportButton";
 import { UsageTable } from "@/components/table/UsageTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDepartments } from "@/hooks/useDepartments";
@@ -12,7 +13,7 @@ import type { DateRange } from "@/lib/date-range";
 import { sectionData } from "@/lib/query/section-data";
 
 import { DepartmentFilter } from "./DepartmentFilter";
-import { teamsColumns } from "./teams-columns";
+import { TEAMS_CSV_COLUMNS, teamsColumns } from "./teams-columns";
 
 type TeamsBodyProps = {
   range: DateRange;
@@ -48,22 +49,30 @@ export function TeamsBody({
     return <Skeleton className="h-96 w-full" />;
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <DepartmentFilter
-          value={department}
-          options={options}
-          onChange={onDepartmentChange}
-          disabled={departments.isError}
-        />
-        {departments.isError ? (
-          <p role="status" className="text-muted-foreground text-sm">
-            Departments unavailable
-          </p>
-        ) : null}
-      </div>
-      {teams.teams.length === 0 ? (
+  // The filter joins the table toolbar's search row and stays mounted above
+  // the no-results state so it is the way out of it.
+  const filter = (
+    <>
+      <DepartmentFilter
+        value={department}
+        options={options}
+        onChange={onDepartmentChange}
+        disabled={departments.isError}
+      />
+      {departments.isError ? (
+        <p role="status" className="text-muted-foreground text-sm">
+          Departments unavailable
+        </p>
+      ) : null}
+    </>
+  );
+
+  if (teams.teams.length === 0) {
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="flex min-h-8 flex-wrap items-center gap-2">
+          {filter}
+        </div>
         <EmptyState
           icon={Users}
           title={department ? "No results" : "No teams in this period"}
@@ -73,15 +82,34 @@ export function TeamsBody({
               : "Try a wider date range."
           }
         />
-      ) : (
-        <UsageTable
-          data={teams.teams}
-          columns={columns}
-          getRowId={(t) => t.teamId}
-          initialSort={{ id: "cost", desc: true }}
-          caption="Teams"
+      </div>
+    );
+  }
+
+  return (
+    <UsageTable
+      data={teams.teams}
+      columns={columns}
+      getRowId={(t) => t.teamId}
+      initialSort={{ id: "cost", desc: true }}
+      searchKey="teamName"
+      searchPlaceholder="Search by team"
+      caption="Teams"
+      toolbarStart={filter}
+      emptyState={
+        <p className="text-muted-foreground py-6 text-center text-sm">
+          No teams match your search.
+        </p>
+      }
+      toolbarActions={({ rows, visibleColumnIds }) => (
+        <ExportButton
+          filename={`teams-${range.dateFrom}-${range.dateTo}.csv`}
+          columns={visibleColumnIds.flatMap(
+            (id) => TEAMS_CSV_COLUMNS[id] ?? [],
+          )}
+          rows={rows}
         />
       )}
-    </div>
+    />
   );
 }

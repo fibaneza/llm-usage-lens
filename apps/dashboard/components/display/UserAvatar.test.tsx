@@ -6,17 +6,14 @@ import { describe, expect, it } from "vitest";
 
 import { UserAvatar } from "./UserAvatar";
 
-// Source: Design System -- Component Inventory (`UserAvatar`: initials avatar
-// with consistent color per user); implementation-phases Phase 4.6 ("Tests:
-// UserAvatar color consistency"); Rule 40.2 / 60.30 (semantic tokens, no raw
-// hex). Contract: `<UserAvatar userId="alice.smith@corp.com" />` renders a
+// Source: Design System -- Component Inventory (`UserAvatar`, amended
+// 2026-11-16: initials avatar, neutral fill, 20px in tables -- per-user colour
+// carried no information); implementation-phases Phase 4.6; Rule 40.2 / 60.30
+// (semantic tokens, no raw hex). Contract: `<UserAvatar userId=... />` renders a
 // decorative (aria-hidden) element -- the adjacent name carries the identity --
-// whose text is the initials and whose inline `background-color` is
-// `var(--color-avatar-N)`, N in 1..8, a family dedicated to avatars (never a
-// model, team or non-model token). The token is a pure function of `userId`.
-// Ambiguity resolved: the design system defines no user palette, so this test
-// pins a new `--color-avatar-1..8` family in globals.css (spec note needed).
-const TOKEN = /^var\(--color-avatar-[1-8]\)$/;
+// whose text is the initials, on `bg-muted` with foreground text, 20px. The
+// `--color-avatar-1..8` family stays defined in globals.css (see below) but is
+// no longer applied to the element.
 
 function renderAvatar(userId: string) {
   const { container, unmount } = render(<UserAvatar userId={userId} />);
@@ -45,22 +42,19 @@ describe("UserAvatar", () => {
     expect(renderAvatar("alice").hidden).toBe("true");
   });
 
-  it("colors by a dedicated avatar token, never raw hex", () => {
-    expect(renderAvatar("alice").color).toMatch(TOKEN);
-    expect(renderAvatar("zed").color).toMatch(TOKEN);
+  it("renders a neutral 20px avatar: muted fill, foreground initials", () => {
+    const { container } = render(<UserAvatar userId="alice" />);
+
+    const el = container.firstElementChild as HTMLElement;
+    expect(el).toHaveClass("size-5", "bg-muted", "text-foreground");
+    expect(el).not.toHaveClass("text-white");
+    expect(el).not.toHaveClass("size-7");
   });
 
-  it("gives the same user the same color on every render", () => {
-    const colors = Array.from({ length: 5 }, () => renderAvatar("alice").color);
-
-    expect(new Set(colors).size).toBe(1);
-  });
-
-  it("can give different users different colors", () => {
-    const ids = ["alice", "bob", "carol", "dave", "erin", "frank", "grace"];
-    const colors = new Set(ids.map((id) => renderAvatar(id).color));
-
-    expect(colors.size).toBeGreaterThan(1);
+  it("sets no per-user inline colour, so every user gets the same fill", () => {
+    for (const id of ["alice", "zed", "carol-ann-lee"]) {
+      expect(renderAvatar(id).color).toBe("");
+    }
   });
 });
 

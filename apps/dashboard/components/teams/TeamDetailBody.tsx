@@ -6,9 +6,11 @@ import { formatUsd } from "@/components/charts/chart-data";
 import { AccountIdBadge } from "@/components/display/AccountIdBadge";
 import { EmptyState } from "@/components/display/EmptyState";
 import { MetricCard } from "@/components/display/MetricCard";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTeam } from "@/hooks/useTeam";
 import type { DateRange } from "@/lib/date-range";
+import { withDateRange } from "@/lib/date-range-search-params";
 import { ApiRequestError } from "@/lib/query/fetch-api";
 import { sectionData } from "@/lib/query/section-data";
 
@@ -23,12 +25,14 @@ function isNotFound(error: unknown): boolean {
 type TeamDetailBodyProps = {
   id: string;
   range: DateRange;
+  // The URL's own date values, carried into the links (issue #75).
+  urlRange: Record<string, string | null>;
 };
 
 // Loads the team for the range: skeletons while pending, a not-found message
 // for an unknown id, the section boundary's alert on any other failure
 // (Rule 40.4, 60.12).
-export function TeamDetailBody({ id, range }: TeamDetailBodyProps) {
+export function TeamDetailBody({ id, range, urlRange }: TeamDetailBodyProps) {
   const query = useTeam(id, { dateFrom: range.dateFrom, dateTo: range.dateTo });
   const notFound = isNotFound(query.error) && !query.isFetching;
   const team = notFound ? undefined : sectionData(query);
@@ -56,28 +60,36 @@ export function TeamDetailBody({ id, range }: TeamDetailBodyProps) {
     );
   }
 
+  const withRange = (path: string) =>
+    withDateRange(path, { get: (key) => urlRange[key] ?? null });
   const tokens = team.inputTokens + team.outputTokens;
   const hasUsage = team.cost !== 0 || tokens !== 0 || team.invocations !== 0;
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-2">
-        <h2 className="text-2xl font-semibold">{team.teamName}</h2>
-        <p className="text-muted-foreground text-sm">{team.departmentName}</p>
-        {team.accounts.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        breadcrumb={[
+          { label: "Teams", href: withRange("/dashboard/teams") },
+          { label: team.teamName },
+        ]}
+        title={team.teamName}
+        meta={
+          <>
+            <span className="text-cell text-muted-foreground">
+              {team.departmentName}
+            </span>
             {team.accounts.map((account) => (
               <AccountIdBadge
                 key={account.accountId}
                 accountId={account.accountId}
               />
             ))}
-          </div>
-        ) : null}
-        <p className="text-muted-foreground text-xs">
-          Bedrock service charges only
-        </p>
-      </header>
+            <span className="text-cell text-muted-foreground">
+              Bedrock service charges only
+            </span>
+          </>
+        }
+      />
       {hasUsage ? (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

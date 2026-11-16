@@ -245,6 +245,37 @@ describe("TeamsContent -- department filter", () => {
   });
 });
 
+// Design System -- Layout, Page frame ("Toolbars are one row: search, filters,
+// then view controls (Columns) and Export on the right"); design plan 2.4 and
+// D-19 (search + Columns + Export on every list page); SH-70, SH-73.
+describe("TeamsContent -- toolbar", () => {
+  it("puts the Department filter in the same toolbar row as search, Columns and Export CSV", async () => {
+    stubApi({ teams: teamsFor(), departments });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    await screen.findByRole("table");
+
+    const toolbar = screen
+      .getByRole("combobox", { name: "Department" })
+      .closest('[data-slot="table-toolbar"]') as HTMLElement | null;
+    expect(toolbar).not.toBeNull();
+    const row = within(toolbar as HTMLElement);
+    expect(row.getByRole("searchbox")).toBeInTheDocument();
+    expect(row.getByRole("button", { name: "Columns" })).toBeInTheDocument();
+    expect(row.getByRole("button", { name: "Export CSV" })).toBeInTheDocument();
+  });
+
+  it("filters the rows by team name from the search box (D-19)", async () => {
+    stubApi({ teams: teamsFor(), departments });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    const table = await screen.findByRole("table");
+
+    await userEvent.setup().type(screen.getByRole("searchbox"), "Ledger");
+
+    await waitFor(() => expect(dataRows(table)).toHaveLength(1));
+    expect(dataRows(table)[0]).toHaveTextContent("Ledger");
+  });
+});
+
 describe("TeamsContent -- states", () => {
   it("shows a no-teams EmptyState when the API returns none", async () => {
     stubApi({ teams: () => apiResponse(teamsBody([])), departments });

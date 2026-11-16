@@ -4,6 +4,7 @@ import { useQueryStates } from "nuqs";
 import { useMemo } from "react";
 
 import { SectionBoundary } from "@/components/display/SectionBoundary";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 
@@ -19,11 +20,14 @@ export function UsersContent() {
   );
 
   return (
-    <SectionBoundary
-      title="the users"
-      resetKeys={[range.dateFrom, range.dateTo]}
-    >
-      <UsersBody range={range} urlRange={{ dateFrom, dateTo }} />
-    </SectionBoundary>
+    <div className="flex flex-col gap-4">
+      <PageHeader description="Cost and usage for each person who calls Bedrock." />
+      <SectionBoundary
+        title="the users"
+        resetKeys={[range.dateFrom, range.dateTo]}
+      >
+        <UsersBody range={range} urlRange={{ dateFrom, dateTo }} />
+      </SectionBoundary>
+    </div>
   );
 }

@@ -35,6 +35,17 @@ async function settle() {
   }
 }
 
+// Design System -- Control Patterns, Key-value lists: the synced state is a
+// <dl>; the value paired with a term is its <dd>.
+function definition(term: string): HTMLElement {
+  const dt = screen.getByText(term, { selector: "dt" });
+  const dd = dt.nextElementSibling;
+  if (!(dd instanceof HTMLElement) || dd.tagName !== "DD") {
+    throw new Error(`no <dd> after the "${term}" term`);
+  }
+  return dd;
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
@@ -73,7 +84,22 @@ describe("SyncStatusSection", () => {
 
     expect(screen.getByText(/success/i)).toBeInTheDocument();
     expect(screen.getByText(/10:00.*UTC|UTC.*10:00/)).toBeInTheDocument();
-    expect(screen.getByText("Next sync in 42 min")).toBeInTheDocument();
+    expect(definition("Next sync")).toHaveTextContent("in 42 min");
+  });
+
+  // Design System -- Control Patterns (Key-value lists), OV-11: status, last run
+  // (a <time> in the mono face) and next sync read as a term/value list.
+  it("lists Status, Last run and Next sync as a key-value list", async () => {
+    stubApi({ syncStatus: () => apiResponse({ data: syncedFixture() }) });
+    renderSection();
+    await settle();
+
+    expect(definition("Status")).toHaveTextContent("Success");
+    const lastRun = definition("Last run").querySelector("time");
+    expect(lastRun).toHaveAttribute("datetime", "2026-01-20T10:00:00.000Z");
+    expect(lastRun).toHaveTextContent(/10:00.*UTC|UTC.*10:00/);
+    expect(lastRun).toHaveClass("font-mono");
+    expect(definition("Next sync")).toHaveTextContent("in 42 min");
   });
 
   it.each([
@@ -97,13 +123,13 @@ describe("SyncStatusSection", () => {
     stubApi({ syncStatus: () => apiResponse({ data: syncedFixture() }) });
     renderSection();
     await settle();
-    expect(screen.getByText("Next sync in 42 min")).toBeInTheDocument();
+    expect(definition("Next sync")).toHaveTextContent("in 42 min");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2 * 60_000);
     });
 
-    expect(screen.getByText("Next sync in 40 min")).toBeInTheDocument();
+    expect(definition("Next sync")).toHaveTextContent("in 40 min");
   });
 
   describe("last run time is UTC regardless of the host timezone (Rule 20.1)", () => {

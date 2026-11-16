@@ -8,6 +8,7 @@ import { DeltaBadge } from "@/components/display/DeltaBadge";
 import { EmptyState } from "@/components/display/EmptyState";
 import { MetricCard } from "@/components/display/MetricCard";
 import { PeriodComparison } from "@/components/display/PeriodComparison";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDepartment } from "@/hooks/useDepartment";
 import { departmentHeaderStats } from "@/lib/aggregate/department-header";
@@ -16,6 +17,7 @@ import {
   inclusiveSpanDays,
   previousRange,
 } from "@/lib/date-range";
+import { withDateRange } from "@/lib/date-range-search-params";
 import { ApiRequestError } from "@/lib/query/fetch-api";
 import { sectionData } from "@/lib/query/section-data";
 
@@ -34,6 +36,8 @@ function isNotFound(error: unknown): boolean {
 type DepartmentDetailBodyProps = {
   id: string;
   range: DateRange;
+  // The URL's own date values, carried into the breadcrumb link (issue #75).
+  urlRange: Record<string, string | null>;
 };
 
 // Loads the department for the range: skeletons while pending, a not-found
@@ -41,7 +45,11 @@ type DepartmentDetailBodyProps = {
 // (Rule 40.4, 60.12). The previous period only feeds the deltas through a
 // second, non-blocking request -- if it is pending or fails the page still
 // renders, without a delta.
-export function DepartmentDetailBody({ id, range }: DepartmentDetailBodyProps) {
+export function DepartmentDetailBody({
+  id,
+  range,
+  urlRange,
+}: DepartmentDetailBodyProps) {
   const currentQuery = useDepartment(id, rangeParams(range));
   const previousQuery = useDepartment(id, rangeParams(previousRange(range)));
   const notFound = isNotFound(currentQuery.error) && !currentQuery.isFetching;
@@ -81,8 +89,24 @@ export function DepartmentDetailBody({ id, range }: DepartmentDetailBodyProps) {
     stats.totalCost !== 0 || stats.totalTokens !== 0 || stats.invocations !== 0;
 
   return (
-    <div className="flex flex-col gap-6">
-      <h2 className="text-2xl font-semibold">{department.departmentName}</h2>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        breadcrumb={[
+          {
+            label: "Departments",
+            href: withDateRange("/dashboard/departments", {
+              get: (key) => urlRange[key] ?? null,
+            }),
+          },
+          { label: department.departmentName },
+        ]}
+        title={department.departmentName}
+        meta={
+          <span className="text-cell text-muted-foreground">
+            Bedrock service charges only
+          </span>
+        }
+      />
       {hasUsage ? (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -90,7 +114,6 @@ export function DepartmentDetailBody({ id, range }: DepartmentDetailBodyProps) {
               title="Total cost"
               value={formatUsd(stats.totalCost)}
               icon={Coins}
-              description={<p>Bedrock service charges only</p>}
               trend={
                 <DeltaBadge
                   current={stats.totalCost}
@@ -120,31 +143,32 @@ export function DepartmentDetailBody({ id, range }: DepartmentDetailBodyProps) {
                 />
               }
             />
+            {/* Labels differ from the MetricCard titles so each group keeps a unique accessible name. */}
+            <PeriodComparison
+              className="md:col-span-3"
+              days={inclusiveSpanDays(range)}
+              metrics={[
+                {
+                  label: "Cost",
+                  current: stats.totalCost,
+                  previous: stats.previous?.totalCost ?? null,
+                  kind: "usd",
+                },
+                {
+                  label: "Token volume",
+                  current: stats.totalTokens,
+                  previous: stats.previous?.totalTokens ?? null,
+                  kind: "count",
+                },
+                {
+                  label: "Invocation count",
+                  current: stats.invocations,
+                  previous: stats.previous?.invocations ?? null,
+                  kind: "count",
+                },
+              ]}
+            />
           </div>
-          {/* Labels differ from the MetricCard titles so each group keeps a unique accessible name. */}
-          <PeriodComparison
-            days={inclusiveSpanDays(range)}
-            metrics={[
-              {
-                label: "Cost",
-                current: stats.totalCost,
-                previous: stats.previous?.totalCost ?? null,
-                kind: "usd",
-              },
-              {
-                label: "Token volume",
-                current: stats.totalTokens,
-                previous: stats.previous?.totalTokens ?? null,
-                kind: "count",
-              },
-              {
-                label: "Invocation count",
-                current: stats.invocations,
-                previous: stats.previous?.invocations ?? null,
-                kind: "count",
-              },
-            ]}
-          />
           <DepartmentSections department={department} range={range} />
         </>
       ) : (

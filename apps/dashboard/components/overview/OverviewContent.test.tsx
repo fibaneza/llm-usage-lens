@@ -627,3 +627,93 @@ describe("OverviewContent — date filter drives every section", () => {
     );
   });
 });
+
+// Design System -- Layout, Panels and density; Component Inventory, `Panel`;
+// State patterns (Loading, Error): the four chart/sync sections are Panels, the
+// KPI skeleton matches the final card geometry, and the Total Cost footnote
+// holds at most two lines. Inventory OV-03, OV-08..OV-12, OV-14, OV-15.
+describe("OverviewContent — compact workspace panels", () => {
+  const PANELS = [
+    "Cost trend",
+    "Model distribution",
+    "Top 5 departments",
+    "Sync status",
+  ] as const;
+
+  function panel(title: string): HTMLElement {
+    return screen.getByRole("region", { name: title });
+  }
+
+  function lowestCommonAncestor(a: Element, b: Element): Element {
+    let node: Element | null = a;
+    while (node && !node.contains(b)) node = node.parentElement;
+    if (!node) throw new Error("elements share no ancestor");
+    return node;
+  }
+
+  it("renders each section as a titled Panel (h2 region, card slot) with its own skeleton while pending (OV-12, OV-14)", () => {
+    stubApi({ overview: NEVER, syncStatus: NEVER });
+    renderWithProviders(<OverviewContent />, URL_PARAMS);
+
+    for (const title of PANELS) {
+      const region = panel(title);
+      expect(region).toHaveAttribute("data-slot", "card");
+      expect(
+        within(region).getByRole("heading", { level: 2, name: title }),
+      ).toBeInTheDocument();
+      expect(region.querySelector(SKELETON)).not.toBeNull();
+    }
+  });
+
+  it("keeps each chart Panel's heading beside its own Retry alert when /api/overview fails (OV-15)", async () => {
+    stubApi({
+      overview: () => apiError(500),
+      syncStatus: () => apiResponse({ data: syncedFixture() }),
+    });
+    renderWithProviders(<OverviewContent />, URL_PARAMS);
+    await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(4));
+
+    for (const title of PANELS.slice(0, 3)) {
+      const region = panel(title);
+      expect(
+        within(region).getByRole("heading", { level: 2, name: title }),
+      ).toBeInTheDocument();
+      expect(
+        within(within(region).getByRole("alert")).getByRole("button", {
+          name: /retry/i,
+        }),
+      ).toBeInTheDocument();
+    }
+    expect(within(panel("Sync status")).queryByRole("alert")).toBeNull();
+  });
+
+  // Design System -- Layout, KPI rows / design plan 4.7: skeleton geometry
+  // matches the final card (88px) and the row stays five cards.
+  it("shows five 88px KPI skeletons while the overview is pending", () => {
+    stubApi({ overview: NEVER, syncStatus: NEVER });
+    const view = renderWithProviders(<OverviewContent />, URL_PARAMS);
+
+    expect(
+      view.container.querySelectorAll(`${SKELETON}[class*="h-[88px]"]`),
+    ).toHaveLength(5);
+  });
+
+  // Design System -- Layout, KPI rows: at most two 12px footnote lines, so the
+  // scope note and the Recurring indicator share the second line (OV-03).
+  it("keeps the Total Cost footnote to two lines: the split, then scope note with the Recurring indicator", async () => {
+    stubApi({
+      overview: overviewFor(),
+      syncStatus: () => apiResponse({ data: NEVER_SYNCED }),
+    });
+    renderWithProviders(<OverviewContent />, URL_PARAMS);
+    const totalCost = await card("Total Cost");
+
+    const split = within(totalCost).getByText(/Model \$1,000\.00/);
+    const scope = within(totalCost).getByText("Bedrock service charges only");
+    const recurring = within(totalCost).getByText(/Recurring:/);
+    const secondLine = lowestCommonAncestor(scope, recurring);
+
+    expect(secondLine.contains(split)).toBe(false);
+    expect(secondLine.textContent).not.toMatch(/Non-model \$/);
+  });
+});

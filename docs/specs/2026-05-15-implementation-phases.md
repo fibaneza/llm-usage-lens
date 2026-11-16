@@ -657,6 +657,16 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [x] *My usage* page (`/dashboard/me`) and *My teams* landing; scoped labels, "not visible" / "no team" / "no access" states, role-aware landing, no dead links
 - [x] Verify: e2e per role; seeded probe per role
 
+> **Note (2026-11-16, mock-up review).** The navigation data (`lib/nav.ts`,
+> `AppSidebar`, `AppHeader`, `CommandMenu`) belongs to this phase until it
+> lands; the Phase 5 *UI refresh — compact workspace* builds the Management
+> section, the role filter and the landing pages on top of it. The lead
+> landing is now *My usage* (decided 2026-11-16, user; Access Control —
+> *Navigation and landing by role*). The lead-scoped Bedrock/AWS cost view in
+> the first task (*My teams*, "your teams" labels for a lead) is **under
+> review — open, user decision pending (asked 2026-11-16)**: build nothing
+> that depends on it until the user answers.
+
 ## LiteLLM units (L0–L8; decided 2026-11-10)
 
 **Goal:** team and user administration of the existing LiteLLM proxy and LiteLLM-reported cost, per the [LiteLLM spec](2026-11-10-litellm.md). One branch and squash commit per unit (Rule 30.4), in order. L0 has no dependency. **L1 and L2 need 4R.1–4R.2 on `main` and the Phase 4.9 Settings shell, and may run in parallel with 4R.3–4R.5 (user direction 2026-11-14; Rule 30):** the L1 Settings → LiteLLM panel is its own `internal-admin` section in the existing shell and does not wait for the 4R.4 access sections. L3 needs L2 and 4R.3; L3b and L3c (added 2026-11-16, user) follow L3 and come before L4; L4 needs L3, L3b, 4R.3 and 4R.4; L5–L8 follow in order. A parallel L-unit owns `lib/litellm/**`, `app/api/litellm/**`, its Settings section and its `env.ts` and infra additions; it does not edit the policy module, existing Route Handlers or pages that 4R.3 changes. Each code unit runs the Rule 70 loop; L1, L2 and L4 add a dedicated security review against the spec's threat model (LT1–LT18). The fake LiteLLM (in-process HTTP or MSW, both editions) implements the allowlisted operations exactly per `docs/litellm/openapi.json`; no test reaches the internet (Rule 60.24).
@@ -719,6 +729,14 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [ ] Write routes for every allowlisted write (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list (workflow pilot candidate — *Workflow pilots*)
 - [ ] Team members (LiteLLM spec — LD10, LD16; amended 2026-11-14): Leads create, update and delete members (`removeTeamMember` default on); the LiteLLM team join link is added as `inviteTeamMember` only after the operators confirm the endpoint and the snapshot is refreshed — until then the UI invites through `addTeamMember`
 - [ ] Verify: write matrix; LT5, LT9, LT10, LT13, LT16, LT18 (privileged member → `409`, no key or membership write); one audit record per success/failure, one `denied` per authorization refusal (incl. `409 PRIVILEGED_TARGET`) and none on other rejections; structural write-route test includes every LiteLLM write route; e2e probe
+
+> **Note (2026-11-16, mock-up review).** The Team page (Management → Team;
+> Design System — *Management pages*) carries this unit's member, budget and
+> reset-spend controls: edit budget, reset spend per member row and the bulk
+> "Reset spend for all members", add and remove member, each destructive one
+> behind a named confirmation. They are built with this unit; until an
+> operation is enabled the control is absent, not dead (`resetMemberSpend`
+> default **off**, LD10). The page adds no LiteLLM call of its own (Rule 10).
 
 ### L5 — Polish and verification (`feature/phase-l5-litellm-polish`)
 
@@ -827,6 +845,27 @@ up building inside a unit; it never merges or skips the review.
   - User menu shows the role label(s) and the sign-in method, from the label maps in `lib/auth/roles.ts`
   - Sidebar brand reads "LLM Usage Lens"
   - `e2e/responsive.spec.ts` also covers 1920: no horizontal scroll; the content container's width equals the `SidebarInset` width and its left and right padding is 32px
+- [ ] UI refresh — compact workspace (user direction 2026-11-15; Design System — *Typography*, *Layout*, *Navigation*, *Settings Page*, *Control Patterns*, amended 2026-11-16). It may run before the rest of Phase 5, on `feature/ui-compact-workspace`, at the user's direction (Rule 30); one branch, one squash commit; **lands only after the user validates the UI in person**. Two slices: A is built, B is not.
+  - [x] **Slice A (built)** — presentation only:
+    - [x] Tokens and density in `app/globals.css` (neutral canvas, muted ≠ border, `--color-focus-ring`, `--color-link`, `--color-input` 3:1, `--color-warning-text`, compact text, spacing, radius and overlay-shadow tokens); primitives under `components/ui/` consume them; reduced-motion base rule
+    - [x] Shell sizing: sidebar 224px, 32px items, neutral active state, collapse icon button; top bar global controls only, two rows below `md`
+    - [x] Shared primitives: `PageHeader`, `PageTabs`, `Panel`, `KeyValueList`, `TableToolbar`, column helpers (right-aligned numerics), skeletons matching layout, chart legend; shadcn Breadcrumb, Collapsible, Switch, Alert; no new npm dependency
+    - [x] Pages: Overview (compact KPI row, Panels), Ranking (tabs in the header, one toolbar row), Departments (table) and detail (breadcrumb, KPI strip), Teams and detail, Services and Users (search, Columns, Export)
+    - [x] Every existing URL, accessible name, nuqs name, query key and role gate unchanged (the U1 "nothing lost" checklist, `temp/run-ui/ui-inventory.md`)
+    - [ ] Verify: `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, impacted Vitest, the full `pnpm test:e2e`, `pnpm build:ci`; axe clean on every page; no horizontal scroll at 375 / 768 / 1024 / 1440 / 1920; keyboard walk of sidebar, tabs and one dialog; before/after screenshots; user validation
+  - [ ] **Slice B (not built)** — the sidebar groups and Management routes change navigation, landing and some behaviour, so "presentation only" does not apply to this slice:
+    - [ ] Shell and navigation groups, Management routes and redirects, `ScopeLine`, `BudgetBar`, `AlertDialog`, the public pages (auth card) and the Account page; `PageHeader` on Overview, Me, LiteLLM and Settings
+    - Mock-up review (decided 2026-11-16, user; Design System — *Navigation (Sidebar)*, *Management pages*, *Settings Page*; Access Control — *Navigation and landing by role*; LiteLLM spec — *Views as Management routes*):
+      - Sidebar groups Usage (organisation-level roles), Management (My usage · Team · Organisation · Users · Audit) and Administration (Settings, last); Usage labels "Cost by department / team / service / user" with matching page titles, and every test and e2e selector that names them updated; landing admin and org admin → Cost overview, lead and user → My usage; a hidden item is absent and its route `404`
+      - Management routes `/dashboard/me` and `/dashboard/manage/{team,organisation,users,audit}`; `/dashboard/litellm` (any `?tab=`) and the Settings audit entry redirect; the LiteLLM tab row removed; one `Tabs` component for the remaining in-page tabs (Ranking, Team page) and the Settings route tabs
+      - One Team page (usage and management; team selector, member search, `BudgetBar` and the "Near or over budget" filter, named `AlertDialog` confirmations, bulk reset); its write controls arrive with L4 and are absent until enabled; no LiteLLM call of its own
+      - My usage: spend-by-day chart and spend-by-model breakdown (lazy Recharts, model tokens), "Request a budget increase" link (`mailto:` or copyable address)
+      - One Audit page with an App · Gateway source filter (composition; each source keeps its permission)
+      - `ScopeLine` on scoped pages; sync badges hidden for lead and user; the date range stays on every page
+      - Settings route tabs (AWS accounts, Sync and data, LiteLLM, Access) and the second rows inside Access and LiteLLM are built by unit D of the LiteLLM role-views run; this task keeps their look consistent only
+      - **Depends on Phase 4R.5** (navigation data, role filter, landing pages) and **LiteLLM unit L4** (Team page writes); until each lands, the dependent part waits
+      - **Open — user decision pending (asked 2026-11-16):** whether a lead keeps a scoped "AWS-billed cost" tile on the Team page or loses the Bedrock/AWS cost view of its teams entirely (Access Control — *Navigation and landing by role*); the tile is not built until answered
+      - Tests (Rule 60.24a): one per-role navigation suite (each item absent and its route `404` for a role that may not see it); one e2e journey per role (admin, lead, user); axe clean and no horizontal scroll at 375 / 768 / 1024 / 1440
 - [ ] Add `ErrorBoundary` per section on every page (one chart failing doesn't crash the page) (workflow pilot candidate, one agent per page — *Workflow pilots*)
 - [ ] Accessibility audit
   > Smoke-level a11y is enforced continuously before Phase 5:

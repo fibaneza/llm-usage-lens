@@ -53,6 +53,24 @@ describe("Card", () => {
     expect(card).toHaveTextContent("Inside");
   });
 
+  // Design System -- Layout, Panels and density (2026-11-16): card background,
+  // 1px border, --radius-card, no shadow, 16px padding.
+  it("is a bordered 8px surface with no shadow and 16px padding", () => {
+    render(
+      <Card data-testid="card">
+        <CardHeader data-testid="header">Head</CardHeader>
+        <CardContent data-testid="content">Body</CardContent>
+      </Card>,
+    );
+
+    const card = screen.getByTestId("card");
+    expect(card).toHaveClass("border", "rounded-card", "py-4");
+    expect(card.className).not.toMatch(/(^|\s)shadow(-|\s|$)/);
+    expect(card.className).not.toMatch(/rounded-xl/);
+    expect(screen.getByTestId("header")).toHaveClass("px-4");
+    expect(screen.getByTestId("content")).toHaveClass("px-4");
+  });
+
   it("forwards native props such as aria attributes", () => {
     render(
       <Card aria-label="Spend summary">

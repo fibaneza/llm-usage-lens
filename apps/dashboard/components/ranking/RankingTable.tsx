@@ -1,7 +1,7 @@
 "use client";
 
 import type { RankingRow } from "@llm-usage-lens/shared";
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 
 import { ExportButton } from "@/components/table/ExportButton";
 import { UsageTable } from "@/components/table/UsageTable";
@@ -13,6 +13,12 @@ type RankingTableProps = {
   current: readonly RankingRow[];
   previous: readonly RankingRow[] | undefined;
   filename: string;
+  modelFilter: ReactNode;
+  // Replaces the table: the skeleton while the first result is pending, the
+  // empty state for an empty period.
+  bodyOverride: ReactNode;
+  // A selection change is in flight; the export would write stale rows.
+  pending: boolean;
 };
 
 // The ranking leaderboard (Design System -- Ranking Page) is the shared
@@ -23,6 +29,9 @@ export function RankingTable({
   current,
   previous,
   filename,
+  modelFilter,
+  bodyOverride,
+  pending,
 }: RankingTableProps) {
   const data = useMemo(
     () => buildRankingRows(current, previous),
@@ -43,6 +52,8 @@ export function RankingTable({
           No names match your search.
         </p>
       }
+      bodyOverride={bodyOverride}
+      toolbarStart={modelFilter}
       toolbarActions={({ rows, visibleColumnIds }) => (
         <ExportButton
           filename={filename}
@@ -50,6 +61,7 @@ export function RankingTable({
             (id) => RANKING_CSV_COLUMNS[id] ?? [],
           )}
           rows={rows}
+          disabled={pending || rows.length === 0}
         />
       )}
     />

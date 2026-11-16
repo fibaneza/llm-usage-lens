@@ -92,4 +92,40 @@ describe("toCsv", () => {
 
     expect(lines(csv)).toEqual(['"Cost, USD"', "5"]);
   });
+
+  // OWASP CSV injection: a text field a spreadsheet would run as a formula is
+  // prefixed with an apostrophe (review round 1 W6; exports carry userId and
+  // service tags).
+  it.each(["=SUM(A1)", "+1", "-1+2", "@cmd", "\tx", "\rx"])(
+    "prefixes a field starting with a formula character (%j) with an apostrophe",
+    (name) => {
+      const csv = toCsv(columns, [{ name, cost: 1, tokens: 2 }]);
+
+      expect(csv).toContain(`'${name}`);
+    },
+  );
+
+  it("prefixes before quoting, so a formula field with a comma stays one quoted field", () => {
+    const csv = toCsv(columns, [{ name: "=A1,B1", cost: 1, tokens: 2 }]);
+
+    expect(lines(csv)[1]).toBe(`"'=A1,B1",1,2`);
+  });
+
+  it("neutralises a formula-looking header too", () => {
+    const csv = toCsv(
+      [{ header: "=evil", value: (r: Row) => r.cost }],
+      [{ name: "x", cost: 5, tokens: 0 }],
+    );
+
+    expect(lines(csv)[0]).toBe("'=evil");
+  });
+
+  it("leaves ordinary fields, mid-field formula characters and numbers unchanged", () => {
+    const csv = toCsv(columns, [
+      { name: "a=b", cost: -1.5, tokens: 2 },
+      { name: "user@example.com", cost: 0, tokens: 0 },
+    ]);
+
+    expect(lines(csv).slice(1)).toEqual(["a=b,-1.5,2", "user@example.com,0,0"]);
+  });
 });

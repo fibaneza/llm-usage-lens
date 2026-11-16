@@ -5,8 +5,15 @@ export type CsvColumn<T> = {
 
 const NEEDS_QUOTING = /[",\r\n]/;
 
+const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
 function escapeField(value: string | number): string {
-  const text = String(value);
+  // OWASP CSV injection: a text cell a spreadsheet would read as a formula gets
+  // a leading apostrophe; numbers are written raw.
+  const text =
+    typeof value === "string" && FORMULA_PREFIX.test(value)
+      ? `'${value}`
+      : String(value);
   return NEEDS_QUOTING.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

@@ -1,5 +1,5 @@
 import type { ServiceListRow } from "@llm-usage-lens/shared";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -173,11 +173,56 @@ describe("ServicesContent -- table", () => {
     expect(dataRows(table)[0]).toHaveTextContent("Untagged");
   });
 
-  it("shows the model-usage-only note", async () => {
+  it("shows the model-usage-only note as a role=note under the page description, above the toolbar (Design System -- Services Page, 2026-11-16)", async () => {
     stubApi({ services: servicesFor() });
     renderWithProviders(<ServicesContent />, URL_PARAMS);
     await screen.findByRole("table");
-    expect(screen.getByRole("note")).toHaveTextContent(/model usage only/i);
+    const note = screen.getByRole("note");
+
+    expect(note).toHaveTextContent(/model usage only/i);
+    const description = note.previousElementSibling;
+    expect(description?.textContent?.trim()).toBeTruthy();
+    expect(description).not.toContainElement(screen.getByRole("searchbox"));
+    expect(
+      note.compareDocumentPosition(screen.getByRole("searchbox")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});
+
+// Design System -- Services Page (2026-11-16): "the toolbar has Search,
+// Columns and Export CSV like Ranking"; SH-70, SH-73.
+describe("ServicesContent -- toolbar", () => {
+  it("puts search, Columns and Export CSV in the table toolbar above the table", async () => {
+    stubApi({ services: servicesFor() });
+    const view = renderWithProviders(<ServicesContent />, URL_PARAMS);
+    const table = await screen.findByRole("table");
+
+    const root = view.container.querySelector(
+      '[data-slot="usage-table"]',
+    ) as HTMLElement;
+    const toolbar = within(root)
+      .getByRole("button", {
+        name: "Export CSV",
+      })
+      .closest('[data-slot="table-toolbar"]') as HTMLElement;
+    expect(toolbar).not.toBeNull();
+    expect(within(toolbar).getByRole("searchbox")).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("button", { name: "Columns" }),
+    ).toBeInTheDocument();
+    expect(toolbar.contains(table)).toBe(false);
+  });
+
+  it("filters the rows by service name from the search box", async () => {
+    stubApi({ services: servicesFor() });
+    renderWithProviders(<ServicesContent />, URL_PARAMS);
+    const table = await screen.findByRole("table");
+
+    await userEvent.setup().type(screen.getByRole("searchbox"), "ledger");
+
+    await waitFor(() => expect(dataRows(table)).toHaveLength(1));
+    expect(dataRows(table)[0]).toHaveTextContent("ledger-svc");
   });
 });
 
@@ -202,9 +247,10 @@ describe("ServicesContent -- states", () => {
     const table = await screen.findByRole("table");
     expect(dataRows(table)).toHaveLength(2);
     expect(within(table).getAllByText("Untagged")).toHaveLength(2);
-    expect(
-      screen.getByText(/no usage carries a service tag/i),
-    ).toBeInTheDocument();
+    // SV-02: the notice is a status message, not an alert.
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /no usage carries a service tag/i,
+    );
     expect(screen.queryByText(/no services/i)).not.toBeInTheDocument();
   });
 

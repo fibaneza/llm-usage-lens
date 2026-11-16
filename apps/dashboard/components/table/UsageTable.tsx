@@ -2,6 +2,7 @@
 
 import { type ReactNode, useMemo, useState } from "react";
 import {
+  type Column,
   type ColumnDef,
   type ColumnSort,
   flexRender,
@@ -21,6 +22,7 @@ import { columnLabel } from "@/components/table/column-label";
 import { ColumnToggle } from "@/components/table/ColumnToggle";
 import { Pagination } from "@/components/table/Pagination";
 import { SearchInput } from "@/components/table/SearchInput";
+import { TableToolbar } from "@/components/table/TableToolbar";
 import { UsageCardList } from "@/components/table/UsageCardList";
 import {
   Table,
@@ -32,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
 type ToolbarView<T> = {
   rows: T[];
@@ -49,6 +52,13 @@ type UsageTableProps<T> = {
   caption: string;
   emptyState?: ReactNode;
   toolbarActions?: (view: ToolbarView<T>) => ReactNode;
+  // Page filters (for example a model select) that join the search in the
+  // toolbar's first slot.
+  toolbarStart?: ReactNode;
+  // Shown instead of the table and paging (a loading skeleton, a period with
+  // no rows) while the toolbar stays mounted in the same place, so a page
+  // filter in `toolbarStart` keeps keyboard focus across the transition.
+  bodyOverride?: ReactNode;
 };
 
 type SortState = false | SortDirection;
@@ -57,6 +67,15 @@ function ariaSort(sorted: SortState) {
   if (sorted === "asc") return "ascending";
   if (sorted === "desc") return "descending";
   return "none";
+}
+
+function alignmentOf<T>(column: Column<T>) {
+  const right = column.columnDef.meta?.align === "right";
+  const numeric = column.columnDef.meta?.numeric === true;
+  return {
+    right,
+    className: cn(right && "text-right", numeric && "font-mono tabular-nums"),
+  };
 }
 
 function SortIcon({ sorted }: { sorted: SortState }) {
@@ -86,6 +105,8 @@ export function UsageTable<T>({
   caption,
   emptyState,
   toolbarActions,
+  toolbarStart,
+  bodyOverride,
 }: UsageTableProps<T>) {
   const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
@@ -125,45 +146,55 @@ export function UsageTable<T>({
 
   return (
     <div data-slot="usage-table" className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {searchKey ? (
-          <SearchInput
-            value={search}
-            placeholder={searchPlaceholder}
-            onChange={(next) => {
-              setSearch(next);
-              table.setPageIndex(0);
-            }}
-          />
-        ) : (
-          <span />
-        )}
-        <div className="flex flex-wrap items-center gap-2">
-          {isMobile ? <CardSortControl table={table} /> : null}
-          <ColumnToggle
-            columns={toggleableColumns}
-            onToggle={(id, visible) =>
-              table.getColumn(id)?.toggleVisibility(visible)
-            }
-          />
-          {toolbarActions?.({
-            rows: table
-              .getPrePaginationRowModel()
-              .rows.map((row) => row.original),
-            visibleColumnIds: table
-              .getVisibleLeafColumns()
-              .map((column) => column.id),
-          })}
-        </div>
-      </div>
+      <TableToolbar
+        start={
+          <>
+            {searchKey ? (
+              <SearchInput
+                value={search}
+                placeholder={searchPlaceholder}
+                onChange={(next) => {
+                  setSearch(next);
+                  table.setPageIndex(0);
+                }}
+              />
+            ) : null}
+            {toolbarStart}
+          </>
+        }
+        end={
+          <>
+            {isMobile ? (
+              <CardSortControl table={table} />
+            ) : (
+              <ColumnToggle
+                columns={toggleableColumns}
+                onToggle={(id, visible) =>
+                  table.getColumn(id)?.toggleVisibility(visible)
+                }
+              />
+            )}
+            {toolbarActions?.({
+              rows: table
+                .getPrePaginationRowModel()
+                .rows.map((row) => row.original),
+              visibleColumnIds: table
+                .getVisibleLeafColumns()
+                .map((column) => column.id),
+            })}
+          </>
+        }
+      />
 
-      {isMobile ? (
+      {bodyOverride ? (
+        bodyOverride
+      ) : isMobile ? (
         rows.length > 0 ? (
           <UsageCardList table={table} caption={caption} />
         ) : null
       ) : (
         <FigureFormatProvider value="compact">
-          <Table className="text-xs lg:text-sm">
+          <Table>
             <TableCaption className="sr-only">{caption}</TableCaption>
             <TableHeader>
               {table.getHeaderGroups().map((group) => (
@@ -176,10 +207,14 @@ export function UsageTable<T>({
                           header.getContext(),
                         );
                     const sortable = header.column.getCanSort();
+                    const align = alignmentOf(header.column);
                     return (
                       <TableHead
                         key={header.id}
-                        className="h-auto px-1 py-2 whitespace-normal lg:px-2"
+                        className={cn(
+                          "px-1.5 whitespace-normal lg:px-3",
+                          align.className,
+                        )}
                         aria-sort={
                           sortable
                             ? ariaSort(header.column.getIsSorted())
@@ -190,7 +225,10 @@ export function UsageTable<T>({
                           <button
                             type="button"
                             onClick={header.column.getToggleSortingHandler()}
-                            className="focus-visible:ring-ring/50 -mx-1 inline-flex flex-wrap items-center gap-x-1 rounded px-1 text-left outline-none focus-visible:ring-[3px]"
+                            className={cn(
+                              "focus-visible:ring-focus-ring focus-visible:ring-offset-background -mx-1 inline-flex flex-wrap items-center gap-x-1 rounded px-1 text-left outline-hidden focus-visible:ring-2 focus-visible:ring-offset-2",
+                              align.right && "flex-row-reverse",
+                            )}
                           >
                             {content}
                             <SortIcon sorted={header.column.getIsSorted()} />
@@ -208,7 +246,13 @@ export function UsageTable<T>({
               {rows.map((row) => (
                 <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="px-1 py-2 lg:px-2">
+                    <TableCell
+                      key={cell.id}
+                      className={cn(
+                        "px-1.5 max-lg:text-xs lg:px-3",
+                        alignmentOf(cell.column).className,
+                      )}
+                    >
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),
@@ -222,12 +266,14 @@ export function UsageTable<T>({
         </FigureFormatProvider>
       )}
 
-      {rows.length === 0 ? (
+      {bodyOverride ? null : rows.length === 0 ? (
         (emptyState ?? <EmptyState title="No data to display" />)
       ) : (
         <Pagination
           pageIndex={table.getState().pagination.pageIndex}
           pageCount={table.getPageCount()}
+          rowCount={table.getFilteredRowModel().rows.length}
+          pageSize={table.getState().pagination.pageSize}
           onPageChange={(index) => table.setPageIndex(index)}
         />
       )}

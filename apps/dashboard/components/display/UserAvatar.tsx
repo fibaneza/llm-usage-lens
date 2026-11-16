@@ -1,5 +1,3 @@
-const AVATAR_COUNT = 8;
-
 function initialsOf(userId: string): string {
   return userId
     .split(/[^A-Za-z0-9]+/)
@@ -9,23 +7,14 @@ function initialsOf(userId: string): string {
     .join("");
 }
 
-function avatarIndex(userId: string): number {
-  let hash = 0;
-  for (const char of userId) {
-    hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
-  }
-  return (hash % AVATAR_COUNT) + 1;
-}
-
-// Design System -- Component Inventory, `UserAvatar`: initials on a color that
-// is a pure function of the user ID. Decorative: the adjacent name carries
-// the identity.
+// Design System -- Component Inventory, `UserAvatar`: neutral 20px initials
+// avatar (per-user colour carried no information; amended 2026-11-16).
+// Decorative: the adjacent name carries the identity.
 export function UserAvatar({ userId }: { userId: string }) {
   return (
     <span
       aria-hidden="true"
-      style={{ backgroundColor: `var(--color-avatar-${avatarIndex(userId)})` }}
-      className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+      className="bg-muted text-foreground inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[0.6875rem] font-semibold"
     >
       {initialsOf(userId)}
     </span>

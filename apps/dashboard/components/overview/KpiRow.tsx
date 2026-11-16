@@ -6,7 +6,7 @@ import { Activity, Building2, Coins, DollarSign, Sparkles } from "lucide-react";
 import { formatUsd } from "@/components/charts/chart-data";
 import { DeltaBadge } from "@/components/display/DeltaBadge";
 import { MetricCard } from "@/components/display/MetricCard";
-import { Skeleton } from "@/components/ui/skeleton";
+import { KpiSkeleton } from "@/components/display/KpiSkeleton";
 import { useOverview } from "@/hooks/useOverview";
 import { type DateRange, previousRange } from "@/lib/date-range";
 import { sectionData } from "@/lib/query/section-data";
@@ -15,13 +15,7 @@ import { RecurringIndicator } from "./RecurringIndicator";
 
 const KPI_GRID =
   "grid gap-4 md:grid-cols-2 lg:grid-cols-3 min-[90rem]:grid-cols-5";
-const KPI_SKELETON_KEYS = [
-  "total-cost",
-  "total-tokens",
-  "total-invocations",
-  "most-used-model",
-  "active-accounts",
-] as const;
+const KPI_COUNT = 5;
 
 const countFormatter = new Intl.NumberFormat("en-US");
 
@@ -46,9 +40,7 @@ export function KpiRow({ range }: KpiRowProps) {
   if (overview === undefined) {
     return (
       <div className={KPI_GRID}>
-        {KPI_SKELETON_KEYS.map((key) => (
-          <Skeleton key={key} className="h-32 w-full rounded-xl" />
-        ))}
+        <KpiSkeleton count={KPI_COUNT} />
       </div>
     );
   }
@@ -76,8 +68,11 @@ export function KpiRow({ range }: KpiRowProps) {
         description={
           <>
             <p>{`Model ${formatUsd(overview.modelCost)} · Non-model ${formatUsd(overview.nonModelCost)}`}</p>
-            <p>Bedrock service charges only</p>
-            <RecurringIndicator categories={recurring} />
+            <p>
+              <span>Bedrock service charges only</span>
+              {recurring.length > 0 ? " · " : null}
+              <RecurringIndicator categories={recurring} />
+            </p>
           </>
         }
       />

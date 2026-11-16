@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
@@ -7,12 +9,12 @@ import { collectConsoleErrors } from "./support/console-errors";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 
-// Phase 4.3 Departments (implementation-phases -- Phase 4.3 tasks and Verify:
-// "cards render with seed data, links navigate to detail pages"; Design System
-// -- Page Architecture, "Department cards grid"; Rule 40.6 breakpoints, grid of
-// 1 column below md, 2 at md and 3 from lg; Rule 20.12). The browser-side
-// requests to /api/departments are fulfilled from fixtures so the assertions
-// are deterministic and independent of DynamoDB Local (Rule 60.24).
+// Phase 4.3 Departments (implementation-phases -- Phase 4.3 Verify: "links
+// navigate to detail pages"; Design System -- Navigation (Sidebar), Departments
+// row: a table of cost, change, tokens, teams and top model linking to detail,
+// amended 2026-11-16; Responsive Tables: a card list below md; Rule 20.12). The
+// browser-side requests to /api/departments are fulfilled from fixtures so the
+// assertions are deterministic and independent of DynamoDB Local (Rule 60.24).
 const DEPARTMENTS_URL = /\/api\/departments(\?|$)/;
 const SYNC_STATUS_URL = /\/api\/sync-status(\?|$)/;
 
@@ -58,7 +60,7 @@ function department(
   };
 }
 
-// Six cards, so three columns fill two rows. The first has a long name and
+// Six departments. The first has a long name and
 // large figures to try the narrowest widths; Legal has no model usage.
 const CURRENT: Department[] = [
   department(
@@ -149,13 +151,22 @@ function content(page: Page): Locator {
   return page.locator("main > :not(header)");
 }
 
-// Each card is a link to a department's detail page.
+// Each department is a link to its detail page (the name cell of a table row,
+// the title of a card below md).
 function cards(page: Page): Locator {
   return content(page).getByRole("link");
 }
 
 function cardNamed(page: Page, name: string): Locator {
   return cards(page).filter({ hasText: name });
+}
+
+// The table row (desktop) or card-list item (below md) holding a department.
+function rowNamed(page: Page, name: string): Locator {
+  return content(page)
+    .getByRole("row")
+    .or(content(page).getByRole("listitem"))
+    .filter({ hasText: name });
 }
 
 async function openDepartments(page: Page, count = CURRENT.length) {
@@ -165,27 +176,6 @@ async function openDepartments(page: Page, count = CURRENT.length) {
     page.getByRole("heading", { level: 1, name: "Department breakdown" }),
   ).toBeVisible();
   await expect(cards(page)).toHaveCount(count);
-}
-
-async function cardBoxes(page: Page) {
-  const links = cards(page);
-  const count = await links.count();
-  return Promise.all(
-    Array.from({ length: count }, async (_unused, index) => {
-      const box = await links.nth(index).boundingBox();
-      if (!box) throw new Error(`card ${index} has no layout box`);
-      return box;
-    }),
-  );
-}
-
-// Columns are the distinct left edges, within a pixel or two of each other.
-function columnCount(boxes: Array<{ x: number }>): number {
-  const lefts: number[] = [];
-  for (const { x } of boxes) {
-    if (!lefts.some((left) => Math.abs(left - x) <= 2)) lefts.push(x);
-  }
-  return lefts.length;
 }
 
 async function expectNoHorizontalOverflow(page: Page, label: string) {
@@ -203,17 +193,12 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
       const box = link.getBoundingClientRect();
       const problems: string[] = [];
       if (box.right > document.documentElement.clientWidth + 1) {
-        problems.push(`card right edge ${box.right} is past the viewport`);
-      }
-      if (link.scrollWidth > link.clientWidth + 1) {
-        problems.push(
-          `card content ${link.scrollWidth}px in a ${link.clientWidth}px card`,
-        );
+        problems.push(`link right edge ${box.right} is past the viewport`);
       }
       return problems.map((p) => `${link.textContent?.slice(0, 30)}: ${p}`);
     }),
   );
-  expect(spill, `${label}: card content spills`).toEqual([]);
+  expect(spill, `${label}: department links spill`).toEqual([]);
 }
 
 test.describe("departments page", () => {
@@ -221,7 +206,7 @@ test.describe("departments page", () => {
     await signInAsTestUser(context);
   });
 
-  test("renders one card per department with its figures, and requests the current and previous range", async ({
+  test("renders one table row per department with its figures, and requests the current and previous range", async ({
     page,
   }) => {
     const pageErrors: Error[] = [];
@@ -231,24 +216,28 @@ test.describe("departments page", () => {
 
     await openDepartments(page);
 
-    const engineering = cardNamed(page, "Engineering");
+    const engineering = rowNamed(page, "Engineering");
     await expect(engineering).toContainText("$600.00");
     await expect(engineering).toContainText(/1,500,000|1\.5M/);
-    await expect(engineering).toContainText(/3\s+teams|teams\W{0,3}3\b/i);
+    await expect(
+      engineering.getByRole("cell", { name: "3", exact: true }),
+    ).toBeVisible();
     await expect(engineering).toContainText("Claude Opus");
 
-    const data = cardNamed(page, "Data Science");
+    const data = rowNamed(page, "Data Science");
     await expect(data).toContainText("$300.00");
     await expect(data).toContainText(/600,000|600K/);
-    await expect(data).toContainText(/1\s+team\b|teams?\W{0,3}1\b/i);
+    await expect(
+      data.getByRole("cell", { name: "1", exact: true }),
+    ).toBeVisible();
     await expect(data).toContainText("Claude Sonnet");
 
-    await expect(cardNamed(page, "Marketing")).toContainText("Claude Haiku");
+    await expect(rowNamed(page, "Marketing")).toContainText("Claude Haiku");
     await expect(
-      cardNamed(page, "Corporate Strategy and Partnerships Office"),
+      rowNamed(page, "Corporate Strategy and Partnerships Office"),
     ).toContainText("Other models");
     await expect(
-      cardNamed(page, "Corporate Strategy and Partnerships Office"),
+      rowNamed(page, "Corporate Strategy and Partnerships Office"),
     ).toContainText(/\$12,345\.67|\$12\.3K/);
 
     expect(requests).toContainEqual(RANGE);
@@ -257,7 +246,7 @@ test.describe("departments page", () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test("a card link opens that department's detail route with the date range carried", async ({
+  test("a department link opens that department's detail route with the date range carried", async ({
     page,
   }) => {
     await mockApi(page);
@@ -275,7 +264,36 @@ test.describe("departments page", () => {
     expect(url.searchParams.get("dateTo")).toBe(RANGE.dateTo);
   });
 
-  test("a card is reachable and activated from the keyboard", async ({
+  // Review round 1 W8 (Design System -- Departments row; Phase 4.3 toolbar):
+  // search narrows the rows and Export CSV downloads with the header row.
+  test("searches by department name and exports the CSV with its header row", async ({
+    page,
+  }) => {
+    await mockApi(page);
+    await openDepartments(page);
+
+    await content(page)
+      .getByRole("searchbox", { name: /search by department/i })
+      .fill("Engin");
+    await expect(rowNamed(page, "Engineering")).toBeVisible();
+    await expect(rowNamed(page, "Marketing")).toHaveCount(0);
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      content(page).getByRole("button", { name: "Export CSV" }).click(),
+    ]);
+    const path = await download.path();
+    expect(path).not.toBeNull();
+    const lines = (await readFile(path, "utf8"))
+      .split(/\r?\n/)
+      .filter((line) => line.length > 0);
+
+    expect(lines[0]).toMatch(/^Department,Cost,/);
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain("Engineering");
+  });
+
+  test("a department link is reachable and activated from the keyboard", async ({
     page,
   }) => {
     await mockApi(page);
@@ -291,12 +309,14 @@ test.describe("departments page", () => {
     await expect(page).toHaveURL(/\/dashboard\/departments\/dept-data\?/);
   });
 
-  test("a focused card shows a visible focus indicator", async ({ page }) => {
+  test("a focused department link shows a visible focus indicator", async ({
+    page,
+  }) => {
     await mockApi(page);
     await openDepartments(page);
 
     const card = cardNamed(page, "Engineering");
-    // Everything painted on the card or inside it that could carry a ring.
+    // Everything painted on the link or inside it that could carry a ring.
     const paint = () =>
       card.evaluate((link) =>
         [link, ...link.querySelectorAll("*")]
@@ -322,23 +342,23 @@ test.describe("departments page", () => {
   });
 });
 
-// Design System -- Responsive: the grid is 1 column below md (768px), 2 at md
-// and 3 from lg (1024px); the page never scrolls horizontally, with the
-// sidebar expanded or collapsed (Rule 40.6).
+// Design System -- Responsive Tables: the full table from md (768px) up, a card
+// list below; the page never scrolls horizontally, with the sidebar expanded or
+// collapsed (Rule 40.6).
 const LAYOUTS = [
-  { width: 375, height: 812, columns: 1 },
-  { width: 768, height: 1024, columns: 2 },
-  { width: 1024, height: 768, columns: 3 },
-  { width: 1440, height: 900, columns: 3 },
+  { width: 375, height: 812, table: false },
+  { width: 768, height: 1024, table: true },
+  { width: 1024, height: 768, table: true },
+  { width: 1440, height: 900, table: true },
 ] as const;
 
-test.describe("departments page - responsive grid", () => {
+test.describe("departments page - responsive layout", () => {
   test.beforeEach(async ({ context }) => {
     await signInAsTestUser(context);
   });
 
-  for (const { width, height, columns } of LAYOUTS) {
-    test(`lays the cards out in ${columns} column${columns === 1 ? "" : "s"} without horizontal scroll at ${width}px (sidebar expanded)`, async ({
+  for (const { width, height, table } of LAYOUTS) {
+    test(`shows ${table ? "the table" : "the card list"} without horizontal scroll at ${width}px (sidebar expanded)`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height });
@@ -346,15 +366,20 @@ test.describe("departments page - responsive grid", () => {
 
       await openDepartments(page);
 
-      expect(columnCount(await cardBoxes(page))).toBe(columns);
+      await expect(
+        content(page).getByRole("table", { name: "Departments" }),
+      ).toHaveCount(table ? 1 : 0);
+      await expect(
+        content(page).getByRole("list", { name: "Departments" }),
+      ).toHaveCount(table ? 0 : 1);
       await expectNoHorizontalOverflow(page, `${width}px expanded`);
     });
   }
 
-  for (const { width, height, columns } of LAYOUTS.filter(
+  for (const { width, height } of LAYOUTS.filter(
     (layout) => layout.width >= 768,
   )) {
-    test(`keeps ${columns} columns and no horizontal scroll at ${width}px with the sidebar collapsed`, async ({
+    test(`keeps the table and no horizontal scroll at ${width}px with the sidebar collapsed`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height });
@@ -369,9 +394,6 @@ test.describe("departments page - responsive grid", () => {
 
       await expect(cards(page)).toHaveCount(CURRENT.length);
       await expect
-        .poll(async () => columnCount(await cardBoxes(page)))
-        .toBe(columns);
-      await expect
         .poll(() =>
           page.evaluate(
             () =>
@@ -383,21 +405,6 @@ test.describe("departments page - responsive grid", () => {
       await expectNoHorizontalOverflow(page, `${width}px collapsed`);
     });
   }
-
-  test("the three columns are equal width at 1440px", async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await mockApi(page);
-    await openDepartments(page);
-
-    const boxes = await cardBoxes(page);
-    const firstRow = boxes.filter(
-      (b) => Math.abs(b.y - (boxes[0]?.y ?? 0)) <= 2,
-    );
-
-    expect(firstRow).toHaveLength(3);
-    const widths = firstRow.map((b) => b.width);
-    expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(2);
-  });
 });
 
 // Design System -- UX Standards (contrast 4.5:1), Rule 60.30. Measured on the
@@ -411,14 +418,14 @@ test.describe("departments page - accessibility (axe)", () => {
     { width: 1440, height: 900 },
     { width: 375, height: 812 },
   ]) {
-    test(`has no serious or critical violations with cards loaded at ${width}px`, async ({
+    test(`has no serious or critical violations with the departments loaded at ${width}px`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height });
       await mockApi(page);
       await openDepartments(page);
       await expect(
-        cardNamed(page, "Engineering").getByRole("img", {
+        rowNamed(page, "Engineering").getByRole("img", {
           name: "Up 20.0% vs previous period",
         }),
       ).toBeVisible();

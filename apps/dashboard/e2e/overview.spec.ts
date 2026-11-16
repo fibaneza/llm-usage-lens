@@ -221,10 +221,16 @@ test.describe("overview page", () => {
         .getByText(/sync status/i)
         .first(),
     ).toBeVisible();
+    // Design System -- Key-value lists: the synced state is a KeyValueList.
     await expect(
       content(page)
-        .getByText(/^Next sync in \d+ min$/)
-        .first(),
+        .getByRole("term")
+        .filter({ hasText: /^Next sync$/ }),
+    ).toBeVisible();
+    await expect(
+      content(page)
+        .getByRole("definition")
+        .filter({ hasText: /^in \d+ min$/ }),
     ).toBeVisible();
     await expect(
       page.getByRole("timer", { name: /^Next sync in \d+ min$/ }).first(),

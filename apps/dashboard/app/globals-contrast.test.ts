@@ -129,33 +129,145 @@ describe("avatar token contrast (white initials, WCAG AA 4.5:1)", () => {
   });
 });
 
-// Design System - Destructive and secondary (changed 2026-11-15, F13): the
-// fills carry white button text and are also used as text on the page and
-// card, so each reaches 4.5:1 on white and on --color-background.
-describe("destructive and secondary tokens (WCAG AA 4.5:1)", () => {
+// Design System - Destructive (changed 2026-11-15, F13): the fill carries white
+// button text and is also used as text on the page and card, so it reaches
+// 4.5:1 on white and on --color-background.
+describe("destructive token (WCAG AA 4.5:1)", () => {
+  it("--color-destructive is #BE123C", () => {
+    expect(token("destructive").toLowerCase()).toBe("#be123c");
+  });
+
+  it("destructive against white and the page background", () => {
+    expect(contrast(token("destructive"), "#FFFFFF")).toBeGreaterThanOrEqual(
+      4.5,
+    );
+    expect(
+      contrast(token("destructive"), token("background")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("destructive-foreground on the destructive fill", () => {
+    expect(
+      contrast(token("destructive-foreground"), token("destructive")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// Design System -- Color Palette (compact refresh, 2026-11-16): the palette
+// values are stated in the spec table, so a drift fails here.
+describe("compact-refresh palette values", () => {
   it.each([
-    ["destructive", "#BE123C"],
-    ["secondary", "#4338CA"],
+    ["background", "#F8FAFC"],
+    ["muted", "#F1F5F9"],
+    ["accent", "#F1F5F9"],
+    ["secondary", "#F1F5F9"],
+    ["secondary-foreground", "#0F172A"],
+    ["primary-subtle", "#EEF2FF"],
+    ["link", "#4338CA"],
+    ["input", "#8391A7"],
+    ["focus-ring", "#4F46E5"],
+    ["success-text", "#047857"],
+    ["sidebar-accent", "#F1F5F9"],
+    ["sidebar-ring", "#4F46E5"],
   ])("--color-%s is %s", (name, hex) => {
     expect(token(name).toLowerCase()).toBe(hex.toLowerCase());
   });
+});
 
-  it.each(["destructive", "secondary"])(
-    "%s against white and the page background",
-    (name) => {
-      expect(contrast(token(name), "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(token(name), token("background"))).toBeGreaterThanOrEqual(
-        4.5,
-      );
-    },
-  );
+// Design System -- Color Palette: stated ratios for the compact-refresh tokens.
+describe("compact-refresh token contrast", () => {
+  it("secondary-foreground on the neutral secondary fill (16.30:1)", () => {
+    expect(
+      contrast(token("secondary-foreground"), token("secondary")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
 
-  it.each(["destructive", "secondary"])(
-    "%s-foreground on the %s fill",
-    (name) => {
+  it.each(["card", "background"])("link text on %s", (surface) => {
+    expect(contrast(token("link"), token(surface))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(["card", "background"])("success-text on %s", (surface) => {
+    expect(
+      contrast(token("success-text"), token(surface)),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // Review round 1 W5 (WCAG 1.4.3): the Badge `warning` variant is small text;
+  // amber #D97706 is ~3:1, so the text uses a darker `--color-warning-text`.
+  it.each(["card", "background"])("warning-text on %s", (surface) => {
+    expect(
+      contrast(token("warning-text"), token(surface)),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("foreground on primary-subtle", () => {
+    expect(
+      contrast(token("foreground"), token("primary-subtle")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("muted-foreground on primary-subtle", () => {
+    expect(
+      contrast(token("muted-foreground"), token("primary-subtle")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // WCAG 1.4.11: field and switch-track boundaries are 3:1 against the card.
+  it("input boundary on card", () => {
+    expect(contrast(token("input"), token("card"))).toBeGreaterThanOrEqual(3);
+  });
+
+  // WCAG 1.4.11: the keyboard focus indicator against every surface it sits on.
+  it.each(["card", "background", "muted", "sidebar"])(
+    "focus-ring on %s",
+    (surface) => {
       expect(
-        contrast(token(`${name}-foreground`), token(name)),
-      ).toBeGreaterThanOrEqual(4.5);
+        contrast(token("focus-ring"), token(surface)),
+      ).toBeGreaterThanOrEqual(3);
     },
   );
+
+  it("success keeps the icon-only 3:1 on card", () => {
+    expect(contrast(token("success"), token("card"))).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// Design System -- Typography / Layout / Elevation (compact refresh): density
+// tokens live in globals.css and primitives consume only these names.
+describe("density tokens", () => {
+  function declaration(name: string): string {
+    const match = css.match(new RegExp(`${name}:\\s*([^;]+);`));
+    if (!match?.[1]) throw new Error(`token ${name} is not declared`);
+    return match[1].trim();
+  }
+
+  it.each([
+    ["--text-cell", "0.8125rem"],
+    ["--text-kpi", "1.25rem"],
+    ["--spacing-control", "2rem"],
+    ["--spacing-touch", "2.75rem"],
+    ["--spacing-row", "2.25rem"],
+    ["--spacing-row-media", "2.5rem"],
+    ["--spacing-row-head", "2rem"],
+    ["--spacing-card", "1rem"],
+    ["--spacing-card-tight", "0.75rem"],
+    ["--spacing-section", "1.5rem"],
+    ["--radius-card", "0.5rem"],
+    ["--radius-control", "0.375rem"],
+  ])("%s is %s", (name, value) => {
+    expect(declaration(name)).toBe(value);
+  });
+
+  it("declares an overlay shadow for popovers, menus, dialogs and the sheet", () => {
+    expect(declaration("--shadow-overlay")).toMatch(/rgb\(/);
+  });
+
+  // Rule 60.30 / Design System -- Animation: reduced motion floor in the base layer.
+  it("zeroes animation and transition durations under prefers-reduced-motion", () => {
+    const start = css.search(/@media \(prefers-reduced-motion:\s*reduce\)/);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const block = css.slice(start, start + 500);
+    expect(block).toMatch(/animation-duration:\s*0\.01ms/);
+    expect(block).toMatch(/transition-duration:\s*0\.01ms/);
+  });
 });

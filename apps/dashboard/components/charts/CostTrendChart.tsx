@@ -8,14 +8,16 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
+
 import { ChartEmptyState } from "./ChartEmptyState";
+import { ChartLegend } from "./ChartLegend";
 import { formatUsd, toCostTrendSeries, toTeamTrendSeries } from "./chart-data";
 
 type CostTrendChartProps =
@@ -42,6 +44,7 @@ function formatDate(date: string): string {
 const axisTick = { fill: "var(--color-muted-foreground)", fontSize: 12 };
 
 export function CostTrendChart(props: CostTrendChartProps) {
+  const reducedMotion = usePrefersReducedMotion();
   const { rows, series } =
     props.groupBy === "team"
       ? toTeamTrendSeries(props.data, props.teamNames)
@@ -90,10 +93,9 @@ export function CostTrendChart(props: CostTrendChartProps) {
                 backgroundColor: "var(--color-popover)",
                 color: "var(--color-popover-foreground)",
                 border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-md, 6px)",
+                borderRadius: "var(--radius-card)",
               }}
             />
-            <Legend />
             {series.map((s) => (
               <Area
                 key={s.key}
@@ -104,11 +106,14 @@ export function CostTrendChart(props: CostTrendChartProps) {
                 stroke={`var(${s.colorVar})`}
                 fill={`var(${s.colorVar})`}
                 fillOpacity={0.6}
+                isAnimationActive={!reducedMotion}
+                animationDuration={250}
               />
             ))}
           </AreaChart>
         </ResponsiveContainer>
       </div>
+      <ChartLegend items={series} />
       <div className="sr-only">
         <table>
           <caption>{`Cost trend by ${groupLabel}, USD per UTC day`}</caption>

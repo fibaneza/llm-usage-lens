@@ -3,6 +3,7 @@
 import { useQueryErrorResetBoundary } from "@tanstack/react-query";
 import { Component, Suspense, type ReactNode } from "react";
 
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -15,11 +16,15 @@ type SectionBoundaryProps = {
   // Runs after a Retry click, so a parent can reset sibling boundaries that
   // share the failed query.
   onRetry?: () => void;
+  // Rendered above the alert while the section is in error, for controls the
+  // user needs to change the request that failed.
+  errorControls?: ReactNode;
   children: ReactNode;
 };
 
 type ErrorBoundaryProps = {
   title: string;
+  errorControls?: ReactNode;
   resetKeys: readonly unknown[];
   onReset: () => void;
   children: ReactNode;
@@ -54,15 +59,24 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   override render() {
     if (!this.state.hasError) return this.props.children;
 
-    return (
-      <div
-        role="alert"
-        className="border-destructive/40 flex flex-col items-start gap-3 rounded-xl border p-6"
+    const alert = (
+      <Alert
+        variant="destructive"
+        className="flex items-center justify-between gap-3 py-2"
       >
-        <p className="text-sm font-medium">{`Couldn't load ${this.props.title}.`}</p>
+        <p className="text-cell font-medium">{`Couldn't load ${this.props.title}.`}</p>
         <Button type="button" variant="outline" size="sm" onClick={this.retry}>
           Retry
         </Button>
+      </Alert>
+    );
+    if (this.props.errorControls === undefined) return alert;
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="flex min-h-8 flex-wrap items-center gap-2">
+          {this.props.errorControls}
+        </div>
+        {alert}
       </div>
     );
   }
@@ -73,6 +87,7 @@ export function SectionBoundary({
   fallback,
   resetKeys = [],
   onRetry,
+  errorControls,
   children,
 }: SectionBoundaryProps) {
   // Clears TanStack Query's error state so Retry refetches a query that threw
@@ -82,6 +97,7 @@ export function SectionBoundary({
   return (
     <ErrorBoundary
       title={title}
+      errorControls={errorControls}
       resetKeys={resetKeys}
       onReset={() => {
         reset();

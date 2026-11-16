@@ -1,5 +1,6 @@
 "use client";
 
+import { KeyValueList } from "@/components/display/KeyValueList";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHydrated } from "@/hooks/useHydrated";
 import { useMinutesUntil } from "@/hooks/useMinutesUntil";
@@ -15,8 +16,7 @@ const STATUS_LABELS = {
 
 function NextSync({ nextScheduledAt }: { nextScheduledAt: string }) {
   const minutes = useMinutesUntil(nextScheduledAt);
-  if (minutes === null) return null;
-  return <p className="text-sm">{`Next sync in ${minutes} min`}</p>;
+  return minutes === null ? null : <span>{`in ${minutes} min`}</span>;
 }
 
 // Overview section 5 (Design System — Overview Page): the last run's status and
@@ -51,15 +51,22 @@ export function SyncStatusSection() {
   const { status, lastRunAt, nextScheduledAt } = result.status;
 
   return (
-    <div className="flex flex-col gap-1">
-      <p className="text-base font-semibold">{STATUS_LABELS[status]}</p>
-      <p className="text-muted-foreground text-sm">
-        Last run{" "}
-        <time dateTime={lastRunAt} className="text-foreground font-mono">
-          {formatLastRun(lastRunAt)}
-        </time>
-      </p>
-      <NextSync nextScheduledAt={nextScheduledAt} />
-    </div>
+    <KeyValueList
+      items={[
+        { term: "Status", value: STATUS_LABELS[status] },
+        {
+          term: "Last run",
+          value: (
+            <time dateTime={lastRunAt} className="font-mono">
+              {formatLastRun(lastRunAt)}
+            </time>
+          ),
+        },
+        {
+          term: "Next sync",
+          value: <NextSync nextScheduledAt={nextScheduledAt} />,
+        },
+      ]}
+    />
   );
 }

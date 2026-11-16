@@ -2,19 +2,17 @@
 
 import type { DepartmentDetailResponse } from "@llm-usage-lens/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useId, type ReactNode } from "react";
 
 import { LazyCostTrendChart } from "@/components/charts/LazyCharts";
 import { CostEstimateIndicator } from "@/components/display/CostEstimateIndicator";
-import { SectionBoundary } from "@/components/display/SectionBoundary";
+import { Panel } from "@/components/display/Panel";
+import { numericColumn } from "@/components/table/column-helpers";
 import { CountFigure, UsdFigure } from "@/components/table/figures";
 import { RankCell } from "@/components/table/RankingList";
 import { UsageTable } from "@/components/table/UsageTable";
 import type { DateRange } from "@/lib/date-range";
 
 type Team = DepartmentDetailResponse["teams"][number];
-
-const NUMERIC = "font-mono tabular-nums";
 
 const TEAM_COLUMNS: ColumnDef<Team>[] = [
   {
@@ -27,56 +25,27 @@ const TEAM_COLUMNS: ColumnDef<Team>[] = [
       </span>
     ),
   },
-  {
+  numericColumn<Team>({
     accessorKey: "cost",
     header: "Cost",
-    cell: ({ row }) => (
-      <UsdFigure value={row.original.cost} className={NUMERIC} />
-    ),
-  },
-  {
+    cell: ({ row }) => <UsdFigure value={row.original.cost} />,
+  }),
+  numericColumn<Team>({
     accessorKey: "inputTokens",
     header: "Input Tokens",
-    cell: ({ row }) => (
-      <CountFigure value={row.original.inputTokens} className={NUMERIC} />
-    ),
-  },
-  {
+    cell: ({ row }) => <CountFigure value={row.original.inputTokens} />,
+  }),
+  numericColumn<Team>({
     accessorKey: "outputTokens",
     header: "Output Tokens",
-    cell: ({ row }) => (
-      <CountFigure value={row.original.outputTokens} className={NUMERIC} />
-    ),
-  },
-  {
+    cell: ({ row }) => <CountFigure value={row.original.outputTokens} />,
+  }),
+  numericColumn<Team>({
     accessorKey: "invocations",
     header: "Invocations",
-    cell: ({ row }) => (
-      <CountFigure value={row.original.invocations} className={NUMERIC} />
-    ),
-  },
+    cell: ({ row }) => <CountFigure value={row.original.invocations} />,
+  }),
 ];
-
-type SectionProps = {
-  title: string;
-  resetKey: unknown;
-  children: ReactNode;
-};
-
-function Section({ title, resetKey, children }: SectionProps) {
-  const headingId = useId();
-
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <h2 id={headingId} className="text-lg font-semibold">
-        {title}
-      </h2>
-      <SectionBoundary title={title.toLowerCase()} resetKeys={[resetKey]}>
-        {children}
-      </SectionBoundary>
-    </section>
-  );
-}
 
 function Empty({ children }: { children: string }) {
   return <p className="text-muted-foreground py-6 text-sm">{children}</p>;
@@ -102,7 +71,11 @@ export function DepartmentSections({
 
   return (
     <>
-      <Section title="Teams breakdown" resetKey={resetKey}>
+      <Panel
+        title="Teams breakdown"
+        boundaryTitle="teams breakdown"
+        resetKeys={[resetKey]}
+      >
         {department.teams.length === 0 ? (
           <Empty>No teams in this period.</Empty>
         ) : (
@@ -114,15 +87,19 @@ export function DepartmentSections({
             caption="Teams in this department"
           />
         )}
-      </Section>
-      <Section title="Cost by team over time" resetKey={resetKey}>
+      </Panel>
+      <Panel
+        title="Cost by team over time"
+        boundaryTitle="cost by team over time"
+        resetKeys={[resetKey]}
+      >
         <LazyCostTrendChart
           groupBy="team"
           data={department.teamTrend}
           teamNames={teamNames}
         />
-      </Section>
-      <Section title="Top users" resetKey={resetKey}>
+      </Panel>
+      <Panel title="Top users" boundaryTitle="top users" resetKeys={[resetKey]}>
         {department.topUsers.length === 0 ? (
           <Empty>No users in this period.</Empty>
         ) : (
@@ -137,14 +114,17 @@ export function DepartmentSections({
                   {user.userId}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <UsdFigure value={user.cost} className={NUMERIC} />
+                  <UsdFigure
+                    value={user.cost}
+                    className="font-mono tabular-nums"
+                  />
                   {user.costEstimated ? <CostEstimateIndicator /> : null}
                 </span>
               </li>
             ))}
           </ol>
         )}
-      </Section>
+      </Panel>
     </>
   );
 }

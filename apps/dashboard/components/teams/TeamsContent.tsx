@@ -4,6 +4,7 @@ import { parseAsString, useQueryState, useQueryStates } from "nuqs";
 import { useMemo } from "react";
 
 import { SectionBoundary } from "@/components/display/SectionBoundary";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 
@@ -24,16 +25,19 @@ export function TeamsContent() {
   );
 
   return (
-    <SectionBoundary
-      title="the teams"
-      resetKeys={[range.dateFrom, range.dateTo, department]}
-    >
-      <TeamsBody
-        range={range}
-        urlRange={{ dateFrom, dateTo }}
-        department={department}
-        onDepartmentChange={(next) => void setDepartment(next)}
-      />
-    </SectionBoundary>
+    <div className="flex flex-col gap-4">
+      <PageHeader description="Cost, tokens and activity for each team, filterable by department." />
+      <SectionBoundary
+        title="the teams"
+        resetKeys={[range.dateFrom, range.dateTo, department]}
+      >
+        <TeamsBody
+          range={range}
+          urlRange={{ dateFrom, dateTo }}
+          department={department}
+          onDepartmentChange={(next) => void setDepartment(next)}
+        />
+      </SectionBoundary>
+    </div>
   );
 }

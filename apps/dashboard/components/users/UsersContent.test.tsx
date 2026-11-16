@@ -1,5 +1,5 @@
 import type { UserListRow } from "@llm-usage-lens/shared";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -111,11 +111,15 @@ describe("UsersContent -- table", () => {
     const bob = dataRows(table).find((r) =>
       r.textContent?.includes("bob@example.com"),
     ) as HTMLElement;
-    expect(
-      Array.from(bob.querySelectorAll('[aria-hidden="true"]')).some(
-        (el) => el.textContent === "BE",
-      ),
-    ).toBe(true);
+    const initials = Array.from(
+      bob.querySelectorAll('[aria-hidden="true"]'),
+    ).find((el) => el.textContent === "BE");
+    expect(initials).toBeDefined();
+    // Neutral avatar: no per-user colour (Design System -- Avatar Colors,
+    // amended 2026-11-16; Users Page).
+    expect(initials?.getAttribute("style") ?? "").not.toContain(
+      "--color-avatar-",
+    );
   });
 
   it("requests /api/users with the URL date range", async () => {
@@ -183,11 +187,56 @@ describe("UsersContent -- table", () => {
     expect(dataRows(table)[0]).toHaveTextContent("Ledger");
   });
 
-  it("shows the model-usage-only note", async () => {
+  it("shows the model-usage-only note as a role=note under the page description, above the toolbar (Design System -- Users Page, 2026-11-16)", async () => {
     stubApi({ users: usersFor() });
     renderWithProviders(<UsersContent />, URL_PARAMS);
     await screen.findByRole("table");
-    expect(screen.getByRole("note")).toHaveTextContent(/model usage only/i);
+    const note = screen.getByRole("note");
+
+    expect(note).toHaveTextContent(/model usage only/i);
+    const description = note.previousElementSibling;
+    expect(description?.textContent?.trim()).toBeTruthy();
+    expect(description).not.toContainElement(screen.getByRole("searchbox"));
+    expect(
+      note.compareDocumentPosition(screen.getByRole("searchbox")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});
+
+// Design System -- Users Page (2026-11-16): "the toolbar has Search, Columns
+// and Export CSV like Ranking"; SH-70, SH-73.
+describe("UsersContent -- toolbar", () => {
+  it("puts search, Columns and Export CSV in the table toolbar above the table", async () => {
+    stubApi({ users: usersFor() });
+    const view = renderWithProviders(<UsersContent />, URL_PARAMS);
+    const table = await screen.findByRole("table");
+
+    const root = view.container.querySelector(
+      '[data-slot="usage-table"]',
+    ) as HTMLElement;
+    const toolbar = within(root)
+      .getByRole("button", {
+        name: "Export CSV",
+      })
+      .closest('[data-slot="table-toolbar"]') as HTMLElement;
+    expect(toolbar).not.toBeNull();
+    expect(within(toolbar).getByRole("searchbox")).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("button", { name: "Columns" }),
+    ).toBeInTheDocument();
+    expect(toolbar.contains(table)).toBe(false);
+  });
+
+  it("filters the rows by user id from the search box", async () => {
+    stubApi({ users: usersFor() });
+    renderWithProviders(<UsersContent />, URL_PARAMS);
+    const table = await screen.findByRole("table");
+
+    await userEvent.setup().type(screen.getByRole("searchbox"), "bob");
+
+    await waitFor(() => expect(dataRows(table)).toHaveLength(1));
+    expect(dataRows(table)[0]).toHaveTextContent("bob@example.com");
   });
 });
 

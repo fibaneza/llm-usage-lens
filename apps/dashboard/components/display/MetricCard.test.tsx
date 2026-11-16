@@ -39,6 +39,61 @@ describe("MetricCard", () => {
     expect(screen.getByText("$1,234.56").className).toMatch(/font-mono/);
   });
 
+  // Design System -- Component Inventory, `MetricCard` / Layout KPI rows
+  // (amended 2026-11-16): 12px label, one 20px value (`--text-kpi`) with the
+  // delta inline, 12px footnote, 12px vertical and 16px horizontal padding.
+  it("uses the 20px KPI value size, not text-2xl", () => {
+    render(
+      <MetricCard title="Total Cost" value="$1,234.56" icon={DollarSign} />,
+    );
+
+    const value = screen.getByText("$1,234.56");
+    expect(value).toHaveClass("text-kpi");
+    expect(value).not.toHaveClass("text-2xl");
+  });
+
+  it("shows a 12px muted label and a 12px footnote", () => {
+    render(
+      <MetricCard
+        title="Total Cost"
+        value="$1.00"
+        icon={DollarSign}
+        description={<span>footnote</span>}
+      />,
+    );
+
+    expect(screen.getByText("Total Cost")).toHaveClass(
+      "text-xs",
+      "text-muted-foreground",
+    );
+    expect(screen.getByText("footnote").parentElement).toHaveClass("text-xs");
+  });
+
+  it("pads 12px vertically and 16px horizontally", () => {
+    const { container } = render(
+      <MetricCard title="Total Cost" value="$1.00" icon={DollarSign} />,
+    );
+
+    const cardEl = container.querySelector('[data-slot="card"]');
+    expect(cardEl?.className).toMatch(/(^|\s)py-(3|card-tight)(\s|$)/);
+    expect(cardEl?.className).toMatch(/(^|\s)px-(4|card)(\s|$)/);
+  });
+
+  it("places the trend inline with the value in the same row", () => {
+    render(
+      <MetricCard
+        title="Total Cost"
+        value="$1.00"
+        icon={DollarSign}
+        trend={<span>+3%</span>}
+      />,
+    );
+
+    expect(screen.getByText("$1.00").parentElement).toContainElement(
+      screen.getByText("+3%"),
+    );
+  });
+
   it("renders the trend slot when given", () => {
     render(
       <MetricCard

@@ -1,7 +1,7 @@
 import { MODEL_META, type DepartmentRow } from "@llm-usage-lens/shared";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DateRangePicker } from "@/components/filters/DateRangePicker";
 import { previousRange, resolvePreset } from "@/lib/date-range";
@@ -17,16 +17,17 @@ import { renderWithProviders } from "@/test/render-providers";
 
 import { DepartmentsContent } from "./DepartmentsContent";
 
-// Source: implementation-phases Phase 4.3 (tasks and Verify: "cards render
-// with seed data, links navigate to detail pages"; "Tests: grid renders
-// correct number of cards; empty state when no departments"); Data Model --
-// Zod Validation Schemas (`teamCount`, `topModel` on the department row); Design
-// System -- Page Architecture (Departments = "Department cards grid"),
-// Component Inventory (MetricCard, EmptyState, Skeleton, DeltaBadge); Rules
-// 20.5, 20.12, 40.4, 60.12, 60.21, 60.24. The grid is exercised through the
-// real hooks, fetchApi and nuqs with a stubbed same-origin fetch. The module
-// under test is `components/departments/DepartmentsContent.tsx`, a client
-// component that takes no props and reads the global date range from the URL.
+// Source: implementation-phases Phase 4.3 (tasks and Verify: "links navigate
+// to detail pages"; "Tests: empty state when no departments"); Data Model --
+// Zod Validation Schemas (`teamCount`, `topModel` on the department row);
+// Design System -- Navigation (Sidebar) table (Departments = "Departments
+// table (cost, change, tokens, teams, top model) linking to detail", amended
+// 2026-11-16), Responsive Tables, Page frame; design plan D-11 (cards
+// retired), D-19 (search + Columns + Export on every list page); Rules 20.5,
+// 20.12, 40.4, 60.12, 60.21, 60.24. The table is exercised through the real
+// hooks, fetchApi and nuqs with a stubbed same-origin fetch. The module under
+// test is `components/departments/DepartmentsContent.tsx`, a client component
+// that takes no props and reads the global date range from the URL.
 const RANGE = { dateFrom: "2026-01-11", dateTo: "2026-01-20" };
 const PREVIOUS = previousRange(RANGE);
 const URL_PARAMS = { searchParams: RANGE };
@@ -37,7 +38,7 @@ const DETAIL_PREFIX = "/dashboard/departments/";
 const row = departmentRowFixture;
 
 // Cost order (the API order) is Engineering, Data Science, Marketing, Legal.
-// Each card has its own top model so a card showing another card's model, or
+// Each row has its own top model so a row showing another row's model, or
 // all of them, is visible. Legal has no model usage at all.
 const DEPARTMENTS: DepartmentRow[] = [
   row({
@@ -136,22 +137,30 @@ function requestParams(urls: URL[]): Array<Record<string, string>> {
   return urls.map((url) => Object.fromEntries(url.searchParams));
 }
 
-// The department cards: each is a link to a department detail page.
-function cardLinks(): HTMLElement[] {
+// Each department is a table row whose name cell links to its detail page.
+function departmentLinks(): HTMLElement[] {
   return screen
     .queryAllByRole("link")
     .filter((link) => link.getAttribute("href")?.startsWith(DETAIL_PREFIX));
 }
 
-async function loadedCards(): Promise<HTMLElement[]> {
-  await waitFor(() => expect(cardLinks().length).toBeGreaterThan(0));
-  return cardLinks();
+async function loadedLinks(): Promise<HTMLElement[]> {
+  await waitFor(() => expect(departmentLinks().length).toBeGreaterThan(0));
+  return departmentLinks();
 }
 
-async function cardFor(name: string): Promise<HTMLElement> {
-  const cards = await loadedCards();
-  const found = cards.find((card) => textOf(card).includes(name));
-  if (!found) throw new Error(`no department card for "${name}"`);
+async function rowFor(name: string): Promise<HTMLElement> {
+  const links = await loadedLinks();
+  const link = links.find((candidate) => textOf(candidate).includes(name));
+  const tr = link?.closest("tr");
+  if (!tr) throw new Error(`no department row for "${name}"`);
+  return tr;
+}
+
+async function linkFor(name: string): Promise<HTMLElement> {
+  const links = await loadedLinks();
+  const found = links.find((link) => textOf(link).includes(name));
+  if (!found) throw new Error(`no department link for "${name}"`);
   return found;
 }
 
@@ -172,18 +181,22 @@ function orderedNames(cards: HTMLElement[]): string[] {
   );
 }
 
-// "3 teams", "1 team", "Teams 3" or "Teams: 3"; "1 teams" is not accepted.
-function expectTeamCount(card: HTMLElement, count: number) {
-  const noun = count === 1 ? "team" : "teams";
-  const pattern = new RegExp(
-    `(\\b${count}\\s+${noun}\\b)|(\\bteams?\\b\\W{0,3}${count}\\b)`,
-    "i",
-  );
-  expect(textOf(card)).toMatch(pattern);
+// The value in the row's "Teams" column, found through the column header.
+function teamsCell(tr: HTMLElement): string {
+  const table = tr.closest("table") as HTMLElement;
+  const index = within(table)
+    .getAllByRole("columnheader")
+    .findIndex((header) => /^teams/i.test(header.textContent?.trim() ?? ""));
+  expect(index).toBeGreaterThanOrEqual(0);
+  return within(tr).getAllByRole("cell")[index]?.textContent?.trim() ?? "";
 }
 
-function hrefOf(card: HTMLElement): URL {
-  return new URL(card.getAttribute("href") ?? "", "http://localhost");
+function expectTeamCount(tr: HTMLElement, count: number) {
+  expect(teamsCell(tr)).toBe(String(count));
+}
+
+function hrefOf(link: HTMLElement): URL {
+  return new URL(link.getAttribute("href") ?? "", "http://localhost");
 }
 
 afterEach(() => {
@@ -191,12 +204,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("DepartmentsContent -- cards grid", () => {
-  it("renders one card per department row", async () => {
+describe("DepartmentsContent -- departments table", () => {
+  it("renders one table row per department", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    const cards = await loadedCards();
+    const cards = await loadedLinks();
 
     expect(cards).toHaveLength(DEPARTMENTS.length);
   });
@@ -205,7 +218,7 @@ describe("DepartmentsContent -- cards grid", () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    expect(orderedNames(await loadedCards())).toEqual([
+    expect(orderedNames(await loadedLinks())).toEqual([
       "Engineering",
       "Data Science",
       "Marketing",
@@ -227,29 +240,29 @@ describe("DepartmentsContent -- cards grid", () => {
     });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    expect(await loadedCards()).toHaveLength(7);
+    expect(await loadedLinks()).toHaveLength(7);
   });
 
   it("shows a department's name, total cost, total tokens, team count and top model", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    const engineering = textOf(await cardFor("Engineering"));
+    const engineering = textOf(await rowFor("Engineering"));
 
     expect(engineering).toContain("Engineering");
     expect(engineering).toContain("$600.00");
     // Input + output = 1,500,000; the abbreviated form is acceptable too.
     expect(engineering).toMatch(/1,500,000|1\.5M/);
-    expectTeamCount(await cardFor("Engineering"), 3);
+    expectTeamCount(await rowFor("Engineering"), 3);
     expect(engineering).toContain(MODEL_META["claude-opus"].displayName);
   });
 
-  it("shows every card its own figures, not another department's", async () => {
+  it("shows every row its own figures, not another department's", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    const data = await cardFor("Data Science");
-    const marketing = await cardFor("Marketing");
+    const data = await rowFor("Data Science");
+    const marketing = await rowFor("Marketing");
 
     expect(textOf(data)).toContain("$300.00");
     expect(textOf(data)).toMatch(/600,000|600K/);
@@ -281,7 +294,7 @@ describe("DepartmentsContent -- cards grid", () => {
     });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    const misc = textOf(await cardFor("Miscellaneous"));
+    const misc = textOf(await rowFor("Miscellaneous"));
 
     expect(misc).toContain(MODEL_META.other.displayName);
     expect(misc).not.toContain("claude-");
@@ -291,7 +304,7 @@ describe("DepartmentsContent -- cards grid", () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    const legal = await cardFor("Legal");
+    const legal = await rowFor("Legal");
     const text = textOf(legal);
 
     for (const modelName of MODEL_NAMES) {
@@ -307,17 +320,17 @@ describe("DepartmentsContent -- cards grid", () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    const legal = textOf(await cardFor("Legal"));
+    const legal = textOf(await rowFor("Legal"));
 
     expect(legal).toMatch(/\b0\b/);
     expect(legal).not.toMatch(/NaN|undefined/);
   });
 
-  it("never shows the department id as the card's name", async () => {
+  it("never shows the department id as the row's name", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    const engineering = textOf(await cardFor("Engineering"));
+    const engineering = textOf(await rowFor("Engineering"));
 
     expect(engineering).not.toContain("dept-eng");
   });
@@ -327,7 +340,7 @@ describe("DepartmentsContent -- requests", () => {
   it("requests the current range from the URL and the period just before it, with only the range params", async () => {
     const stub = stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
-    await loadedCards();
+    await loadedLinks();
 
     await waitFor(() => {
       const requests = requestParams(stub.departmentsRequests());
@@ -344,7 +357,7 @@ describe("DepartmentsContent -- requests", () => {
     const thirty = resolvePreset("30d");
     const stub = stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />);
-    await loadedCards();
+    await loadedLinks();
 
     expect(thirty).toEqual({ dateFrom: "2025-12-22", dateTo: "2026-01-20" });
     await waitFor(() => {
@@ -363,7 +376,7 @@ describe("DepartmentsContent -- requests", () => {
     renderWithProviders(<DepartmentsContent />, {
       searchParams: { dateFrom: "not-a-date", dateTo: "2026-13-45" },
     });
-    await loadedCards();
+    await loadedLinks();
 
     await waitFor(() =>
       expect(requestParams(stub.departmentsRequests())).toContainEqual({
@@ -383,7 +396,7 @@ describe("DepartmentsContent -- requests", () => {
     renderWithProviders(<DepartmentsContent />, {
       searchParams: { dateFrom: "2025-01-01", dateTo: "2026-01-20" },
     });
-    await loadedCards();
+    await loadedLinks();
 
     await waitFor(() =>
       expect(requestParams(stub.departmentsRequests())).toContainEqual({
@@ -400,10 +413,10 @@ describe("DepartmentsContent -- requests", () => {
 });
 
 describe("DepartmentsContent -- change vs the previous period (DeltaBadge)", () => {
-  it("shows each card's change against the same department's previous cost", async () => {
+  it("shows each row's change against the same department's previous cost", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
-    const engineering = await cardFor("Engineering");
+    const engineering = await rowFor("Engineering");
 
     await waitFor(() =>
       expect(
@@ -413,7 +426,7 @@ describe("DepartmentsContent -- change vs the previous period (DeltaBadge)", () 
       ).toBeInTheDocument(),
     );
     expect(
-      within(await cardFor("Data Science")).getByRole("img", {
+      within(await rowFor("Data Science")).getByRole("img", {
         name: "Down 50.0% vs previous period",
       }),
     ).toBeInTheDocument();
@@ -422,7 +435,7 @@ describe("DepartmentsContent -- change vs the previous period (DeltaBadge)", () 
   it("shows no badge when the department has no previous cost or a previous cost of 0", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
-    const engineering = await cardFor("Engineering");
+    const engineering = await rowFor("Engineering");
     await waitFor(() =>
       expect(
         within(engineering).getByRole("img", { name: /vs previous period/ }),
@@ -430,7 +443,7 @@ describe("DepartmentsContent -- change vs the previous period (DeltaBadge)", () 
     );
 
     for (const name of ["Marketing", "Legal"]) {
-      const card = await cardFor(name);
+      const card = await rowFor(name);
       expect(
         within(card).queryByRole("img", { name: /vs previous period/ }),
       ).not.toBeInTheDocument();
@@ -456,12 +469,12 @@ describe("DepartmentsContent -- change vs the previous period (DeltaBadge)", () 
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
     expect(
-      await within(await cardFor("Engineering")).findByRole("img", {
+      await within(await rowFor("Engineering")).findByRole("img", {
         name: "Up 20.0% vs previous period",
       }),
     ).toBeInTheDocument();
     expect(
-      within(await cardFor("Data Science")).queryByRole("img", {
+      within(await rowFor("Data Science")).queryByRole("img", {
         name: /vs previous period/,
       }),
     ).not.toBeInTheDocument();
@@ -493,13 +506,13 @@ describe("DepartmentsContent -- change vs the previous period (DeltaBadge)", () 
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
     expect(
-      await within(await cardFor("Engineering")).findByRole("img", {
+      await within(await rowFor("Engineering")).findByRole("img", {
         name: "Up 20.0% vs previous period",
       }),
     ).toBeInTheDocument();
   });
 
-  it("keeps the cards intact, without badges or an alert, when the previous-period request fails", async () => {
+  it("keeps the rows intact, without badges or an alert, when the previous-period request fails", async () => {
     const current = departmentsFor();
     const stub = stubApi({
       departments: (url) =>
@@ -508,7 +521,7 @@ describe("DepartmentsContent -- change vs the previous period (DeltaBadge)", () 
           : current(url),
     });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
-    await loadedCards();
+    await loadedLinks();
 
     await waitFor(() =>
       expect(
@@ -519,13 +532,13 @@ describe("DepartmentsContent -- change vs the previous period (DeltaBadge)", () 
     );
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(orderedNames(cardLinks())).toEqual(NAMES);
+    expect(orderedNames(departmentLinks())).toEqual(NAMES);
     expect(
       screen.queryAllByRole("img", { name: /vs previous period/ }),
     ).toHaveLength(0);
   });
 
-  it("does not wait for the previous period before showing the cards", async () => {
+  it("does not wait for the previous period before showing the rows", async () => {
     const current = departmentsFor();
     stubApi({
       departments: (url) =>
@@ -535,7 +548,7 @@ describe("DepartmentsContent -- change vs the previous period (DeltaBadge)", () 
     });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    expect(orderedNames(await loadedCards())).toEqual(NAMES);
+    expect(orderedNames(await loadedLinks())).toEqual(NAMES);
     expect(
       screen.queryAllByRole("img", { name: /vs previous period/ }),
     ).toHaveLength(0);
@@ -543,13 +556,13 @@ describe("DepartmentsContent -- change vs the previous period (DeltaBadge)", () 
 });
 
 describe("DepartmentsContent -- links to the department detail page", () => {
-  it("makes every card a link to its department's detail route", async () => {
+  it("makes every row a link to its department's detail route", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    const cards = await loadedCards();
+    const cards = await loadedLinks();
 
-    expect(cards.map((card) => hrefOf(card).pathname)).toEqual([
+    expect(cards.map((link) => hrefOf(link).pathname)).toEqual([
       "/dashboard/departments/dept-eng",
       "/dashboard/departments/dept-data",
       "/dashboard/departments/dept-mkt",
@@ -557,12 +570,12 @@ describe("DepartmentsContent -- links to the department detail page", () => {
     ]);
   });
 
-  it("carries the global date range in each card's link", async () => {
+  it("carries the global date range in each row's link", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    for (const card of await loadedCards()) {
-      const { searchParams } = hrefOf(card);
+    for (const link of await loadedLinks()) {
+      const { searchParams } = hrefOf(link);
       expect(searchParams.get("dateFrom")).toBe(RANGE.dateFrom);
       expect(searchParams.get("dateTo")).toBe(RANGE.dateTo);
     }
@@ -574,8 +587,8 @@ describe("DepartmentsContent -- links to the department detail page", () => {
       searchParams: { ...RANGE, tab: "users", sort: "cost" },
     });
 
-    for (const card of await loadedCards()) {
-      expect([...hrefOf(card).searchParams.keys()].sort()).toEqual([
+    for (const link of await loadedLinks()) {
+      expect([...hrefOf(link).searchParams.keys()].sort()).toEqual([
         "dateFrom",
         "dateTo",
       ]);
@@ -586,7 +599,7 @@ describe("DepartmentsContent -- links to the department detail page", () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />);
 
-    const cards = await loadedCards();
+    const cards = await loadedLinks();
 
     for (const card of cards) {
       const href = card.getAttribute("href") ?? "";
@@ -609,7 +622,7 @@ describe("DepartmentsContent -- links to the department detail page", () => {
     });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    const card = await cardFor("Ops and Co");
+    const card = await linkFor("Ops and Co");
 
     expect(hrefOf(card).pathname).toBe(
       `/dashboard/departments/${encodeURIComponent("dept/ops & co")}`,
@@ -617,10 +630,10 @@ describe("DepartmentsContent -- links to the department detail page", () => {
     expect(hrefOf(card).searchParams.get("dateFrom")).toBe(RANGE.dateFrom);
   });
 
-  it("gives each card link an accessible name that contains the department name", async () => {
+  it("gives each row link an accessible name that contains the department name", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
-    await loadedCards();
+    await loadedLinks();
 
     for (const name of NAMES) {
       const link = screen.getByRole("link", { name: new RegExp(name) });
@@ -628,21 +641,27 @@ describe("DepartmentsContent -- links to the department detail page", () => {
     }
   });
 
-  it("does not nest links inside a card", async () => {
+  it("keeps one link per row, none nested", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    for (const card of await loadedCards()) {
-      expect(within(card).queryAllByRole("link")).toHaveLength(0);
+    for (const link of await loadedLinks()) {
+      const tr = link.closest("tr") as HTMLElement;
+      expect(within(tr).getAllByRole("link")).toHaveLength(1);
     }
   });
 
-  it("leaves the cards keyboard-reachable (links, not click handlers on a div)", async () => {
+  it("leaves the rows keyboard-reachable (links, not click handlers on a div)", async () => {
     stubApi({ departments: departmentsFor() });
     renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    const [first] = await loadedCards();
-    await userEvent.setup().tab();
+    const [first] = await loadedLinks();
+    const user = userEvent.setup();
+    // The toolbar (search, Columns, Export) precedes the table in tab order
+    // (Design System -- Page frame, "Toolbars are one row").
+    for (let step = 0; step < 10 && document.activeElement !== first; step++) {
+      await user.tab();
+    }
 
     expect(first?.tagName).toBe("A");
     expect(first).toHaveFocus();
@@ -650,26 +669,26 @@ describe("DepartmentsContent -- links to the department detail page", () => {
 });
 
 describe("DepartmentsContent -- loading, empty and error states", () => {
-  it("shows skeletons and no cards, alert or empty state while the request is pending", () => {
+  it("shows skeletons and no rows, alert or empty state while the request is pending", () => {
     stubApi({ departments: NEVER });
     const view = renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
     expect(view.container.querySelectorAll(SKELETON).length).toBeGreaterThan(0);
-    expect(cardLinks()).toHaveLength(0);
+    expect(departmentLinks()).toHaveLength(0);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryAllByText(/\bno (departments?|usage)/i)).toHaveLength(0);
   });
 
-  it("removes the skeletons once the cards have loaded", async () => {
+  it("removes the skeletons once the rows have loaded", async () => {
     stubApi({ departments: departmentsFor() });
     const view = renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
-    await loadedCards();
+    await loadedLinks();
 
     expect(view.container.querySelectorAll(SKELETON)).toHaveLength(0);
   });
 
-  it("shows an empty state, no cards and no alert when there are no departments", async () => {
+  it("shows an empty state, no rows and no alert when there are no departments", async () => {
     stubApi({ departments: departmentsFor([], []) });
     const view = renderWithProviders(<DepartmentsContent />, URL_PARAMS);
 
@@ -677,7 +696,7 @@ describe("DepartmentsContent -- loading, empty and error states", () => {
       (await screen.findAllByText(/\bno (departments?|usage|data|cost)/i))
         .length,
     ).toBeGreaterThan(0);
-    expect(cardLinks()).toHaveLength(0);
+    expect(departmentLinks()).toHaveLength(0);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(view.container.querySelectorAll(SKELETON)).toHaveLength(0);
   });
@@ -690,20 +709,20 @@ describe("DepartmentsContent -- loading, empty and error states", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/couldn.t load/i);
-    expect(cardLinks()).toHaveLength(0);
+    expect(departmentLinks()).toHaveLength(0);
 
     failing = false;
     await userEvent
       .setup()
       .click(within(alert).getByRole("button", { name: /retry/i }));
 
-    expect(orderedNames(await loadedCards())).toEqual(NAMES);
+    expect(orderedNames(await loadedLinks())).toEqual(NAMES);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 
-describe("DepartmentsContent -- the date range drives the grid", () => {
-  it("clears an errored grid when the date range changes, without a Retry click", async () => {
+describe("DepartmentsContent -- the date range drives the table", () => {
+  it("clears an errored table when the date range changes, without a Retry click", async () => {
     const seven = resolvePreset("7d");
     const okFrom = [seven.dateFrom, previousRange(seven).dateFrom];
     const sevenData = [
@@ -732,14 +751,14 @@ describe("DepartmentsContent -- the date range drives the grid", () => {
       .setup()
       .click(screen.getByRole("button", { name: /last 7 days/i }));
 
-    const card = await cardFor("Marketing");
+    const card = await rowFor("Marketing");
     expect(textOf(card)).toContain("$77.70");
     await waitFor(() =>
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
     );
   });
 
-  it("refetches and re-renders the cards for a new range", async () => {
+  it("refetches and re-renders the rows for a new range", async () => {
     const seven = resolvePreset("7d");
     const sevenData = [
       row({
@@ -764,7 +783,7 @@ describe("DepartmentsContent -- the date range drives the grid", () => {
         <DepartmentsContent />
       </>,
     );
-    expect(orderedNames(await loadedCards())).toEqual(NAMES);
+    expect(orderedNames(await loadedLinks())).toEqual(NAMES);
 
     await userEvent
       .setup()
@@ -775,12 +794,113 @@ describe("DepartmentsContent -- the date range drives the grid", () => {
       expect(requests).toContainEqual(seven);
       expect(requests).toContainEqual(previousRange(seven));
     });
-    await waitFor(() => expect(cardLinks()).toHaveLength(1));
-    expect(textOf(await cardFor("Marketing"))).toContain("$77.70");
+    await waitFor(() => expect(departmentLinks()).toHaveLength(1));
+    expect(textOf(await rowFor("Marketing"))).toContain("$77.70");
     expect(screen.queryByText("Engineering")).not.toBeInTheDocument();
-    // The card links follow the new range too.
+    // The row links follow the new range too.
     expect(
-      hrefOf(await cardFor("Marketing")).searchParams.get("dateFrom"),
+      hrefOf(await linkFor("Marketing")).searchParams.get("dateFrom"),
     ).toBe(seven.dateFrom);
+  });
+});
+
+// Design System -- Navigation (Sidebar) table, Departments row (2026-11-16):
+// a table with the columns "cost, change, tokens, teams, top model" after the
+// department name; the table is the shared UsageTable, so it carries the list
+// toolbar (D-19: search + Columns + Export CSV) and sorts by cost descending.
+describe("DepartmentsContent -- table structure and toolbar", () => {
+  it("renders a table captioned Departments with the name, cost, change, tokens, teams and top-model columns", async () => {
+    stubApi({ departments: departmentsFor() });
+    renderWithProviders(<DepartmentsContent />, URL_PARAMS);
+    await loadedLinks();
+
+    const table = screen.getByRole("table", { name: "Departments" });
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent?.trim() ?? "");
+    for (const name of [
+      /^Department/i,
+      /^Cost/,
+      /^Change/,
+      /^Tokens/,
+      /^Teams/,
+      /^Top model/i,
+    ]) {
+      expect(headers.some((header) => name.test(header))).toBe(true);
+    }
+    expect(
+      within(table).getByRole("columnheader", { name: /^Cost/ }),
+    ).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("puts search, Columns and Export CSV in the table toolbar (D-19, SH-70, SH-73)", async () => {
+    stubApi({ departments: departmentsFor() });
+    const view = renderWithProviders(<DepartmentsContent />, URL_PARAMS);
+    await loadedLinks();
+
+    const root = view.container.querySelector(
+      '[data-slot="usage-table"]',
+    ) as HTMLElement;
+    expect(root).not.toBeNull();
+    expect(within(root).getByRole("searchbox")).toBeInTheDocument();
+    expect(
+      within(root).getByRole("button", { name: "Columns" }),
+    ).toBeInTheDocument();
+    expect(
+      within(root).getByRole("button", { name: "Export CSV" }),
+    ).toBeInTheDocument();
+  });
+
+  it("filters the rows by department name from the search box (D-19)", async () => {
+    stubApi({ departments: departmentsFor() });
+    renderWithProviders(<DepartmentsContent />, URL_PARAMS);
+    await loadedLinks();
+
+    await userEvent.setup().type(screen.getByRole("searchbox"), "Data");
+
+    await waitFor(() => expect(departmentLinks()).toHaveLength(1));
+    expect(departmentLinks()[0]).toHaveTextContent("Data Science");
+  });
+});
+
+// Design System -- Responsive Tables / design plan D-11: below md the table
+// becomes a card list driven by the same columns, so every department is still
+// reachable by its link.
+describe("DepartmentsContent -- mobile card list (viewport below 768px)", () => {
+  const originalWidth = window.innerWidth;
+
+  beforeEach(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 375,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: originalWidth,
+    });
+  });
+
+  it("shows one list item per department, titled by its detail link, and no table", async () => {
+    stubApi({ departments: departmentsFor() });
+    renderWithProviders(<DepartmentsContent />, URL_PARAMS);
+
+    const list = await screen.findByRole("list", { name: "Departments" });
+    const items = within(list).getAllByRole("listitem");
+
+    expect(items).toHaveLength(DEPARTMENTS.length);
+    expect(
+      within(items[0] as HTMLElement).getByRole("link", {
+        name: "Engineering",
+      }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("/dashboard/departments/dept-eng"),
+    );
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 });

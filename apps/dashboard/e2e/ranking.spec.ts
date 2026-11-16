@@ -739,7 +739,9 @@ test.describe("ranking page - responsive", () => {
     expect(report.clipped, "a tab is cut off").toEqual([]);
   });
 
-  test("at 375px search, sort, columns and export stay available on the cards", async ({
+  // Design System - Responsive Tables (amended 2026-11-16): the Columns toggle
+  // is hidden in card-list mode.
+  test("at 375px search, sort and export stay available on the cards, without the Columns toggle", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 375, height: 812 });
@@ -751,7 +753,7 @@ test.describe("ranking page - responsive", () => {
     ).toBeVisible();
     await expect(
       main(page).getByRole("button", { name: "Columns" }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(
       main(page).getByRole("button", { name: "Export CSV" }),
     ).toBeVisible();

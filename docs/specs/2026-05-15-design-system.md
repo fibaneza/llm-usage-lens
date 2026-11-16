@@ -19,7 +19,7 @@ Enterprise analytics dashboard for tracking AWS Bedrock usage and cost across an
 | **Runtime** | Node.js | 22 LTS |
 | **Package Manager** | pnpm | Fast, disk-efficient, lockfile |
 | **Styling** | Tailwind CSS | v4+ |
-| **UI Components** | shadcn/ui | Copy-paste components on Radix UI primitives |
+| **UI Components** | shadcn/ui | Copy-paste components on Radix UI primitives (the `radix-ui` umbrella package). The compact refresh adds Breadcrumb, Collapsible, Switch and Alert with no new npm dependency; Sonner, data grids, animation and layout libraries are not used (agent decision, 2026-11-16) |
 | **Design patterns** | UI UX Pro Max | Component patterns, accessibility, interactions |
 | **Authentication** | Auth.js (NextAuth v5) | Microsoft Entra ID provider; provider-agnostic, swappable in `apps/dashboard/auth.ts` |
 | **Validation** | Zod | v4, all API boundaries and form inputs |
@@ -150,7 +150,7 @@ Selected for enterprise SaaS analytics dashboards — clean, high-contrast, prin
 - **Mode support:** Light primary
 - **Performance:** Excellent
 - **Accessibility:** WCAG AAA target for key text; muted/secondary text meets AA (4.5:1) on every surface it sits on
-- **Key effects:** Soft indigo shadows, subtle surface layering, high readability, visible focus states
+- **Key effects:** Neutral surfaces separated by 1px borders (no shadows on cards or tables; a soft shadow only on overlays), one accent colour reserved for the primary action, active states and status, high readability, visible focus states (agent decision, 2026-11-16: compact workspace — an internal tool reads as a tool when chrome recedes; user direction 2026-11-15)
 
 ## Color Palette
 
@@ -158,23 +158,29 @@ Selected for enterprise SaaS analytics dashboards — clean, high-contrast, prin
 |------|-----|-------------|-------|
 | Primary | `#4F46E5` | `--color-primary` | Navigation active states, primary buttons |
 | On Primary | `#FFFFFF` | `--color-on-primary` | Text on primary color |
-| Secondary | `#4338CA` | `--color-secondary` | Links, secondary actions, `secondary` badge (white text): 7.90:1 on `#FFFFFF`, 7.39:1 on `#F5F7FF` (changed 2026-11-15, below) |
+| Secondary | `#F1F5F9` | `--color-secondary` | Neutral secondary buttons and `secondary` badge, foreground text `#0F172A` (16.30:1) (agent decision, 2026-11-16: a second saturated indigo competed with the primary) |
+| Link | `#4338CA` | `--color-link` | Text links (the former secondary role): 7.90:1 on `#FFFFFF`, ≥7.4:1 on `#F8FAFC` (agent decision, 2026-11-16) |
 | Accent/CTA | `#D97706` | `--color-accent` | Warnings, highlights, cost alerts |
-| Background | `#F5F7FF` | `--color-background` | Page background (soft blue-gray canvas) |
+| Background | `#F8FAFC` | `--color-background` | Page background (neutral canvas) (agent decision, 2026-11-16: the indigo-tinted canvas read as a template) |
 | Foreground | `#0F172A` | `--color-foreground` | Primary text |
 | Muted foreground | `#566880` | `--color-muted-foreground` | Placeholders, muted text |
-| Muted | `#E2E8F0` | `--color-muted` | Muted surfaces (subtle fills, tracks) |
+| Muted | `#F1F5F9` | `--color-muted` | Muted surfaces (subtle fills, tracks, hover) — distinct from Border (agent decision, 2026-11-16: muted equal to border made fills look like rules) |
 | Border | `#E2E8F0` | `--color-border` | Card borders, dividers |
-| Destructive | `#BE123C` | `--color-destructive` | Error states, high cost alerts, `destructive` badge and button (white text): 6.29:1 on `#FFFFFF`, 5.88:1 on `#F5F7FF` (changed 2026-11-15, below) |
+| Destructive | `#BE123C` | `--color-destructive` | Error states, high cost alerts, `destructive` badge and button (white text): 6.29:1 on `#FFFFFF`, 6.01:1 on `#F8FAFC` (changed 2026-11-15, below; canvas ratio recomputed 2026-11-16 for the neutral canvas) |
 | Success | `#059669` | `--color-success` | Positive trends, low cost indicators |
+| Input | `#8391A7` | `--color-input` | Boundary of inputs, selects and switch tracks: 3.19:1 on `#FFFFFF` (WCAG 1.4.11) (agent decision, 2026-11-16) |
+| Success text | `#047857` | `--color-success-text` | Success as text (5.48:1 on `#FFFFFF`); `--color-success` stays for icons (3.77:1 ≥ 3:1) (agent decision, 2026-11-16) |
+| Primary subtle | `#EEF2FF` | `--color-primary-subtle` | Range band, selected-row tint (agent decision, 2026-11-16) |
 | Ring | `rgba(79,70,229,0.35)` | `--color-ring` | Input focus glow (decorative; not the keyboard focus indicator) |
-| Focus ring | `#4F46E5` | `--color-focus-ring` | Keyboard focus indicator: 6.29:1 on `#FFFFFF`, 5.88:1 on `#F5F7FF`, 5.10:1 on `#E2E8F0` (Interaction & States; decided 2026-11-06); `apps/dashboard/app/globals-contrast.test.ts` enforces it once the token lands (Phase 5) |
+| Focus ring | `#4F46E5` | `--color-focus-ring` | Keyboard focus indicator: 6.29:1 on `#FFFFFF`, 6.01:1 on `#F8FAFC`, 5.74:1 on `#F1F5F9`. Landed with the compact refresh (agent decision, 2026-11-16: brought forward from Phase 5; `globals-contrast.test.ts` enforces it) |
 
 **Muted foreground (changed 2026-10-29).** Raised from `#94A3B8` (2.0–2.6:1) to `#566880` so muted text meets WCAG AA 4.5:1 on card, background, muted, accent and sidebar surfaces (lowest: 4.62:1 on Muted `#E2E8F0`). `apps/dashboard/app/globals-contrast.test.ts` enforces it. The vendored `docs/design-system/` previews still show the old value; this table wins.
 
 **Destructive and secondary (changed 2026-11-15; orchestrator, user delegated; WCAG 2.2 SC 1.4.3).** `--color-destructive` `#E11D48` (4.70:1 on `#FFFFFF`, 4.39:1 on `#F5F7FF`) and `--color-secondary` `#6366F1` (4.47:1 on `#FFFFFF`, 4.18:1 on `#F5F7FF`) failed AA 4.5:1 as text on the canvas and, for the secondary badge, as a fill behind white text. They become rose-700 `#BE123C` (6.29:1 on `#FFFFFF`, 5.88:1 on `#F5F7FF`, 5.10:1 on Muted `#E2E8F0`) and indigo-700 `#4338CA` (7.90:1 on `#FFFFFF`, 7.39:1 on `#F5F7FF`), which stays distinct from `--color-primary` `#4F46E5`. Their `-foreground` tokens stay `#FFFFFF`. `apps/dashboard/app/globals-contrast.test.ts` enforces 4.5:1 for both tokens against `#FFFFFF` and `--color-background`.
 
 **Known divergence (pre-existing, Phase 1).** The table lists Accent/CTA `#D97706` as `--color-accent`, but `apps/dashboard/app/globals.css` defines `#D97706` as `--color-warning` and sets `--color-accent` to `#EEF2FF` (shadcn's neutral interactive surface). This spec does not resolve it; a follow-up decision should ratify one mapping and update either this table or the code.
+
+**Compact refresh (agent decision, 2026-11-16).** `--color-accent` becomes the neutral `#F1F5F9` (shadcn's hover/focus surface), `--color-sidebar-accent` `#F1F5F9`, and `--color-sidebar-ring` the opaque `#4F46E5`. Muted foreground `#566880` still meets 4.5:1 on every surface (lowest 5.20:1 on Muted `#F1F5F9`). The `--color-avatar-*` family stays defined but tables render neutral avatars (*Avatar Colors*).
 
 ### Chart Colors (Per Model)
 
@@ -208,7 +214,7 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
 
 ### Avatar Colors (Per User)
 
-`UserAvatar` (Team Detail users table, Phase 4.6; reused on Users, Phase 4.8) fills each initials avatar from a dedicated palette, `--color-avatar-1` … `--color-avatar-8`, chosen by a stable hash of the user id so the same user always gets the same colour (adopted 2026-11-06). The initials are white; every fill meets 4.5:1 against white. Avatars are decorative (`aria-hidden`): the user id is always shown as text beside them, so colour never identifies a user. `apps/dashboard/app/globals-contrast.test.ts` enforces the 4.5:1 contrast and the distinctness from the other families. This family is distinct from the model, team and non-model tokens and never stands in for them (Rule 40.2).
+From the compact refresh, avatars in tables are neutral (20px, `--color-muted` fill, foreground initials) because the colour carried no information (agent decision, 2026-11-16). The palette below is kept for non-table uses until a later clean-up. `UserAvatar` (Team Detail users table, Phase 4.6; reused on Users, Phase 4.8) previously filled each initials avatar from a dedicated palette, `--color-avatar-1` … `--color-avatar-8`, chosen by a stable hash of the user id so the same user always gets the same colour (adopted 2026-11-06). The initials are white; every fill meets 4.5:1 against white. Avatars are decorative (`aria-hidden`): the user id is always shown as text beside them, so colour never identifies a user. `apps/dashboard/app/globals-contrast.test.ts` enforces the 4.5:1 contrast and the distinctness from the other families. This family is distinct from the model, team and non-model tokens and never stands in for them (Rule 40.2).
 
 | Token | Hex |
 |-------|-----|
@@ -231,9 +237,22 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
 
 **Self-hosted fonts (decided 2026-11-06):** both families ship as npm packages (`@fontsource-variable/space-grotesk`, `@fontsource-variable/jetbrains-mono`, SIL Open Font License) and load through `next/font/local` in `apps/dashboard/app/layout.tsx`, exposed as the existing `--font-space-grotesk` / `--font-jetbrains-mono` CSS variables. Load the `latin` `wght`-axis woff2 file of each package (the variable weight axis covers the weights above), with `display: "swap"`, matching the previous `next/font/google` subset. The build makes no network request for fonts; a build-time Google Fonts fetch made CI's `build` job fail intermittently.
 
-- **Type scale:** 12 / 14 / 16 / 18 / 24 / 32 / 48
-- **Base:** 16px body
-- **Line height:** 1.5 for body, 1.2 for headings
+- **Compact scale (agent decision, 2026-11-16: user direction 2026-11-15, "more compact, professional"; reference band of internal admin products):**
+
+  | Role | Size / line height | Token or utility |
+  |---|---|---|
+  | Dashboard body, sidebar, controls | 14 / 20 | `text-sm` on the dashboard content root |
+  | Table cells, key–value values | 13 / 20 | `--text-cell` |
+  | Secondary, helper, labels, table headers, nav group labels | 12 / 16 | `text-xs` |
+  | Card title | 14 / 20 semibold | `text-sm` |
+  | Section title (`h2` in a Panel) | 16 / 24 semibold | `text-base` |
+  | Top-bar page title (`h1`) | 16 / 24 semibold | `text-base` |
+  | Entity title (`h2` in `PageHeader`) | 20 / 28 semibold | `text-xl` |
+  | KPI value | 20 / 28 semibold, JetBrains Mono, tabular | `--text-kpi` |
+  | Inputs | 16 below `md` (no iOS zoom), 14 from `md` | `text-base md:text-sm` |
+- **Base:** the root stays 16px (rem and touch sizes are stable); the public pages (`/`, sign-in, no-access, account setup) keep a 16px body.
+- **Line height:** as in the table; 1.2–1.4 for headings.
+- One heading style per level: the `Panel` component owns section titles; no page sets its own heading size.
 - **Number formatting:** Tabular/monospaced figures for data columns (JetBrains Mono handles this natively)
 
 ## Layout
@@ -250,22 +269,28 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
 ### Structure
 
 ```
-+----------+------------------------------------------+
-| Brand    |  Top Bar: Page title · Sync | [7D 30D 90D] · User menu
-+----------+------------------------------------------+
-|  MAIN    |                                           |
-| Overview |  Content Area                             |
-|          |  +--------------------------------------+ |
-| ATTRIB.  |  |  Page Content                        | |
-| Ranking  |  |  (cards, charts, tables)             | |
-| Depts    |  +--------------------------------------+ |
-| Teams    |                                           |
-| Services |                                           |
-| Users    |                                           |
-|          |                                           |
-| Settings |                                           |
-+----------+------------------------------------------+
++----------------+--------------------------------------------------------+
+| Brand          | Top bar: h1 page title · sync | 7D 30D 90D · ⌘K · next sync · user
++----------------+--------------------------------------------------------+
+| USAGE          | PageHeader: breadcrumb (detail) · entity title · actions |
+|  Overview      |             one-line description                         |
+|  Ranking       |             tabs (peer views)                            |
+|  Cost by dept. | Toolbar: search · filters · ⟶ columns · export           |
+|  Cost by team  | Panels (cards, charts, tables)                           |
+|  Cost by serv. |                                                          |
+|  Cost by user  |                                                          |
+| MANAGEMENT     |                                                          |
+|  My usage      |                                                          |
+|  Team          |                                                          |
+|  Organisation  |                                                          |
+|  Users         |                                                          |
+|  Audit         |                                                          |
+| ADMINISTRATION |                                                          |
+|  Settings      |                                                          |
+|            [⇤] |                                                          |
++----------------+--------------------------------------------------------+
 ```
+(agent decision, 2026-11-16: compact workspace; groups and items amended the same day by the mock-up review, decided 2026-11-16, user — *Navigation (Sidebar)*. The diagram shows an `internal-admin`; other roles see fewer items.)
 
 - Brand (logo + product + org name) sits at the top of the sidebar, not in a
   full-width header; it collapses to the mark when the rail collapses. The
@@ -276,20 +301,19 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
   the right. The date filter lives here — not in a content-area band — so it
   reads as a single global control across every page (the earlier "Page Header +
   Date Range Filter" content band was dropped in favour of the top-bar toggle).
-- Top bar responsiveness (decided 2026-10-29): below `md` (768) it may wrap to
-  two rows; from `md` up it is one row whose bottom border aligns with the
-  sidebar header. To fit, the sync-status badge and sync countdown show
-  icon-only below `lg` (1024) and icon + text from `lg`; the command-menu
-  trigger is icon-only from `md` to 1439 px and shows its "Search…" label and
-  ⌘K hint from 1440. Compact forms keep their full meaning in `aria-label` and
+- Top bar responsiveness (decided 2026-10-29; amended 2026-11-16): below `md` (768) it wraps to exactly two rows — trigger, page title, sync icon, search icon and user menu, then the date range; from `md` up it is one row whose bottom border aligns with the sidebar header. The sync-status badge and sync countdown show icon-only below `lg` (1024) and icon + text from `lg`; the command-menu trigger is icon-only below 1440 and shows its "Search…" label and ⌘K hint from 1440 (agent decision, 2026-11-16: a third header row cost 15% of a phone viewport). Compact forms keep their full meaning in `aria-label` and
   `title` (the search trigger also carries `aria-keyshortcuts`); nothing in the
   top bar is hidden from `md` up. Thresholds from `md` up use only the
   breakpoints below (Rule 40.6); below `md`, where the bar may wrap, the
   countdown is hidden under Tailwind's `sm` (640).
+- Sync badges by role (decided 2026-11-16, user): `SyncStatusBadge` and
+  `SyncCountdown` render only for callers who see the **Usage** group (they
+  describe the organisation-level cost pipeline); for a team lead and a user
+  they are absent. The `DateRangePicker` stays for every role, including on
+  *My usage* and *Team*, because spend is per period.
 - Page title is the descriptive heading (e.g. "Cost overview"), not the short
   sidebar label ("Overview").
-- Sidebar: collapsible, persistent on desktop, overlay on mobile; nav is grouped
-  (**Main**, **Attribution**) with Settings pinned to the footer.
+- Sidebar: 224px (`14rem`), collapsible to a 48px icon rail, persistent on desktop, overlay sheet on mobile; nav is grouped **Usage**, **Management**, **Administration** (Settings lives in Administration, last, at the bottom of the side panel; amended 2026-11-16, user: **Management** replaces **Gateway** — *Navigation (Sidebar)*); the footer holds only the collapse icon button (accessible name "Collapse" / "Expand"). Items are 32px with 16px icons; the active item is a neutral fill with a 2px `--color-sidebar-primary` indicator and `aria-current="page"`. A group renders only when it has an item for the caller and an item renders only when its route serves the caller ("hidden, never dead"); the filter runs on the server per request (Rule 60.10) and the sidebar, `PageTitle` and `CommandMenu` share it (agent decision, 2026-11-16: groups by audience — look vs manage). The filter only mirrors the server's authorization: every hidden item's route returns the same `404` as a missing page from the policy module (Rule 10.3; Access Control — *Navigation and landing by role*); hiding a link is never the control.
 - Content area: **fluid** (decided 2026-11-11, user direction; replaces the
   earlier 1280px centred column). It fills the inset beside the sidebar at
   every breakpoint, with no page-level max-width: the content container is as
@@ -308,13 +332,10 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
   departments spans 8 and sync status 4. Other pages keep their current
   section layout inside the fluid content area until a later amendment names
   them.
-- KPI rows: the Overview KPI row (five cards) shows one across at 375, two
-  from `md`, three from `lg` and five from 1440. Any other KPI row shows one
-  across below `md`, then all its cards in one row.
-- Panels and density: every section, tables included, sits on a card surface
-  (card background, 1px `--color-border` border, soft shadow). KPI cards and
-  panels use compact 16px padding on all four sides. Table rows use the 1px
-  `--color-border` divider and a hover highlight; no heavier rules.
+- KPI rows: the Overview KPI row (five cards) shows one across at 375, two from `md`, three from `lg` and five from 1440. Any other KPI row shows one across below `md`, then all its cards in one row. A KPI card shows a 12px label, one 20px value with its delta inline, and at most two 12px footnote lines; cards align to the top, not to the tallest card. Rows are count-agnostic so a later unit can add or hide a card (agent decision, 2026-11-16: the stretched first card made four cards 70% empty).
+- Panels and density (amended 2026-11-16): every section, tables included, sits in a `Panel` — card background, 1px `--color-border` border, `--radius-card` (8px), **no shadow**, 16px padding, a title row (section `h2`, optional one-line description, actions right). A table inside a Panel renders flush (no second border). KPI cards use 12px vertical and 16px horizontal padding. Controls are 32px (`--spacing-control`) on pointer-fine screens; table header rows 32px, body rows 36px (40px with an avatar or action buttons); spacing on a 4px grid, 24px between Panels in a column, 16px in the Overview grid. Overlays (popover, menu, dialog, sheet) are the only surfaces with a shadow (`--shadow-overlay`). Radius: 8px surfaces, 6px controls, full only for status pills, avatars and switches (agent decision, 2026-11-16: compact, restrained scale requested by the user).
+- Page frame (agent decision, 2026-11-16): the top bar carries only global controls and the page `h1`. Every dashboard page starts with a `PageHeader`: breadcrumb on detail pages (first crumb links to the list with the date range carried), the entity title as `h2` on detail pages, a one-line description (13px muted, ≤72ch), page actions on the right (at most one filled primary button per view; others outline or ghost, 32px), an optional tabs strip and the page toolbar. On a page whose content the caller's scope narrows, a `ScopeLine` sits under the description and states the scope ("Showing teams you lead: Platform, Checkout"), so a filtered page never looks empty or complete by accident (decided 2026-11-16, user); it lists the in-scope names only and is omitted for callers who see everything. Toolbars are one row: search, filters, then view controls (Columns) and Export on the right.
+- Tabs vs secondary navigation (agent decision, 2026-11-16; amended 2026-11-16, user): tabs only for 2–6 peer views of one object, with the active tab in the URL; a tab a caller cannot use is not rendered. Two kinds share the one `Tabs` component (`components/ui/tabs.tsx`, never a second one): **view tabs** switch a view inside one route with nuqs state (Ranking dimensions; the Team page's *Members*, *Budgets*, *Keys*), and **route tabs** are links, one route per tab, with `aria-current="page"` on the active one (the Settings tabs and the second tab row inside Settings → Access and Settings → LiteLLM, *Settings Page*). Both use the *Control Patterns* tab style; a second row is the same strip at 32px under the first. The LiteLLM page's tab row is gone: its views are the **Management** sidebar items, each its own route (*Navigation (Sidebar)*). The earlier vertical Settings secondary navigation is superseded by the Settings route tabs.
 - Chart height does not grow with width: a chart panel keeps a fixed height
   (240–360px), so a wide screen adds data width, not empty height.
 - Spacing: 4px/8px grid system
@@ -323,23 +344,30 @@ Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (low
 
 ### Navigation (Sidebar)
 
-Nav is grouped: **Main** (Overview) and **Attribution** (the per-dimension
-breakdowns); Settings is pinned to the sidebar footer. Each item carries a short
-rail label and a descriptive page title shown in the top bar.
+Nav is grouped: **Usage** (Overview and the per-dimension breakdowns), **Management** (the caller's own usage, team, organisation, user and audit views) and **Administration** (Settings) (agent decision, 2026-11-16: replaces Main / Attribution and the footer Settings entry; groups by audience; amended 2026-11-16, user, from the mock-up review: **Management** replaces **Gateway** and the single LiteLLM item, and the LiteLLM page's tabs become Management items, each its own route). Each item carries a short rail label and a descriptive page title shown in the top bar. Which roles see each item is in Access Control — *Navigation and landing by role*; an item the caller may not see is absent, never disabled, and its route returns the same `404` as a missing page (Rule 10.3).
+
+**Unique labels (agent decision, 2026-11-16: "Teams" and "Users" appeared twice in one sidebar; parallel "Cost by …" labels for every breakdown in a group is the common pattern and keeps each label unique).** The four Usage breakdown items read "Cost by department", "Cost by team", "Cost by service", "Cost by user"; their page titles (`h1`) follow. Routes, nuqs names and query keys are unchanged.
 
 | Group | Item (rail label) | Page title | Route | Description |
 |-------|-------------------|------------|-------|-------------|
-| Main | Overview | Cost overview | `/dashboard` | KPI cards, cost trend chart, top consumers |
-| Attribution | Ranking | Cost ranking | `/dashboard/ranking` | Leaderboard with tabs + model filter |
-| Attribution | Departments | Department breakdown | `/dashboard/departments` | Department cards grid |
-| — | Department Detail | Department breakdown | `/dashboard/departments/[id]` | Teams breakdown, cost over time (drill-down, no rail item) |
-| Attribution | Teams | Team breakdown | `/dashboard/teams` | Teams list, filterable by department |
-| — | Team Detail | Team breakdown | `/dashboard/teams/[id]` | Services + users breakdown (drill-down, no rail item) |
-| Attribution | Services | Service breakdown | `/dashboard/services` | All services across all accounts |
-| Attribution | Users | User breakdown | `/dashboard/users` | All users across all accounts |
-| Gateway | LiteLLM | LiteLLM usage & administration | `/dashboard/litellm` | LiteLLM-reported spend, members, keys, model access (LiteLLM units L3+; [LiteLLM spec](2026-11-10-litellm.md)) |
-| Footer | Settings | Settings | `/dashboard/settings` | Account registry, sync status, data retention (tag coverage: Phase 4.9b) |
+| Usage | Overview | Cost overview | `/dashboard` | KPI cards, cost trend chart, top consumers |
+| Usage | Ranking | Cost ranking | `/dashboard/ranking` | Leaderboard with tabs + model filter |
+| Usage | Cost by department | Cost by department | `/dashboard/departments` | Departments table (cost, change, tokens, teams, top model) linking to detail (agent decision, 2026-11-16: consistent with the other breakdowns; the three-card grid left most of the canvas empty) |
+| — | Department Detail | Cost by department | `/dashboard/departments/[id]` | Teams breakdown, cost over time (drill-down, no rail item); `PageHeader` breadcrumb "Departments / <name>" (agent decision, 2026-11-16) |
+| Usage | Cost by team | Cost by team | `/dashboard/teams` | Teams list, filterable by department |
+| — | Team Detail | Cost by team | `/dashboard/teams/[id]` | Services + users breakdown (drill-down, no rail item); `PageHeader` breadcrumb "Teams / <name>" (agent decision, 2026-11-16) |
+| Usage | Cost by service | Cost by service | `/dashboard/services` | All services across all accounts |
+| Usage | Cost by user | Cost by user | `/dashboard/users` | All users across all accounts |
+| Management | My usage | My usage | `/dashboard/me` | The caller's own usage (*Management pages*) |
+| Management | Team | Team usage & management | `/dashboard/manage/team` | One page for a team's usage and its management (*Management pages*) |
+| Management | Organisation | Organisation usage | `/dashboard/manage/organisation` | Totals across linked teams and a per-team table (LiteLLM spec — *Views by role*) |
+| Management | Users | User lookup | `/dashboard/manage/users` | Search a user and see their spend (LiteLLM spec — *Views by role*) |
+| Management | Audit | Audit log | `/dashboard/manage/audit` | One audit page with a source filter, App · Gateway (*Management pages*) |
+| Administration | Settings | Settings | `/dashboard/settings` | Admin area with route tabs: AWS accounts, Sync and data, LiteLLM, Access (*Settings Page*) |
+
 | — | Account | Account | `/dashboard/account` | The caller's sign-in method; for password users, the own password change form (from the user menu, no rail item; added 2026-11-15, Access Control D30) |
+
+**Routes and redirects (agent decision, 2026-11-16: `/dashboard/me` is the route 4R.5 already names; the other Management items share one `/dashboard/manage/` prefix so they never collide with the Usage routes `/dashboard/teams` and `/dashboard/users`, and the prefix names the group rather than LiteLLM because the Team and Audit pages compose app and gateway data).** Every existing URL keeps working through a redirect (`redirect()` in the page, presentation only): `/dashboard/litellm` → the caller's landing page; `/dashboard/litellm?tab=my-usage|team|organisation|users|audit` → the matching Management route (other query parameters carried); the Settings audit entry (`/dashboard/settings?section=audit` and `/dashboard/settings/audit`) → `/dashboard/manage/audit`. A redirect target the caller may not see returns the same `404` as a missing page. The earlier note that no `/dashboard/audit` route exists is superseded; there is still no `/dashboard/audit`.
 
 ### Overview Page
 
@@ -360,9 +388,10 @@ Charts:
 ### Ranking Page
 
 ```
-Tabs:   [Departments] [Teams] [Services] [Users]
-Filter: Model: [All Models v]  Date: [Last 30 days v]
+PageHeader tabs: [Departments] [Teams] [Services] [Users]      (nuqs `tab`)
+Toolbar:         [Search by name] [Model: All models v]  ⟶  [Columns] [Export CSV]
 ```
+Date stays in the top bar. Numeric columns are right-aligned in JetBrains Mono with tabular figures (agent decision, 2026-11-16: one toolbar row instead of three; numbers compare down a column).
 
 Sortable data table columns:
 - Rank (with medal icons for top 3)
@@ -376,29 +405,33 @@ Sortable data table columns:
 
 ### Department Detail Page
 
-- Department header with total cost, tokens, invocations, and the "Bedrock service charges only" scope note
+- `PageHeader`: breadcrumb, department name (`h2`), the "Bedrock service charges only" scope note; KPI row with total cost, tokens and invocations, and the previous-period comparison as a compact strip in the same row (agent decision, 2026-11-16: the separate comparison block repeated the KPIs)
 - Teams breakdown table (sortable)
 - Cost over time: stacked area by team
 - Top users in this department: ranked list
 
 A per-department model usage chart is not part of v1; the sections match Phase 4.4 (decided 2026-11-06).
 
+Sections are Panels in one scroll (no tabs; agent decision, 2026-11-16: short pages).
+
 ### Team Detail Page
 
-- Team header with the team's account IDs (one `AccountIdBadge` per entry of `accounts[]` — normally one, since each team owns exactly one account (System Architecture — *Organizational Hierarchy*); more appear only when the range spans an account remapping), total cost, tokens, and the "Bedrock service charges only" scope note
+- `PageHeader`: breadcrumb, team name (`h2`), and one meta line with the department, the team's account IDs and the scope note (agent decision, 2026-11-16) — one `AccountIdBadge` per entry of `accounts[]` — normally one, since each team owns exactly one account (System Architecture — *Organizational Hierarchy*); more appear only when the range spans an account remapping), total cost, tokens, and the "Bedrock service charges only" scope note
 - Services breakdown table
 - Users breakdown table
 - Model usage breakdown: bar chart
 
 A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 (decided 2026-11-06).
 
+Sections are Panels in one scroll (no tabs; agent decision, 2026-11-16: short pages).
+
 ### Services Page
 
-- Services table (`UsageTable`: Service Name, Team, Department, Cost, Tokens, Invocations, % of Total), one row per team and service (Data Model — `ServicesResponseSchema`), with the "model usage only" note. The sections match Phase 4.7 (decided 2026-11-06).
+- Services table (`UsageTable`: Service Name, Team, Department, Cost, Tokens, Invocations, % of Total), one row per team and service (Data Model — `ServicesResponseSchema`), with the "model usage only" note. The sections match Phase 4.7 (decided 2026-11-06). The "model usage only" note is a one-line `role=note` under the page description; the toolbar has Search, Columns and Export CSV like Ranking (agent decision, 2026-11-16: consistent list toolbar).
 
 ### Users Page
 
-- Users table (`UsageTable`: User (`UserAvatar` + user id), Team, Department, Cost, Tokens, Invocations, % of Total), one row per team and user (Data Model — `UsersResponseSchema`), with the "model usage only" note. The sections match Phase 4.8 (decided 2026-11-06).
+- Users table (`UsageTable`: User (`UserAvatar` + user id), Team, Department, Cost, Tokens, Invocations, % of Total), one row per team and user (Data Model — `UsersResponseSchema`), with the "model usage only" note. The sections match Phase 4.8 (decided 2026-11-06). The "model usage only" note is a one-line `role=note` under the page description; the toolbar has Search, Columns and Export CSV like Ranking (agent decision, 2026-11-16: consistent list toolbar). Users renders neutral 20px avatars (*Avatar Colors*).
 
 ### Settings Page
 
@@ -408,6 +441,13 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 - Data retention: TTL configuration display
 - Access (Phase 4R; [Access Control spec](2026-11-10-access-control.md)): **Members** (add by email/UPN, remove, move; plus the **Pending and stale** access lists, built in 4R.4 — Access Control D34, reversed by the user 2026-11-15; a scoped read route, filtered by the management-read rule), **Team admins** (team and department scopes), **Visibility** (team settings, department settings and cap, "limited by department" hints), and `internal-admin`-only **Group mappings**, **Role grants** (re-authentication prompt and reason field), **Identity links**, **Password users** (create with a one-time setup link shown once, reset, TOTP reset, disable, delete, the SSO reference, bind status and conflicts; the password sign-in switch), **Per-user approval**; **Audit log** and **Access review** export for `internal-admin` and `internal-auditor`. Team and department pickers list the account registry through `GET /api/access/org-units`, scoped to what the caller manages, and member and admin rows show each person's name and email (Access Control D37). A re-auth write in Role grants or Password users opens "Confirm it's you" and returns to that section (Access Control — *Recent authentication*). Sections a caller cannot use are not rendered; SSO-managed rows show a read-only "Managed in Entra" badge. Forms meet the Phase 5 floor (axe clean, keyboard, visible focus).
 
+**Administration tabs (decided 2026-11-16, user, from the mock-up review; supersedes the vertical secondary navigation and the `section` parameter in the next paragraph; built by unit D of the LiteLLM role-views run, which owns the Settings page — this spec fixes only the look).** Administration holds the `internal-admin` and `internal-org-admin` configuration of the app and the organisation and stays the last sidebar item. Settings is split into **route tabs** at the top of the page, each its own route — *AWS accounts*, *Sync and data*, *LiteLLM*, *Access* — with a second route-tab row inside *Access* and inside *LiteLLM* (the Settings → LiteLLM tabs below); both rows use the one `Tabs` component (*Layout* — *Tabs vs secondary navigation*). `/dashboard/settings` opens the first tab the caller can use, and the old `?section=` and `#slug` links redirect to the tab that holds the section. Changes from the review:
+
+- **Team membership leaves Settings → Access** for Management → Team (*Management pages*): the **Members** and **Pending and stale** lists of a team move there. Settings → Access keeps the organisation-wide access settings (Team admins, Visibility, Group mappings, Role grants, Identity links and mapping, Password users, Per-user approval) and shows a one-line link "Team membership is managed under Management → Team".
+- **Audit leaves Settings** (agent decision, 2026-11-16, addition 6 — *Management pages*): the Audit log and Access review live on the one Audit page under Management; the former Settings audit entry redirects there, so the Settings tab row has no *Audit* tab.
+
+**Administration layout (agent decision, 2026-11-16: 15 sections on one 12,000px page had no structure; LiteLLM-admin and Linear-settings pattern; navigation superseded the same day by *Administration tabs* above — the group contents, section rules and Panel rules below still apply, minus the Members, Pending and stale, and Audit sections that moved).** Before the route tabs, Settings was one route, `/dashboard/settings`, with a vertical secondary navigation (224px, sticky; a labelled select below `lg`) and the active group in the URL (nuqs `section`). Groups, in order: **AWS accounts** (`accounts`, default: Account registry), **Sync and data** (`sync`: Sync status, Data retention; Tag coverage when 4.9b lands), **LiteLLM** (`litellm`: the Settings → LiteLLM panel and its tabs, *LiteLLM Page*), **Access** (`access`: People — Members, Team admins, Pending and stale; Visibility; Roles and mapping — Group mappings, Role grants; Identities — Identity links, Identity mapping; Sign-in — Password users, Per-user approval), **Audit** (`audit`: Audit log, Access review). A group with no section the caller can use is not rendered; an unknown or unauthorised `section` falls back to the first visible group. Every section keeps its `h2` text and its `id` slug; a `#slug` hash (including the step-up returns `#role-grants` and `#password-users`) selects the group that contains it and scrolls to the section, so no return-URL parameter is introduced (Access Control — *Recent authentication*). Each section is a Panel; read-only configuration is a key–value list; forms keep the 72ch measure; destructive actions sit last in a separated row of their Panel (deactivate account, reset toggles) or last in a row's actions; one filled primary button per view.
+
 ### Account Page
 
 *Added 2026-11-15 (Access Control D30).* `/dashboard/account`, reached from the user menu; every signed-in role.
@@ -415,6 +455,8 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 - **Password users:** a "Change password" form — current password, new password, confirm new password, and a TOTP code when enrolled — posting to `POST /api/account/password`. Inline errors: the generic refusal, `WEAK_PASSWORD` (12–128 characters, not a common password), mismatched confirmation (client-side, before sending). On success a confirmation message; the page stays signed in and other sessions end (Access Control D29).
 - **Other sign-in methods** (Entra, master user, dev login): the sign-in method and a short note on where the credential is managed; no form.
 - Forms meet the Phase 5 floor (axe clean, keyboard, visible focus, labelled fields, `autocomplete` `current-password` / `new-password` / `one-time-code`).
+
+The top-bar `h1` reads "Account"; the page renders the sign-in facts as a key–value list in a Panel and no second "Account" heading (agent decision, 2026-11-16: the fallback "Dashboard" title was wrong).
 
 ### LiteLLM Page
 
@@ -426,7 +468,7 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 - **Shown-once key dialog:** after generate or rotate, a dialog shows the value once with a copy action and the warning "This key will not be shown again"; closing it discards the value.
 - **Team-key budget note:** "Only the team and team-member budgets are enforced on team keys; the owner's personal budget does not apply."
 - **Controls** for disabled or Enterprise-only operations are not rendered; destructive actions (remove member, reset spend, delete key) confirm in a dialog, never a browser `confirm()`.
-- **Tabs (L3b, 2026-11-16):** the page's sections are grouped into tabs — *My usage*, *Team*, *Organisation*, *Users*, *Audit* — with the shadcn `Tabs` component and `?tab=` URL state; each tab keeps its sections' Suspense + ErrorBoundary (LiteLLM spec — *Views by role*). The *Users* tab and the Settings *Users* tab share one search component: a labelled search input, results in a shadcn `Table` (at most 25 rows, so no TanStack paging), a selected user's spend and daily spend below.
+- **Tabs (L3b, 2026-11-16; superseded the same day, user, by the mock-up review):** L3b grouped the page's sections into tabs — *My usage*, *Team*, *Organisation*, *Users*, *Audit* — with the shadcn `Tabs` component and `?tab=` URL state. The tab row is replaced by the **Management** sidebar items, each its own route, and `/dashboard/litellm` (with any `?tab=`) redirects (*Navigation (Sidebar)*, *Management pages*); each view keeps its sections' Suspense + ErrorBoundary and its "LiteLLM-reported" labels (LiteLLM spec — *Views by role*). The *Users* tab and the Settings *Users* tab share one search component: a labelled search input, results in a shadcn `Table` (at most 25 rows, so no TanStack paging), a selected user's spend and daily spend below.
 - **Settings → LiteLLM** (`internal-admin`; `internal-org-admin` edits *Guardrails* and *Team links* and sees *Connection* read-only, LD24; read-only for `internal-auditor`; tabbed from L3b: *Connection*, *Guardrails*, *Team links*, *Users*): connection URL, edition (read-only), service-key status ("configured: yes/no" — no entry, reveal or rotate), connection test result, operation toggles, team links (link, re-link and unlink with an inline confirmation), orphaned LiteLLM members. Per-section edit flags come from one pure helper in `lib/auth/` (`litellmPanelCapabilities`); a read-only section renders no write control at all (no switch, Save, Reset, connection test or link control), so the UI can issue no write (LT20).
   - **Guardrails grouping (agent decision, 2026-11-16, unit A1 — G6):** the ~33 operation switches are grouped by operation family, in this order: *Team writes*, *Member writes*, *Key writes*, *Team reads*, *User reads*, *Key and spend reads*, *Proxy reads*, then *Other operations* for any name not mapped (never dropped). Each group has a heading and a one-line description (its accessible description); each row shows the operation's LiteLLM call from the LiteLLM spec's *Reads* / *Writes* tables. Empty groups are omitted; order inside a group and the defaults are unchanged. Reason: a flat list of ~33 switches is hard to scan, and the spec's own tables already split operations by family.
 
@@ -435,11 +477,27 @@ A per-team cost-over-time chart is not part of v1; the sections match Phase 4.6 
 - **No access** (session the policy cannot resolve): a full-page `EmptyState` — "You don't have access to LLM Usage Lens. Contact your administrator."
 - **No team** (`internal-viewer` without a member team or admin scope): *My usage* plus "Ask your team lead for access".
 - **Not visible** (a team or department hidden by visibility): a neutral inline notice, never a zero.
-- **Scoped labels:** callers below `internal-org-admin` see "your teams" on organisation-wide KPIs, rankings and charts; no organisation total includes out-of-scope cost.
-- **Role-aware landing:** `internal-viewer` and members → *My usage*; `internal-team-admin` → *My teams*; `internal-org-admin`, `internal-admin`, `internal-auditor` → Overview. The landing is decided on the stored scope (global > department > team > *My usage*), not on the role claim, because the scope is what the pages filter on (agent decision D-R5-2a, 2026-11-16).
-- **Department-only admins (agent decision D-R5-2, 2026-11-16, coordinator ruling):** an admin whose only scopes are departments lands on their department (one scope) or on Departments (several), not on *My teams*. Reason: the narrowest view of the caller's scope; a department scope has no team list of its own.
-- **Overview opt-out and scoped Overview link (agent decision D-R5-1, 2026-11-16):** the landing redirect runs in `app/dashboard/page.tsx` (not `auth.ts`): a non-global caller requesting `/dashboard` without `?view=overview` is redirected to their landing page, and their Overview nav and command-menu link is `/dashboard?view=overview`. Reason: one behaviour for every sign-in method with no `auth.ts` change, while the Overview stays reachable for scoped callers. Rejected: a separate Overview route (larger link and test churn).
+- **Scoped labels:** callers below `internal-org-admin` see "your teams" on organisation-wide KPIs, rankings and charts; no organisation total includes out-of-scope cost. (Under review, 2026-11-16: with the Usage group shown only to organisation-level roles, these labels apply on the Usage pages only if the open lead question in Access Control — *Navigation and landing by role* keeps a scoped cost view; they stay specified until it is answered.)
+- **Role-aware landing:** `internal-viewer` and members → *My usage*; `internal-team-admin` → *My usage* (decided 2026-11-16, user; replaces *My teams*, whose content is under review — Access Control — *Navigation and landing by role*); `internal-org-admin`, `internal-admin`, `internal-auditor` → Overview ("Cost overview"). As landed in Phase 4R.5 the code still sends `internal-team-admin` to *My teams*; the change to *My usage* is built with the compact-workspace shell work (implementation-phases — *Phase 5*). The landing is decided on the stored scope (global > department > team > *My usage*), not on the role claim, because the scope is what the pages filter on (agent decision D-R5-2a, 2026-11-16).
+- **Department-only admins (agent decision D-R5-2, 2026-11-16, coordinator ruling; superseded 2026-11-16 (user) by *Navigation and landing by role*; still in code until Slice B):** an admin whose only scopes are departments lands on their department (one scope) or on Departments (several), not on *My teams*. Reason: the narrowest view of the caller's scope; a department scope has no team list of its own. Under the superseding matrix a lead of any scope, department included, lands on *My usage* (`/dashboard/me`) (Access Control — *Navigation and landing by role*).
+- **Overview opt-out and scoped Overview link (agent decision D-R5-1, 2026-11-16; superseded 2026-11-16 (user) by *Navigation and landing by role*; still in code until Slice B):** the landing redirect runs in `app/dashboard/page.tsx` (not `auth.ts`): a non-global caller requesting `/dashboard` without `?view=overview` is redirected to their landing page, and their Overview nav and command-menu link is `/dashboard?view=overview`. Reason: one behaviour for every sign-in method with no `auth.ts` change, while the Overview stays reachable for scoped callers. Rejected: a separate Overview route (larger link and test churn).
 - **Access-state copy (agent decision D-R5-4, 2026-11-16):** the page and nav label is "My usage"; its heading is "Your Bedrock usage"; the no-team state says "Ask your team lead for access"; a hidden team or department reads "not visible" with no zero shown; an empty period reads "No Bedrock usage". Reason: the empty-state precedent in this spec. The "your teams" notice is not shown to a caller with no team or admin scope (there is nothing to scope).
+
+### Management pages
+
+*Added 2026-11-16 (user, mock-up review: decisions and the eight accepted additions). Roles per Access Control — *Navigation and landing by role*; LiteLLM data per the LiteLLM spec — *Views by role*. Every figure keeps its provenance label; LiteLLM-reported and AWS-billed figures are never added together (L6's combined rules aside).*
+
+- **My usage** (`/dashboard/me`, every signed-in role). The caller's own usage: the 4R.5 own Bedrock usage (`/api/me/usage`) and the LiteLLM *My usage* view (spend, budget with reset time, limits, own keys' metadata), each labelled with its source. It answers "why": a spend-by-day chart and a spend-by-model breakdown of the caller's own data — lazy-loaded Recharts in `ResponsiveContainer`, series coloured by the model token from `packages/shared` (Rule 40.2, 40.3). A **"Request a budget increase"** link addresses the caller's team lead as a `mailto:` link or a copyable address; no outbound-message feature is added, and the link is absent when no lead is known. The date range stays; sync badges are hidden for a lead and a user (*Layout*).
+- **Team** (`/dashboard/manage/team`; lead for the teams it leads, `internal-org-admin` and `internal-admin` for every team; `internal-auditor` read-only — Access Control). **One page** for a team's usage and its management, replacing the LiteLLM *Team* tab and the Settings team membership. `PageHeader`: team selector (nuqs `team`; a lead's list holds only the teams it leads), the `ScopeLine` for a lead, and the view tabs *Members*, *Budgets*, *Keys*. Usage: team spend ("LiteLLM-reported"), team budget, members, keys' metadata, model access. Management: member search, **Add member**, **Edit budget**, **Reset spend** (a button at the right of each member row), **Remove member**, and a bulk **"Reset spend for all members"** above the member table.
+  - **Membership** (agent decision, 2026-11-16: the mock-up's member table carries the app membership — role, source "group mapping"/"manual", added date — and Settings → Access hands team membership to this page): the member list is the team's app affiliations with their pending and stale entries (the 4R.4 Members routes), joined with each member's LiteLLM spend and budget when the team is linked. Add and remove act on the affiliation through the existing 4R.4 routes and, where the team is linked and the operation is enabled, on the LiteLLM membership through the L4 routes; an SSO-managed member shows "Managed in Entra" and no remove. The page adds **no LiteLLM call of its own** (Rule 10): every write goes through an existing or L4 Route Handler.
+  - **Lead's other team-scoped access actions** (agent decision, 2026-11-16: a lead no longer sees Administration, and the Access Control permission matrix is unchanged, so its team-scope admin grants and its team's visibility setting need a surface): on this page, for a caller whose scope allows it, the *Members* tab marks team admins with a grant/remove action (never on the caller's own scope) and a *Visibility* Panel shows the team setting with "limited by department" hints, both through the existing 4R.4 routes. Settings → Access keeps the same sections for `internal-org-admin` and `internal-admin`.
+  - **Write controls arrive with L4.** Edit budget, reset spend (`resetMemberSpend`, toggle default **off**, LD10) and the LiteLLM member writes are built with LiteLLM unit L4; until the operation is enabled for the caller the control is **absent, not dead** (*LiteLLM Page* — *Controls*).
+  - **Confirm destructive actions** (decided 2026-11-16, user): reset spend and remove member open a `AlertDialog` that names the person and the effect — e.g. "Sets j.lee's spend to $0.00. Recorded in the audit log." — with Cancel focused first and the `destructive` confirm button; the bulk reset's dialog states the member count ("Resets spend for 12 members to $0.00. Recorded in the audit log."). Never a browser `confirm()`.
+  - **Budget as a bar** (decided 2026-11-16, user): a thin `BudgetBar` under each member and team budget — neutral below 80%, warning from 80%, destructive at or above 100% — with the percentage as text beside it (colour is never the only signal; "No limit" when there is no budget). The member table toolbar gains a **"Near or over budget"** filter (≥ 80%).
+  - **AWS-billed cost tile — open, user decision pending (asked 2026-11-16).** Addition 2 proposes an "AWS-billed cost" tile next to the LiteLLM-reported team spend, for the same team and period, read through the existing access layer and scoped to the teams the caller may see, each figure labelled with its source and never added together. Whether a lead keeps any Bedrock/AWS cost view of its teams is the open question in Access Control — *Navigation and landing by role*; the tile is **not built** until the user answers, and nothing else on this page depends on it.
+- **Organisation** and **Users** (`/dashboard/manage/organisation`, `/dashboard/manage/users`): the LiteLLM *Organisation* and *Users* views unchanged in content (LiteLLM spec — *Views by role*), now their own routes.
+- **Audit** (`/dashboard/manage/audit`; agent decision, 2026-11-16: audit is an oversight read used by `internal-auditor`, who holds no configuration, so it sits with the other read views under Management rather than in Administration; one placement, the Settings entry redirects). One page with a **source filter** — *App* (the dashboard audit log, Access Control — *Audit log*) and *Gateway* (LiteLLM's audit, LiteLLM spec — *Audit*) — shown as a segmented toggle in the toolbar (nuqs `source`). It is **composition, not a merged store**: each source keeps its own route, permission and pagination, and a source the caller may not read is not offered. The Access review export is a page action for the roles that may export it. Viewing either source stays audited.
+- **Scope line and date range:** every Management page a scope narrows shows the `ScopeLine` (*Layout* — *Page frame*); the global date range applies to every Management page.
 
 ## Responsive Tables
 
@@ -448,7 +506,9 @@ Data tables (`UsageTable`, `RankingList`) have up to 8 columns, which cannot fit
 - **Desktop / tablet (≥ `md`, 768px+):** Full table — all columns, sortable headers.
 - **Mobile (< `md`):** Each row collapses into a **card**. The entity name is the card title, Cost is shown prominently, and the remaining metrics render as label–value pairs. TanStack Table drives both renders from the same data, sorting, and pagination.
 
-Sort and filter controls (`SearchInput`, `ModelFilter`, `ColumnToggle`, `Pagination`) remain available in both layouts. No horizontal scroll at any viewport.
+Sort and filter controls (`SearchInput`, `ModelFilter`, `Pagination`) remain available in both layouts; `ColumnToggle` is hidden in card-list mode. No horizontal scroll at any viewport.
+
+Table spec (agent decision, 2026-11-16): sticky header; numeric columns right-aligned in JetBrains Mono with tabular figures, header aligned with its column; inline row actions as 32px icon buttons with tooltips naming the action, destructive last and separated; Columns toggle on every desktop table (hidden in card-list mode); pagination controls only when there is more than one page, with the row count always shown; the card list uses the non-hideable column as the card title. Touch targets reach 44px below `md` and on coarse pointers.
 
 ## Date Filtering
 
@@ -482,15 +542,15 @@ Conventions for interactive controls, established with the global
   button variant — no bordered box. Muted by default, foreground on hover.
   Reserve `outline` (bordered) buttons for standalone secondary actions, not for
   inline icon affordances.
-- **Popovers, dropdowns, and dialogs:** soft floating surfaces — `rounded-xl`,
-  a light `border-border/60`, and `shadow-lg` on `bg-popover`. Avoid heavy
-  full-strength borders on overlays.
+- **Popovers, dropdowns, and dialogs:** floating surfaces — `--radius-card` (8px), a light `border-border/60` and `--shadow-overlay` on `bg-popover`; the only shadowed surfaces in the app (agent decision, 2026-11-16).
+- **Buttons:** one filled primary per view; section and toolbar actions `outline` or `ghost` at 32px; `secondary` is a neutral fill; destructive confirmations use the `destructive` variant with Cancel focused first (agent decision, 2026-11-16).
+- **Tabs:** 36px strip with a full-width bottom border; active tab foreground text with a 2px primary indicator; horizontal scroll on narrow screens, never wrap; state in the URL (agent decision, 2026-11-16).
+- **Switches:** shadcn `Switch` (`role=switch`), `--color-input` track border when off, `bg-primary` when on (agent decision, 2026-11-16: replaces two hand-rolled switches).
+- **Key–value lists:** `<dl>`, label column 8–12rem muted 13px, value 13px (mono for IDs and numbers), 32px rows (agent decision, 2026-11-16).
 - **Selection & ranges:** the selected item is `bg-primary`; a range band uses
-  `accent`; "today"/current markers are a subtle `accent/60` chip, never a
+  `primary-subtle` (amended 2026-11-16: `accent` is now neutral); "today"/current markers are a subtle `accent/60` chip, never a
   competing fill.
-- **Focus:** keep a visible focus indicator on every interactive element
-  (Rule 60.30) at 2-4px and at least 3:1 against the adjacent background
-  (WCAG 1.4.11). Its colour is the dedicated opaque `--color-focus-ring` token,
+- **Focus:** keep a visible focus indicator on every interactive element (Rule 60.30) at 2-4px and at least 3:1 against the adjacent background (WCAG 1.4.11); from the compact refresh every primitive uses `focus-visible:ring-2 ring-focus-ring ring-offset-2` (agent decision, 2026-11-16: brought forward from Phase 5). Its colour is the dedicated opaque `--color-focus-ring` token,
   not the translucent `--color-ring` / `ring-ring/50` (about 1.3:1 on white). A
   box-shadow ring is hidden in forced-colors mode, so pair it with
   `outline-hidden` (Tailwind v4: a transparent outline that forced colors
@@ -503,23 +563,32 @@ Conventions for interactive controls, established with the global
 
 | Component | Source | Purpose |
 |-----------|--------|---------|
-| `Sidebar` | shadcn/ui | Collapsible navigation with active state. Locally patched (2026-10-29): `components/ui/sidebar.tsx` renders desktop markup until hydrated, uses the `border-sidebar-border` token for its edge, and `hooks/use-mobile.ts` uses `useSyncExternalStore`, so a late-hydrating `<Suspense>` does not mismatch at mobile widths; the mobile sheet returns focus to the `SidebarTrigger` on close (`onCloseAutoFocus`), and `SidebarMenuButton` tooltips are held closed on mobile so a single Escape closes the sheet — re-apply after any `shadcn add sidebar`. Nav and brand links close the mobile sheet on click (`AppSidebar`); the footer toggle's accessible name, icon and tooltip follow its action ("Collapse" / "Expand"; always "Collapse" in the mobile sheet) (`AppSidebar`, 2026-10-30) |
+| `Sidebar` | shadcn/ui | Collapsible navigation with active state. Locally patched (2026-10-29): `components/ui/sidebar.tsx` renders desktop markup until hydrated, uses the `border-sidebar-border` token for its edge, and `hooks/use-mobile.ts` uses `useSyncExternalStore`, so a late-hydrating `<Suspense>` does not mismatch at mobile widths; the mobile sheet returns focus to the `SidebarTrigger` on close (`onCloseAutoFocus`), and `SidebarMenuButton` tooltips are held closed on mobile so a single Escape closes the sheet — re-apply after any `shadcn add sidebar`. Nav and brand links close the mobile sheet on click (`AppSidebar`); the footer toggle's accessible name, icon and tooltip follow its action ("Collapse" / "Expand"; always "Collapse" in the mobile sheet) (`AppSidebar`, 2026-10-30). Width `14rem`, menu buttons 32px, groups Usage / Management / Administration (Management replaces Gateway, decided 2026-11-16, user), footer collapse icon button (amended 2026-11-16). |
 | `CommandMenu` | shadcn/ui (cmdk) | Cmd+K quick search — jump to any department, team, user, service |
 | `Kbd` | Custom | Keyboard shortcut hints |
+| `PageHeader` | Custom | Breadcrumb, entity title (`h2`), description, actions, tabs and toolbar slot at the top of every dashboard page (agent decision, 2026-11-16) |
+| `PageTabs` | shadcn/ui Tabs | URL-bound tabs on the one `Tabs` component: view tabs (Ranking, Team page) and route tabs (Settings and its second rows) (agent decision, 2026-11-16; amended 2026-11-16, user: the LiteLLM tab row became Management routes) |
+| `Breadcrumb` | shadcn/ui | Detail-page trail (agent decision, 2026-11-16) |
+| `SettingsNav` | Custom | Grouped Settings secondary navigation; select below `lg` (agent decision, 2026-11-16; superseded the same day by the Settings route tabs, *Settings Page* — not built) |
+| `ScopeLine` | Custom | "Showing …" scope statement under the `PageHeader` description on scoped pages (decided 2026-11-16, user) |
 
 ### Data Display
 
 | Component | Source | Purpose |
 |-----------|--------|---------|
-| `MetricCard` | Custom (shadcn Card) | KPI card with value, trend indicator, icon |
+| `MetricCard` | Custom (shadcn Card) | KPI card: 12px label, 20px value with inline delta, up to two footnote lines; no decorative icon chip (amended 2026-11-16) |
 | `DeltaBadge` | Custom | "+12.3%" green arrow or "-5.1%" red arrow for trends |
 | `UsageTable` | Custom (TanStack Table + shadcn Table) | Sortable, filterable data table with pagination; renders as a card list below the `md` breakpoint (see Responsive Tables) |
-| `Tabs` | shadcn (Radix Tabs) | Tabbed views with Arrow/Home/End keyboard navigation and a visible focus ring on triggers and panels (LiteLLM page and Settings → LiteLLM, L3b) |
-| `UserSearch` | Custom | Debounced LiteLLM user search with a results table and the selected user's usage; shared by the LiteLLM *Users* tab and Settings → LiteLLM *Users* (L3b) |
+| `Tabs` | shadcn (Radix Tabs) | Tabbed views with Arrow/Home/End keyboard navigation and a visible focus ring on triggers and panels (L3b; from 2026-11-16 the Team page, Ranking and the Settings tab rows — the only tabs component) |
+| `UserSearch` | Custom | Debounced LiteLLM user search with a results table and the selected user's usage; shared by Management → Users (formerly the LiteLLM *Users* tab) and Settings → LiteLLM *Users* (L3b) |
+| `BudgetBar` | Custom (shadcn Progress) | Thin budget bar: neutral < 80%, warning from 80%, destructive ≥ 100%, percentage as text (decided 2026-11-16, user) |
 | `RankingList` | Custom | Ranked list; the rank is rendered by `RankCell` (medal icons for the top three). The % of total bar is `PercentOfTotalBar`, composed in where a page shows shares (the Ranking table, Phase 4.2) — not part of `RankingList` itself (decided 2026-11-06) |
 | `SparklineCell` | Custom | Inline trend sparkline for table cells |
 | `PercentOfTotalBar` | Custom | Inline bar showing proportion visually in ranking tables |
-| `PeriodComparison` | Custom | "vs previous 30 days" side-by-side stat comparison |
+| `PeriodComparison` | Custom | "vs previous period" compact strip inside the KPI row (amended 2026-11-16) |
+| `Panel` | Custom (Card surface) | Titled section: `h2`, description, actions, own Suspense + `SectionBoundary` + skeleton, flush table mode (agent decision, 2026-11-16) |
+| `KeyValueList` | Custom | Read-only configuration as `<dl>` (agent decision, 2026-11-16) |
+| `TableToolbar` | Custom | One-row table toolbar (agent decision, 2026-11-16) |
 
 ### Charts
 
@@ -527,6 +596,8 @@ Conventions for interactive controls, established with the global
 |-----------|--------|---------|
 | `CostTrendChart` | Recharts | Stacked area chart; `groupBy: 'model' \| 'team'` (loaded with `next/dynamic`, `ssr: false`) |
 | `ModelBreakdownChart` | Recharts | Donut chart showing model distribution |
+
+Legends are a custom swatch + foreground-text legend (series colour never used as text colour); entry animation ≤250ms and off under `prefers-reduced-motion` (agent decision, 2026-11-16: legend text in model colours failed 4.5:1).
 
 ### Filters & Controls
 
@@ -547,9 +618,12 @@ Conventions for interactive controls, established with the global
 | `SyncCountdown` | Custom | "Next sync in 42 min" countdown in top bar to `SyncStatus.nextScheduledAt` (required when the item exists — `SyncStatusSchema`, Rule 20.9); an overdue time reads "0 min", never negative; sync status refetches every 5 minutes (*Caching Strategy*). Neutral "Next sync: pending" while loading, when no sync has run, or when the request fails. ARIA `role="timer"` (implicit `aria-live="off"`), so ticks are not announced — never a `status` live region (decided 2026-10-29) |
 | `CostEstimateIndicator` | Custom (shadcn Badge) | Subtle outline "Estimated" badge beside a cost whose row has `costEstimated: true` — per-user and per-service proportional estimates (Rule 20.3); built in Phase 4.2. It does not mark `costFinalized: false` |
 | `TagCoverageBar` | Custom | Progress bar showing % of tagged usage per team (Phase 4.9b, deferred) |
-| `EmptyState` | Custom | Reusable empty state with icon, message, and optional CTA |
+| `EmptyState` | Custom | Reusable empty state with icon, message and optional CTA; `size="sm"` for one-line empties inside a table or Panel (amended 2026-11-16) |
 | `ErrorBoundary` | Custom | Per-section error boundary — one chart failing doesn't crash the page |
 | `Skeleton` | shadcn/ui | Loading placeholder for sections taking >300ms |
+| `Alert` | shadcn/ui | Inline notices and section errors (agent decision, 2026-11-16) |
+| `AlertDialog` | shadcn/ui | Destructive confirmations naming the person, the effect and (bulk) the count; Cancel focused first (decided 2026-11-16, user) |
+| `Switch`, `Collapsible` | shadcn/ui | Toggles; disclosure of secondary content (agent decision, 2026-11-16) |
 
 ### Identity & Badges
 
@@ -557,21 +631,21 @@ Conventions for interactive controls, established with the global
 |-----------|--------|---------|
 | `ModelBadge` | Custom | Model name with its assigned color dot |
 | `AccountIdBadge` | Custom | Formatted AWS account ID with copy button (123-456-789-012) |
-| `UserAvatar` | Custom | Initials avatar with consistent color per user |
+| `UserAvatar` | Custom | Initials avatar, neutral fill, 20px in tables (agent decision, 2026-11-16: per-user colour carried no information and dominated rows; plan D-15) |
 
 ## UX Standards (from UI UX Pro Max)
 
 ### Critical (Must Have)
 
 - **Accessibility**: Contrast 4.5:1 minimum, alt text, keyboard navigation, aria-labels, focus rings (2-4px, at least 3:1, kept in forced-colors mode — Interaction & States)
-- **Touch targets**: Minimum 44x44px, 8px spacing between targets
+- **Touch targets**: Minimum 44x44px below `md` and on coarse pointers, 8px spacing between targets; on pointer-fine desktop, controls are 32px (above WCAG 2.5.8's 24px) (agent decision, 2026-11-16: compact desktop density without shrinking touch)
 - **Loading states**: Skeleton screens for >300ms loads, spinner on async buttons
 - **Error feedback**: Clear messages near the problem field, recovery path included
 
 ### High Priority
 
 - **Responsive**: Mobile-first, no horizontal scroll, viewport meta tag
-- **Typography**: Base 16px, line-height 1.5, semantic color tokens (no raw hex in components)
+- **Typography**: the compact scale in *Typography* (14px dashboard body, 16px inputs on mobile), semantic color tokens (no raw hex in components) (amended 2026-11-16)
 - **Navigation**: Bottom nav max 5 items on mobile, predictable back behavior, active state highlighted
 
 ### Charts and Data (Dashboard-Specific)

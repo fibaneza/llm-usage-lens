@@ -10,6 +10,8 @@ import {
   YAxis,
 } from "recharts";
 
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
+
 import { ChartEmptyState } from "./ChartEmptyState";
 import { formatUsd, type TopDepartmentBar } from "./chart-data";
 
@@ -20,6 +22,8 @@ type TopDepartmentsChartProps = {
 const axisTick = { fill: "var(--color-muted-foreground)", fontSize: 12 };
 
 export function TopDepartmentsChart({ bars }: TopDepartmentsChartProps) {
+  const reducedMotion = usePrefersReducedMotion();
+
   if (bars.length === 0) return <ChartEmptyState />;
 
   return (
@@ -62,7 +66,7 @@ export function TopDepartmentsChart({ bars }: TopDepartmentsChartProps) {
                 backgroundColor: "var(--color-popover)",
                 color: "var(--color-popover-foreground)",
                 border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-md, 6px)",
+                borderRadius: "var(--radius-card)",
               }}
             />
             <Bar
@@ -70,6 +74,9 @@ export function TopDepartmentsChart({ bars }: TopDepartmentsChartProps) {
               name="Cost"
               fill="var(--color-primary)"
               radius={4}
+              maxBarSize={24}
+              isAnimationActive={!reducedMotion}
+              animationDuration={250}
             />
           </BarChart>
         </ResponsiveContainer>

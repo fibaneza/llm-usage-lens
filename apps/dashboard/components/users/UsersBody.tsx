@@ -5,13 +5,14 @@ import { useMemo } from "react";
 
 import { EmptyState } from "@/components/display/EmptyState";
 import { ModelUsageNote } from "@/components/ranking/ModelUsageNote";
+import { ExportButton } from "@/components/table/ExportButton";
 import { UsageTable } from "@/components/table/UsageTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUsers } from "@/hooks/useUsers";
 import type { DateRange } from "@/lib/date-range";
 import { sectionData } from "@/lib/query/section-data";
 
-import { usersColumns } from "./users-columns";
+import { usersColumns, usersCsvColumns } from "./users-columns";
 
 type UsersBodyProps = {
   range: DateRange;
@@ -31,6 +32,7 @@ export function UsersBody({ range, urlRange }: UsersBodyProps) {
     () => usersColumns(urlRange, totalCost),
     [urlRange, totalCost],
   );
+  const csvColumns = useMemo(() => usersCsvColumns(totalCost), [totalCost]);
 
   if (rows === undefined) {
     return <Skeleton className="h-96 w-full" />;
@@ -46,15 +48,29 @@ export function UsersBody({ range, urlRange }: UsersBodyProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <>
       <ModelUsageNote />
       <UsageTable
         data={rows}
         columns={columns}
         getRowId={(r) => `${r.teamId}:${r.userId}`}
         initialSort={{ id: "cost", desc: true }}
+        searchKey="userId"
+        searchPlaceholder="Search by user"
         caption="Users"
+        emptyState={
+          <p className="text-muted-foreground py-6 text-center text-sm">
+            No users match your search.
+          </p>
+        }
+        toolbarActions={({ rows: visibleRows, visibleColumnIds }) => (
+          <ExportButton
+            filename={`users-${range.dateFrom}-${range.dateTo}.csv`}
+            columns={visibleColumnIds.flatMap((id) => csvColumns[id] ?? [])}
+            rows={visibleRows}
+          />
+        )}
       />
-    </div>
+    </>
   );
 }

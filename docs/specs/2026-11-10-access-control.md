@@ -365,7 +365,10 @@ with `hidden < visible` and `none < own < all`.
 - A team setting above its department cap is stored, **applied as the cap**,
   and shown as "limited by department".
 - Callers below `internal-org-admin` see organisation-wide views (Overview
-  KPIs, rankings) only over in-scope data, labelled "your teams".
+  KPIs, rankings) only over in-scope data, labelled "your teams". (Under
+  review 2026-11-16: the Usage pages are now shown only to organisation-level
+  roles; whether a lead keeps any scoped cost view is open — *Navigation and
+  landing by role*. The rule stays in force for every scoped read.)
 - **Privacy:** per-user cost is personal data; the legal basis and retention
   are a **(user)** decision (DPO/HR) — proposed wording under *Decisions*.
 
@@ -374,6 +377,69 @@ denies (`401`/`403`/`404` per *Enforcement*): (1) token valid (issuer,
 `tid`, `oid`, session cap) → (2) global role → (3) member affiliation and
 admin scopes (precedence above) → (4) inherited caps → (5)
 `can(action, resource)`.
+
+### Navigation and landing by role
+
+*Added 2026-11-16 (user, mock-up review). Pages and routes: Design System —
+*Navigation (Sidebar)*, *Management pages*, *Settings Page*.* Role words:
+**admin** = `internal-admin`, **org admin** = `internal-org-admin`,
+**lead** = `internal-team-admin` (any scope), **user** = `internal-viewer`
+and members, **auditor** = `internal-auditor`.
+
+| Sidebar item | admin | org admin | auditor | lead | user |
+|---|---|---|---|---|---|
+| **Usage** — Overview, Ranking, Cost by department, Cost by team, Cost by service, Cost by user | ✓ | ✓ | ✓ read-only | ✗ — see the open question below | ✗ |
+| **Management** — My usage | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Management — Team | ✓ every team | ✓ every team | ✓ read-only | ✓ teams it leads | ✗ |
+| Management — Organisation, Users | ✓ | ✓ | ✓ read-only | ✗ | ✗ |
+| Management — Audit | ✓ | ✗ (see below) | ✓ | ✗ | ✗ |
+| **Administration** — Settings | ✓ | ✓ (no configuration except the LiteLLM toggles and team links, LD24) | ✓ read-only tabs only | ✗ | ✗ |
+
+- **Decided 2026-11-16 (user):** the Usage group is organisation-level and
+  shown to admin and org admin; Management → My usage to every signed-in
+  role; Team to lead, org admin and admin; Organisation, Users and Audit to
+  org admin and admin; Administration to admin and org admin, last in the
+  side panel. **Landing page:** admin and org admin → Cost overview
+  (`/dashboard`); lead and user → My usage (`/dashboard/me`). This replaces
+  the 4R.5 *My teams* landing for a lead.
+- **Auditor** (agent decision, 2026-11-16: the review's table names the
+  managing roles only; `internal-auditor` still "reads everything,
+  read-only" per *Roles*, so it keeps every read view): Usage, the
+  Management read views and Audit, read-only; landing → Cost overview; in
+  Administration only the tabs it may read (Settings → LiteLLM read-only).
+- **Audit for org admin** (agent decision, 2026-11-16: the review keeps both
+  audit sources' permissions as they are — Design System — *Management
+  pages*; today neither the app audit log nor the LiteLLM audit is readable
+  by `internal-org-admin`): the Audit item renders only for a caller who may
+  read at least one source, so an org admin does not see it. Giving org
+  admins audit read is a permission change and stays the user's (*Decision
+  policy*).
+- **Hidden means absent and `404`.** An item the caller may not see is not
+  rendered (never disabled), and its route — and any redirect that lands on
+  it — returns the same `404` body as a missing page (*Enforcement* item 2;
+  Rule 10.3). Visibility is enforced by the policy module on the server for
+  every page and Route Handler; the navigation filter only mirrors it.
+- **Lead team-scoped actions** keep their permissions (*Permission matrix*,
+  unchanged) and move to Management → Team for a lead, who does not see
+  Administration (Design System — *Management pages*).
+- **Visibility settings** (*Visibility and inheritance*, above) keep
+  governing every scoped read route and the Team Detail, Services and
+  Ranking data; with the Usage group hidden for users, the team-level and
+  user-level settings currently have no page that shows them to a user.
+  They stay in force and editable; a page that surfaces them to users is a
+  later decision.
+- **Open — user decision pending (asked 2026-11-16).** Phase 4R.5 gives a
+  lead a Bedrock/AWS cost view scoped to its own teams ("your teams" on
+  Overview, rankings and charts; *Visibility and inheritance*; the *My
+  teams* view). Hiding the whole Usage group from leads removes it. The
+  question to the user: should a lead **lose the Bedrock/AWS cost view of
+  its own teams entirely**, or **keep a scoped "AWS-billed cost" tile** on
+  the Team page (Design System — *Management pages*, addition 2)? Neither
+  answer is assumed here. Both keep the Usage group hidden from leads (the
+  ✗ above, decided); what is open is whether any AWS-billed figure for a
+  lead's teams remains. Until the user answers, the "AWS-billed cost" tile
+  is not built, the lead-scoped read rules and routes from 4R.3 stay in
+  force and are not removed, and no other work depends on the answer.
 
 ## Membership, admin scopes and lifecycle
 

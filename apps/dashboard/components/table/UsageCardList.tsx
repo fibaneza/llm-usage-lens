@@ -14,7 +14,7 @@ function CellContent<T>({ cell }: { cell: Cell<T, unknown> }) {
 }
 
 // Design System -- Responsive Tables: below md each row is a card -- the
-// `name` cell is the title, the `cost` cell the prominent figure, every other
+// non-hideable cell (the entity name or link) is the title, the `cost` cell the prominent figure, every other
 // visible column a label-value pair. The cells are the column definitions' own,
 // so the cards show exactly what the table would.
 export function UsageCardList<T>({ table, caption }: UsageCardListProps<T>) {
@@ -22,14 +22,16 @@ export function UsageCardList<T>({ table, caption }: UsageCardListProps<T>) {
     <ul role="list" aria-label={caption} className="space-y-3">
       {table.getRowModel().rows.map((row) => {
         const cells = row.getVisibleCells();
-        const title = cells.find((cell) => cell.column.id === "name");
+        const title =
+          cells.find((cell) => !cell.column.getCanHide()) ??
+          cells.find((cell) => cell.column.id === "name");
         const cost = cells.find((cell) => cell.column.id === "cost");
         const rest = cells.filter((cell) => cell !== title && cell !== cost);
 
         return (
           <li
             key={row.id}
-            className="bg-card text-card-foreground space-y-3 rounded-lg border p-4"
+            className="bg-card text-card-foreground rounded-card space-y-3 border p-4"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 font-medium break-words">

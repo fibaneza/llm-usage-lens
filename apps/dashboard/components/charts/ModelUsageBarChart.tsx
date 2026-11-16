@@ -13,6 +13,7 @@ import {
 import { MODEL_META, type ModelKey } from "@llm-usage-lens/shared";
 
 import { ModelBadge } from "@/components/display/ModelBadge";
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 
 import { ChartEmptyState } from "./ChartEmptyState";
 import { formatUsd, type ModelBreakdownSlice } from "./chart-data";
@@ -28,6 +29,8 @@ function isModelKey(key: string): key is ModelKey {
 const axisTick = { fill: "var(--color-muted-foreground)", fontSize: 12 };
 
 export function ModelUsageBarChart({ slices }: ModelUsageBarChartProps) {
+  const reducedMotion = usePrefersReducedMotion();
+
   if (slices.length === 0) return <ChartEmptyState />;
 
   // Each bar carries its model token as its own fill.
@@ -73,10 +76,17 @@ export function ModelUsageBarChart({ slices }: ModelUsageBarChartProps) {
                 backgroundColor: "var(--color-popover)",
                 color: "var(--color-popover-foreground)",
                 border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-md, 6px)",
+                borderRadius: "var(--radius-card)",
               }}
             />
-            <Bar dataKey="cost" name="Cost" radius={4} />
+            <Bar
+              dataKey="cost"
+              name="Cost"
+              radius={4}
+              maxBarSize={24}
+              isAnimationActive={!reducedMotion}
+              animationDuration={250}
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>

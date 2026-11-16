@@ -134,4 +134,16 @@ describe("ModelBreakdownChart", () => {
 
     expect(screen.getByText(/no data yet/i)).toBeInTheDocument();
   });
+
+  // Design System -- Chart Colors (2026-11-16): custom swatch + foreground-text
+  // legend replaces the Recharts legend (series-coloured text failed 4.5:1).
+  it("shows the custom ChartLegend, not the Recharts legend", async () => {
+    const { container } = await renderChart(
+      <ModelBreakdownChart slices={slices} />,
+    );
+
+    const legend = screen.getByRole("list", { name: "Chart legend" });
+    expect(legend).toHaveTextContent("Claude Opus");
+    expect(container.querySelector(".recharts-legend-wrapper")).toBeNull();
+  });
 });

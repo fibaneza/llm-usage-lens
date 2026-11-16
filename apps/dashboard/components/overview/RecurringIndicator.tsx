@@ -17,9 +17,9 @@ export function RecurringIndicator({ categories }: RecurringIndicatorProps) {
   if (categories.length === 0) return null;
 
   return (
-    <p className="text-foreground mt-1 inline-flex items-center gap-1 font-medium">
+    <span className="text-foreground inline-flex items-center gap-1 font-medium">
       <Repeat className="size-3 shrink-0" aria-hidden />
       {`Recurring: ${categories.map(categoryName).join(", ")}`}
-    </p>
+    </span>
   );
 }

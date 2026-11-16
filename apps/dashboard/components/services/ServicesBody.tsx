@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { EmptyState } from "@/components/display/EmptyState";
 import { ModelUsageNote } from "@/components/ranking/ModelUsageNote";
+import { ExportButton } from "@/components/table/ExportButton";
 import { UsageTable } from "@/components/table/UsageTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useServices } from "@/hooks/useServices";
@@ -12,7 +13,7 @@ import type { DateRange } from "@/lib/date-range";
 import { sectionData } from "@/lib/query/section-data";
 import { UNTAGGED_SERVICE } from "@/lib/service-label";
 
-import { servicesColumns } from "./services-columns";
+import { servicesColumns, servicesCsvColumns } from "./services-columns";
 
 type ServicesBodyProps = {
   range: DateRange;
@@ -32,6 +33,7 @@ export function ServicesBody({ range, urlRange }: ServicesBodyProps) {
     () => servicesColumns(urlRange, totalCost),
     [urlRange, totalCost],
   );
+  const csvColumns = useMemo(() => servicesCsvColumns(totalCost), [totalCost]);
 
   if (rows === undefined) {
     return <Skeleton className="h-96 w-full" />;
@@ -49,7 +51,7 @@ export function ServicesBody({ range, urlRange }: ServicesBodyProps) {
   const allUntagged = rows.every((r) => r.serviceName === UNTAGGED_SERVICE);
 
   return (
-    <div className="space-y-4">
+    <>
       <ModelUsageNote />
       {allUntagged ? (
         <p role="status" className="text-muted-foreground text-sm">
@@ -61,8 +63,22 @@ export function ServicesBody({ range, urlRange }: ServicesBodyProps) {
         columns={columns}
         getRowId={(r) => `${r.teamId}:${r.serviceName}`}
         initialSort={{ id: "cost", desc: true }}
+        searchKey="serviceName"
+        searchPlaceholder="Search by service"
         caption="Services"
+        emptyState={
+          <p className="text-muted-foreground py-6 text-center text-sm">
+            No services match your search.
+          </p>
+        }
+        toolbarActions={({ rows: visibleRows, visibleColumnIds }) => (
+          <ExportButton
+            filename={`services-${range.dateFrom}-${range.dateTo}.csv`}
+            columns={visibleColumnIds.flatMap((id) => csvColumns[id] ?? [])}
+            rows={visibleRows}
+          />
+        )}
       />
-    </div>
+    </>
   );
 }
