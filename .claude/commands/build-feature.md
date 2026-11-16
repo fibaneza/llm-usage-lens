@@ -31,12 +31,13 @@ test first (non-behavioural blockers skip this stage — Rule 70.6).
 
 Dispatch the `typescript-developer` agent with the task description and the
 tdd-test-engineer's red report. It implements until the suite passes and the
-gates (`tsc`, `eslint`, `vitest`, plus the headless Playwright suite when the
-task touches UI) are green — without editing any test. If it
+gates (`tsc`, `eslint`, `vitest`, plus the targeted Playwright specs once when
+the task touches UI — Rule 70.12, *E2E budget*) are green — without editing any test. If it
 disputes a test, re-dispatch the `tdd-test-engineer` for a ruling (UPHOLD /
 AMEND), then resume. Both agents run only new and impacted tests (the files
 they work on, then `vitest run --changed <merge-base>`) and read results, not
-logs; the full suite runs once, on the `main` candidate (Rule 70.12).
+logs; the full suite runs in CI, and the full e2e once per push batch on the
+`main` candidate until CI runs it (Rule 70.12).
 
 ## Step 3 — Review (once per phase)
 
@@ -55,9 +56,9 @@ In a **single message**, dispatch in parallel:
   `docs/specs/**` or `.claude/rules/**`.
 - `playwright-ui-reviewer` — when UI components or pages changed
   (`apps/dashboard/components/**`, `apps/dashboard/app/**`,
-  `apps/dashboard/e2e/**`): runs the headless Playwright suite (the
-  devcontainer has no display — never `--headed`) and audits that every
-  changed component is exercised by a spec.
+  `apps/dashboard/e2e/**`): audits that every changed component is
+  exercised by a spec, and runs headless Playwright (never `--headed`) only
+  for specs the worker's evidence does not cover (Rule 70.12 — *E2E budget*).
 - `ecc:typescript-reviewer` — when `.ts`/`.tsx` changed (almost always).
 - `ecc:security-reviewer` — when auth, Route Handlers, env, or AWS code
   changed.

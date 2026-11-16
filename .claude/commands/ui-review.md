@@ -24,7 +24,9 @@ performs inside the `/build-feature` loop (Rule 70.11).
    (`pnpm --dir apps/dashboard exec playwright install --with-deps chromium`
    installs it once; normally done by `.devcontainer/post-create.sh`).
 2. **Run the suite:** `pnpm test:e2e` — append `$ARGUMENTS` as a filter when
-   given (e.g. `pnpm test:e2e -- smoke`).
+   given (e.g. `pnpm test:e2e -- smoke`). An explicit user command, outside
+   the agents' *E2E budget* (Rule 70.12); prefer a filter for the changed
+   specs.
 3. **On failures**, read `apps/dashboard/test-results/` (screenshots, traces)
    and summarise per failing spec: which page, what rendered, which assertion
    failed.

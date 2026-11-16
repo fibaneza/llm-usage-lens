@@ -52,8 +52,11 @@ that defines what "done" means — before any production code exists.
    - Edge cases for this project: missing `SyncStatus` ("never synced"),
      `costEstimated` / `costFinalized` flags, `_untagged` services, GSI
      pagination, 90-day range cap.
-3. **Run the suite and capture the red state:** `pnpm exec vitest run`, plus
-   `pnpm test:e2e` (headless Playwright) when the task touches UI. At this
+3. **Run the suite and capture the red state:** `pnpm exec vitest run` on the
+   new and impacted files. Do **not** run e2e at this stage (Rule 70.12 —
+   *E2E budget*): check that new specs load with
+   `pnpm --filter @llm-usage-lens/dashboard exec playwright test --list <spec>`
+   and list them for the developer; red e2e is assumed. At this
    stage failures — including `tsc` errors from importing not-yet-written
    modules — are the **expected** result. Report exactly which failures the
    implementation must clear.

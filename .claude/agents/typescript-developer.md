@@ -45,6 +45,10 @@ tdd-test-engineer's failing suite pass.
   ones — check with Grep first.
 - Run the gates on what you changed and fix what you broke:
   `pnpm exec tsc --noEmit`, `pnpm exec eslint .`, `pnpm exec vitest run`.
+  When the change touches UI, run the targeted Playwright specs (the new ones
+  plus those of the pages you changed) **once**, after the other gates are
+  green — not per iteration; the full suite only when a shared file changed
+  (Rule 70.12 — *E2E budget*).
 - Never run `git commit`, `git push`, or any `--no-verify`. Never touch AWS.
 
 ## On a rework pass

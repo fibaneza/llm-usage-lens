@@ -594,8 +594,11 @@ exit codes and count lines only; open a log only to diagnose a failure.
   mirrors CI. A plain `pnpm build` fails locally on missing env vars, which
   is expected and not a regression.
 - `/verify-phase <target>`
-- `pnpm test:e2e`, only when the target touches UI. Otherwise record it as
-  `not run` with the reason.
+- E2E per Rule 70.12 — *E2E budget*: the targeted specs once at the green
+  gate when the target touches UI; the full `pnpm test:e2e` only when a
+  shared file (Rule 70.12 list) changed. Otherwise record it as `not run` with the
+  reason. Record e2e evidence as counts at a commit, so the review can reuse
+  it instead of re-running.
 - **CI:** read the latest runs with `gh run list --branch main`. Record the
   result for commits the user has pushed; for unpushed commits record
   `not run — requires git push (user action)`. Tick a CI-dependent Verify

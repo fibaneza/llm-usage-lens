@@ -72,8 +72,8 @@ review = quality-reviewer + spec-guardian + ecc reviewers
    the tdd-test-engineer reports which failures the implementation must clear.
 4. **The typescript-developer's job is green.** It implements until the
    suite passes and runs the gates (`tsc`, `eslint`, `vitest`, plus the
-   headless Playwright suite — `pnpm test:e2e` — when the change touches UI
-   components or pages). It never
+   targeted headless Playwright specs once, when the change touches UI
+   components or pages — see *E2E budget* in rule 12). It never
    edits, weakens, or deletes a test — a test it believes is wrong goes back
    to the orchestrator, who re-dispatches the tdd-test-engineer to rule on it.
 5. **REQUEST CHANGES if** the gates are not green at review time **or** any
@@ -142,11 +142,46 @@ review = quality-reviewer + spec-guardian + ecc reviewers
       `lib/api/respond.ts`, `auth.ts`, `env.ts`) or to test infrastructure
       (`vitest.config.ts`, `test/**`, `e2e/support/**`) is impacted
       everywhere, so `--changed` already widens to the full suite.
+    - **E2E budget (decided 2026-11-16, user: "reduce the number of e2e
+      runs").** E2E is the slowest gate and shares one database and port,
+      so it runs only where it can catch a defect nothing else does:
+      - **Shared files** (they affect every page or the e2e harness):
+        `e2e/support/**`, `playwright.config.ts`, `scripts/e2e-lock.mjs`,
+        `scripts/seed*.ts`, `test/role-probe-seed.ts`,
+        `test/e2e-identity-seed.ts`, `lib/nav.ts`, `lib/auth/**`,
+        `app/layout.tsx`, `app/dashboard/layout.tsx`, `app/globals.css`,
+        `components/layout/**`, `components/ui/**`,
+        `components/providers/**`, `auth.ts`, `proxy.ts`, `next.config.ts`.
+      - **No e2e** for docs, config, server-only code, Route Handlers,
+        data access, or test-only changes outside `e2e/` — integration
+        and unit tests cover those — except files in the shared list.
+      - **Red stage:** the tdd-test-engineer does not run e2e; it checks
+        that new specs load (`pnpm --filter @llm-usage-lens/dashboard exec
+        playwright test --list <spec>`). Red e2e is assumed.
+      - **Green stage:** the typescript-developer runs the **targeted**
+        specs — new specs plus the specs of the pages it changed — **once**,
+        when the unit and integration gates are green, not per iteration.
+      - **Full e2e on a branch** only when a shared file changed, once per
+        unit at its green gate.
+      - **Review:** `playwright-ui-reviewer` audits coverage first and runs
+        e2e only for specs whose evidence is missing, failing, or older than
+        the last commit that touched UI or `e2e/` files. Delta re-reviews
+        run no e2e unless the delta touched UI or `e2e/` files.
+      - **Merging `main` in** needs no e2e re-run unless `main` brought a
+        change to a shared file; then the targeted specs only.
+      - **Safety net, until CI runs e2e.** CI runs no Playwright yet
+        (implementation-phases Phase 5 — *Add Playwright to GitHub Actions
+        CI*). Until it does, the coordinator runs **one** full
+        `pnpm test:e2e` on the `main` candidate before each push — one run
+        per push batch, not per unit — and a red run goes back to a `fix/`
+        branch before the push. Once CI runs e2e, that run moves to CI.
+      - Otherwise the coordinator does not run e2e, except to produce
+        evidence a worker can no longer produce (an unreachable run).
     - **The full suite runs in CI (amended 2026-11-15, user).** Sessions
       run the branch gate (above) with `main` merged in; the coordinator
       does not re-run tests and relies on that evidence. The full
-      `pnpm check` and `pnpm test:e2e` run in GitHub Actions on the user's
-      push (or on a PR, Rule 31's optional path). A red CI run goes back
+      `pnpm check` runs in GitHub Actions on the user's push (e2e: see
+      *E2E budget* — local until CI runs it) (or on a PR, Rule 31's optional path). A red CI run goes back
       into the loop on a `fix/` branch; `main` is never committed to
       directly (Rule 30.5). Previously the full suite ran once locally on
       the `main` candidate.

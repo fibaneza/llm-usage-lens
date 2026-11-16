@@ -203,8 +203,17 @@ full suite, no per-branch review.
    the tests again. It takes the worker's branch-gate evidence from the
    report (exit codes and counts for typecheck, lint, format, the impacted
    tests plus the file-reading tests, and targeted e2e), checks the branch
-   has `main` merged in, and runs `/verify-phase <unit>` (Rule 30.3). The
-   full suite runs in GitHub Actions (`llm-usage-lens-build.yml`) on the
+   has `main` merged in, and runs `/verify-phase <unit>` (Rule 30.3). Before
+   landing a unit that adds files, it runs the two structure suites itself
+   (`lib/data/access/structure.test.ts`, `lib/litellm/structure.test.ts`):
+   they read files, so `--changed` misses them, and they take seconds. Its
+   review dispatch tells `playwright-ui-reviewer` which e2e evidence exists
+   (counts at a commit), so the reviewer runs only what is not covered
+   (Rule 70.12 — *E2E budget*); a delta re-review with no UI change gets no
+   UI reviewer. Until CI runs Playwright, it runs one full `pnpm test:e2e`
+   on the `main` candidate before each push (one run per push batch), and a
+   red run goes to a `fix/` branch before the push. The
+   full `pnpm check` runs in GitHub Actions (`llm-usage-lens-build.yml`) on the
    user's push; a red CI run goes back to a `fix/` branch through the
    Rule 70 loop. When the user wants CI before `main`, use Rule 31's
    optional PR path.

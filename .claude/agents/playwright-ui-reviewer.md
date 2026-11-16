@@ -24,8 +24,16 @@ once with `pnpm --dir apps/dashboard exec playwright install --with-deps chromiu
 
 ## What you do
 
-1. **Run the suite:** `pnpm test:e2e` (root) — equivalent to
-   `pnpm --filter @llm-usage-lens/dashboard exec playwright test`. The config
+1. **Audit first, then run only what is not evidenced** (Rule 70.12 — *E2E
+   budget*). If the worker's e2e evidence (counts, at a commit) covers the
+   reviewed commit and no commit since touched UI or `e2e/` files, do not
+   re-run.
+   Otherwise run only the specs that lack evidence or failed:
+   `pnpm test:e2e -- <spec…>`. Run the whole suite (`pnpm test:e2e`, root —
+   equivalent to `pnpm --filter @llm-usage-lens/dashboard exec playwright
+   test`) only when shared UI or e2e infrastructure changed and no full-run
+   evidence exists for the reviewed commit. Delta re-reviews run no e2e
+   unless the delta touched UI or `e2e/` files. The config
    boots its own dev server on port 3211 with a test `AUTH_SECRET`; specs
    authenticate via the forged-session helper (`e2e/support/session.ts`) —
    real Auth.js verification, no production bypass.

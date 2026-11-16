@@ -783,8 +783,10 @@ before L4, never during a unit that edits the same files (Rule 60.24a).
   `departments.spec.ts` cases that re-ran `DepartmentsContent.test.tsx`
   with a stubbed API were removed; the other e2e specs assert shell,
   navigation, responsive or axe behaviour a component test cannot see)
-- [ ] Verify: `pnpm check` and the full `pnpm test:e2e` green (run in CI on
-  push); no spec rule, rule item or threat item loses its last test (coverage
+- [ ] Verify: `pnpm check` green in CI on push and the full `pnpm test:e2e`
+  green on the `main` candidate before push (in CI once Phase 5 *Add
+  Playwright to GitHub Actions CI* lands; Rule 70.12 — *E2E budget*); no spec
+  rule, rule item or threat item loses its last test (coverage
   list per removed case: done, in the finish report); test lines and run time
   before and after reported
 
