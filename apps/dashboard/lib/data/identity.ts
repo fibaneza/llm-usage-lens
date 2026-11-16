@@ -67,15 +67,41 @@ export async function upsertIdentity(
       sets.push(`#${attr} = :${attr}`);
     }
   }
-  await getDocumentClient().send(
-    new UpdateCommand({
-      TableName: getTableName(),
-      Key: key(identity.oid),
-      UpdateExpression: `SET ${sets.join(", ")}${removes.length ? ` REMOVE ${removes.join(", ")}` : ""}`,
-      ExpressionAttributeNames: names,
-      ExpressionAttributeValues: values,
-    }),
-  );
+  const isLocal = identity.authMethod === "local";
+  try {
+    await getDocumentClient().send(
+      new UpdateCommand({
+        TableName: getTableName(),
+        Key: key(identity.oid),
+        UpdateExpression: `SET ${sets.join(", ")}${removes.length ? ` REMOVE ${removes.join(", ")}` : ""}`,
+        ...(isLocal
+          ? { ConditionExpression: "attribute_not_exists(PK) OR #am = :am" }
+          : {}),
+        ExpressionAttributeNames: names,
+        ExpressionAttributeValues: values,
+      }),
+    );
+  } catch (error) {
+    if (!isLocal || !(error instanceof ConditionalCheckFailedException)) {
+      throw error;
+    }
+    // Dev login as a stored identity (Access Control spec - Dev login): the
+    // record keeps its own provenance; only the sign-in time moves.
+    await getDocumentClient().send(
+      new UpdateCommand({
+        TableName: getTableName(),
+        Key: key(identity.oid),
+        UpdateExpression:
+          "SET #lsa = :lsa, #v = if_not_exists(#v, :zero) + :one",
+        ExpressionAttributeNames: { "#lsa": "lastSignInAt", "#v": "version" },
+        ExpressionAttributeValues: {
+          ":lsa": now.toISOString(),
+          ":zero": 0,
+          ":one": 1,
+        },
+      }),
+    );
+  }
 }
 
 export type MasterReservation = { allowed: boolean; lockedNow: boolean };

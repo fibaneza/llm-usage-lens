@@ -1,11 +1,20 @@
+"use client";
+
+import { useActionState, useState } from "react";
+
 import { GLOBAL_ROLES, INTERNAL_ADMIN_ROLE } from "@/lib/auth/roles";
+
+type DevLoginState = { ok: false } | null;
 
 type SignInOptionsProps = {
   entra: boolean;
   devLogin: boolean;
   master?: boolean;
   entraAction: () => Promise<void>;
-  devLoginAction: (formData: FormData) => Promise<void>;
+  devLoginAction: (
+    previous: DevLoginState,
+    formData: FormData,
+  ) => Promise<DevLoginState>;
   masterAction?: (formData: FormData) => Promise<void>;
 };
 
@@ -22,6 +31,8 @@ export function SignInOptions({
   devLoginAction,
   masterAction,
 }: SignInOptionsProps) {
+  const [devState, devAction] = useActionState(devLoginAction, null);
+  const [identity, setIdentity] = useState("");
   return (
     <div className="flex flex-col items-center gap-4">
       {entra ? (
@@ -32,7 +43,7 @@ export function SignInOptions({
         </form>
       ) : null}
       {devLogin ? (
-        <form action={devLoginAction} className="flex flex-col gap-3">
+        <form action={devAction} className="flex flex-col gap-3">
           <label className="text-foreground flex flex-col gap-1 text-left text-sm">
             Role
             <select
@@ -47,8 +58,25 @@ export function SignInOptions({
               ))}
             </select>
           </label>
+          <label className="text-foreground flex flex-col gap-1 text-left text-sm">
+            Sign in as (email or user id)
+            <input
+              name="identity"
+              autoComplete="off"
+              className={FIELD_CLASS}
+              value={identity}
+              onChange={(event) => setIdentity(event.target.value)}
+            />
+          </label>
+          {devState?.ok === false ? (
+            <p role="alert" className="text-destructive text-sm">
+              That identity could not be used to sign in.
+            </p>
+          ) : null}
           <button type="submit" className={BUTTON_CLASS}>
-            Sign in as local developer
+            {identity.trim()
+              ? `Sign in as ${identity.trim()}`
+              : "Sign in as local developer"}
           </button>
         </form>
       ) : null}

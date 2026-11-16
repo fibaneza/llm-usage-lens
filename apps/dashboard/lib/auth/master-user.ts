@@ -4,6 +4,7 @@ import { trace } from "@opentelemetry/api";
 import { argon2Verify } from "hash-wasm";
 import { z } from "zod";
 
+import { MASTER_OID_PREFIX } from "@/lib/auth/master-oid";
 import { verifyTotp } from "@/lib/auth/totp";
 import { recordSecurityEvent } from "@/lib/auth/security-events";
 import type { SecurityEvent } from "@/lib/auth/security-events";
@@ -12,6 +13,7 @@ import type { SecurityEvent } from "@/lib/auth/security-events";
 // user), "Threat model" T1, T20. Every failure is a generic null; one security
 // event per attempt, id-only (Rule 50.6).
 
+export { MASTER_OID_PREFIX };
 export const MASTER_USER_PROVIDER_ID = "master-user";
 
 export type MasterUserConfig = {
@@ -71,7 +73,7 @@ export async function authorizeMasterUser(
     deps?.now && deps.lockout && deps.recordEvent
       ? { now: deps.now, lockout: deps.lockout, recordEvent: deps.recordEvent }
       : { ...(await defaultDeps()), ...deps };
-  const oid = `master:${config.username.toLowerCase()}`;
+  const oid = `${MASTER_OID_PREFIX}${config.username.toLowerCase()}`;
   const emit = (action: SecurityEvent["action"]): Promise<void> =>
     d.recordEvent({
       action,

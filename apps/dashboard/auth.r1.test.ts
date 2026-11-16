@@ -22,6 +22,7 @@ const captured = vi.hoisted(() => ({ config: undefined as unknown as Config }));
 const upsertIdentity = vi.hoisted(() => vi.fn());
 const authorizeMasterUser = vi.hoisted(() => vi.fn());
 const recordSecurityEvent = vi.hoisted(() => vi.fn());
+const resolveDevIdentity = vi.hoisted(() => vi.fn());
 
 vi.mock("next-auth", () => ({
   default: (config: unknown) => {
@@ -36,6 +37,7 @@ vi.mock("next-auth/providers/microsoft-entra-id", () => ({
   default: { type: "oidc", id: "microsoft-entra-id" },
 }));
 vi.mock("@/lib/data/identity", () => ({ upsertIdentity }));
+vi.mock("@/lib/auth/dev-identity", () => ({ resolveDevIdentity }));
 vi.mock("@/lib/auth/security-events", () => ({ recordSecurityEvent }));
 // R2b-1 wiring (covered in auth.r2.test.ts); mocked so these R1 cases stay
 // store-free.
@@ -106,6 +108,14 @@ beforeEach(() => {
   upsertIdentity.mockReset().mockResolvedValue(undefined);
   authorizeMasterUser.mockReset();
   recordSecurityEvent.mockReset();
+  resolveDevIdentity.mockReset().mockResolvedValue({
+    ok: true,
+    identity: {
+      oid: "local:dev@localhost",
+      email: "dev@localhost",
+      name: "Local Developer",
+    },
+  });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -180,6 +190,96 @@ describe("local login (dev only)", () => {
       expect(out ?? null).toBeNull();
     },
   );
+
+  // L3c, Access Control - Dev login: the identity option. Resolution itself is
+  // tested in lib/auth/dev-identity.integration.test.ts; here only the wiring.
+  describe("identity option (L3c)", () => {
+    it("declares an identity credential next to role (Dev login)", async () => {
+      const cfg = await load({ AUTH_DEV_LOGIN: "true" });
+      const p = cfg.providers.find((x) => x.options?.id === "dev-login");
+      const options = p?.options as { credentials?: Record<string, unknown> };
+      expect(Object.keys(options.credentials ?? {}).sort()).toEqual([
+        "identity",
+        "role",
+      ]);
+    });
+
+    it.each([[undefined], [""], ["Ada@Example.com"]])(
+      "passes the identity credential %j to the resolver as given (Dev login)",
+      async (identity) => {
+        await authorize({ role: "internal-viewer", identity });
+        expect(resolveDevIdentity).toHaveBeenCalledTimes(1);
+        expect(resolveDevIdentity).toHaveBeenCalledWith(identity);
+      },
+    );
+
+    it("signs in as the resolved identity with authMethod local (Dev login, user menu)", async () => {
+      resolveDevIdentity.mockResolvedValue({
+        ok: true,
+        identity: { oid: "oid-ada", email: "ada@example.com", name: "Ada" },
+      });
+      const user = await authorize({
+        role: "internal-viewer",
+        identity: "ada@example.com",
+      });
+      expect(user).toMatchObject({
+        oid: "oid-ada",
+        email: "ada@example.com",
+        name: "Ada",
+        authMethod: "local",
+        roles: ["internal-viewer"],
+      });
+    });
+
+    it("takes the role only from the Role field, never from the identity (Dev login)", async () => {
+      resolveDevIdentity.mockResolvedValue({
+        ok: true,
+        identity: {
+          oid: "oid-ada",
+          email: "ada@example.com",
+          name: "Ada",
+          roles: ["internal-admin"],
+          lastSeenRoles: ["internal-admin"],
+        },
+      });
+      const user = await authorize({
+        role: "internal-viewer",
+        identity: "ada@example.com",
+      });
+      expect(user?.roles).toEqual(["internal-viewer"]);
+    });
+
+    // Rule 50 / Dev login: authorize refuses a master-prefixed oid, whatever
+    // the resolver returns, so the dev login can never impersonate the master user.
+    it("refuses a master-prefixed oid (Rule 50, Dev login)", async () => {
+      resolveDevIdentity.mockResolvedValue({
+        ok: true,
+        identity: { oid: "master:root", name: "root" },
+      });
+      const out = await authorize({
+        role: "internal-admin",
+        identity: "master:root",
+      });
+      expect(out ?? null).toBeNull();
+    });
+
+    it("still refuses an invalid role when the identity is valid (Dev login)", async () => {
+      const out = await authorize({
+        role: "root",
+        identity: "ada@example.com",
+      });
+      expect(out ?? null).toBeNull();
+    });
+
+    it("refuses the sign-in when the identity is refused (Dev login)", async () => {
+      resolveDevIdentity.mockResolvedValue({ ok: false });
+      const out = await authorize({
+        role: "internal-admin",
+        identity: "not valid",
+      });
+      expect(out ?? null).toBeNull();
+    });
+  });
 });
 
 describe("signIn callback", () => {

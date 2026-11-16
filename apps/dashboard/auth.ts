@@ -13,6 +13,7 @@ import {
   DEV_LOGIN_PROVIDER_ID,
   resolveSignInProviders,
 } from "@/lib/auth/auth-config";
+import { MASTER_OID_PREFIX } from "@/lib/auth/master-oid";
 import { parseEntraProfile } from "@/lib/auth/entra-profile";
 import {
   MASTER_USER_PROVIDER_ID,
@@ -72,8 +73,6 @@ const tenantId =
   /\/([0-9a-f-]{36})\/v2\.0$/.exec(
     env.AUTH_MICROSOFT_ENTRA_ID_ISSUER ?? "",
   )?.[1] ?? "";
-
-const LOCAL_DEFAULT_EMAIL = "dev@localhost";
 
 function isApiPath(pathname: string | undefined): boolean {
   return pathname === "/api" || pathname?.startsWith("/api/") === true;
@@ -168,15 +167,21 @@ if (enabledSignInProviders.devLogin) {
     Credentials({
       id: DEV_LOGIN_PROVIDER_ID,
       name: "Local developer",
-      credentials: { role: {} },
+      credentials: { role: {}, identity: {} },
       authorize: async (credentials) => {
         const role = credentials?.role ?? INTERNAL_ADMIN_ROLE;
         if (!isGlobalRole(role)) return null;
+        // Loaded on demand: the resolver reads DynamoDB (server-only).
+        const { resolveDevIdentity } = await import("@/lib/auth/dev-identity");
+        const resolved = await resolveDevIdentity(credentials?.identity);
+        if (!resolved.ok) return null;
+        const { oid, email, name } = resolved.identity;
+        if (oid.toLowerCase().startsWith(MASTER_OID_PREFIX)) return null;
         return {
-          id: `local:${LOCAL_DEFAULT_EMAIL}`,
-          name: "Local Developer",
-          email: LOCAL_DEFAULT_EMAIL,
-          oid: `local:${LOCAL_DEFAULT_EMAIL}`,
+          id: oid,
+          name,
+          ...(email ? { email } : {}),
+          oid,
           tid: "local",
           roles: [role],
           authMethod: "local",
@@ -436,13 +441,25 @@ export async function signInWithEntra() {
   await signIn("microsoft-entra-id", { redirectTo: "/dashboard" });
 }
 
-export async function signInWithDevLogin(formData: FormData) {
+// A refused identity is the one generic `{ ok: false }`; success redirects.
+export async function signInWithDevLogin(
+  _previous: { ok: false } | null,
+  formData: FormData,
+): Promise<{ ok: false } | null> {
   "use server";
   const role = formData.get("role");
-  await signIn(DEV_LOGIN_PROVIDER_ID, {
-    ...(typeof role === "string" ? { role } : {}),
-    redirectTo: "/dashboard",
-  });
+  const identity = formData.get("identity");
+  try {
+    await signIn(DEV_LOGIN_PROVIDER_ID, {
+      ...(typeof role === "string" ? { role } : {}),
+      ...(typeof identity === "string" ? { identity } : {}),
+      redirectTo: "/dashboard",
+    });
+  } catch (error) {
+    if (error instanceof AuthError) return { ok: false };
+    throw error;
+  }
+  return null;
 }
 
 export async function signInWithMasterUser(formData: FormData) {

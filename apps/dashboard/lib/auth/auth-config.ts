@@ -118,10 +118,10 @@ export function resolveSignInProviders(input: AuthEnvInput): SignInProviders {
     );
   }
 
-  if (isSet(input.devLogin) && (production || entra)) {
+  if (isSet(input.devLogin) && (production || prod || entra)) {
     throw new AuthConfigError(
-      production
-        ? "AUTH_DEV_LOGIN must not be set in production."
+      production || prod
+        ? "AUTH_DEV_LOGIN must not be set in production or when APP_ENV=prod."
         : "AUTH_DEV_LOGIN must not be set when Microsoft Entra ID is configured.",
     );
   }
@@ -143,7 +143,7 @@ export function resolveSignInProviders(input: AuthEnvInput): SignInProviders {
     );
   }
 
-  const devLogin = !production && input.devLogin === "true";
+  const devLogin = !production && !prod && input.devLogin === "true";
   if (!entra && !devLogin && !master) {
     throw new AuthConfigError(
       "No sign-in provider is enabled: configure Microsoft Entra ID or set AUTH_DEV_LOGIN=true (non-production only).",

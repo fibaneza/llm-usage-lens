@@ -59,6 +59,20 @@ describe("resolveSignInProviders (R1 rules)", () => {
     );
   });
 
+  // Access Control T7 / LiteLLM LT21, Rule 50: APP_ENV=prod rejects the dev
+  // login even when NODE_ENV is not "production" (the two flags are independent).
+  it("T7: APP_ENV=prod rejects AUTH_DEV_LOGIN when NODE_ENV is development", () => {
+    const prodWithMaster = {
+      appEnv: "prod",
+      nodeEnv: "development",
+      ...MASTER,
+      masterTotpSecret: "JBSWY3DPEHPK3PXP",
+      devLogin: "true",
+    };
+    expect(() => resolve(prodWithMaster)).toThrow(AuthConfigError);
+    expect(() => resolve(prodWithMaster)).toThrow(/AUTH_DEV_LOGIN/);
+  });
+
   it("T21: requires APP_ENV", () => {
     expect(() => resolve({ appEnv: undefined, devLogin: "true" })).toThrow(
       AuthConfigError,

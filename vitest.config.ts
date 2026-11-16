@@ -23,7 +23,19 @@ export default defineConfig({
     projects: [
       {
         plugins: [react()],
-        resolve: { alias },
+        resolve: {
+          alias: {
+            ...alias,
+            // Server-only modules a unit test loads for real (auth.ts's dev
+            // login resolver); `server-only` throws outside an RSC build.
+            "server-only": fileURLToPath(
+              new URL(
+                "./apps/dashboard/test/server-only-stub.ts",
+                import.meta.url,
+              ),
+            ),
+          },
+        },
         test: {
           name: "unit",
           environment: "jsdom",

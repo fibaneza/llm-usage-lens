@@ -1,7 +1,10 @@
 import "server-only";
 
-import { IdentityRecordSchema } from "@llm-usage-lens/shared";
+import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { GSI1_NAME, IdentityRecordSchema } from "@llm-usage-lens/shared";
 import type { z } from "zod";
+
+import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 
 import { IDENTS_GSI1PK, META_SK, identPk } from "./keys";
 import { queryPage } from "./paging";
@@ -85,4 +88,52 @@ export async function ownEmail(oid: string): Promise<string | null> {
   if (!item) return null;
   const email = IdentityListItemSchema.shape.email.parse(item.email);
   return email ? email.trim().toLowerCase() : null;
+}
+
+export type DevIdentityMatch = {
+  oid: string;
+  email?: string;
+  displayName?: string;
+};
+
+const DevIdentityMatchSchema = IdentityRecordSchema.pick({
+  oid: true,
+  email: true,
+  displayName: true,
+});
+
+// Dev login (Access Control spec): a stored identity by oid.
+export async function findIdentityByOid(
+  oid: string,
+): Promise<DevIdentityMatch | null> {
+  const item = await getItem(identPk(oid), META_SK);
+  const parsed = DevIdentityMatchSchema.safeParse(item);
+  return parsed.success ? parsed.data : null;
+}
+
+// Dev login: a stored identity by lower-cased email. Walks the IDENTS
+// partition to the end of its pages (Rule 20.6); dev-only, small data.
+export async function findIdentityByEmail(
+  email: string,
+): Promise<DevIdentityMatch | null> {
+  let startKey: Record<string, unknown> | undefined;
+  do {
+    const res = await getDocumentClient().send(
+      new QueryCommand({
+        TableName: getTableName(),
+        IndexName: GSI1_NAME,
+        KeyConditionExpression: "gsi1pk = :pk AND begins_with(gsi1sk, :sk)",
+        ExpressionAttributeValues: { ":pk": IDENTS_GSI1PK, ":sk": "IDENT#" },
+        ...(startKey ? { ExclusiveStartKey: startKey } : {}),
+      }),
+    );
+    for (const item of res.Items ?? []) {
+      const parsed = DevIdentityMatchSchema.safeParse(item);
+      if (parsed.success && parsed.data.email?.toLowerCase() === email) {
+        return parsed.data;
+      }
+    }
+    startKey = res.LastEvaluatedKey;
+  } while (startKey);
+  return null;
 }
