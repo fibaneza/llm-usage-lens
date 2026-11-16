@@ -742,8 +742,12 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### L5 — Polish and verification (`feature/phase-l5-litellm-polish`)
 
-- [ ] Accessibility (Phase 5 floor), responsive layout, runbook completed, full role × operation matrix (workflow pilot candidate — *Workflow pilots*) against the fake (and a non-production LiteLLM when provided)
-- [ ] Verify: axe clean; matrix green; e2e probe
+- [x] Spec: LiteLLM spec — *Polish and verification (L5)* (scope, accessibility floor, responsive, the role × operation matrix, the probe, the runbook outline; agent decisions, 2026-11-17)
+- [ ] Accessibility floor and responsive checks on `/dashboard/litellm` and `/dashboard/litellm/team-config` (axe per role, keyboard walk of tabs, picker and every dialog, cards below `md`)
+- [ ] Role × operation matrix test from the spec table, against the fake (workflow pilot candidate — *Workflow pilots*)
+- [ ] Runbook `docs/guides/litellm-admin.md` completed per the spec outline
+- [ ] Probe: `pnpm probe:litellm` (opt-in `LITELLM_PROBE=1`, local `localhost:4000` only, never `prod`; outside `pnpm test:e2e`, `pnpm check` and CI) on the `llmul-probe` fixture team, with the fake mode `pnpm probe:litellm:fake` (LiteLLM spec LD28)
+- [ ] Verify: axe clean at 375 / 768 / 1024 / 1440 / 1920; matrix green; the probe run on the local LiteLLM (or the named fake mode, stated in the report), with its keys and member cleaned up and toggles restored
 
 ### L6 — Combined usage and *My usage* (`feature/phase-l6-litellm-combined`)
 
