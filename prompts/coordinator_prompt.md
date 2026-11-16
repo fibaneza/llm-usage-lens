@@ -64,14 +64,20 @@ never overrides a rule; it only adds coordination.
   8. "message the coordinator **only** with one of these one-line messages
      (user, 2026-11-15: no acks, milestone updates, corrections or
      closing notes):
-     - `ready to merge <unit> at <commit>`
+     - `ready to merge <unit> at <commit> (main <sha>) | gate <counts> |
+       e2e <counts at commit, or "not run: reason"> | docs <yes/no> |
+       UI <yes/no> | decisions <ids or none>` — one line, all at the final
+       commit; the coordinator picks the reviewer set from it without re-reading the
+       diff (it still checks the tree is clean and the commit matches)
      - `frozen <unit> at <commit>, report <path>` (usage freeze or deadline)
      - `blocked <unit>: <what is needed, from whom>`
      - `overlap <unit>: <path> owned by another goal`
-     Everything else goes in the run's report and progress log. When the
-     branch gate is green (typecheck, lint, format, impacted tests), commit
-     everything, leave the worktree clean, send 'ready to merge <unit> at
-     <commit>', and stop work on that branch. Run no review fan-out and no
+     Everything else goes in the run's report and progress log. Before
+     `ready`, run the **ready self-check** (Rule 70.12 — *Ready
+     self-check*): it removes the review rounds that cost the most today.
+     When the branch gate is green (typecheck, lint, format, impacted tests,
+     the two structure suites), commit everything, leave the worktree clean,
+     send the `ready` line, and stop work on that branch. Run no review fan-out and no
      full suite yourself — the coordinator runs them once for the whole
      batch (§4). Never merge into `main` or delete the branch".
 - **The `/goal` line is the user's to type** — a slash command cannot be sent
@@ -93,13 +99,21 @@ never overrides a rule; it only adds coordination.
 - Log every worker message, one line each, to `temp/coordinator/status.log`
   (`<UTC> <worker>: <milestone>`), and update `state.md` (milestone, last
   commit, blockers). Relay a short summary to the user.
-- **Idle check (user, 2026-11-15).** While at least one goal is active (a
-  worker briefed, with no `ready` or `frozen` message since), a session-only
-  `CronCreate` job runs every 5 minutes. It checks only the active goals:
-  `ListAgents`, then each one's worktree `log -1` and `status`, then usage.
-  It nudges an idle, unchanged, silent worker once, and tells the user if
-  the worker stays idle. When no goal is active, the job deletes itself and
-  is created again with the next brief.
+- **Idle check (user, 2026-11-15; economy amendment 2026-11-16, user).**
+  Worker messages and agent notifications are the primary signal; the cron
+  is only a fallback. While at least one goal is active (a worker briefed,
+  with no `ready` or `frozen` since), a session-only `CronCreate` job runs
+  every **15 minutes** with a **one-line prompt** ("Coordinator idle check:
+  coordinator_prompt §2 *Idle check*") — the procedure lives here, not in
+  the cron text, so each firing does not resend it. Each firing: one
+  `ListAgents` and one Bash over the active worktrees (`log -1`, dirty
+  count, contains `main`, the e2e lock owner from
+  `$(git rev-parse --git-common-dir)/e2e-run.lock/owner.json`). If nothing changed since the
+  last firing, print one line and write nothing to `state.md` (one
+  `status.log` line is enough). It nudges an idle, unchanged, silent worker
+  once, and tells the user if the worker stays idle at the next firing.
+  When no goal is active, the job deletes itself and is created again with
+  the next brief.
 - **Do not duplicate work.** The coordinator runs no agents on a goal while
   its worker is working on it. If a worker is stuck past its deadline,
   message it once; if it stays idle, tell the user.
@@ -123,14 +137,17 @@ never overrides a rule; it only adds coordination.
   its own lines and never reorders or rewrites another goal's. Count-style
   tests on these (number of audit actions, error codes, write prefixes) are
   expected to change at merge.
-- **Stay current (amended 2026-11-16, user).** After every landing on
-  `main`, bring **every** active branch up to date the same hour: if its
-  worker is idle and its worktree is clean, the coordinator merges `main`
-  into it there (conflicts: `main` plus the branch's new lines; a squashed
-  copy of the branch's own work resolves to the branch side) and runs
-  typecheck plus the tests the conflict touched; otherwise it tells the
-  worker to merge `main` at its next step. A new goal never starts from a
-  stale branch.
+- **Stay current (amended 2026-11-16, user; economy amendment the same
+  day).** After every landing on `main`, send each active worker **one**
+  line: `main updated: <sha> (<unit>; files it touches that you also edit,
+  or "no overlap">)`. The worker merges `main` at its next clean step and
+  **always right before `ready`**; a merge with no overlap needs only
+  typecheck and the tests `--changed` picks up (no e2e unless `main`
+  brought a shared file, Rule 70.12 — *E2E budget*). The coordinator does
+  not merge into a worker's tree itself (a session shown as idle can still
+  run tests — lesson, 2026-11-16), except for a branch whose worker is gone,
+  which the coordinator then owns. A new goal never starts from a stale
+  branch.
   Propagation covers only branches with **work in progress**: their own
   commits not yet on `main`, or uncommitted changes (user, 2026-11-16).
   Finished branches (landed, or ready and waiting for clean-up) are removed,
@@ -141,14 +158,27 @@ never overrides a rule; it only adds coordination.
   next goal only when its dependencies are on `main`, and lands finished
   goals one commit per unit, consolidating to `main` as soon as each review
   approves (or at the user's direction).
-- **No test collisions (user, 2026-11-16).** Vitest is isolated per run: each run gets its own `bedrock-usage-test-<pid>` table. **E2E and the seeded probes are not:** every worktree serves Playwright on port 3211 against the shared `bedrock-usage` table in DynamoDB Local. Hold the cross-session lock while running them:
-  ```bash
-  L=/Users/fibanez/Projects/aws-bedrock-cost-tracker/temp/coordinator/locks/e2e
-  if mkdir "$L" 2>/dev/null; then echo "<session> <unit> $(date +%H:%M)" > "$L/owner"
-    pnpm test:e2e -- <specs> > <log> 2>&1; rc=$?; rm "$L/owner"; rmdir "$L"; (exit $rc)
-  else echo "e2e lock held by: $(cat "$L/owner")"; fi
-  ```
-  If the lock is held, do other work and retry later. Never wait in a loop, and never break another session's lock: tell the coordinator if one looks stale (more than 30 min). A seeded probe also uses its own table (`bedrock-usage-probe-<unit>`), never `bedrock-usage`. The lasting fix is a per-worktree port and table, queued as test infra.
+- **No test collisions (user, 2026-11-16; economy amendment the same
+  day).** The isolation is automatic, so no slot messages are needed for
+  it:
+  - **Vitest** (unit and integration) is isolated per run, with its own
+    `bedrock-usage-test-<pid>` table. No slot; runs in parallel.
+  - **E2E** (`pnpm test:e2e`, both Playwright projects) takes the
+    cross-worktree lock itself (`scripts/e2e-lock.mjs`, in the git common
+    dir) and waits for it. No slot request; just run it.
+  - **Reseeding the shared `bedrock-usage` table** (`db:seed:empty`,
+    `db:seed`) is the one collision the lock does not cover, because the
+    lock wraps only `playwright test`. Reseed inside the lock, in one
+    command: `node scripts/e2e-lock.mjs sh -c "pnpm db:seed:empty && pnpm
+    db:seed && E2E_LOCK=off pnpm test:e2e -- <specs>"` (the outer lock
+    covers the whole command; `E2E_LOCK=off` stops the inner one waiting on
+    it). Never reseed outside it.
+  - The lock lives at `$(git rev-parse --git-common-dir)/e2e-run.lock/`
+    (`owner.json`). The script takes it over by itself when the owner's
+    pid has died or the lock is older than `E2E_LOCK_STALE_MIN` (45
+    minutes), so a dead holder needs no action. The coordinator reads the
+    owner in the idle check and asks a live holder past 45 minutes about
+    it; it never breaks a lock by hand.
 - **Config blockers: copy the local env files (user, 2026-11-16).** When a
   worker is blocked by missing configuration (env validation, an auth or
   LiteLLM setting), copy the primary checkout's git-ignored env files into
@@ -172,6 +202,10 @@ never overrides a rule; it only adds coordination.
 
 - All sessions draw on the same 5-hour and weekly limits. Read usage before
   each brief and on each worker message.
+- **Do not start a review fan-out at ≥ 80 %** of the 5-hour window: a
+  review killed by the limit is paid twice. Queue it for after the reset.
+  Between the 75 % worker freeze and 80 %, the coordinator may still start
+  a review whose evidence is complete, so the batch lands before the reset.
 - At **≥ 60 %** (caution) tell workers to stay at 2 agents and skip optional
   work. At **≥ 75 %** (freeze) tell every worker to start no new agents, let
   running ones finish, commit what passed, write its report and stop.
@@ -187,7 +221,9 @@ all into one candidate, and only then runs the full tests, the security
 review and the other reviews — once, on the combined tree. No per-branch
 full suite, no per-branch review.
 
-1. **Intake.** A worker reports "ready to merge <unit> at <commit>". Check
+1. **Intake.** A worker reports the one-line `ready to merge <unit> at
+   <commit> (main <sha>) | gate … | e2e … | docs … | UI … | decisions …`
+   (§1 item 8). Check
    the worktree is clean and the commit matches; record it in the merge
    queue in `state.md`. **The batch run starts on one of two triggers:**
    every active goal is in the queue, or the workers stop on a usage

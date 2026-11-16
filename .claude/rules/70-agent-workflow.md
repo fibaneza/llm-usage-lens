@@ -79,7 +79,10 @@ review = quality-reviewer + spec-guardian + ecc reviewers
 5. **REQUEST CHANGES if** the gates are not green at review time **or** any
    reviewer raises a BLOCKER. WARN and NIT findings do not block. Gates are
    never taken on trust: the orchestrator runs them itself on the commit
-   under review and hands the reviewer the evidence (exit codes and counts).
+   under review and hands the reviewer the evidence (exit codes and counts)
+   — except under a coordinator, where the worker's branch-gate evidence at
+   the final commit is that evidence (rule 12, *Batched under a
+   coordinator*; coordinator prompt §4 *No re-run*).
    The reviewer re-runs only what that evidence does not cover, or a check
    it doubts (rule 12).
 6. **Rework loops back to the top of the loop** with one consolidated,
@@ -129,15 +132,46 @@ review = quality-reviewer + spec-guardian + ecc reviewers
     - **Re-reviews are delta-scoped.** After REQUEST CHANGES, the next pass
       reviews only the blocker fixes (the diff since the last reviewed
       commit) against the blocker list, not the whole phase again. The
-      3-round cap (rule 7) still applies.
+      3-round cap (rule 7) still applies. **One reviewer per delta**
+      (economy amendment, 2026-11-16, user): a single `quality-reviewer` on
+      opus checks the whole delta, including the spec-guardian duty for any
+      docs in it, and a delta that fixes a security blocker is checked with
+      security scope (`quality-reviewer` on opus, or `ecc:security-reviewer`
+      when it raised the blocker); `playwright-ui-reviewer` joins only when
+      the delta
+      touched UI or `e2e/` files. The orchestrator writes the blockers once,
+      to a file, and every dispatch points at that file instead of
+      restating it.
+    - **Ready self-check (economy amendment, 2026-11-16, user).** Most
+      REQUEST CHANGES rounds today were spec drift and stale evidence, not
+      code defects. Before `ready`, the worker checks:
+      - **Evidence at the final commit:** every gate count is from the
+        commit it sends, after the last merge of `main`; the two structure
+        suites (`lib/data/access/structure.test.ts`,
+        `lib/litellm/structure.test.ts`) ran, because `--changed` misses
+        tests that read files; lint ran after any e2e build output existed.
+      - **Spec consistency:** for every spec or rule statement the unit
+        changed, grep `docs/specs/**` and `.claude/rules/**` for the old
+        statement and either update it or mark it superseded, with the date
+        and reason. A rule never contradicts its spec (Rule 00.2, 00.4).
+      - **Decisions live in the spec:** each agent decision is recorded in
+        the spec with its reason (Rule 00.3), not only in the run report;
+        tests cite spec lines, not reports or plans.
+      - **Checkboxes match the code:** tick only what was built; split a
+        task into built and not-built parts instead of ticking it whole.
+      - **Ownership and overlap:** `git diff --name-only main...HEAD` holds
+        only owned files, plus shared append-only lines (coordinator §2a).
     - **Branches run only new and impacted tests** (amended 2026-11-14,
       user). Iterations run the files being worked on
       (`pnpm exec vitest run <paths>`); the phase's green gate — the
       review's evidence — is `pnpm typecheck`, `pnpm lint`,
       `pnpm format:check` and the impacted tests,
       `pnpm exec vitest run --changed $(git merge-base main HEAD)` (Vitest
-      follows the import graph from every changed file), plus the targeted
-      e2e specs (`pnpm test:e2e -- <spec>`) when UI changed. A change to a
+      follows the import graph from every changed file), the two structure
+      suites (`lib/data/access/structure.test.ts`,
+      `lib/litellm/structure.test.ts` — they read files, so `--changed`
+      misses them), plus the targeted e2e specs (`pnpm test:e2e -- <spec>`)
+      when UI changed (*E2E budget*). A change to a
       shared module (`packages/shared`, `lib/data/access/store.ts`,
       `lib/api/respond.ts`, `auth.ts`, `env.ts`) or to test infrastructure
       (`vitest.config.ts`, `test/**`, `e2e/support/**`) is impacted
