@@ -67,8 +67,8 @@ export const GET = withRoute(async (_request, { params }, session) => {
       LiteLLMKeysResponseSchema.parse({
         connected: true,
         items: items.map((k) => {
-          const { userId, ...rest } = keyView(k);
-          return team.perUserCostHidden ? rest : { userId, ...rest };
+          const { userId, keyAlias, ...rest } = keyView(k);
+          return team.perUserCostHidden ? rest : { userId, keyAlias, ...rest };
         }),
       }),
     );

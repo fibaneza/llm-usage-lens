@@ -14,6 +14,7 @@ import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { LiteLLMReportedBadge } from "./LiteLLMReportedBadge";
+import { useIsClient } from "./use-is-client";
 
 type LiteLLMSectionProps = {
   title: string;
@@ -47,6 +48,7 @@ export function LiteLLMSection({
 }: LiteLLMSectionProps) {
   const headingId = useId();
   const [pending, setPending] = useState(false);
+  const isClient = useIsClient();
 
   return (
     <section
@@ -60,13 +62,17 @@ export function LiteLLMSection({
         </h2>
         {reported ? <LiteLLMReportedBadge /> : null}
       </div>
-      <SectionBoundary
-        title={title.toLowerCase()}
-        resetKeys={[resetKey]}
-        fallback={<Loading setPending={setPending} />}
-      >
-        {children}
-      </SectionBoundary>
+      {isClient ? (
+        <SectionBoundary
+          title={title.toLowerCase()}
+          resetKeys={[resetKey]}
+          fallback={<Loading setPending={setPending} />}
+        >
+          {children}
+        </SectionBoundary>
+      ) : (
+        <Skeleton className="h-40 w-full" />
+      )}
     </section>
   );
 }

@@ -5,13 +5,25 @@ import { CircleDollarSign, Wallet } from "lucide-react";
 import { formatUsd } from "@/components/charts/chart-data";
 import { EmptyState } from "@/components/display/EmptyState";
 import { MetricCard } from "@/components/display/MetricCard";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { DailySpend } from "./DailySpend";
 import { KeysTable } from "./KeysTable";
 import { Unavailable } from "./LiteLLMSection";
+import { useIsClient } from "./use-is-client";
 import { useMeSuspenseQuery } from "./use-me-query";
 
+// Self-gating: no relative /api/ fetch during SSR or hydration (LiteLLM spec,
+// "No server-side fetch of /api/*").
 export function MyUsageSection() {
+  return useIsClient() ? (
+    <MyUsageContent />
+  ) : (
+    <Skeleton className="h-40 w-full" />
+  );
+}
+
+function MyUsageContent() {
   const result = useMeSuspenseQuery();
   if (result.status === "unavailable") return <Unavailable />;
   const me = result.data;

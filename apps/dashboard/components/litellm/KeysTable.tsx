@@ -14,7 +14,7 @@ import { formatSydneyTime } from "./sydney-time";
 
 type KeyRow = {
   tokenId: string;
-  keyAlias: string | null;
+  keyAlias?: string | null;
   models: readonly string[];
   spend: number;
   maxBudget: number | null;
@@ -47,7 +47,7 @@ export function KeysTable({
       <TableBody>
         {keys.map((key) => (
           <TableRow key={key.tokenId}>
-            <TableCell>{key.keyAlias ?? key.tokenId}</TableCell>
+            <TableCell>{key.keyAlias ?? `…${key.tokenId.slice(-4)}`}</TableCell>
             <TableCell className="whitespace-normal">
               <span className="flex flex-wrap gap-1">
                 {key.models.map((model) => (

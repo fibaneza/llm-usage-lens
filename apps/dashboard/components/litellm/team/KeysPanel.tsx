@@ -205,7 +205,7 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
           </TableHeader>
           <TableBody>
             {items.map((key) => {
-              const alias = key.keyAlias ?? key.tokenId.slice(0, 8);
+              const alias = key.keyAlias ?? `…${key.tokenId.slice(-4)}`;
               const act = (action: string) =>
                 write(keyPath(teamId, key.tokenId, action), "POST", undefined, [
                   "keys",

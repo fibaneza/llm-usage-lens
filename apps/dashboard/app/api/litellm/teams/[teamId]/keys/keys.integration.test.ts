@@ -133,6 +133,8 @@ describe("GET /api/litellm/teams/[teamId]/keys - Organisation cap (LD23, T16)", 
       expect(body.data.items.length).toBeGreaterThan(0);
       for (const item of body.data.items) {
         expect(item, "userId").not.toHaveProperty("userId");
+        // LD27: an alias often names its owner; absent, not null.
+        expect(item, "keyAlias").not.toHaveProperty("keyAlias");
         expect(item.spend).toBe(2.5);
         expect(item.tokenId).toBeTruthy();
       }
@@ -147,6 +149,7 @@ describe("GET /api/litellm/teams/[teamId]/keys - Organisation cap (LD23, T16)", 
       const { body } = await get();
       expect(body.data.items[0]).toMatchObject({
         userId: LUSER.memberA,
+        keyAlias: "alias-a",
         spend: 2.5,
       });
     },
@@ -156,6 +159,7 @@ describe("GET /api/litellm/teams/[teamId]/keys - Organisation cap (LD23, T16)", 
     signInAs("teamAdminA");
     const { body } = await get();
     expect(body.data.items[0].userId).toBe(LUSER.memberA);
+    expect(body.data.items[0].keyAlias).toBe("alias-a"); // LD27
   });
 });
 

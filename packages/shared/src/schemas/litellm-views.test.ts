@@ -148,6 +148,21 @@ describe("LiteLLMKeysResponseSchema", () => {
         .success,
     ).toBe(true);
   });
+  it("accepts a key row with keyAlias absent (LD27, Organisation cap)", () => {
+    const capped = {
+      tokenId: "tok-1",
+      blocked: false,
+      expires: null,
+      models: ["claude-sonnet"],
+      spend: 0.5,
+      maxBudget: null,
+    };
+    const parsed = LiteLLMKeysResponseSchema.safeParse({
+      connected: true,
+      items: [capped],
+    });
+    expect(parsed.success).toBe(true);
+  });
   it("rejects an item without a tokenId (keys route)", () => {
     const rest = Object.fromEntries(
       Object.entries(key).filter(([k]) => k !== "tokenId"),

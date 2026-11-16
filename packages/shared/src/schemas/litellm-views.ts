@@ -11,7 +11,7 @@ const EnabledOperations = z.array(z.string());
 const KeyMetadataSchema = z.object({
   tokenId: z.string(),
   userId: z.string().nullish(),
-  keyAlias: z.string().nullable(),
+  keyAlias: z.string().nullish(),
   blocked: z.boolean(),
   expires: z.string().nullable(),
   models: z.array(z.string()),
