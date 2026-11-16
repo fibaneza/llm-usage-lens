@@ -120,8 +120,12 @@ describe("no master key anywhere (LT2)", () => {
 
 describe("the service key is read only inside lib/litellm and env.ts (LT1, Rule 50.6)", () => {
   it("no other production file references LITELLM_SERVICE_KEY", () => {
+    // e2e specs and playwright.config.ts are test tooling: they only inject a fixed fake key.
+    const isE2eTooling = (p: string) =>
+      p.startsWith("apps/dashboard/e2e/") ||
+      p === "apps/dashboard/playwright.config.ts";
     const files = walk(join(ROOT, "apps/dashboard")).filter(
-      (f) => isCode(f) && !isTest(rel(f)),
+      (f) => isCode(f) && !isTest(rel(f)) && !isE2eTooling(rel(f)),
     );
     const allowed = (p: string) =>
       p === "apps/dashboard/env.ts" ||
