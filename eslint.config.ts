@@ -81,6 +81,8 @@ export default tseslint.config(
     files: [
       "apps/dashboard/app/**/{page,layout,template,loading,error,global-error,not-found,default,route}.{ts,tsx}",
       "apps/dashboard/{proxy,auth}.ts",
+      // Playwright globalSetup (the CI e2e-dev warm-up).
+      "apps/dashboard/e2e/support/warm-up.ts",
       "**/*.config.{ts,mts,mjs,cjs,js}",
     ],
     rules: { "import/no-default-export": "off" },

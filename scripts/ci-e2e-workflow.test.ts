@@ -194,12 +194,14 @@ describe("ci e2e-dev job (llm-usage-lens-build.yml)", () => {
   // Coordinator follow-up (ci/e2e-dev-guard): fail unless exactly the 10
   // dev-login cases ran, none skipped (ACTIONS.md e2e-dev job).
   it("writes a JSON report and then asserts exactly 10 cases, none skipped (ACTIONS.md e2e-dev)", () => {
-    expect(run).toMatch(/--reporter=list,json/);
+    // Review warning: a CLI --reporter replaces the config reporters (html,
+    // github); the config adds json when PLAYWRIGHT_JSON_OUTPUT_FILE is set.
+    expect(run).not.toMatch(/--reporter/);
     expect(block(run, "env", 8)).toMatch(
       /^\s+PLAYWRIGHT_JSON_OUTPUT_FILE:\s*.*e2e-dev-report\.json\s*$/m,
     );
     const guard = steps.findIndex((s) =>
-      /^ {8}run:\s*pnpm exec tsx scripts\/e2e-assert-count\.ts .*e2e-dev-report\.json 10\s*$/m.test(
+      /^ {8}run:\s*pnpm exec tsx scripts\/e2e-assert-count-cli\.ts .*e2e-dev-report\.json 10\s*$/m.test(
         s,
       ),
     );
@@ -219,5 +221,20 @@ describe("ci e2e-dev job (llm-usage-lens-build.yml)", () => {
     for (const u of uses.filter((x) => !x.startsWith("./"))) {
       expect(u).toMatch(/@[0-9a-f]{40}$/);
     }
+  });
+});
+
+// Coordinator decision (ci/e2e-dev-followups): the config loads the warm-up
+// globalSetup only through the devServerWarmUp gate (ACTIONS.md e2e-dev job).
+describe("playwright.config.ts warm-up wiring", () => {
+  const config = readFileSync(
+    join(__dirname, "..", "apps", "dashboard", "playwright.config.ts"),
+    "utf8",
+  );
+
+  it("sets globalSetup to the warm-up only when devServerWarmUp(process.env) holds", () => {
+    expect(config).toMatch(
+      /globalSetup:\s*devServerWarmUp\(process\.env\)\s*\?\s*"\.\/e2e\/support\/warm-up\.ts"\s*:\s*undefined/,
+    );
   });
 });

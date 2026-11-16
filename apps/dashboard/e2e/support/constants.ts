@@ -5,12 +5,22 @@ export const E2E_PORT = 3211;
 // `next dev`. Production refuses the dev-only login (auth guide — Dev-only
 // local login), so specs that need it skip under production servers and run
 // in the CI e2e-dev job, which sets E2E_SERVERS=dev.
+// Unit-tested in scripts/e2e-assert-count.test.ts (the Vitest unit project
+// excludes e2e/).
 export function productionServers(
   env: Readonly<Record<string, string | undefined>>,
 ): boolean {
   return !!env.CI && env.E2E_SERVERS !== "dev";
 }
 export const E2E_PRODUCTION_SERVERS = productionServers(process.env);
+// The CI e2e-dev job starts `next dev` cold; e2e/support/warm-up.ts compiles
+// /sign-in and /dashboard before the first test (.github/ACTIONS.md — e2e-dev
+// job). Local runs and production servers skip it.
+export function devServerWarmUp(
+  env: Readonly<Record<string, string | undefined>>,
+): boolean {
+  return !!env.CI && !productionServers(env);
+}
 export const DEV_LOGIN_ONLY_REASON =
   "the dev-only login is refused by production builds; the CI e2e-dev job and local next dev runs cover it";
 export const E2E_BASE_URL = `http://127.0.0.1:${E2E_PORT}`;

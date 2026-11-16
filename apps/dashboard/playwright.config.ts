@@ -13,6 +13,7 @@ import {
   E2E_PROBE_TABLE,
   E2E_PRODUCTION_SERVERS,
   E2E_TABLE,
+  devServerWarmUp,
 } from "./e2e/support/constants";
 
 // The 4R.5 role probe (e2e/role-landing.spec.ts; Phase 4R.5 Verify: "e2e per
@@ -49,6 +50,9 @@ export default defineConfig({
     ["list"],
     ["html", { open: "never", outputFolder: "playwright-report" }],
     ...(process.env.CI ? ([["github"]] as const) : []),
+    // The CI e2e-dev guard reads this JSON report (.github/ACTIONS.md); set
+    // here so the list, html and github reporters stay on.
+    ...(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE ? ([["json"]] as const) : []),
   ],
   // First dev-server compile of a route can be slow; keep generous timeouts
   // rather than flaky wall-clock sleeps (Rule 60.24). Production servers do
@@ -61,6 +65,10 @@ export default defineConfig({
   expect: {
     timeout: process.env.CI && !E2E_PRODUCTION_SERVERS ? 15_000 : 5_000,
   },
+  // CI e2e-dev only: compile the cold dev routes before the first test.
+  globalSetup: devServerWarmUp(process.env)
+    ? "./e2e/support/warm-up.ts"
+    : undefined,
   outputDir: "test-results",
   use: {
     baseURL: E2E_BASE_URL,

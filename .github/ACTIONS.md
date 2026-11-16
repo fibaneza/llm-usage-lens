@@ -88,7 +88,23 @@ It uses no secrets: the web servers' env is pinned in
   Playwright's 5 s `expect` default while the cold `next dev` compiled
   the server action and `/dashboard`. The same cases take 2.1-2.6 s once
   the routes are warm (run 43927910942). Under CI on `next dev` only, the
-  `expect` timeout is now 15 s. Re-measure on the next green run.
+  `expect` timeout is now 15 s.
+- **`e2e-dev` measured (43946917882, f4f3f98, 2026-11-16, green):** the
+  job took 3m38s, with 2.1 min of tests. Ten cases ran: 9 passed and 1
+  was flaky. `dev-login.spec.ts:28`, the first dev-login sign-in on the
+  cold server, failed after 26.5 s and passed on retry in 6.5 s. The
+  guard reported `e2e case count ok: 10`. In the same run `e2e` took
+  11m46s (10.6 min of tests: 401 passed, 10 skipped). That is slower
+  than the 4.9 min in run 43939025415, so runner speed varies between
+  runs. `test` took 15m57s.
+- **`e2e-dev` warm-up (2026-11-17):** before the first test, a Playwright
+  `globalSetup` (`apps/dashboard/e2e/support/warm-up.ts`) loads
+  `/sign-in` on both dev servers and `/dashboard` on the main one with a
+  forged session. The cold compile then happens outside a test. Only
+  `devServerWarmUp(env)` loads it: `CI` set with `E2E_SERVERS=dev`.
+  Local runs and production servers skip it. The 15 s `expect` timeout
+  stays as the safety margin. In a local cold run (Next caches moved
+  aside), the first dev-login sign-in took 454 ms.
 - **History on `next dev`, 2026-11-16:** run 43882190808 (1 worker)
   spent about 22.5 min on 330 of 350 cases, then stopped at 23m53s on a
   runner shutdown signal. Run 43922339732 (2 workers) finished 354 of
@@ -110,12 +126,12 @@ It uses no secrets: the web servers' env is pinned in
   400 passed, 10 skipped (the dev-login cases) and 1 flaky. The flaky
   case, `role-landing.spec.ts:165`, passed on retry. In the same run,
   `quality` took 2m02s, `build` 1m09s and `test` 16m10s.
-- **Cost:** about 31 runner-minutes per push or pull-request run.
-  `test` takes about 16 min, `e2e` about 7.5 min, `quality` and `build`
-  about 3 min together, and `e2e-dev` an estimated 3-4 min (one cold
-  `next dev` for 10 cases). The repository is private, so the minutes
-  count against the GitHub free tier (2,000 min/month on Free), about 60
-  runs a month, and each job bills its own minutes. `test` is now the
+- **Cost:** about 31-35 runner-minutes per push or pull-request run.
+  `test` takes about 16 min, `e2e` 7.5-12 min, `quality` and `build`
+  about 3 min together, and `e2e-dev` about 3.5 min. The repository is
+  private, so the minutes count against the GitHub free tier (2,000
+  min/month on Free), about 55-65 runs a month, and each job bills its
+  own minutes. `test` is now the
   longest job. The cost is accepted, not avoided (CLAUDE.md, *Cost
   posture*).
 
