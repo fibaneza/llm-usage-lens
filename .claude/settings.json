@@ -44,6 +44,8 @@
       "Bash(docker version*)",
       "Bash(git *)",
       "Bash(gitleaks *)",
+      "Bash(git checkout -- *)",
+      "Bash(git branch -D*)",
       "Bash(aws sts get-caller-identity *)",
       "Bash(aws sso login *)",
       "Bash(aws dynamodb list-tables --endpoint-url http://localhost:8000*)",
@@ -123,10 +125,8 @@
       "Edit(/.gitleaks.toml)",
       "Bash(gh api *)",
       "Bash(git clean*)",
-      "Bash(git checkout -- *)",
       "Bash(git restore*)",
       "Bash(git stash drop*)",
-      "Bash(git branch -D*)",
       "Bash(sam deploy*)"
     ],
     "deny": [
