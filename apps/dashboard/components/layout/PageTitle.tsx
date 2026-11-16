@@ -9,11 +9,19 @@ import { cn } from "@/lib/utils";
 // single <h1> (the route pages render content without a duplicate heading). Uses
 // the nav item's `pageTitle` so the heading is more informative than the short
 // sidebar label (design reference — "Cost overview", not "Overview").
+// Routes with no rail item (Design System - Navigation (Sidebar), Account row).
+const OFF_RAIL_TITLES: readonly { href: string; title: string }[] = [
+  { href: "/dashboard/account", title: "Account" },
+];
+
 export function PageTitle({ className }: { className?: string }) {
   const pathname = usePathname();
   const active = NAV_ITEMS.find((item) => isNavItemActive(pathname, item.href));
+  const offRail = OFF_RAIL_TITLES.find((item) =>
+    isNavItemActive(pathname, item.href),
+  );
 
-  const title = active?.pageTitle ?? "Dashboard";
+  const title = active?.pageTitle ?? offRail?.title ?? "Dashboard";
 
   return (
     <h1

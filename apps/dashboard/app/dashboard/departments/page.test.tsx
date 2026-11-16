@@ -14,9 +14,9 @@ import { renderWithProviders } from "@/test/render-providers";
 
 import DepartmentsPage from "./page";
 
-// 4R.5 review B2: the shell reads the caller's scope for the "your teams"
-// notice (covered in scope-notice.integration.test.ts); here the caller is a
-// global reader so only rendering is tested.
+// B1-2: the shell gates on the caller's stored scope (the not-found matrix is
+// in usage-routes.integration.test.ts); here the caller is a global reader so
+// only rendering is tested.
 vi.mock("@/auth", () => ({
   auth: vi.fn(async () => ({ user: { oid: "u", roles: ["internal-admin"] } })),
 }));

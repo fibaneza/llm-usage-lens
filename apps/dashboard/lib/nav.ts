@@ -16,8 +16,8 @@ import type { Scope } from "@/lib/auth/policy";
 export type NavItem = {
   // Short label shown in the sidebar rail.
   title: string;
-  // Descriptive heading shown in the top bar (design reference — the rail says
-  // "Overview", the page heading says "Cost overview").
+  // Descriptive heading shown in the top bar (the rail says "Overview", the
+  // page heading says "Cost overview").
   pageTitle: string;
   href: string;
   icon: LucideIcon;
@@ -28,32 +28,23 @@ export type NavGroup = {
   items: readonly NavItem[];
 };
 
-// Sidebar navigation, grouped per the design reference: a "Main" group for the
-// Overview landing page and an "Attribution" group for the per-dimension
-// breakdowns. The two detail routes (departments/[id], teams/[id]) are reached
-// by drill-down and are intentionally absent — they have no standalone
-// navigation target (design-system — Navigation).
+const USAGE_GROUP_LABEL = "Usage";
+
+// Sidebar navigation (Design System - Navigation (Sidebar)): Usage is the
+// organisation-level cost views followed by the caller's own usage (last),
+// Management is the gateway page, Administration holds Settings. The
+// two detail routes (departments/[id], teams/[id]) are reached by drill-down
+// and are intentionally absent.
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
-    label: "Main",
+    label: USAGE_GROUP_LABEL,
     items: [
-      {
-        title: "My usage",
-        pageTitle: "My usage",
-        href: "/dashboard/me",
-        icon: CircleUser,
-      },
       {
         title: "Overview",
         pageTitle: "Cost overview",
         href: "/dashboard",
         icon: LayoutDashboard,
       },
-    ],
-  },
-  {
-    label: "Attribution",
-    items: [
       {
         title: "Ranking",
         pageTitle: "Cost ranking",
@@ -61,33 +52,39 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         icon: Trophy,
       },
       {
-        title: "Departments",
-        pageTitle: "Department breakdown",
+        title: "Cost by department",
+        pageTitle: "Cost by department",
         href: "/dashboard/departments",
         icon: Building2,
       },
       {
-        title: "Teams",
-        pageTitle: "Team breakdown",
+        title: "Cost by team",
+        pageTitle: "Cost by team",
         href: "/dashboard/teams",
         icon: UsersRound,
       },
       {
-        title: "Services",
-        pageTitle: "Service breakdown",
+        title: "Cost by service",
+        pageTitle: "Cost by service",
         href: "/dashboard/services",
         icon: Boxes,
       },
       {
-        title: "Users",
-        pageTitle: "User breakdown",
+        title: "Cost by user",
+        pageTitle: "Cost by user",
         href: "/dashboard/users",
         icon: User,
+      },
+      {
+        title: "My usage",
+        pageTitle: "My usage",
+        href: "/dashboard/me",
+        icon: CircleUser,
       },
     ],
   },
   {
-    label: "Gateway",
+    label: "Management",
     items: [
       {
         title: "LiteLLM",
@@ -97,31 +94,26 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       },
     ],
   },
+  {
+    label: "Administration",
+    items: [
+      {
+        title: "Settings",
+        pageTitle: "Settings",
+        href: "/dashboard/settings",
+        icon: Settings,
+      },
+    ],
+  },
 ];
 
-// Flat list of the grouped destinations — kept for callers that don't care about
-// grouping (e.g. the PageTitle lookup and the Phase 2.2 command menu).
-export const PRIMARY_NAV_ITEMS: readonly NavItem[] = NAV_GROUPS.flatMap(
+// Flat list of every destination - consumed by the PageTitle lookup.
+export const NAV_ITEMS: readonly NavItem[] = NAV_GROUPS.flatMap(
   (group) => group.items,
 );
 
-// Settings is pinned to the sidebar footer, separate from the primary groups.
-export const SETTINGS_NAV_ITEM: NavItem = {
-  title: "Settings",
-  pageTitle: "Settings",
-  href: "/dashboard/settings",
-  icon: Settings,
-};
-
-// The full set (primary + settings) — consumed by the PageTitle lookup and
-// the command menu in Phase 2.2.
-export const NAV_ITEMS: readonly NavItem[] = [
-  ...PRIMARY_NAV_ITEMS,
-  SETTINGS_NAV_ITEM,
-];
-
 // Overview owns the exact "/dashboard" path; every other link also matches its
-// nested detail routes (e.g. /dashboard/teams/123 highlights Teams).
+// nested detail routes (e.g. /dashboard/teams/123 highlights Cost by team).
 export function isNavItemActive(pathname: string, href: string): boolean {
   const path = href.split("?")[0] ?? href;
   if (path === "/dashboard") {
@@ -135,54 +127,23 @@ export type NavScope = Pick<
   "global" | "memberTeamId" | "teamScopes" | "departmentScopes"
 >;
 
-// Source: implementation-phases Phase 4R.5; Design System - Access states and
-// scoped labels. Non-global callers reach the Overview through ?view=overview
-// because a bare /dashboard sends them to their landing page.
-const OVERVIEW_HREF = "/dashboard";
-const SCOPED_OVERVIEW_HREF = "/dashboard?view=overview";
-const NO_TEAM_HREFS: ReadonlySet<string> = new Set([
-  "/dashboard/me",
-  "/dashboard/litellm",
-]);
+const MY_USAGE_HREF = "/dashboard/me";
 
-const hasAnyScope = (scope: NavScope) =>
-  scope.memberTeamId !== null ||
-  scope.teamScopes.size > 0 ||
-  scope.departmentScopes.size > 0;
-
+// The one nav filter (sidebar, PageTitle and CommandMenu share it). The Usage
+// group is organisation-level except My usage, so non-global callers keep only
+// My usage there; the other pages 404 for them (Access Control - Navigation
+// and landing by role).
 export function navGroupsFor(scope: NavScope): readonly NavGroup[] {
   if (scope.global) return NAV_GROUPS;
-  const scoped = hasAnyScope(scope);
   return NAV_GROUPS.map((group) => ({
-    label: group.label,
-    items: group.items
-      .filter((item) => {
-        if (!scoped) return NO_TEAM_HREFS.has(item.href);
-        return (
-          item.href !== "/dashboard/departments" ||
-          scope.departmentScopes.size > 0
-        );
-      })
-      .map((item) => {
-        if (scoped && item.href === "/dashboard/teams") {
-          return { ...item, title: "My teams" };
-        }
-        if (scoped && item.href === OVERVIEW_HREF) {
-          return { ...item, href: SCOPED_OVERVIEW_HREF };
-        }
-        return item;
-      }),
-  })).filter((group) => group.items.length > 0);
+    ...group,
+    items: group.items.filter(
+      (item) =>
+        group.label !== USAGE_GROUP_LABEL || item.href === MY_USAGE_HREF,
+    ),
+  }));
 }
 
 export function landingPathFor(scope: NavScope): string {
-  if (scope.global) return "/dashboard";
-  const [onlyDepartment] = scope.departmentScopes;
-  if (onlyDepartment !== undefined) {
-    return scope.departmentScopes.size === 1
-      ? `/dashboard/departments/${encodeURIComponent(onlyDepartment)}`
-      : "/dashboard/departments";
-  }
-  if (scope.teamScopes.size > 0) return "/dashboard/teams";
-  return "/dashboard/me";
+  return scope.global ? "/dashboard" : "/dashboard/me";
 }

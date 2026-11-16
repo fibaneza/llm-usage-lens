@@ -4,6 +4,7 @@ import {
   signInWithEntra,
   signInWithMasterUser,
 } from "@/auth";
+import { Panel } from "@/components/display/Panel";
 import { SignInOptions } from "@/components/auth/SignInOptions";
 
 // Enabled providers depend on runtime env, so never prerender at build time.
@@ -13,12 +14,18 @@ export default function SignInPage() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 p-8 text-center">
       <h1 className="text-foreground text-2xl font-semibold">LLM Usage Lens</h1>
-      <SignInOptions
-        {...enabledSignInProviders}
-        entraAction={signInWithEntra}
-        devLoginAction={signInWithDevLogin}
-        masterAction={signInWithMasterUser}
-      />
+      <Panel
+        title="Sign in"
+        boundaryTitle="the sign-in options"
+        className="w-full max-w-sm text-left"
+      >
+        <SignInOptions
+          {...enabledSignInProviders}
+          entraAction={signInWithEntra}
+          devLoginAction={signInWithDevLogin}
+          masterAction={signInWithMasterUser}
+        />
+      </Panel>
     </main>
   );
 }

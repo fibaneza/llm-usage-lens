@@ -18,6 +18,9 @@ import { UserMenu } from "./UserMenu";
 // the Auth.js session.
 export async function AppHeader({ scope }: { scope?: NavScope } = {}) {
   const session = await auth();
+  // Sync badges show only to callers who see the Usage group (Design System -
+  // Layout, Structure); no scope fails closed to the non-global view.
+  const showSync = scope?.global === true;
 
   async function signOutAction() {
     "use server";
@@ -35,7 +38,7 @@ export async function AppHeader({ scope }: { scope?: NavScope } = {}) {
           boundary stays as deep as possible (Rule 60.7). */}
       <div className="flex min-w-0 items-center gap-3 md:flex-1">
         <PageTitle className="min-w-0 md:truncate" />
-        <SyncStatusBadge />
+        {showSync ? <SyncStatusBadge /> : null}
       </div>
 
       <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2 md:shrink-0 md:flex-nowrap">
@@ -52,7 +55,7 @@ export async function AppHeader({ scope }: { scope?: NavScope } = {}) {
         <Suspense fallback={<CommandMenuSkeleton />}>
           <CommandMenu scope={scope} />
         </Suspense>
-        <SyncCountdown />
+        {showSync ? <SyncCountdown /> : null}
         <UserMenu user={session?.user ?? null} signOutAction={signOutAction} />
       </div>
     </header>

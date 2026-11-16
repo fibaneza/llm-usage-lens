@@ -173,7 +173,7 @@ async function openDepartments(page: Page, count = CURRENT.length) {
   await page.goto(PAGE_URL);
   await waitForHydration(page);
   await expect(
-    page.getByRole("heading", { level: 1, name: "Department breakdown" }),
+    page.getByRole("heading", { level: 1, name: "Cost by department" }),
   ).toBeVisible();
   await expect(cards(page)).toHaveCount(count);
 }

@@ -663,9 +663,9 @@ the `auth.signin.error` record; `withRoute` treats a session without
 > section, the role filter and the landing pages on top of it. The lead
 > landing is now *My usage* (decided 2026-11-16, user; Access Control —
 > *Navigation and landing by role*). The lead-scoped Bedrock/AWS cost view in
-> the first task (*My teams*, "your teams" labels for a lead) is **under
-> review — open, user decision pending (asked 2026-11-16)**: build nothing
-> that depends on it until the user answers.
+> the first task (*My teams*, "your teams" labels for a lead) was **removed
+> in Slice B1 (decided 2026-11-17, coordinator under the user's
+> delegation)**: a lead has no Bedrock/AWS cost view of its teams.
 
 ## LiteLLM units (L0–L8; decided 2026-11-10)
 
@@ -872,9 +872,16 @@ up building inside a unit; it never merges or skips the review.
     - [x] Every existing URL, accessible name, nuqs name, query key and role gate unchanged (the U1 "nothing lost" checklist, `temp/run-ui/ui-inventory.md`)
     - [ ] Verify: `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, impacted Vitest, the full `pnpm test:e2e`, `pnpm build:ci`; axe clean on every page; no horizontal scroll at 375 / 768 / 1024 / 1440 / 1920; keyboard walk of sidebar, tabs and one dialog; before/after screenshots; user validation
   - [ ] **Slice B (not built)** — the sidebar groups and Management routes change navigation, landing and some behaviour, so "presentation only" does not apply to this slice:
-    - [ ] Shell and navigation groups, Management routes and redirects, `ScopeLine`, `BudgetBar`, `AlertDialog`, the public pages (auth card) and the Account page; `PageHeader` on Overview, Me, LiteLLM and Settings
+    - [ ] **B1 — shell and navigation** (split 2026-11-17, coordinator, at the user's request: B1 runs before LiteLLM unit L4 and unit D land; B2 waits for both; branch `feature/ui-slice-b1-shell`):
+      - [x] Sidebar groups Usage / Management / Administration with Settings out of the footer; Usage labels "Cost by department / team / service / user" and matching page titles; Usage holds My usage, last, for every signed-in caller (user, 2026-11-17: moved from Management); Management holds, until B2, the existing LiteLLM item
+      - [x] Role gating on the stored scope: the six organisation-level Usage items render only for a global reader (My usage, last in Usage, for everyone — B1-14), and every one of their routes (list and detail) returns `404` for anyone else; `/dashboard` and `/dashboard/home` send a lead or user to My usage; `?view=overview` and the *My teams* relabel removed (Access Control — *Navigation and landing by role*, B1 decisions)
+      - [x] `ScopeLine` component and its `PageHeader` slot, replacing the 4R.5 notice markup; sync badges hidden for lead and user; the date range stays on every page
+      - [x] `PageHeader` on Overview and My usage; the sign-in auth card on the Slice A primitives; the Account page on `PageHeader` and `Panel`
+      - [x] The command menu and top bar follow the same groups, labels and gating (one filter)
+      - [x] Tests: the per-role navigation suite, the Usage-route `404` matrix, one e2e journey per role (admin, lead, user), axe clean and no horizontal scroll at 375 / 768 / 1024 / 1440
+    - [ ] **B2 — Management pages** (waits for L4 and D): Management routes and redirects, the Team page, `BudgetBar`, `AlertDialog` (reuse L4's `components/ui/alert-dialog.tsx`), the single Audit page, `PageHeader` on LiteLLM and Settings, removal of the LiteLLM item and its tab row; **the Settings route gate (`404` for lead and user) and hiding the Settings item for them, in one change** (coordinator ruling, 2026-11-17: the nav mirrors the server, so B1 keeps the Settings item for every signed-in caller while the route still serves them)
     - Mock-up review (decided 2026-11-16, user; Design System — *Navigation (Sidebar)*, *Management pages*, *Settings Page*; Access Control — *Navigation and landing by role*; LiteLLM spec — *Views as Management routes*):
-      - Sidebar groups Usage (organisation-level roles), Management (My usage · Team · Organisation · Users · Audit) and Administration (Settings, last); Usage labels "Cost by department / team / service / user" with matching page titles, and every test and e2e selector that names them updated; landing admin and org admin → Cost overview, lead and user → My usage; a hidden item is absent and its route `404`
+      - Sidebar groups Usage (organisation-level items for global readers; My usage for everyone), Management (Team · Organisation · Users · Audit; My usage moved to Usage, last, 2026-11-17, user) and Administration (Settings, last); Usage labels "Cost by department / team / service / user" with matching page titles, and every test and e2e selector that names them updated; landing admin and org admin → Cost overview, lead and user → My usage; a hidden item is absent and its route `404`
       - Management routes `/dashboard/me` and `/dashboard/manage/{team,organisation,users,audit}`; `/dashboard/litellm` (any `?tab=`) and the Settings audit entry redirect; the LiteLLM tab row removed; one `Tabs` component for the remaining in-page tabs (Ranking, Team page) and the Settings route tabs
       - One Team page (usage and management; team selector, member search, `BudgetBar` and the "Near or over budget" filter, named `AlertDialog` confirmations, bulk reset); its write controls arrive with L4 and are absent until enabled; no LiteLLM call of its own
       - My usage: spend-by-day chart and spend-by-model breakdown (lazy Recharts, model tokens), "Request a budget increase" link (`mailto:` or copyable address)
@@ -882,7 +889,7 @@ up building inside a unit; it never merges or skips the review.
       - `ScopeLine` on scoped pages; sync badges hidden for lead and user; the date range stays on every page
       - Settings route tabs (AWS accounts, Sync and data, LiteLLM, Access) and the second row inside Access are built by unit D of the LiteLLM role-views run; the second row inside LiteLLM is owned by unit A2 (agent decision, 2026-11-17, coordinator); this task keeps their look consistent only
       - **Depends on Phase 4R.5** (navigation data, role filter, landing pages) and **LiteLLM unit L4** (Team page writes); until each lands, the dependent part waits
-      - **Open — user decision pending (asked 2026-11-16):** whether a lead keeps a scoped "AWS-billed cost" tile on the Team page or loses the Bedrock/AWS cost view of its teams entirely (Access Control — *Navigation and landing by role*); the tile is not built until answered
+      - **Decided 2026-11-17 (coordinator, under the user's delegation):** a lead has no "AWS-billed cost" tile (least privilege; AWS billing is account-level) and loses the Bedrock/AWS cost view of its teams (Access Control — *Navigation and landing by role*); the tile is not built
       - Tests (Rule 60.24a): one per-role navigation suite (each item absent and its route `404` for a role that may not see it); one e2e journey per role (admin, lead, user); axe clean and no horizontal scroll at 375 / 768 / 1024 / 1440
 - [ ] Add `ErrorBoundary` per section on every page (one chart failing doesn't crash the page) (workflow pilot candidate, one agent per page — *Workflow pilots*)
 - [ ] Accessibility audit

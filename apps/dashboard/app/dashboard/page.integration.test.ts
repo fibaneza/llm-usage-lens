@@ -5,16 +5,16 @@ import { clearTable, ensureTestTable } from "@/test/test-support";
 
 import OverviewPage from "./page";
 
-// Source: implementation-phases Phase 4R.5 ("role-aware landing"; Verify:
-// seeded probe per role); prompts/rbac_prompt.md R5 row (internal-viewer and
-// member -> My usage, leads -> My team / My department, internal-org-admin,
-// internal-admin, internal-auditor -> the Overview); Design System - "Access
-// states and scoped labels". Ruling 2026-11-16: auth.ts keeps redirecting
-// every sign-in to /dashboard, so this page does the landing server-side: a
-// non-global caller without ?view=overview is redirected to landingPathFor;
-// ?view=overview is the Overview link the sidebar offers scoped callers.
-// Real policy inputs from DynamoDB Local; only `@/auth` and the Next redirect
-// are stubbed.
+// Source: Access Control - Navigation and landing by role (Usage is
+// organisation-level; landing: global -> Cost overview, lead and user -> My
+// usage); Design System - Navigation (Sidebar) (a hidden item's route returns
+// the same 404 as a missing page); slice B1 brief B1-1 (Usage visibility =
+// scope.global, read from the stored scope, not the role claim), B1-3
+// (`/dashboard` is the sign-in callback target: a non-global caller is
+// redirected to /dashboard/me and the Overview content is never rendered;
+// ?view=overview is removed and has no effect). Real policy inputs from
+// DynamoDB Local (test/scope-fixtures.ts org); only `@/auth` and the Next
+// redirect are stubbed.
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("next/cache", async () => {
   const mod = await import("@/test/next-cache-fake");
@@ -23,6 +23,9 @@ vi.mock("next/cache", async () => {
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
+  },
+  notFound: () => {
+    throw new Error("NEXT_NOT_FOUND");
   },
 }));
 
@@ -36,9 +39,15 @@ beforeEach(async () => {
 
 type Outcome = { redirectedTo: string } | { rendered: true };
 
+// The page ignores the query after B1-3, so it may declare no props; the cast
+// keeps these calls compiling either way while still sending the query.
+const page = OverviewPage as unknown as (props: {
+  searchParams: Promise<Record<string, string>>;
+}) => Promise<unknown>;
+
 async function visit(search: Record<string, string> = {}): Promise<Outcome> {
   try {
-    await OverviewPage({ searchParams: Promise.resolve(search) });
+    await page({ searchParams: Promise.resolve(search) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.startsWith("NEXT_REDIRECT:")) {
@@ -49,8 +58,17 @@ async function visit(search: Record<string, string> = {}): Promise<Outcome> {
   return { rendered: true };
 }
 
-describe("/dashboard role-aware landing (sign-in always lands here)", () => {
-  it.each([["admin"], ["orgAdmin"], ["auditor"]] as const)(
+const GLOBAL = ["admin", "orgAdmin", "auditor"] as const;
+const NON_GLOBAL = [
+  "viewerNone",
+  "memberA",
+  "memberB",
+  "teamAdminA",
+  "deptAdminEng",
+] as const;
+
+describe("/dashboard (sign-in callback target; B1-3)", () => {
+  it.each(GLOBAL)(
     "renders the Overview for global reader %s, no redirect",
     async (name) => {
       signInAs(name);
@@ -58,38 +76,45 @@ describe("/dashboard role-aware landing (sign-in always lands here)", () => {
     },
   );
 
-  it.each([
-    ["viewerNone", "/dashboard/me"],
-    ["memberA", "/dashboard/me"],
-    ["memberB", "/dashboard/me"],
-    ["teamAdminA", "/dashboard/teams"],
-    ["deptAdminEng", "/dashboard/departments/dept-eng"],
-  ] as const)("redirects %s to %s", async (name, path) => {
-    signInAs(name);
-    expect(await visit()).toEqual({ redirectedTo: path });
-  });
+  it.each(NON_GLOBAL)(
+    "redirects %s to /dashboard/me and never renders the Overview",
+    async (name) => {
+      signInAs(name);
+      expect(await visit()).toEqual({ redirectedTo: "/dashboard/me" });
+    },
+  );
 
-  it.each([
-    "viewerNone",
-    "memberA",
-    "teamAdminA",
-    "deptAdminEng",
-    "orgAdmin",
-  ] as const)("?view=overview never redirects (%s)", async (name) => {
-    signInAs(name);
+  // B1-3: ?view=overview is gone; it opts nobody out and changes nothing.
+  it.each(NON_GLOBAL)(
+    "?view=overview does not let %s see the Overview (still redirected)",
+    async (name) => {
+      signInAs(name);
+      expect(await visit({ view: "overview" })).toEqual({
+        redirectedTo: "/dashboard/me",
+      });
+    },
+  );
+
+  it("?view=overview has no effect for a global reader", async () => {
+    signInAs("orgAdmin");
     expect(await visit({ view: "overview" })).toEqual({ rendered: true });
   });
 
-  it("redirects on a date range alone: only view=overview opts out", async () => {
+  it("a date range alone does not let a non-global caller in", async () => {
     signInAs("memberA");
     expect(
       await visit({ dateFrom: "2026-01-01", dateTo: "2026-01-31" }),
     ).toEqual({ redirectedTo: "/dashboard/me" });
   });
 
-  it("uses the stored scope, not the role claim (viewer-claim lead lands on their admin scope)", async () => {
+  it("sends an unauthenticated caller to sign in, never to a data page", async () => {
+    signInAs(null);
+    expect(await visit()).toEqual({ redirectedTo: "/sign-in" });
+  });
+
+  it("uses the stored scope, not the role claim (a viewer-claim lead is still redirected)", async () => {
     expect(CALLERS.teamAdminA.roles).toEqual(["internal-viewer"]);
     signInAs("teamAdminA");
-    expect(await visit()).toEqual({ redirectedTo: "/dashboard/teams" });
+    expect(await visit()).toEqual({ redirectedTo: "/dashboard/me" });
   });
 });

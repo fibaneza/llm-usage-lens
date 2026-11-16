@@ -14,6 +14,16 @@ import { renderWithProviders } from "@/test/render-providers";
 
 import TeamDetailPage from "./page";
 
+// B1-2: every Usage page gates on the caller's stored scope (the not-found
+// matrix per caller is in usage-routes.integration.test.ts); this file tests
+// rendering, so the caller is a global reader.
+vi.mock("@/auth", () => ({
+  auth: vi.fn(async () => ({ user: { oid: "u", roles: ["internal-admin"] } })),
+}));
+vi.mock("@/lib/api/scoped-rollups", () => ({
+  scopeFor: vi.fn(async () => ({ global: true })),
+}));
+
 // Source: Rule 60.7 (page stays a Server Component), Rule 60.13 (`params` is
 // a Promise and is awaited), Rule 60.12 (client content under Suspense);
 // implementation-phases Phase 4.6 (replace the placeholder).

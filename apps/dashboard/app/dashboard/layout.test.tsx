@@ -5,9 +5,11 @@ import DashboardLayout from "./layout";
 
 // Source: Rules 40.4 and 60.12 (a failing section never breaks the page; every
 // page still enforces access itself), Rule 60.17 (no silent failures: the error
-// reaches OpenTelemetry), Phase 4R.5 review round 2 D2. When the authorization
-// read fails the layout fails closed: it passes the no-team scope, so the rail
-// shows only My usage and LiteLLM, never the full NAV_GROUPS.
+// reaches OpenTelemetry), Phase 4R.5 review round 2 D2; Design System -
+// Navigation (Sidebar) (slice B1). When the authorization read fails the layout
+// fails closed: it passes the no-team (non-global) scope, so the rail shows
+// Usage (My usage only, B1-14), Management (LiteLLM) and Administration
+// (Settings), never the six organisation-level Usage items or the full NAV_GROUPS.
 const recordException = vi.fn();
 vi.mock("@opentelemetry/api", () => ({
   trace: { getActiveSpan: () => ({ recordException }) },
@@ -62,16 +64,16 @@ const NO_TEAM_HEADER_SCOPE = JSON.stringify({
 const link = (name: string) => screen.queryByRole("link", { name });
 const GATED = [
   "Overview",
-  "My teams",
-  "Teams",
   "Ranking",
-  "Departments",
-  "Services",
-  "Users",
+  "Cost by department",
+  "Cost by team",
+  "Cost by service",
+  "Cost by user",
 ];
 function expectNoTeamRail() {
   expect(link("My usage")).toBeInTheDocument();
   expect(link("LiteLLM")).toBeInTheDocument();
+  expect(link("Settings")).toBeInTheDocument();
   for (const name of GATED) expect(link(name), name).not.toBeInTheDocument();
   expect(screen.getByTestId("header")).toHaveAttribute(
     "data-scope",
@@ -118,7 +120,14 @@ describe("DashboardLayout authorization read failure (review round 2, D2)", () =
     expect(scopeForMock).not.toHaveBeenCalled();
     expect(recordException).not.toHaveBeenCalled();
     expect(screen.getByTestId("header")).toHaveAttribute("data-scope", "none");
-    for (const name of ["My usage", "Overview", "Ranking", "LiteLLM"]) {
+    for (const name of [
+      "My usage",
+      "Overview",
+      "Ranking",
+      "Cost by team",
+      "LiteLLM",
+      "Settings",
+    ]) {
       expect(link(name), name).toBeInTheDocument();
     }
   });

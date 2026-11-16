@@ -528,9 +528,9 @@ test.describe("fluid workspace", () => {
   // table.
   const TABLE_PAGES = [
     { name: "Ranking", path: `/dashboard/ranking?${QUERY}` },
-    { name: "Teams", path: `/dashboard/teams?${QUERY}` },
-    { name: "Services", path: `/dashboard/services?${QUERY}` },
-    { name: "Users", path: `/dashboard/users?${QUERY}` },
+    { name: "Cost by team", path: `/dashboard/teams?${QUERY}` },
+    { name: "Cost by service", path: `/dashboard/services?${QUERY}` },
+    { name: "Cost by user", path: `/dashboard/users?${QUERY}` },
     {
       name: "Department Detail",
       path: `/dashboard/departments/dept-eng?${QUERY}`,

@@ -75,8 +75,9 @@ for (const width of [768, 1440]) {
     test("collapsed: the toggle's tooltip says Expand", async ({ page }) => {
       await collapseRail(page);
 
-      // Tab from the Settings link: the toggle is next in the footer, and the
-      // click that collapsed the rail left it focused without a tooltip.
+      // Tab from the Settings link (the last link, in Administration): the
+      // toggle is next, alone in the footer, and the click that collapsed the
+      // rail left it focused without a tooltip.
       await page.getByRole("link", { name: "Settings" }).focus();
       await page.keyboard.press("Tab");
 

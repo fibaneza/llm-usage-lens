@@ -178,11 +178,12 @@ describe("AppSidebar - mobile sheet (375px)", () => {
     expect(dialog).not.toBeInTheDocument();
   });
 
-  // The brand link and the footer Settings link live outside the nav groups;
-  // each must close the sheet like the group links do.
+  // The brand link lives outside the nav groups and Settings is the lone item
+  // of the Administration group (Design System - Navigation (Sidebar)); each
+  // must close the sheet like the other group links do.
   it.each([
     {
-      label: "footer Settings link",
+      label: "Administration Settings link",
       name: "Settings",
       to: "/dashboard/settings",
     },
@@ -212,7 +213,7 @@ describe("AppSidebar - mobile sheet (375px)", () => {
 
     await user.click(trigger);
     await screen.findByRole("dialog", { name: "Sidebar" });
-    await user.click(screen.getByRole("link", { name: "Teams" }));
+    await user.click(screen.getByRole("link", { name: "Cost by team" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     await user.click(trigger);
@@ -220,6 +221,42 @@ describe("AppSidebar - mobile sheet (375px)", () => {
     expect(
       await screen.findByRole("dialog", { name: "Sidebar" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("AppSidebar - mobile sheet footer (375px)", () => {
+  const originalWidth = window.innerWidth;
+
+  beforeEach(() => {
+    route.state.pathname = "/dashboard";
+    setViewportWidth(375);
+  });
+
+  afterEach(() => {
+    setViewportWidth(originalWidth);
+  });
+
+  // Design System - Navigation (Sidebar): Settings sits in Administration and
+  // the footer holds only the collapse button, in the sheet too (slice B1).
+  it("holds only the collapse button in the sheet footer, with Settings in Administration", async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(screen.getByRole("button", { name: "Toggle Sidebar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Sidebar" });
+    const footer = dialog.querySelector('[data-slot="sidebar-footer"]');
+    if (!(footer instanceof HTMLElement)) throw new Error("no footer");
+
+    expect(within(footer).queryAllByRole("link")).toHaveLength(0);
+    expect(
+      within(footer)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Collapse"]);
+    const labels = [
+      ...dialog.querySelectorAll('[data-slot="sidebar-group-label"]'),
+    ].map((el) => el.textContent);
+    expect(labels).toEqual(["Usage", "Management", "Administration"]);
   });
 });
 

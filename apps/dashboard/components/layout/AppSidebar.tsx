@@ -24,7 +24,6 @@ import {
   isNavItemActive,
   NAV_GROUPS,
   navGroupsFor,
-  SETTINGS_NAV_ITEM,
   type NavScope,
 } from "@/lib/nav";
 
@@ -73,8 +72,6 @@ function SidebarNav({ toHref, scope }: { toHref: ToHref; scope?: NavScope }) {
   const toggleCollapses = isMobile || state === "expanded";
   const toggleLabel = toggleCollapses ? "Collapse" : "Expand";
   const ToggleIcon = toggleCollapses ? PanelLeftClose : PanelLeftOpen;
-  const SettingsIcon = SETTINGS_NAV_ITEM.icon;
-  const settingsActive = isNavItemActive(pathname, SETTINGS_NAV_ITEM.href);
 
   // The layout persists across client navigations, so the mobile sheet's open
   // state would otherwise outlive the click that navigated away. A no-op on
@@ -105,59 +102,44 @@ function SidebarNav({ toHref, scope }: { toHref: ToHref; scope?: NavScope }) {
       </SidebarHeader>
 
       <SidebarContent>
-        {navGroups.map((group) => (
-          <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = isNavItemActive(pathname, item.href);
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={active}
-                        tooltip={item.title}
-                        className={NAV_LINK_CLASS}
-                      >
-                        <Link
-                          href={toHref(item.href)}
-                          onClick={closeMobileSheet}
-                          aria-current={active ? "page" : undefined}
+        <nav aria-label="Primary" className="flex flex-col gap-2">
+          {navGroups.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const active = isNavItemActive(pathname, item.href);
+                    return (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={active}
+                          tooltip={item.title}
+                          className={NAV_LINK_CLASS}
                         >
-                          <Icon />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+                          <Link
+                            href={toHref(item.href)}
+                            onClick={closeMobileSheet}
+                            aria-current={active ? "page" : undefined}
+                          >
+                            <Icon />
+                            <span>{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </nav>
       </SidebarContent>
 
       <SidebarFooter className="border-sidebar-border border-t">
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={settingsActive}
-              tooltip={SETTINGS_NAV_ITEM.title}
-              className={NAV_LINK_CLASS}
-            >
-              <Link
-                href={toHref(SETTINGS_NAV_ITEM.href)}
-                onClick={closeMobileSheet}
-                aria-current={settingsActive ? "page" : undefined}
-              >
-                <SettingsIcon />
-                <span>{SETTINGS_NAV_ITEM.title}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={toggleSidebar}

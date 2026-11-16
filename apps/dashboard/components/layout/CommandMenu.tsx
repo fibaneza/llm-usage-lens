@@ -14,12 +14,14 @@ import {
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
 import { withDateRange } from "@/lib/date-range-search-params";
-import {
-  NAV_ITEMS,
-  navGroupsFor,
-  SETTINGS_NAV_ITEM,
-  type NavScope,
-} from "@/lib/nav";
+import { navGroupsFor, type NavScope } from "@/lib/nav";
+
+const NON_GLOBAL_SCOPE: NavScope = {
+  global: false,
+  memberTeamId: null,
+  teamScopes: new Set<string>(),
+  departmentScopes: new Set<string>(),
+};
 
 // Cmd+K quick-jump menu. The trigger is styled as a search box; the dialog is
 // also toggled by a global ⌘K / Ctrl+K listener. v1 is a skeleton search over
@@ -32,10 +34,8 @@ export function CommandMenu({ scope }: { scope?: NavScope }) {
   // links so the filter survives navigation (issue #75).
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
-  // No scope shows the full set; a scope lists only the caller's destinations.
-  const items = scope
-    ? [...navGroupsFor(scope).flatMap((g) => g.items), SETTINGS_NAV_ITEM]
-    : NAV_ITEMS;
+  // No scope fails closed to the non-global destinations.
+  const groups = navGroupsFor(scope ?? NON_GLOBAL_SCOPE);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -73,21 +73,23 @@ export function CommandMenu({ scope }: { scope?: NavScope }) {
         <CommandInput placeholder="Search pages…" />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
-          <CommandGroup heading="Pages">
-            {items.map((item) => {
-              const Icon = item.icon;
-              return (
-                <CommandItem
-                  key={item.href}
-                  value={item.title}
-                  onSelect={() => navigate(item.href)}
-                >
-                  <Icon />
-                  <span>{item.title}</span>
-                </CommandItem>
-              );
-            })}
-          </CommandGroup>
+          {groups.map((group) => (
+            <CommandGroup key={group.label} heading={group.label}>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <CommandItem
+                    key={item.href}
+                    value={item.title}
+                    onSelect={() => navigate(item.href)}
+                  >
+                    <Icon />
+                    <span>{item.title}</span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          ))}
         </CommandList>
       </CommandDialog>
     </>

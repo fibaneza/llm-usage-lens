@@ -388,16 +388,17 @@ and members, **auditor** = `internal-auditor`.
 
 | Sidebar item | admin | org admin | auditor | lead | user |
 |---|---|---|---|---|---|
-| **Usage** — Overview, Ranking, Cost by department, Cost by team, Cost by service, Cost by user | ✓ | ✓ | ✓ read-only | ✗ — see the open question below | ✗ |
-| **Management** — My usage | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Management — Team | ✓ every team | ✓ every team | ✓ read-only | ✓ teams it leads | ✗ |
+| **Usage** — Overview, Ranking, Cost by department, Cost by team, Cost by service, Cost by user | ✓ | ✓ | ✓ read-only | ✗ (no AWS cost view, decided 2026-11-17) | ✗ |
+| Usage — My usage (moved from Management 2026-11-17, user) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Management** — Team | ✓ every team | ✓ every team | ✓ read-only | ✓ teams it leads | ✗ |
 | Management — Organisation, Users | ✓ | ✓ | ✓ read-only | ✗ | ✗ |
 | Management — Audit | ✓ | ✗ (see below) | ✓ | ✗ | ✗ |
 | **Administration** — Settings | ✓ | ✓ (no configuration except the LiteLLM toggles and team links, LD24) | ✓ read-only tabs only | ✗ | ✗ |
 
 - **Decided 2026-11-16 (user):** the Usage group is organisation-level and
-  shown to admin and org admin; Management → My usage to every signed-in
-  role; Team to lead, org admin and admin; Organisation, Users and Audit to
+  shown to admin and org admin; My usage to every signed-in role (in
+  Management then; **moved to the Usage group 2026-11-17, user**, see
+  B1-14); Team to lead, org admin and admin; Organisation, Users and Audit to
   org admin and admin; Administration to admin and org admin, last in the
   side panel. **Landing page:** admin and org admin → Cost overview
   (`/dashboard`); lead and user → My usage (`/dashboard/me`). This replaces
@@ -424,22 +425,51 @@ and members, **auditor** = `internal-auditor`.
   Administration (Design System — *Management pages*).
 - **Visibility settings** (*Visibility and inheritance*, above) keep
   governing every scoped read route and the Team Detail, Services and
-  Ranking data; with the Usage group hidden for users, the team-level and
+  Ranking data; with the organisation-level Usage items hidden for users, the team-level and
   user-level settings currently have no page that shows them to a user.
   They stay in force and editable; a page that surfaces them to users is a
   later decision.
-- **Open — user decision pending (asked 2026-11-16).** Phase 4R.5 gives a
-  lead a Bedrock/AWS cost view scoped to its own teams ("your teams" on
-  Overview, rankings and charts; *Visibility and inheritance*; the *My
-  teams* view). Hiding the whole Usage group from leads removes it. The
-  question to the user: should a lead **lose the Bedrock/AWS cost view of
-  its own teams entirely**, or **keep a scoped "AWS-billed cost" tile** on
-  the Team page (Design System — *Management pages*, addition 2)? Neither
-  answer is assumed here. Both keep the Usage group hidden from leads (the
-  ✗ above, decided); what is open is whether any AWS-billed figure for a
-  lead's teams remains. Until the user answers, the "AWS-billed cost" tile
-  is not built, the lead-scoped read rules and routes from 4R.3 stay in
-  force and are not removed, and no other work depends on the answer.
+- **Lead AWS cost view — decided 2026-11-17 (coordinator, under the user's
+  delegation; asked 2026-11-16).** A lead has **no** "AWS-billed cost" tile
+  and no Bedrock/AWS cost view of its teams: least privilege, and AWS
+  billing is account-level, not team-level. The tile (Design System —
+  *Management pages*, addition 2) is not built. The lead-scoped read rules
+  and Route Handlers from 4R.3 stay in force (the API still filters by
+  scope); only the pages are closed.
+- **Slice B1 decisions (agent decisions, 2026-11-17; implementation-phases
+  — *Phase 5*, Slice B1).**
+  - **B1-1** The Usage group is decided on the stored scope's global-reader
+    flag (`Scope.global`: admin, org admin, auditor), not the role claim.
+    Reason: the scope is what the pages filter on (D-R5-2a).
+  - **B1-2** Every Usage route — `/dashboard/ranking`, `/dashboard/departments`
+    and `/dashboard/departments/[id]`, `/dashboard/teams` and
+    `/dashboard/teams/[id]`, `/dashboard/services`, `/dashboard/users` —
+    returns the missing-page `404` to a caller who is not a global reader.
+    Reason: the detail routes are drill-downs of hidden items; a hidden
+    item's route is never reachable.
+  - **B1-3** `/dashboard` and `/dashboard/home` redirect such a caller to
+    `/dashboard/me` rather than `404`. Reason: `/dashboard` is the sign-in
+    callback target; the Overview content is never rendered for them.
+    `?view=overview` has no effect any more (D-R5-1 superseded in code).
+  - **B1-4** Landing: global reader → `/dashboard`; everyone else, a lead of
+    any scope included → `/dashboard/me` (D-R5-2 superseded in code).
+  - **B1-7 Settings stays visible until B2 (coordinator ruling,
+    2026-11-17).** The navigation mirrors the server, and the Settings
+    route still serves a lead and a user (unit D's interim tabs). B1 keeps
+    the Settings item for every signed-in caller; B2 builds the route gate
+    (`404` for lead and user) and hides the item in the same change. Until
+    then the Administration row above is not yet applied for lead and user.
+  - **Management in B1:** the existing LiteLLM item is shown to every
+    signed-in caller; B2 replaces it with Team, Organisation, Users and
+    Audit per the matrix.
+  - **B1-14 My usage is a Usage item (user, 2026-11-17, screenshot
+    review).** My usage sits last in the Usage group and is shown to every
+    signed-in caller. The Usage group therefore renders for everyone: a
+    global reader sees all seven items, a lead or a user sees only My
+    usage. B1-1 and B1-2 still hold for the six organisation-level items
+    and their routes; `/dashboard/me` is never gated. Position (agent
+    decision): last, so Overview stays first for a global reader, whose
+    landing it is.
 
 ## Membership, admin scopes and lifecycle
 

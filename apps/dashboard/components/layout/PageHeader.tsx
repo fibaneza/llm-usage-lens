@@ -9,6 +9,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { ScopeLine } from "@/components/display/ScopeLine";
 
 type PageHeaderProps = {
   breadcrumb?: readonly { label: string; href?: string }[];
@@ -16,6 +17,7 @@ type PageHeaderProps = {
   title?: string;
   meta?: ReactNode;
   description?: ReactNode;
+  scopeLine?: { label: string; names: readonly string[] };
   actions?: ReactNode;
   tabs?: ReactNode;
   // Toolbar slot, rendered last.
@@ -29,6 +31,7 @@ export function PageHeader({
   title,
   meta,
   description,
+  scopeLine,
   actions,
   tabs,
   children,
@@ -72,6 +75,9 @@ export function PageHeader({
         <p className="text-cell text-muted-foreground max-w-[72ch]">
           {description}
         </p>
+      ) : null}
+      {scopeLine ? (
+        <ScopeLine label={scopeLine.label} names={scopeLine.names} />
       ) : null}
       {tabs ? <div className="mt-3">{tabs}</div> : null}
       {children ? <div className="mt-3">{children}</div> : null}

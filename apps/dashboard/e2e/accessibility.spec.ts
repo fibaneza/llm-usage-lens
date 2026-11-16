@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 import { NAV_ITEMS } from "../lib/nav";
+import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 
 // Smoke-level accessibility gate: serious/critical axe violations fail the
@@ -72,5 +73,138 @@ test.describe("accessibility (axe) - public pages", () => {
         nodes: violation.nodes.map((node) => node.target.join(" ")),
       })),
     ).toEqual([]);
+  });
+});
+
+// Slice B1 surfaces at the four project breakpoints (implementation-phases
+// Phase 5 Slice B tests: "axe clean and no horizontal scroll at 375 / 768 /
+// 1024 / 1440"; Design System - Navigation (Sidebar), Layout). NAV_ITEMS above
+// cover the pages as a global reader at the default viewport; these cover what
+// they cannot: the shell as a non-global caller (a viewer with no team, the
+// "user" role: Usage (My usage only), Management and Administration) on My usage, the
+// open mobile sheet, the Account page, and the sign-in page at every width.
+const B1_WIDTHS = [375, 768, 1024, 1440] as const;
+
+async function expectNoBlockingViolations(
+  page: import("@playwright/test").Page,
+) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+  expect(
+    results.violations
+      .filter((v) => v.impact === "serious" || v.impact === "critical")
+      .map((v) => ({
+        id: v.id,
+        impact: v.impact,
+        help: v.help,
+        nodes: v.nodes.map((node) => node.target.join(" ")),
+      })),
+  ).toEqual([]);
+}
+
+test.describe("accessibility (axe) - slice B1 surfaces", () => {
+  for (const width of B1_WIDTHS) {
+    test(`My usage shell for a user is clean at ${width}px`, async ({
+      context,
+      page,
+    }) => {
+      await signInAsTestUser(context, { roles: ["internal-viewer"] });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/dashboard/me");
+      await waitForHydration(page);
+      await expect(
+        page.getByRole("heading", { level: 1, name: "My usage" }),
+      ).toBeVisible();
+
+      await expectNoBlockingViolations(page);
+    });
+
+    // BL2 (round-1 review): the admin's Overview.
+    test(`Overview shell for an admin is clean at ${width}px`, async ({
+      context,
+      page,
+    }) => {
+      await signInAsTestUser(context, { roles: ["internal-admin"] });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/dashboard");
+      await waitForHydration(page);
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Cost overview" }),
+      ).toBeVisible();
+
+      await expectNoBlockingViolations(page);
+    });
+
+    // BL2: the admin's sidebar. The sheet exists only below the 768px mobile
+    // breakpoint (hooks/use-mobile.ts); at 768+ the expanded rail is the
+    // equivalent surface.
+    test(`admin sidebar (${width < 768 ? "open sheet" : "expanded rail"}) is clean at ${width}px`, async ({
+      context,
+      page,
+    }) => {
+      await signInAsTestUser(context, { roles: ["internal-admin"] });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/dashboard");
+      await waitForHydration(page);
+      if (width < 768) {
+        await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+        await expect(
+          page.getByRole("dialog", { name: "Sidebar" }),
+        ).toBeVisible();
+      }
+      const nav = page.getByRole("navigation", { name: "Primary" });
+      for (const label of ["Usage", "Management", "Administration"]) {
+        await expect(nav.getByText(label, { exact: true })).toBeVisible();
+      }
+
+      await expectNoBlockingViolations(page);
+    });
+
+    test(`Account page is clean at ${width}px`, async ({ context, page }) => {
+      await signInAsTestUser(context, { roles: ["internal-viewer"] });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/dashboard/account");
+      await waitForHydration(page);
+      await expect(
+        page.getByRole("heading", { name: "Account" }),
+      ).toBeVisible();
+
+      await expectNoBlockingViolations(page);
+    });
+
+    test(`sign-in page is clean at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/sign-in");
+      await expect(
+        page.getByRole("heading", { level: 1, name: "LLM Usage Lens" }),
+      ).toBeVisible();
+
+      await expectNoBlockingViolations(page);
+    });
+  }
+
+  test("the open mobile sidebar sheet is clean for a user at 375px", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-viewer"] });
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/dashboard/me");
+    await waitForHydration(page);
+    await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+    const sheet = page.getByRole("dialog", { name: "Sidebar" });
+    await expect(sheet).toBeVisible();
+    const nav = sheet.getByRole("navigation", { name: "Primary" });
+    // B1-14: the Usage group is present and holds only My usage.
+    await expect(nav.getByText("Usage", { exact: true })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "My usage" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Overview" })).toHaveCount(0);
+    await expect(nav.getByText("Management", { exact: true })).toBeVisible();
+    await expect(
+      nav.getByText("Administration", { exact: true }),
+    ).toBeVisible();
+
+    await expectNoBlockingViolations(page);
   });
 });

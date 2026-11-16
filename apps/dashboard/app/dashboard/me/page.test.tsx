@@ -161,4 +161,16 @@ describe("MePage (/dashboard/me)", () => {
     });
     expect((await screen.findAllByRole("alert")).length).toBeGreaterThan(0);
   });
+
+  // Slice B1, B1-12 / Design System - Layout, Page frame: a PageHeader
+  // description sits at the top of the page shell, rendered before any data
+  // resolves; the h1 stays in the top bar.
+  it("starts with a PageHeader description, before the requests resolve, and no page-level h1", () => {
+    stub(NEVER, NEVER);
+    const view = renderWithProviders(MePage());
+
+    const description = view.container.querySelector("p");
+    expect(description?.textContent?.trim().length ?? 0).toBeGreaterThan(0);
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+  });
 });

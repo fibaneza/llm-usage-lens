@@ -1,5 +1,7 @@
 import { auth } from "@/auth";
 import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
+import { Panel } from "@/components/display/Panel";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { AUTH_METHOD_LABELS } from "@/lib/auth/roles";
 import { getPasswordCredential } from "@/lib/data/access/password-credentials-store";
 
@@ -25,25 +27,33 @@ export default async function AccountPage() {
       : null;
 
   return (
-    <section className="flex flex-col gap-6">
-      <h2 className="text-foreground text-xl font-semibold tracking-tight">
-        Account
-      </h2>
-      <dl className="flex max-w-[72ch] flex-col gap-3 text-sm">
-        {user?.email ? (
-          <div className="flex flex-col gap-0.5">
-            <dt className="text-muted-foreground">Email</dt>
-            <dd>{user.email}</dd>
-          </div>
-        ) : null}
-        <div className="flex flex-col gap-0.5">
-          <dt className="text-muted-foreground">Sign-in method</dt>
-          <dd>{methodLabel(user?.authMethod)}</dd>
+    <div className="flex flex-col gap-4">
+      <PageHeader description="Your sign-in details and password." />
+      <Panel
+        title="Sign-in details"
+        boundaryTitle="your sign-in details"
+        className="max-w-[72ch]"
+      >
+        <div className="flex flex-col gap-6">
+          <dl className="flex flex-col gap-3 text-sm">
+            {user?.email ? (
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-muted-foreground">Email</dt>
+                <dd>{user.email}</dd>
+              </div>
+            ) : null}
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-muted-foreground">Sign-in method</dt>
+              <dd>{methodLabel(user?.authMethod)}</dd>
+            </div>
+          </dl>
+          {isPasswordUser ? (
+            <ChangePasswordForm
+              totpEnrolled={Boolean(credential?.totpCipher)}
+            />
+          ) : null}
         </div>
-      </dl>
-      {isPasswordUser ? (
-        <ChangePasswordForm totpEnrolled={Boolean(credential?.totpCipher)} />
-      ) : null}
-    </section>
+      </Panel>
+    </div>
   );
 }

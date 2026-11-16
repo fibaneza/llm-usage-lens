@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { NavScope } from "@/lib/nav";
 import { CommandMenu } from "./CommandMenu";
 
 const mockPush = vi.fn<(href: string) => void>();
@@ -12,6 +13,16 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => mockUseSearchParams(),
 }));
 
+// Fail closed (Design System - Layout; Rule 10.3): a bare render is the
+// non-global view, so the quick-jump tests below that need Usage items pass a
+// global scope explicitly.
+const GLOBAL: NavScope = {
+  global: true,
+  memberTeamId: null,
+  teamScopes: new Set<string>(),
+  departmentScopes: new Set<string>(),
+};
+
 describe("CommandMenu", () => {
   beforeEach(() => {
     mockPush.mockClear();
@@ -19,7 +30,7 @@ describe("CommandMenu", () => {
   });
 
   it("renders a search trigger with the ⌘K hint", () => {
-    render(<CommandMenu />);
+    render(<CommandMenu scope={GLOBAL} />);
 
     expect(screen.getByText("Search…")).toBeInTheDocument();
     expect(screen.getByText("⌘K")).toBeInTheDocument();
@@ -27,7 +38,7 @@ describe("CommandMenu", () => {
 
   it("opens the dialog when the trigger is clicked", async () => {
     const user = userEvent.setup();
-    render(<CommandMenu />);
+    render(<CommandMenu scope={GLOBAL} />);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
@@ -38,7 +49,7 @@ describe("CommandMenu", () => {
 
   it("opens the dialog on Cmd+K", async () => {
     const user = userEvent.setup();
-    render(<CommandMenu />);
+    render(<CommandMenu scope={GLOBAL} />);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
@@ -49,7 +60,7 @@ describe("CommandMenu", () => {
 
   it("opens the dialog on Ctrl+K", async () => {
     const user = userEvent.setup();
-    render(<CommandMenu />);
+    render(<CommandMenu scope={GLOBAL} />);
 
     await user.keyboard("{Control>}k{/Control}");
 
@@ -58,7 +69,7 @@ describe("CommandMenu", () => {
 
   it("navigates to Overview and closes when that item is selected", async () => {
     const user = userEvent.setup();
-    render(<CommandMenu />);
+    render(<CommandMenu scope={GLOBAL} />);
 
     await user.keyboard("{Meta>}k{/Meta}");
     const dialog = await screen.findByRole("dialog");
@@ -71,14 +82,16 @@ describe("CommandMenu", () => {
   });
 
   // A second destination — guards against a hardcoded push("/dashboard").
-  it("navigates to Teams when that item is selected", async () => {
+  it("navigates to Cost by team when that item is selected", async () => {
     const user = userEvent.setup();
-    render(<CommandMenu />);
+    render(<CommandMenu scope={GLOBAL} />);
 
     await user.keyboard("{Meta>}k{/Meta}");
     const dialog = await screen.findByRole("dialog");
 
-    const teams = await screen.findByRole("option", { name: /teams/i });
+    const teams = await screen.findByRole("option", {
+      name: "Cost by team",
+    });
     await user.click(teams);
 
     expect(mockPush).toHaveBeenCalledWith("/dashboard/teams");
@@ -87,14 +100,16 @@ describe("CommandMenu", () => {
   });
 
   // Verify-checklist: navigate between pages — a Services destination jump.
-  it("navigates to Services when that item is selected", async () => {
+  it("navigates to Cost by service when that item is selected", async () => {
     const user = userEvent.setup();
-    render(<CommandMenu />);
+    render(<CommandMenu scope={GLOBAL} />);
 
     await user.keyboard("{Control>}k{/Control}");
     await screen.findByRole("dialog");
 
-    const services = await screen.findByRole("option", { name: /services/i });
+    const services = await screen.findByRole("option", {
+      name: "Cost by service",
+    });
     await user.click(services);
 
     expect(mockPush).toHaveBeenCalledWith("/dashboard/services");
@@ -106,7 +121,7 @@ describe("CommandMenu", () => {
       new URLSearchParams("dateFrom=2026-01-01&dateTo=2026-01-31"),
     );
     const user = userEvent.setup();
-    render(<CommandMenu />);
+    render(<CommandMenu scope={GLOBAL} />);
 
     await user.keyboard("{Meta>}k{/Meta}");
     await screen.findByRole("dialog");
@@ -121,7 +136,7 @@ describe("CommandMenu", () => {
 
   it("toggles the dialog closed on a second Cmd+K", async () => {
     const user = userEvent.setup();
-    render(<CommandMenu />);
+    render(<CommandMenu scope={GLOBAL} />);
 
     await user.keyboard("{Meta>}k{/Meta}");
     const dialog = await screen.findByRole("dialog");
@@ -131,53 +146,80 @@ describe("CommandMenu", () => {
     expect(dialog).not.toBeInTheDocument();
   });
 
-  // Phase 4R.5 / Design System - Access states and scoped labels (4R.5 review
-  // UI-B3): a scoped caller's list leaves out out-of-scope destinations and its
-  // Overview item is the ?view=overview link (a bare /dashboard redirects them).
-  describe("for a scoped caller", () => {
-    const scope = {
+  // Design System - Navigation (Sidebar): the sidebar, PageTitle and
+  // CommandMenu share one filter, navGroupsFor (slice B1, B1-8); an item the
+  // caller may not see is absent. Settings is one of the filtered items (B1-7),
+  // not a separately appended entry.
+  describe("shares the sidebar's filter", () => {
+    const scope = (over: Partial<NavScope> = {}): NavScope => ({
       global: false,
-      memberTeamId: "team-a",
+      memberTeamId: null,
       teamScopes: new Set<string>(),
       departmentScopes: new Set<string>(),
-    };
+      ...over,
+    });
+    const USAGE = [
+      "Overview",
+      "Ranking",
+      "Cost by department",
+      "Cost by team",
+      "Cost by service",
+      "Cost by user",
+    ];
 
-    it("lists only in-scope destinations and opens the scoped Overview link", async () => {
+    async function optionNames(s?: NavScope) {
       const user = userEvent.setup();
-      render(<CommandMenu scope={scope} />);
-
+      render(<CommandMenu scope={s} />);
       await user.keyboard("{Meta>}k{/Meta}");
       await screen.findByRole("dialog");
+      return screen.getAllByRole("option").map((o) => o.textContent);
+    }
 
-      expect(
-        screen.queryByRole("option", { name: "Departments" }),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByRole("option", { name: "Teams" }),
-      ).not.toBeInTheDocument();
-      expect(
-        await screen.findByRole("option", { name: "My teams" }),
-      ).toBeInTheDocument();
-
-      await user.click(
-        await screen.findByRole("option", { name: /overview/i }),
-      );
-
-      expect(mockPush).toHaveBeenCalledWith("/dashboard?view=overview");
+    // Design System - Layout (fail closed); Rule 10.3: no scope is the
+    // non-global view, never the full set.
+    it("lists only the non-global destinations when no scope is given", async () => {
+      expect(await optionNames()).toEqual(["My usage", "LiteLLM", "Settings"]);
     });
 
-    it("lists only My usage and LiteLLM for a no-team viewer", async () => {
-      const user = userEvent.setup();
-      render(<CommandMenu scope={{ ...scope, memberTeamId: null }} />);
+    it("lists the same destinations as the sidebar for a global caller", async () => {
+      expect(await optionNames(scope({ global: true }))).toEqual([
+        ...USAGE,
+        "My usage",
+        "LiteLLM",
+        "Settings",
+      ]);
+    });
 
+    it.each([
+      ["a viewer with no team", scope()],
+      ["a member", scope({ memberTeamId: "team-a" })],
+      ["a team lead", scope({ teamScopes: new Set(["team-a"]) })],
+      ["a department lead", scope({ departmentScopes: new Set(["dept-eng"]) })],
+    ])(
+      "lists only My usage, LiteLLM and Settings for %s, and no organisation-level Usage destination (B1-14)",
+      async (_n, s) => {
+        expect(await optionNames(s)).toEqual([
+          "My usage",
+          "LiteLLM",
+          "Settings",
+        ]);
+      },
+    );
+
+    it("opens a destination from the filtered list with the date range carried", async () => {
+      mockUseSearchParams.mockReturnValue(
+        new URLSearchParams("dateFrom=2026-01-01&dateTo=2026-01-31"),
+      );
+      const user = userEvent.setup();
+      render(<CommandMenu scope={scope({ memberTeamId: "team-a" })} />);
       await user.keyboard("{Meta>}k{/Meta}");
       await screen.findByRole("dialog");
 
-      expect(screen.queryByRole("option", { name: /overview/i })).toBeNull();
-      expect(screen.queryByRole("option", { name: /ranking/i })).toBeNull();
-      expect(
-        await screen.findByRole("option", { name: "My usage" }),
-      ).toBeInTheDocument();
+      await user.click(await screen.findByRole("option", { name: "My usage" }));
+
+      expect(mockPush).toHaveBeenCalledWith(
+        "/dashboard/me?dateFrom=2026-01-01&dateTo=2026-01-31",
+      );
     });
   });
 });

@@ -113,6 +113,43 @@ test.describe("fluid content container", () => {
   }
 });
 
+// Slice B1 surfaces (implementation-phases Phase 5 Slice B tests: no horizontal
+// scroll at 375 / 768 / 1024 / 1440): the shell for a non-global caller (the
+// "user" role, a viewer with no team) on My usage and the Account page, which
+// the NAV_ITEMS loop above (a global reader; Account is not a rail item) does
+// not reach.
+test.describe("responsive breakpoints - slice B1 shell for a user", () => {
+  for (const breakpoint of BREAKPOINTS.filter((b) => b.width <= 1440)) {
+    test(`My usage and Account have no horizontal scroll at ${breakpoint.width}px`, async ({
+      context,
+      page,
+    }) => {
+      await signInAsTestUser(context, { roles: ["internal-viewer"] });
+      await page.setViewportSize({
+        width: breakpoint.width,
+        height: breakpoint.height,
+      });
+
+      for (const path of ["/dashboard/me", "/dashboard/account"]) {
+        await page.goto(path);
+        await waitForHydration(page);
+        await expect(
+          page.getByRole("heading", { level: 1 }).first(),
+        ).toBeVisible();
+
+        const overflow = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+        }));
+        expect(
+          overflow.scrollWidth,
+          `${path} overflows horizontally at ${breakpoint.width}px`,
+        ).toBeLessThanOrEqual(overflow.clientWidth);
+      }
+    });
+  }
+});
+
 test.describe("responsive breakpoints - sign-in", () => {
   for (const breakpoint of BREAKPOINTS) {
     test(`sign-in has no horizontal scroll at ${breakpoint.width}px`, async ({
@@ -237,7 +274,7 @@ test.describe("mobile sidebar sheet - dismissal", () => {
     ).toBeVisible();
   });
 
-  test("closes the sheet and navigates when the footer Settings link is clicked", async ({
+  test("closes the sheet and navigates when the Administration Settings link is clicked", async ({
     page,
   }) => {
     await page.request.get("/dashboard/settings");

@@ -68,6 +68,53 @@ describe("PageHeader", () => {
     expect(screen.getByRole("search")).toHaveTextContent("toolbar");
   });
 
+  // Design System - Layout, Page frame: the ScopeLine sits under the
+  // description and is omitted when it has nothing to say (slice B1, B1-10;
+  // prop `scopeLine={{ label, names }}`).
+  it("renders the scope line under the description", () => {
+    render(
+      <PageHeader
+        description="Spend for your teams."
+        scopeLine={{
+          label: "Showing teams you lead",
+          names: ["Platform", "Checkout"],
+        }}
+        tabs={<div role="tablist" aria-label="Views" />}
+      />,
+    );
+
+    const description = screen.getByText("Spend for your teams.");
+    const scope = screen.getByText(/Showing teams you lead/);
+    expect(scope).toHaveTextContent(
+      "Showing teams you lead: Platform, Checkout",
+    );
+    expect(
+      Boolean(
+        description.compareDocumentPosition(scope) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        scope.compareDocumentPosition(screen.getByRole("tablist")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+  });
+
+  it("renders no scope line when the caller sees everything (no scopeLine) or the scope has no names", () => {
+    const { rerender } = render(<PageHeader description="All spend." />);
+    expect(screen.queryByText(/showing/i)).not.toBeInTheDocument();
+
+    rerender(
+      <PageHeader
+        description="All spend."
+        scopeLine={{ label: "Showing teams you lead", names: [] }}
+      />,
+    );
+    expect(screen.queryByText(/showing/i)).not.toBeInTheDocument();
+  });
+
   it("orders breadcrumb, title, description, tabs, then toolbar", () => {
     render(
       <PageHeader

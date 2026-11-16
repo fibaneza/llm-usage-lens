@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Source: Access Control D30 (Account page at /dashboard/account: a
@@ -56,9 +56,6 @@ describe("AccountPage", () => {
         ...credential,
       });
       render(await AccountPage());
-      expect(
-        screen.getByRole("heading", { name: "Account" }),
-      ).toBeInTheDocument();
       expect(screen.getByText("ada@example.test")).toBeInTheDocument();
       expect(
         screen.getByRole("form", { name: "Change password" }),
@@ -82,4 +79,26 @@ describe("AccountPage", () => {
       expect(getPasswordCredential).not.toHaveBeenCalled();
     },
   );
+
+  // Slice B1, B1-13 / Design System - Layout, Page frame and Panels: Account
+  // sits on PageHeader (one-line description) and Panel (a titled card-surface
+  // region); every existing accessible name, field and behaviour is unchanged.
+  it("shows a PageHeader description and holds the sign-in details in a Panel region", async () => {
+    auth.mockResolvedValue(session("entra"));
+    const { container } = render(await AccountPage());
+
+    expect(
+      screen.getByText("Your sign-in details and password."),
+    ).toBeInTheDocument();
+    // Design System - Account Page (line 488): the top-bar h1 is the only
+    // "Account" heading; the page renders no second one (BL1).
+    expect(screen.queryByRole("heading", { name: "Account" })).toBeNull();
+    const panel = container.querySelector('[data-slot="card"]');
+    if (!(panel instanceof HTMLElement)) throw new Error("no Panel");
+    expect(panel).toHaveAccessibleName();
+    expect(within(panel).getByText("ada@example.test")).toBeInTheDocument();
+    expect(within(panel).getByText("Microsoft Entra ID")).toBeInTheDocument();
+    expect(screen.getByText("Email")).toBeInTheDocument();
+    expect(screen.getByText("Sign-in method")).toBeInTheDocument();
+  });
 });

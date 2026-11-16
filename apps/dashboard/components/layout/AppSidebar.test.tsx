@@ -1,9 +1,8 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { NAV_GROUPS } from "@/lib/nav";
 import type { NavScope } from "@/lib/nav";
 import { AppSidebar } from "./AppSidebar";
 
@@ -35,18 +34,22 @@ function renderRail(defaultOpen: boolean) {
   );
 }
 
+// Design System - Navigation (Sidebar): the full set a bare render (no scope)
+// shows; the Usage breakdowns read "Cost by ..." (unique labels, B1-5).
 const NAV_TITLES = [
   "Overview",
   "Ranking",
-  "Departments",
-  "Teams",
-  "Services",
-  "Users",
+  "Cost by department",
+  "Cost by team",
+  "Cost by service",
+  "Cost by user",
+  "My usage",
+  "LiteLLM",
   "Settings",
 ];
 
 describe("AppSidebar", () => {
-  it("renders all seven top-level navigation links", () => {
+  it("renders all nine navigation links when no scope is given", () => {
     renderSidebar("/dashboard");
 
     for (const title of NAV_TITLES) {
@@ -54,10 +57,20 @@ describe("AppSidebar", () => {
     }
   });
 
+  // W3 (round-1 review): the primary nav landmark is named so the e2e specs and
+  // screen readers can address it; Rule 60.30.
+  it("exposes the nav items in a navigation landmark named Primary", () => {
+    renderSidebar("/dashboard");
+
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).getByRole("link", { name: "Overview" })).toBeVisible();
+    expect(within(nav).getByRole("link", { name: "Settings" })).toBeVisible();
+  });
+
   it("marks the link for the active nested route, not Overview", () => {
     renderSidebar("/dashboard/teams/team-123");
 
-    expect(screen.getByRole("link", { name: "Teams" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Cost by team" })).toHaveAttribute(
       "data-active",
       "true",
     );
@@ -103,6 +116,97 @@ describe("AppSidebar", () => {
     expect(
       screen.getByRole("button", { name: "Collapse" }),
     ).toBeInTheDocument();
+  });
+});
+
+// Design System - Navigation (Sidebar): nav is grouped Usage, Management,
+// Administration; Settings lives in Administration, last, and the footer holds
+// only the collapse icon button (slice B1, B1-5).
+describe("AppSidebar - groups (Usage / Management / Administration)", () => {
+  const groupLabels = (container: HTMLElement) =>
+    [...container.querySelectorAll('[data-slot="sidebar-group-label"]')].map(
+      (el) => el.textContent,
+    );
+  const group = (container: HTMLElement, label: string) => {
+    const el = [...container.querySelectorAll('[data-slot="sidebar-group"]')]
+      .filter(
+        (g) =>
+          g.querySelector('[data-slot="sidebar-group-label"]')?.textContent ===
+          label,
+      )
+      .at(0);
+    if (!(el instanceof HTMLElement)) throw new Error(`no group ${label}`);
+    return el;
+  };
+
+  it("labels three groups, in order, and drops the pre-B1 labels", () => {
+    const { container } = renderSidebar("/dashboard");
+
+    expect(groupLabels(container)).toEqual([
+      "Usage",
+      "Management",
+      "Administration",
+    ]);
+    for (const old of ["Main", "Attribution", "Gateway"]) {
+      expect(screen.queryByText(old)).not.toBeInTheDocument();
+    }
+  });
+
+  it("places the Usage items (My usage last), LiteLLM, and Settings in their groups (B1-14)", () => {
+    const { container } = renderSidebar("/dashboard");
+
+    expect(
+      within(group(container, "Usage"))
+        .getAllByRole("link")
+        .map((a) => a.textContent),
+    ).toEqual([
+      "Overview",
+      "Ranking",
+      "Cost by department",
+      "Cost by team",
+      "Cost by service",
+      "Cost by user",
+      "My usage",
+    ]);
+    expect(
+      within(group(container, "Management"))
+        .getAllByRole("link")
+        .map((a) => [a.textContent, a.getAttribute("href")]),
+    ).toEqual([["LiteLLM", "/dashboard/litellm"]]);
+    expect(
+      within(group(container, "Administration"))
+        .getAllByRole("link")
+        .map((a) => a.textContent),
+    ).toEqual(["Settings"]);
+  });
+
+  it("keeps Settings out of the footer, which holds only the collapse button", () => {
+    const { container } = renderSidebar("/dashboard");
+    const footer = container.querySelector('[data-slot="sidebar-footer"]');
+    if (!(footer instanceof HTMLElement)) throw new Error("no footer");
+
+    expect(within(footer).queryAllByRole("link")).toHaveLength(0);
+    expect(
+      within(footer)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Collapse"]);
+  });
+
+  it("puts the Administration group last, after Management", () => {
+    const { container } = renderSidebar("/dashboard");
+    const follows = (a: HTMLElement, b: HTMLElement) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    expect(
+      follows(
+        group(container, "Management"),
+        group(container, "Administration"),
+      ),
+    ).toBe(true);
+    expect(
+      follows(group(container, "Usage"), group(container, "Management")),
+    ).toBe(true);
   });
 });
 
@@ -277,32 +381,26 @@ describe("AppSidebar - rail toggle accessible name (desktop, 1440px)", () => {
   });
 });
 
-// Source: docs/specs/2026-11-10-litellm.md -- Page and Settings and LD9: a
-// "LiteLLM" rail item at /dashboard/litellm in a new "Gateway" group placed
-// after Attribution; the top-bar heading is "LiteLLM usage & administration".
-describe("AppSidebar - Gateway group (LD9)", () => {
-  it("renders a LiteLLM link to /dashboard/litellm under a Gateway label", () => {
+// Source: Design System - Navigation (Sidebar) and docs/specs/2026-11-10-litellm.md
+// (LD9; slice B1 B1-5/B1-6): LiteLLM stays at /dashboard/litellm until B2, now
+// the only Management item, and the top-bar heading is unchanged.
+describe("AppSidebar - LiteLLM in Management", () => {
+  it("renders a LiteLLM link to /dashboard/litellm", () => {
     renderSidebar("/dashboard");
 
-    expect(screen.getByText("Gateway")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "LiteLLM" })).toHaveAttribute(
       "href",
       "/dashboard/litellm",
     );
   });
-
-  it("orders the Gateway group directly after Attribution with the page title", () => {
-    const labels = NAV_GROUPS.map((group) => group.label);
-    expect(labels.indexOf("Gateway")).toBe(labels.indexOf("Attribution") + 1);
-    const item = NAV_GROUPS.find((g) => g.label === "Gateway")?.items[0];
-    expect(item?.pageTitle).toBe("LiteLLM usage & administration");
-  });
 });
 
-// Phase 4R.5 (Design System: No team; ruling 2026-11-16): the sidebar renders
-// navGroupsFor(scope); no scope means the unfiltered full set. The rest of
-// this file keeps the default (no scope) expectations.
-describe("AppSidebar - scope-filtered navigation (Phase 4R.5)", () => {
+// Design System - Navigation (Sidebar) ("hidden, never dead") and Access
+// Control - Navigation and landing by role; slice B1 B1-1/B1-8: the sidebar
+// renders navGroupsFor(scope); no scope means the unfiltered full set. The
+// full per-role matrix is asserted once in lib/nav.test.ts; here only that the
+// rendered rail follows the filter.
+describe("AppSidebar - scope-filtered navigation", () => {
   const scoped = (over: Partial<NavScope>): NavScope => ({
     global: false,
     memberTeamId: null,
@@ -321,43 +419,61 @@ describe("AppSidebar - scope-filtered navigation (Phase 4R.5)", () => {
     );
   }
 
-  it("a viewer with no team sees only My usage and LiteLLM (plus Settings)", () => {
-    renderScoped(scoped({}));
-    expect(screen.getByRole("link", { name: "My usage" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "LiteLLM" })).toBeInTheDocument();
-    for (const gone of [
-      "Overview",
-      "Ranking",
-      "Departments",
-      "Teams",
-      "My teams",
-      "Services",
-      "Users",
-    ]) {
-      expect(screen.queryByRole("link", { name: gone })).toBeNull();
-    }
-  });
+  const USAGE_LINKS = [
+    "Overview",
+    "Ranking",
+    "Cost by department",
+    "Cost by team",
+    "Cost by service",
+    "Cost by user",
+  ];
 
-  it("a member's Overview link opts out of the landing redirect and still carries the date range", () => {
-    renderScoped(
-      scoped({ memberTeamId: "team-a" }),
-      "dateFrom=2026-01-01&dateTo=2026-01-31",
-    );
-    const href = screen
-      .getByRole("link", { name: "Overview" })
-      .getAttribute("href");
-    const url = new URL(href ?? "", "http://x");
-    expect(url.pathname).toBe("/dashboard");
-    expect(url.searchParams.get("view")).toBe("overview");
-    expect(url.searchParams.get("dateFrom")).toBe("2026-01-01");
-    expect(url.searchParams.get("dateTo")).toBe("2026-01-31");
-  });
+  it.each([
+    ["a viewer with no team", scoped({})],
+    ["a member", scoped({ memberTeamId: "team-a" })],
+    ["a team lead", scoped({ teamScopes: new Set(["team-a"]) })],
+    ["a department lead", scoped({ departmentScopes: new Set(["dept-eng"]) })],
+  ])(
+    "%s sees a Usage group with only My usage, then LiteLLM and Settings (B1-14)",
+    (_n, scope) => {
+      const { container } = renderScoped(scope);
 
-  it("a global scope keeps Overview at /dashboard", () => {
-    renderScoped(scoped({ global: true }));
+      expect(
+        [
+          ...container.querySelectorAll('[data-slot="sidebar-group-label"]'),
+        ].map((el) => el.textContent),
+      ).toEqual(["Usage", "Management", "Administration"]);
+      for (const name of ["My usage", "LiteLLM", "Settings"]) {
+        expect(screen.getByRole("link", { name })).toBeInTheDocument();
+      }
+      for (const gone of [...USAGE_LINKS, "My teams", "Teams", "Users"]) {
+        expect(screen.queryByRole("link", { name: gone })).toBeNull();
+      }
+    },
+  );
+
+  it("a global scope sees the three groups with the Usage links, Overview at /dashboard", () => {
+    const { container } = renderScoped(scoped({ global: true }));
+
+    expect(
+      [...container.querySelectorAll('[data-slot="sidebar-group-label"]')].map(
+        (el) => el.textContent,
+      ),
+    ).toEqual(["Usage", "Management", "Administration"]);
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
       "href",
       "/dashboard",
     );
+  });
+
+  it("carries the date range onto Settings and My usage too (issue #75)", () => {
+    renderScoped(scoped({}), "dateFrom=2026-01-01&dateTo=2026-01-31");
+
+    for (const name of ["My usage", "Settings"]) {
+      expect(screen.getByRole("link", { name })).toHaveAttribute(
+        "href",
+        expect.stringContaining("dateFrom=2026-01-01&dateTo=2026-01-31"),
+      );
+    }
   });
 });
