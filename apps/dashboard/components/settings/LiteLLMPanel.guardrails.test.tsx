@@ -1,3 +1,4 @@
+import { LITELLM_OPERATION_NAMES } from "@llm-usage-lens/shared";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ import { apiResponse } from "@/test/api-stubs";
 import { renderWithProviders } from "@/test/render-providers";
 
 import { LiteLLMPanel } from "./LiteLLMPanel";
+import type { LiteLLMPanelCapabilities } from "./LiteLLMPanel";
 
 // Source: docs/specs/2026-11-10-litellm.md -- "Guardrail configuration" (LD19:
 // each operation, writes and reads, shows its effective value and source
@@ -17,14 +19,15 @@ import { LiteLLMPanel } from "./LiteLLMPanel";
 // L2, Rules 40 (UI) and 60.24 (no real network).
 //
 // Contract for the developer (component):
-//   <LiteLLMPanel canEdit?: boolean />   canEdit defaults to true (the panel
-//   is mounted for Admins); canEdit={false} renders values read-only.
+//   <LiteLLMPanel capabilities={...} /> (unit A1, LD24): editGuardrails false
+//   renders values read-only (the role x section matrix is in
+//   LiteLLMPanel.roles.test.tsx).
 //   Calls: GET /api/litellm/toggles -> { version, edition,
 //     operations: { [op]: { enabled, source } } }
 //   PUT /api/litellm/toggles { version, toggles: { [op]: boolean } } (only the
 //     changed operation) or { version, reset: true }; the response has the GET
 //     shape and replaces the shown values.
-//   Markup: group "Write operations" and group "Read operations"; per
+//   Markup: groups by operation family (G6, below); per
 //   operation a role="switch" named exactly the operation name (aria-checked =
 //   effective value); a source badge data-testid="litellm-op-source-<op>"
 //   whose text is ui|file|spec; row data-testid="litellm-op-<op>".
@@ -34,6 +37,17 @@ import { LiteLLMPanel } from "./LiteLLMPanel";
 //   Wildcard warning: data-testid="litellm-wildcard-warning", from
 //   ConnectionTestResult.warnings; always shown when the test returns it
 //   (code-only, LD19 amended 2026-11-15; no toggles field gates it).
+const ADMIN: LiteLLMPanelCapabilities = {
+  editConnection: true,
+  editGuardrails: true,
+  editTeamLinks: true,
+};
+const READ_ONLY: LiteLLMPanelCapabilities = {
+  editConnection: false,
+  editGuardrails: false,
+  editTeamLinks: false,
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -45,6 +59,7 @@ const READS = [
   "getTeamDailySpend",
   "getUser",
   "findUserByEmail",
+  "searchUsers",
   "getUserDailySpend",
   "listKeys",
   "getKey",
@@ -161,30 +176,26 @@ async function ready() {
 }
 
 describe("LiteLLMPanel operation toggles", () => {
-  it("lists every write and read operation in its own group with a labelled switch", async () => {
+  it("every allowlisted operation is covered by the fixture (guards the G6 membership test)", () => {
+    expect([...WRITES, ...READS].sort()).toEqual(
+      [...LITELLM_OPERATION_NAMES].sort(),
+    );
+  });
+
+  it("every operation has a labelled switch, and the switch count equals the operation count", async () => {
     stub({});
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
-    const writes = screen.getByRole("group", { name: /write operations/i });
-    const reads = screen.getByRole("group", { name: /read operations/i });
-    for (const n of WRITES) {
-      expect(
-        within(writes).getByRole("switch", { name: n }),
-      ).toBeInTheDocument();
-    }
-    for (const n of READS) {
-      expect(
-        within(reads).getByRole("switch", { name: n }),
-      ).toBeInTheDocument();
+    for (const n of [...WRITES, ...READS]) {
+      expect(screen.getByRole("switch", { name: n })).toBeInTheDocument();
     }
     expect(screen.getAllByRole("switch")).toHaveLength(
       WRITES.length + READS.length,
     );
   });
-
   it("shows each operation's effective value (aria-checked) from the API", async () => {
     stub({});
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     expect(screen.getByRole("switch", { name: "createTeam" })).toBeChecked();
     expect(screen.getByRole("switch", { name: "getTeam" })).toBeChecked();
@@ -203,7 +214,7 @@ describe("LiteLLMPanel operation toggles", () => {
         },
       }),
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     expect(
       screen.getByTestId("litellm-op-source-createTeam"),
@@ -225,7 +236,7 @@ describe("LiteLLMPanel operation toggles", () => {
       ops: { createTeam: { enabled: false, source: "ui" } },
     });
     const calls = stub({ putResponse: apiResponse({ data: after }) });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     await userEvent.click(screen.getByRole("switch", { name: "createTeam" }));
     await waitFor(() =>
@@ -258,7 +269,7 @@ describe("LiteLLMPanel operation toggles", () => {
       },
     });
     const calls = stub({ putResponse: apiResponse({ data: afterRead }) });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     await userEvent.click(screen.getByRole("switch", { name: "listKeys" }));
     await waitFor(() =>
@@ -294,13 +305,191 @@ describe("LiteLLMPanel operation toggles", () => {
         409,
       ),
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     await userEvent.click(screen.getByRole("switch", { name: "createTeam" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Toggles changed, reload",
     );
     expect(screen.getByRole("switch", { name: "createTeam" })).toBeChecked();
+  });
+});
+
+// G6 (implementation-phases unit A; LiteLLM spec -- Allowlist "Writes" and
+// "Reads" tables, lines ~174-215): Guardrails groups operations by family, not
+// by write/read. Each group is role="group" named by its heading, described by
+// a one-line description (aria-describedby -> accessible description), empty
+// groups are not rendered, unknown operations fall into a final "Other
+// operations" group, and every row shows a description of its LiteLLM call
+// (data-testid litellm-op-desc-<op>). Order inside a group follows the API.
+const FAMILIES: Array<[string, string[]]> = [
+  [
+    "Team writes",
+    ["createTeam", "setTeamBudget", "setTeamLimits", "setTeamModels"],
+  ],
+  [
+    "Member writes",
+    [
+      "addTeamMember",
+      "removeTeamMember",
+      "setMemberBudget",
+      "setMemberLimits",
+      "resetMemberSpend",
+      "resetMemberBudget",
+      "disableMember",
+      "enableMember",
+    ],
+  ],
+  [
+    "Key writes",
+    [
+      "generateMemberKey",
+      "updateMemberKey",
+      "blockKey",
+      "unblockKey",
+      "deleteKey",
+      "rotateKey",
+      "requestKey",
+      "approveKeyRequest",
+      "rejectKeyRequest",
+      "revealKeyRequest",
+    ],
+  ],
+  ["Team reads", ["getTeam", "listProxyTeams", "getTeamDailySpend"]],
+  [
+    "User reads",
+    ["getUser", "findUserByEmail", "searchUsers", "getUserDailySpend"],
+  ],
+  ["Key and spend reads", ["listKeys", "getKey", "listSpendLogs"]],
+  [
+    "Proxy reads",
+    ["listProxyModels", "listProxyAuditLog", "getGlobalSpendReport"],
+  ],
+];
+const L7_OPS = [
+  "requestKey",
+  "approveKeyRequest",
+  "rejectKeyRequest",
+  "revealKeyRequest",
+];
+const UNKNOWN_OP = "someFutureOperation";
+const OTHER = "Other operations";
+const FAMILY_NAMES = [...FAMILIES.map(([name]) => name), OTHER];
+
+function familyGroups() {
+  return screen
+    .getAllByRole("group")
+    .filter((g) => FAMILY_NAMES.includes(g.getAttribute("aria-label") ?? ""));
+}
+const opsIn = (group: HTMLElement) =>
+  within(group)
+    .getAllByRole("switch")
+    .map((s) => s.getAttribute("aria-label"));
+
+describe("LiteLLMPanel Guardrails grouped by operation family (G6)", () => {
+  const extra = Object.fromEntries(
+    [...L7_OPS, UNKNOWN_OP].map((n) => [
+      n,
+      { enabled: true, source: "file" as Source },
+    ]),
+  );
+
+  it("renders the seven families in order plus Other, each op in exactly one group, none dropped", async () => {
+    stub({ toggles: toggles({ ops: extra }) });
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
+    await ready();
+    const groups = familyGroups();
+    expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual(
+      FAMILY_NAMES,
+    );
+    for (const [name, ops] of FAMILIES) {
+      const group = screen.getByRole("group", { name });
+      expect(opsIn(group).sort()).toEqual([...ops].sort());
+    }
+    expect(opsIn(screen.getByRole("group", { name: OTHER }))).toEqual([
+      UNKNOWN_OP,
+    ]);
+    const all = groups.flatMap(opsIn);
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.sort()).toEqual(
+      Object.keys(toggles({ ops: extra }).operations).sort(),
+    );
+    expect(
+      screen.queryByRole("group", { name: /^(write|read) operations$/i }),
+    ).toBeNull();
+  });
+
+  it("each group has a heading equal to its label and a one-line description", async () => {
+    stub({ toggles: toggles({ ops: extra }) });
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
+    await ready();
+    expect(familyGroups()).toHaveLength(FAMILY_NAMES.length);
+    for (const group of familyGroups()) {
+      const label = group.getAttribute("aria-label") ?? "";
+      expect(
+        within(group).getByRole("heading", { name: label }),
+      ).toBeInTheDocument();
+      expect(group).toHaveAccessibleDescription(/\S/);
+    }
+  });
+
+  it("does not render empty groups (no Other group when every op is known)", async () => {
+    stub({
+      toggles: {
+        version: 1,
+        edition: "oss",
+        operations: {
+          getTeam: { enabled: true, source: "file" },
+          createTeam: { enabled: true, source: "file" },
+        },
+      },
+    });
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
+    await openGuardrails();
+    await screen.findByRole("switch", { name: "createTeam" });
+    expect(familyGroups().map((g) => g.getAttribute("aria-label"))).toEqual([
+      "Team writes",
+      "Team reads",
+    ]);
+  });
+
+  it("keeps the API's order inside a group", async () => {
+    const t = toggles({ ops: extra });
+    const reversed = {
+      ...t,
+      operations: Object.fromEntries(Object.entries(t.operations).reverse()),
+    };
+    stub({ toggles: reversed });
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
+    await ready();
+    for (const [name, ops] of FAMILIES) {
+      const expected = Object.keys(reversed.operations).filter((n) =>
+        ops.includes(n),
+      );
+      expect(opsIn(screen.getByRole("group", { name }))).toEqual(expected);
+    }
+  });
+
+  it("shows a description of the LiteLLM call on every row, in read-only mode too", async () => {
+    stub({ toggles: toggles({ ops: extra }) });
+    const { unmount } = renderWithProviders(
+      <LiteLLMPanel capabilities={ADMIN} />,
+    );
+    await ready();
+    for (const n of Object.keys(toggles({ ops: extra }).operations)) {
+      const desc = screen.getByTestId(`litellm-op-desc-${n}`);
+      expect(screen.getByTestId(`litellm-op-${n}`)).toContainElement(desc);
+      if ((LITELLM_OPERATION_NAMES as readonly string[]).includes(n)) {
+        expect(desc.textContent?.trim()).not.toBe("");
+      }
+    }
+    unmount();
+    stub({});
+    renderWithProviders(<LiteLLMPanel capabilities={READ_ONLY} />);
+    await openGuardrails();
+    expect(
+      await screen.findByTestId("litellm-op-desc-createTeam"),
+    ).toBeInTheDocument();
   });
 });
 
@@ -314,7 +503,7 @@ describe("LiteLLMPanel on a fresh deployment (nothing saved, GET reports version
       toggles: toggles({ version: 0 }),
       putResponse: apiResponse({ data: after }),
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     await userEvent.click(screen.getByRole("switch", { name: "createTeam" }));
     await waitFor(() =>
@@ -343,7 +532,7 @@ describe("LiteLLMPanel on a fresh deployment (nothing saved, GET reports version
       toggles: toggles({ version: 0 }),
       putResponse: apiResponse({ data: first }),
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     await userEvent.click(screen.getByRole("switch", { name: "createTeam" }));
     await waitFor(() =>
@@ -374,7 +563,7 @@ describe("LiteLLMPanel on a fresh deployment (nothing saved, GET reports version
 
   it("offers no usable Reset while nothing is saved (hidden or disabled)", async () => {
     stub({ toggles: toggles({ version: 0 }) });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     const reset = screen.queryByRole("button", {
       name: /reset to file defaults/i,
@@ -388,7 +577,7 @@ describe("LiteLLMPanel reset to file defaults", () => {
     const confirmSpy = vi.fn(() => true);
     vi.stubGlobal("confirm", confirmSpy);
     const calls = stub({});
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     await userEvent.click(
       screen.getByRole("button", { name: /reset to file defaults/i }),
@@ -416,7 +605,7 @@ describe("LiteLLMPanel reset to file defaults", () => {
       toggles: before,
       putResponse: apiResponse({ data: after }),
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     expect(
       screen.getByTestId("litellm-op-source-createTeam"),
@@ -445,7 +634,7 @@ describe("LiteLLMPanel reset to file defaults", () => {
         409,
       ),
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     await userEvent.click(
       screen.getByRole("button", { name: /reset to file defaults/i }),
@@ -462,7 +651,7 @@ describe("LiteLLMPanel reset to file defaults", () => {
 describe("LiteLLMPanel guardrail summary (not configurable)", () => {
   it("lists the code-only guardrails read-only, with no controls", async () => {
     stub({});
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     const region = screen.getByRole("region", { name: /enforced in code/i });
     for (const re of [
@@ -488,7 +677,7 @@ describe("LiteLLMPanel guardrail summary (not configurable)", () => {
 describe("LiteLLMPanel guardrail summary - LD18 item", () => {
   it("marks the inference refusal item as pending", async () => {
     stub({});
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     const region = screen.getByRole("region", { name: /enforced in code/i });
     expect(within(region).getByText(/inference/i)).toHaveTextContent(
@@ -507,7 +696,7 @@ describe("LiteLLMPanel wildcard warning", () => {
 
   it("is absent before the test and when the result has no warnings", async () => {
     stub({ test: { result: "ok", message: "Connection ok", warnings: [] } });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await screen.findByRole("button", { name: /test connection/i });
     expect(screen.queryByTestId("litellm-wildcard-warning")).toBeNull();
     await runTest();
@@ -520,7 +709,7 @@ describe("LiteLLMPanel wildcard warning", () => {
     stub({
       test: { result: "ok", message: "Connection ok", warnings: [WILDCARD] },
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await runTest();
     const w = await screen.findByTestId("litellm-wildcard-warning");
     expect(w).toHaveTextContent(/temporary wildcards/i);
@@ -532,7 +721,7 @@ describe("LiteLLMPanel wildcard warning", () => {
     stub({
       test: { result: "ok", message: "Connection ok", warnings: [WILDCARD] },
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await runTest();
     const w = await screen.findByTestId("litellm-wildcard-warning");
     expect(w).toHaveAttribute("role", "status");
@@ -546,7 +735,7 @@ describe("LiteLLMPanel wildcard warning", () => {
       toggles: t,
       test: { result: "ok", message: "Connection ok", warnings: [WILDCARD] },
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await runTest();
     expect(
       await screen.findByTestId("litellm-wildcard-warning"),
@@ -561,7 +750,7 @@ describe("LiteLLMPanel without edit rights", () => {
         ops: { createTeam: { enabled: false, source: "ui" } },
       }),
     });
-    renderWithProviders(<LiteLLMPanel canEdit={false} />);
+    renderWithProviders(<LiteLLMPanel capabilities={READ_ONLY} />);
     await openGuardrails();
     const row = await screen.findByTestId("litellm-op-createTeam");
     expect(row).toHaveTextContent("createTeam");
@@ -590,7 +779,7 @@ describe("LiteLLMPanel toggles loading and error states", () => {
           : Promise.resolve(apiResponse({ data: CONNECTION })),
       ),
     );
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await screen.findByText("https://litellm.example.internal");
     await openGuardrails();
     expect(screen.queryAllByRole("switch")).toHaveLength(0);
@@ -607,7 +796,7 @@ describe("LiteLLMPanel toggles loading and error states", () => {
         500,
       ),
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     expect(
       await screen.findByText("https://litellm.example.internal"),
     ).toBeInTheDocument();

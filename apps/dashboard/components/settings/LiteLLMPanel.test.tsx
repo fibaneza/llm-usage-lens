@@ -6,6 +6,7 @@ import { apiResponse } from "@/test/api-stubs";
 import { renderWithProviders } from "@/test/render-providers";
 
 import { LiteLLMPanel } from "./LiteLLMPanel";
+import type { LiteLLMPanelCapabilities } from "./LiteLLMPanel";
 
 // Source: docs/specs/2026-11-10-litellm.md -- "Page and Settings" (Settings
 // gains an Admin LiteLLM panel: connection URL, edition read-only,
@@ -14,7 +15,14 @@ import { LiteLLMPanel } from "./LiteLLMPanel";
 // key), "API routes" (/api/litellm/connection, /connection/test);
 // implementation-phases L1 (panel: status, URL, edition, test; no key entry).
 // Module under test: `components/settings/LiteLLMPanel.tsx`, a client
-// component with no props. `fetch` is stubbed (Rule 60.24).
+// component taking `capabilities` (unit A1; LD24). These cases use the Admin
+// capabilities; the role x section matrix is in LiteLLMPanel.roles.test.tsx. `fetch` is stubbed (Rule 60.24).
+const ADMIN: LiteLLMPanelCapabilities = {
+  editConnection: true,
+  editGuardrails: true,
+  editTeamLinks: true,
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -63,7 +71,7 @@ function stubLiteLLM(status: Status, testData?: unknown) {
 describe("LiteLLMPanel", () => {
   it("shows the base URL, a read-only edition and 'service key configured: yes'", async () => {
     stubLiteLLM(CONFIGURED);
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     expect(
       await screen.findByText("https://litellm.example.internal"),
     ).toBeInTheDocument();
@@ -80,7 +88,7 @@ describe("LiteLLMPanel", () => {
       edition: "oss",
       serviceKeyConfigured: false,
     });
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     expect(
       await screen.findByText(/service key configured/i),
     ).toHaveTextContent(/no/i);
@@ -92,7 +100,7 @@ describe("LiteLLMPanel", () => {
 
   it("has no input for the service key or the edition anywhere (no UI for the key)", async () => {
     stubLiteLLM(CONFIGURED);
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await screen.findByText("https://litellm.example.internal");
     expect(
       screen.queryByLabelText(/service key|api key|secret|token/i),
@@ -107,7 +115,9 @@ describe("LiteLLMPanel", () => {
       "fetch",
       vi.fn(() => new Promise<Response>(() => {})),
     );
-    const { container } = renderWithProviders(<LiteLLMPanel />);
+    const { container } = renderWithProviders(
+      <LiteLLMPanel capabilities={ADMIN} />,
+    );
     expect(container.querySelector('[data-slot="skeleton"]')).not.toBeNull();
   });
 
@@ -120,7 +130,7 @@ describe("LiteLLMPanel", () => {
     "runs the connection test and shows the %s result",
     async (result, message) => {
       const calls = stubLiteLLM(CONFIGURED, { result, message });
-      renderWithProviders(<LiteLLMPanel />);
+      renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
       await screen.findByText("https://litellm.example.internal");
       await userEvent.click(
         screen.getByRole("button", { name: /test connection/i }),
@@ -136,7 +146,9 @@ describe("LiteLLMPanel", () => {
 
   it("never renders a service key value, even if one were present in a response", async () => {
     stubLiteLLM({ ...CONFIGURED, serviceKey: "sk-fake-key-000" } as Status);
-    const { container } = renderWithProviders(<LiteLLMPanel />);
+    const { container } = renderWithProviders(
+      <LiteLLMPanel capabilities={ADMIN} />,
+    );
     await screen.findByText("https://litellm.example.internal");
     expect(container.textContent).not.toContain("sk-fake-key-000");
   });
@@ -158,7 +170,7 @@ describe("LiteLLMPanel", () => {
         ),
       ),
     );
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText(/./)).toBeInTheDocument();
   });
@@ -166,8 +178,8 @@ describe("LiteLLMPanel", () => {
 
 // LiteLLM spec "Security architecture" item 7 (base URL "Admin-set in
 // Settings", test-before-save, versioned) and implementation-phases L1 (panel:
-// status, URL, edition, test; no key entry). The panel is mounted for admins
-// only, so it offers the URL form unconditionally.
+// status, URL, edition, test; no key entry). The URL form is offered when
+// capabilities.editConnection is set (LD24).
 describe("LiteLLMPanel base URL entry", () => {
   const NEW_URL = "https://litellm-b.example.internal";
 
@@ -203,7 +215,7 @@ describe("LiteLLMPanel base URL entry", () => {
 
   it("offers a labelled base URL input (prefilled with the stored URL) and a Save button", async () => {
     stubLiteLLM(CONFIGURED);
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await screen.findByText("https://litellm.example.internal");
     expect(screen.getByLabelText(/base url/i)).toHaveValue(
       "https://litellm.example.internal",
@@ -216,7 +228,7 @@ describe("LiteLLMPanel base URL entry", () => {
   it("sends PUT /api/litellm/connection with the URL and the current version, and shows the new URL", async () => {
     const saved = { ...CONFIGURED, baseUrl: NEW_URL, version: 4 };
     const puts = stubWithPut(apiResponse({ data: saved }));
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await enterAndSave(NEW_URL);
     expect(puts).toEqual([
       {
@@ -255,7 +267,7 @@ describe("LiteLLMPanel base URL entry", () => {
         );
       }),
     );
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await screen.findByText(/not configured/i);
     await userEvent.type(screen.getByLabelText(/base url/i), NEW_URL);
     await userEvent.click(screen.getByRole("button", { name: /save/i }));
@@ -271,7 +283,7 @@ describe("LiteLLMPanel base URL entry", () => {
     "shows the %i error message inline and keeps the stored URL",
     async (status, code, message) => {
       stubWithPut(apiResponse({ error: { code, message } }, status));
-      renderWithProviders(<LiteLLMPanel />);
+      renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
       await enterAndSave(NEW_URL);
       expect(await screen.findByRole("alert")).toHaveTextContent(message);
       expect(
@@ -328,7 +340,7 @@ describe("LiteLLMPanel tabs (L3b)", () => {
   // Source: WCAG 2.1.1; L3b review B3. The tablist is keyboard operable.
   it("the tablist responds to the arrow keys and shows the next tab's panel", async () => {
     stubAll();
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     const first = await screen.findByRole("tab", { name: "Connection" });
     first.focus();
     await userEvent.keyboard("{ArrowRight}");
@@ -340,7 +352,7 @@ describe("LiteLLMPanel tabs (L3b)", () => {
 
   it("offers the four tabs in order, Connection selected first", async () => {
     stubAll();
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     const tabs = await screen.findAllByRole("tab");
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Connection",
@@ -359,7 +371,7 @@ describe("LiteLLMPanel tabs (L3b)", () => {
 
   it("keeps connection details and the test off the other tabs, and requests team links only on its tab", async () => {
     const calls = stubAll();
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await screen.findByText("https://litellm.example.internal");
     expect(calls).not.toContain("/api/litellm/team-links");
     await userEvent.click(screen.getByRole("tab", { name: "Team links" }));
@@ -371,7 +383,7 @@ describe("LiteLLMPanel tabs (L3b)", () => {
 
   it("the team search box filters the link list and shows an empty state", async () => {
     stubAll();
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await userEvent.click(
       await screen.findByRole("tab", { name: "Team links" }),
     );
@@ -387,7 +399,7 @@ describe("LiteLLMPanel tabs (L3b)", () => {
 
   it("the Users tab hosts the shared user search and requests nothing until a term is typed", async () => {
     const calls = stubAll();
-    renderWithProviders(<LiteLLMPanel />);
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await userEvent.click(await screen.findByRole("tab", { name: "Users" }));
     expect(
       await screen.findByRole("searchbox", { name: /search users/i }),

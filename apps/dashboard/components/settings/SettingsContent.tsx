@@ -13,6 +13,8 @@ import { DataRetention } from "@/components/settings/DataRetention";
 import { LiteLLMPanel } from "@/components/settings/LiteLLMPanel";
 import { SyncStatusPanel } from "@/components/settings/SyncStatusPanel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { litellmPanelCapabilities } from "@/lib/auth/litellm-panel";
+import { INTERNAL_ADMIN_ROLE } from "@/lib/auth/roles";
 
 function Section({
   heading,
@@ -46,6 +48,9 @@ export function SettingsContent({
   isAdmin: boolean;
   access?: { viewer: AccessViewer; stepUp: StepUpActions };
 }) {
+  const litellm = litellmPanelCapabilities(
+    access?.viewer.roles ?? (isAdmin ? [INTERNAL_ADMIN_ROLE] : []),
+  );
   return (
     <div className="flex flex-col gap-8">
       <Section heading="Account registry" title="the account registry">
@@ -55,9 +60,9 @@ export function SettingsContent({
         <h2 className="text-base font-semibold">Sync status</h2>
         <SyncStatusPanel />
       </section>
-      {isAdmin ? (
+      {litellm.visible ? (
         <Section heading="LiteLLM" title="the LiteLLM connection">
-          <LiteLLMPanel canEdit={isAdmin} />
+          <LiteLLMPanel capabilities={litellm} />
         </Section>
       ) : null}
       <Section heading="Data retention" title="the data retention policy">

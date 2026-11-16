@@ -711,7 +711,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 *Added 2026-11-16 at the user's direction (LiteLLM spec LD24); after L3c, before L4.*
 
 - [x] `internal-org-admin` may `PUT /api/litellm/toggles` (including reset) and write team links; `PUT /api/litellm/connection` and `POST /api/litellm/connection/test` stay `internal-admin` only; reads add org-admin; Rules 10.3 and 50.4 amended
-- [ ] **L3d2 — Settings → LiteLLM panel for org-admin** (per-section edit flags: toggles and team links editable, connection read-only), built in unit A (improvements) together with the Auditor read-only view (agent decision, 2026-11-16, coordinator: `components/settings/**` belongs to unit A, which already reworks the panel's visibility)
+- [x] **L3d2 — Settings → LiteLLM panel for org-admin** (per-section edit flags: toggles and team links editable, connection read-only), built in unit A (improvements) together with the Auditor read-only view (agent decision, 2026-11-16, coordinator: `components/settings/**` belongs to unit A, which already reworks the panel's visibility); delivered by unit A1 (`feature/unit-a1-litellm-panel-roles`, 2026-11-16) with `litellmPanelCapabilities` in `lib/auth/` and the grouped Guardrails tab (Design System — *LiteLLM Page*)
 - [x] Verify: `write-routes.integration.test.ts` allowed (org-admin toggles, team links) and refused (org-admin connection `PUT` and test `403`, one `denied` record; Viewer, Lead `403`) cases; LT22
 
 ### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)

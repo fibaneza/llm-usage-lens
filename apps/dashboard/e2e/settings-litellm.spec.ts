@@ -246,3 +246,102 @@ test.describe("settings LiteLLM base URL entry", () => {
     );
   });
 });
+
+// docs/specs/2026-11-10-litellm.md LD24 (org-admin edits Guardrails and Team
+// links, Connection read-only; Auditor read-only), LT20 / LT22; Design System
+// -- Settings -> LiteLLM; implementation-phases L3d2. Fixtures only.
+test.describe("settings LiteLLM by role (LD24)", () => {
+  async function mockConfigApi(page: Page) {
+    await mockApi(page);
+    await page.route(/\/api\/litellm\/toggles$/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            version: 2,
+            edition: "oss",
+            operations: {
+              createTeam: { enabled: true, source: "file" },
+              getTeam: { enabled: true, source: "file" },
+            },
+          },
+        },
+      }),
+    );
+    await page.route(/\/api\/litellm\/team-links(\?|$)/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            items: [
+              {
+                teamId: "payments",
+                litellmTeamId: "ll-111",
+                version: 1,
+                updatedAt: "2026-11-01T00:00:00Z",
+              },
+            ],
+          },
+        },
+      }),
+    );
+  }
+
+  test("an Auditor sees Settings -> LiteLLM read-only", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
+    await mockConfigApi(page);
+    await openSettings(page);
+
+    await expect(
+      page.getByRole("heading", { level: 2, name: "LiteLLM" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("https://litellm.example.internal"),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /^save/i })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /test connection/i }),
+    ).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "Guardrails" }).click();
+    await expect(page.getByTestId("litellm-op-createTeam")).toBeVisible();
+    await expect(page.getByRole("switch")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /reset to file defaults/i }),
+    ).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "Team links" }).click();
+    await expect(page.getByText("ll-111")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^unlink/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^link$/i })).toHaveCount(0);
+  });
+
+  test("an org-admin cannot edit Connection but edits Guardrails and Team links", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await mockConfigApi(page);
+    await openSettings(page);
+
+    await expect(
+      page.getByText("https://litellm.example.internal"),
+    ).toBeVisible();
+    await expect(page.getByLabel(/base url/i)).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /test connection/i }),
+    ).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "Guardrails" }).click();
+    await expect(
+      page.getByRole("switch", { name: "createTeam" }),
+    ).toBeVisible();
+
+    await page.getByRole("tab", { name: "Team links" }).click();
+    await expect(page.getByLabel("Dashboard team ID")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Unlink payments" }),
+    ).toBeVisible();
+  });
+});

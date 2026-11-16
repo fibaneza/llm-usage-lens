@@ -6,17 +6,29 @@ import {
   OperationTogglesViewSchema,
   TeamLinkSchema,
 } from "@llm-usage-lens/shared";
-import type { OperationTogglesView } from "@llm-usage-lens/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
+import type { ReactNode } from "react";
 import { z } from "zod";
 
 import { UserSearch } from "@/components/litellm/UserSearch";
+import { OperationGroup } from "@/components/settings/litellm-panel/OperationGroup";
+import {
+  OPERATION_FAMILIES,
+  OPERATION_INFO,
+  OTHER_FAMILY,
+} from "@/components/settings/litellm-panel/operation-families";
+import { TEAM_LINKS_KEY } from "@/components/settings/litellm-panel/keys";
+import { TeamLinkForm } from "@/components/settings/litellm-panel/TeamLinkForm";
+import { TeamLinkRow } from "@/components/settings/litellm-panel/TeamLinkRow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { LiteLLMPanelCapabilities } from "@/lib/auth/litellm-panel";
 import { fetchApi, mutateApi } from "@/lib/query/fetch-api";
+
+export type { LiteLLMPanelCapabilities };
 
 // Source: docs/specs/2026-11-10-litellm.md — "Page and Settings" and "Security
 // architecture" item 6: the Admin panel shows the connection URL, the edition
@@ -27,31 +39,7 @@ import { fetchApi, mutateApi } from "@/lib/query/fetch-api";
 const StatusSchema = LiteLLMConnectionStatusSchema.strip();
 const STATUS_KEY = ["litellm", "connection"] as const;
 const TOGGLES_KEY = ["litellm", "toggles"] as const;
-const TEAM_LINKS_KEY = ["litellm", "team-links"] as const;
 const TeamLinksSchema = z.object({ items: z.array(TeamLinkSchema) });
-
-type Toggles = OperationTogglesView;
-
-const WRITE_OPS = new Set([
-  "createTeam",
-  "setTeamBudget",
-  "setTeamLimits",
-  "setTeamModels",
-  "addTeamMember",
-  "removeTeamMember",
-  "setMemberBudget",
-  "setMemberLimits",
-  "resetMemberSpend",
-  "resetMemberBudget",
-  "disableMember",
-  "enableMember",
-  "generateMemberKey",
-  "updateMemberKey",
-  "blockKey",
-  "unblockKey",
-  "deleteKey",
-  "rotateKey",
-]);
 
 const CODE_GUARDRAILS = [
   "Operation allowlist and its method + route templates: only the listed operations can be called",
@@ -124,98 +112,6 @@ function BaseUrlForm({
   );
 }
 
-function OperationRow({
-  op,
-  enabled,
-  source,
-  canEdit,
-  pending,
-  onToggle,
-}: {
-  op: string;
-  enabled: boolean;
-  source: string;
-  canEdit: boolean;
-  pending: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <li
-      data-testid={`litellm-op-${op}`}
-      className="flex items-center justify-between gap-3 py-1 text-sm"
-    >
-      <span className="font-mono">{op}</span>
-      <span className="flex items-center gap-3">
-        <span
-          data-testid={`litellm-op-source-${op}`}
-          className="bg-secondary text-secondary-foreground rounded-full px-2 py-0.5 text-xs"
-        >
-          {source}
-        </span>
-        {canEdit ? (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            aria-label={op}
-            disabled={pending}
-            onClick={onToggle}
-            className={`focus-visible:ring-ring relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50 ${
-              enabled ? "bg-primary" : "bg-input"
-            }`}
-          >
-            <span
-              aria-hidden="true"
-              className={`bg-background block size-4 rounded-full transition-transform ${
-                enabled ? "translate-x-4" : "translate-x-0.5"
-              }`}
-            />
-          </button>
-        ) : (
-          <span className="w-8 text-right">{enabled ? "On" : "Off"}</span>
-        )}
-      </span>
-    </li>
-  );
-}
-
-function OperationGroup({
-  label,
-  ops,
-  data,
-  canEdit,
-  pending,
-  onToggle,
-}: {
-  label: string;
-  ops: string[];
-  data: Toggles;
-  canEdit: boolean;
-  pending: boolean;
-  onToggle: (op: string, enabled: boolean) => void;
-}) {
-  return (
-    <div role="group" aria-label={label} className="flex flex-col gap-1">
-      <h4 className="text-sm font-medium">{label}</h4>
-      <ul className="divide-border divide-y">
-        {Object.entries(data.operations)
-          .filter(([op]) => ops.includes(op))
-          .map(([op, v]) => (
-            <OperationRow
-              key={op}
-              op={op}
-              enabled={v.enabled}
-              source={v.source}
-              canEdit={canEdit}
-              pending={pending}
-              onToggle={() => onToggle(op, !v.enabled)}
-            />
-          ))}
-      </ul>
-    </div>
-  );
-}
-
 function TogglesSection({ canEdit }: { canEdit: boolean }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
@@ -257,25 +153,35 @@ function TogglesSection({ canEdit }: { canEdit: boolean }) {
   }
 
   const data = query.data;
-  const names = Object.keys(data.operations);
   const toggle = (op: string, enabled: boolean) =>
     save.mutate({
       version: data.version === 0 ? null : data.version,
       toggles: { [op]: enabled },
     });
-  const shared = { data, canEdit, pending: save.isPending, onToggle: toggle };
+  const groups = [...OPERATION_FAMILIES, OTHER_FAMILY].map((family) => ({
+    ...family,
+    ops: Object.entries(data.operations)
+      .filter(
+        ([op]) => (OPERATION_INFO[op]?.family ?? OTHER_FAMILY.id) === family.id,
+      )
+      .map(([name, v]) => ({ name, enabled: v.enabled, source: v.source })),
+  }));
   return (
     <div className="flex max-w-[72ch] flex-col gap-4">
-      <OperationGroup
-        label="Write operations"
-        ops={names.filter((n) => WRITE_OPS.has(n))}
-        {...shared}
-      />
-      <OperationGroup
-        label="Read operations"
-        ops={names.filter((n) => !WRITE_OPS.has(n))}
-        {...shared}
-      />
+      {groups
+        .filter((g) => g.ops.length > 0)
+        .map((g) => (
+          <OperationGroup
+            key={g.id}
+            id={g.id}
+            label={g.label}
+            description={g.description}
+            ops={g.ops}
+            canEdit={canEdit}
+            pending={save.isPending}
+            onToggle={toggle}
+          />
+        ))}
       {canEdit ? (
         confirming ? (
           <div
@@ -344,7 +250,7 @@ function EnforcedInCode() {
   );
 }
 
-function ConnectionTab() {
+function ConnectionTab({ canEdit }: { canEdit: boolean }) {
   const status = useQuery({
     queryKey: STATUS_KEY,
     queryFn: () => fetchApi("/api/litellm/connection", StatusSchema),
@@ -390,36 +296,42 @@ function ConnectionTab() {
           </span>
         </div>
       </div>
-      <BaseUrlForm
-        key={`${s.version}:${s.baseUrl ?? ""}`}
-        stored={s.baseUrl}
-        version={s.version}
-      />
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={test.isPending}
-          onClick={() => test.mutate()}
-        >
-          Test connection
-        </Button>
-        {test.data ? (
-          <p
-            role="status"
-            className={
-              test.data.result === "ok" ? "text-sm" : "text-destructive text-sm"
-            }
-          >
-            {test.data.message}
-          </p>
-        ) : null}
-        {test.isError ? (
-          <p role="alert" className="text-destructive text-sm">
-            {test.error.message}
-          </p>
-        ) : null}
-      </div>
+      {canEdit ? (
+        <>
+          <BaseUrlForm
+            key={`${s.version}:${s.baseUrl ?? ""}`}
+            stored={s.baseUrl}
+            version={s.version}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={test.isPending}
+              onClick={() => test.mutate()}
+            >
+              Test connection
+            </Button>
+            {test.data ? (
+              <p
+                role="status"
+                className={
+                  test.data.result === "ok"
+                    ? "text-sm"
+                    : "text-destructive text-sm"
+                }
+              >
+                {test.data.message}
+              </p>
+            ) : null}
+            {test.isError ? (
+              <p role="alert" className="text-destructive text-sm">
+                {test.error.message}
+              </p>
+            ) : null}
+          </div>
+        </>
+      ) : null}
       {test.data?.warnings?.length ? (
         <div
           data-testid="litellm-wildcard-warning"
@@ -435,7 +347,7 @@ function ConnectionTab() {
   );
 }
 
-function TeamLinksTab() {
+function TeamLinksTab({ canEdit }: { canEdit: boolean }) {
   const searchId = useId();
   const [term, setTerm] = useState("");
   const query = useQuery({
@@ -478,47 +390,67 @@ function TeamLinksTab() {
       ) : (
         <ul className="divide-border divide-y">
           {items.map((link) => (
-            <li
-              key={link.teamId}
-              className="flex items-center justify-between gap-3 py-1 text-sm"
-            >
-              <span className="font-mono">{link.teamId}</span>
-              <span className="text-muted-foreground font-mono">
-                {link.litellmTeamId}
-              </span>
-            </li>
+            <TeamLinkRow key={link.teamId} link={link} canEdit={canEdit} />
           ))}
         </ul>
       )}
+      {canEdit ? <TeamLinkForm links={query.data.items} /> : null}
     </div>
   );
 }
 
 // Settings -> LiteLLM, tabbed like the page (LiteLLM spec -- Views by role).
-// Tab state is local; each tab mounts only when selected, so team links load
-// on their tab.
-export function LiteLLMPanel({ canEdit = true }: { canEdit?: boolean }) {
+// A tab mounts on first visit (its data loads then) and stays mounted, hidden,
+// so a visited tab keeps its state when the user switches away.
+const TABS = ["connection", "guardrails", "team-links", "users"] as const;
+type TabId = (typeof TABS)[number];
+
+export function LiteLLMPanel({
+  capabilities,
+}: {
+  capabilities: LiteLLMPanelCapabilities;
+}) {
+  const [active, setActive] = useState<TabId>("connection");
+  const [visited, setVisited] = useState<ReadonlySet<TabId>>(
+    new Set<TabId>(["connection"]),
+  );
+  const content = (id: TabId, body: ReactNode) => (
+    <TabsContent value={id} forceMount hidden={active !== id}>
+      {visited.has(id) ? body : null}
+    </TabsContent>
+  );
   return (
-    <Tabs defaultValue="connection">
+    <Tabs
+      value={active}
+      onValueChange={(v) => {
+        const id = TABS.find((t) => t === v);
+        if (id === undefined) return;
+        setActive(id);
+        setVisited((prev) => new Set(prev).add(id));
+      }}
+    >
       <TabsList aria-label="LiteLLM settings">
         <TabsTrigger value="connection">Connection</TabsTrigger>
         <TabsTrigger value="guardrails">Guardrails</TabsTrigger>
         <TabsTrigger value="team-links">Team links</TabsTrigger>
         <TabsTrigger value="users">Users</TabsTrigger>
       </TabsList>
-      <TabsContent value="connection">
-        <ConnectionTab />
-      </TabsContent>
-      <TabsContent value="guardrails">
-        <TogglesSection canEdit={canEdit} />
-        <EnforcedInCode />
-      </TabsContent>
-      <TabsContent value="team-links">
-        <TeamLinksTab />
-      </TabsContent>
-      <TabsContent value="users">
-        <UserSearch />
-      </TabsContent>
+      {content(
+        "connection",
+        <ConnectionTab canEdit={capabilities.editConnection} />,
+      )}
+      {content(
+        "guardrails",
+        <>
+          <TogglesSection canEdit={capabilities.editGuardrails} />
+          <EnforcedInCode />
+        </>,
+      )}
+      {content(
+        "team-links",
+        <TeamLinksTab canEdit={capabilities.editTeamLinks} />,
+      )}
+      {content("users", <UserSearch />)}
     </Tabs>
   );
 }
