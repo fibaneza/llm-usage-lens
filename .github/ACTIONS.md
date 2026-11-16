@@ -40,12 +40,17 @@ Chromium and runs `pnpm test:e2e` (both Playwright projects) with
 `E2E_LOCK=off`, since CI has no other session. It uses no secrets: the dev
 servers' env is pinned in `apps/dashboard/playwright.config.ts`.
 
+- **Runner:** `ubuntu-24.04`, pinned rather than `ubuntu-latest`. The
+  first run (43878743673) failed at the browser install because
+  `ubuntu-latest` is now 26.04, which Playwright 1.60 does not support.
+  Move back to `ubuntu-latest` once a Playwright release supports it.
 - **Caches:** the pnpm store (`node-setup`) and the Playwright browsers in
   `~/.cache/ms-playwright`, keyed on the `@playwright/test` version.
 - **Artifacts:** on failure only, `apps/dashboard/test-results` and
   `apps/dashboard/playwright-report`, kept 7 days.
 - **Cost:** about 2-3 min of tests plus 2-4 min of installs and browser
-  setup, so roughly 5-8 runner-minutes per run on `ubuntu-latest`. The
+  setup, so roughly 5-8 runner-minutes per run (estimate; the first
+  green run's measured time replaces it). The
   repository is private, so the minutes count against the GitHub free tier
   (2,000 min/month on Free). The cost is accepted, not avoided (CLAUDE.md,
   *Cost posture*).

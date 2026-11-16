@@ -91,6 +91,27 @@ describe("ci e2e job (llm-usage-lens-build.yml)", () => {
     expect(cache).not.toBe("");
     expect(block(cache, "with", 8)).toMatch(/^\s+path:.*ms-playwright/m);
     expect(block(cache, "with", 8)).toMatch(/^\s+key:.*playwright/im);
+    // Coordinator review follow-up: the key must carry the resolved version.
+    expect(block(cache, "with", 8)).toMatch(
+      /^\s+key:.*steps\.playwright\.outputs\.version/m,
+    );
+    const idIndex = steps.findIndex((s) => /^\s+id:\s*playwright\s*$/m.test(s));
+    expect(idIndex).toBeGreaterThanOrEqual(0);
+    expect(idIndex).toBeLessThan(steps.indexOf(cache));
+  });
+
+  // Coordinator review follow-up; implementation-phases Phase 5 (CI e2e).
+  it("waits for DynamoDB, then creates the table, seeds, then runs e2e, in that order", () => {
+    const idx = (re: RegExp) => steps.findIndex((s) => re.test(s));
+    const wait = idx(/^ {6}- name:.*Wait for DynamoDB/m);
+    const create = idx(/^ {8}run:\s*pnpm db:create-table\s*$/m);
+    const seed = idx(/^ {8}run:\s*pnpm db:seed\s*$/m);
+    const e2eRun = idx(/^ {8}run:\s*pnpm test:e2e\s*$/m);
+    expect(wait).toBeGreaterThanOrEqual(0);
+    expect(steps[wait]).toMatch(/curl[^\n]*http:\/\/localhost:8000/);
+    expect(wait).toBeLessThan(create);
+    expect(create).toBeLessThan(seed);
+    expect(seed).toBeLessThan(e2eRun);
   });
 
   it("uploads test-results and playwright-report on failure for 7 days (goal: artifacts)", () => {

@@ -14,8 +14,8 @@ import { renderWithProviders } from "@/test/render-providers";
 import { LiteLLMPanel } from "./LiteLLMPanel";
 
 // Source: docs/specs/2026-11-10-litellm.md LD24 (org-admin edits Guardrails and
-// Team links, Connection read-only; Auditor read-only), LT20 / LT22 (writes are
-// Admin / org-admin only), "API routes" (/api/litellm/connection PUT Admin only;
+// Team links, Connection read-only; Auditor read-only), LT22 (org-admin writes
+// are bounded to toggles and team links), "API routes" (/api/litellm/connection PUT Admin only;
 // toggles and team-links writes Admin + org-admin); implementation-phases
 // L3d2; Design System -- Settings -> LiteLLM (read-only for internal-auditor).
 // One layer per behaviour (Rule 60.24a): the role x section matrix lives here;
@@ -224,7 +224,7 @@ describe("LiteLLMPanel role x section matrix (LD24)", () => {
     },
   );
 
-  // LT20 / LT22: a read-only panel never issues a write.
+  // LD24: a read-only (Auditor) panel never issues a write.
   it("a read-only panel issues only GET requests across every tab", async () => {
     const calls = stub();
     renderFor([INTERNAL_AUDITOR_ROLE]);
@@ -387,4 +387,49 @@ describe("LiteLLMPanel team link writes (editTeamLinks)", () => {
       expect(screen.queryByText("ll-333")).toBeNull();
     },
   );
+
+  // Coordinator review of A1 (warning 2); PUT body schema in
+  // app/api/litellm/team-links/[teamId]/route.ts requires both fields.
+  describe("Link form requires both fields", () => {
+    const linkButton = () => screen.getByRole("button", { name: /^link$/i });
+
+    it.each([
+      ["both empty", "", ""],
+      ["only the dashboard team ID", "growth", ""],
+      ["only the LiteLLM team ID", "", "ll-333"],
+      ["whitespace-only dashboard team ID", "   ", "ll-333"],
+      ["whitespace-only LiteLLM team ID", "growth", "   "],
+    ])("Link is disabled with %s", async (_n, team, llm) => {
+      stub();
+      await openLinks();
+      if (team) {
+        await userEvent.type(screen.getByLabelText("Dashboard team ID"), team);
+      }
+      if (llm) {
+        await userEvent.type(screen.getByLabelText("LiteLLM team ID"), llm);
+      }
+      expect(linkButton()).toBeDisabled();
+    });
+
+    it("Link is enabled once both fields are filled", async () => {
+      stub();
+      await openLinks();
+      await userEvent.type(
+        screen.getByLabelText("Dashboard team ID"),
+        "growth",
+      );
+      await userEvent.type(screen.getByLabelText("LiteLLM team ID"), "ll-333");
+      expect(linkButton()).toBeEnabled();
+    });
+
+    it("pressing Enter with a field empty sends no PUT", async () => {
+      const calls = stub();
+      await openLinks();
+      await userEvent.type(
+        screen.getByLabelText("Dashboard team ID"),
+        "growth{Enter}",
+      );
+      expect(writesOf(calls)).toEqual([]);
+    });
+  });
 });

@@ -17,14 +17,17 @@ export function TeamLinkForm({ links }: { links: TeamLink[] }) {
   const llmField = useId();
   const [teamId, setTeamId] = useState("");
   const [litellmTeamId, setLitellmTeamId] = useState("");
+  const team = teamId.trim();
+  const llmTeam = litellmTeamId.trim();
+  const complete = team !== "" && llmTeam !== "";
   const link = useMutation({
     mutationFn: () =>
       mutateApi(
-        `/api/litellm/team-links/${encodeURIComponent(teamId)}`,
+        `/api/litellm/team-links/${encodeURIComponent(team)}`,
         "PUT",
         {
-          litellmTeamId,
-          version: links.find((l) => l.teamId === teamId)?.version ?? null,
+          litellmTeamId: llmTeam,
+          version: links.find((l) => l.teamId === team)?.version ?? null,
         },
         TeamLinkSchema,
       ),
@@ -39,7 +42,7 @@ export function TeamLinkForm({ links }: { links: TeamLink[] }) {
       className="flex flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        link.mutate();
+        if (complete) link.mutate();
       }}
     >
       <label htmlFor={teamField} className="text-sm font-medium">
@@ -59,7 +62,7 @@ export function TeamLinkForm({ links }: { links: TeamLink[] }) {
         onChange={(e) => setLitellmTeamId(e.target.value)}
       />
       <div>
-        <Button type="submit" disabled={link.isPending}>
+        <Button type="submit" disabled={!complete || link.isPending}>
           Link
         </Button>
       </div>
