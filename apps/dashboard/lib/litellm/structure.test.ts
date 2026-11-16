@@ -120,9 +120,12 @@ describe("no master key anywhere (LT2)", () => {
 
 describe("the service key is read only inside lib/litellm and env.ts (LT1, Rule 50.6)", () => {
   it("no other production file references LITELLM_SERVICE_KEY", () => {
-    // e2e specs and playwright.config.ts are test tooling: they only inject a fixed fake key.
+    // e2e specs, playwright.config.ts and the L5 probe (apps/dashboard/probe/,
+    // LD28) are test tooling: they only inject a fixed, public fake key. The
+    // next test keeps the probe from ever reading the real one.
     const isE2eTooling = (p: string) =>
       p.startsWith("apps/dashboard/e2e/") ||
+      p.startsWith("apps/dashboard/probe/") ||
       p === "apps/dashboard/playwright.config.ts";
     const files = walk(join(ROOT, "apps/dashboard")).filter(
       (f) => isCode(f) && !isTest(rel(f)) && !isE2eTooling(rel(f)),
@@ -136,6 +139,80 @@ describe("the service key is read only inside lib/litellm and env.ts (LT1, Rule 
       .filter((p) => !allowed(p))
       .filter((p) => read(join(ROOT, p)).includes("LITELLM_SERVICE_KEY"));
     expect(offenders).toEqual([]);
+  });
+
+  // LT1, Rule 50.6, LD18, LD28: non-test probe/ files never name the real key.
+  // The one allowed text is the config's fake injection into the app under
+  // test. FAKE_LITELLM_SERVICE_KEY and PROBE_FAKE_SERVICE_KEY are the fake's own
+  // constant names, not occurrences. Anything else naming LITELLM_SERVICE_KEY
+  // (also a split literal such as "LITELLM_" + "SERVICE_KEY") is an offender,
+  // as is any computed or aliased read of process.env.
+  const ALLOWED_PROBE_ENTRY =
+    /\bLITELLM_SERVICE_KEY:\s*FAKE_LITELLM_SERVICE_KEY\b/g;
+  const PROBE_CONFIG = "apps/dashboard/probe/playwright.probe.config.ts";
+  const probeKeyOffences = (file: string, text: string): string[] => {
+    const offences: string[] = [];
+    const entries = text.match(ALLOWED_PROBE_ENTRY)?.length ?? 0;
+    if (file !== PROBE_CONFIG && entries > 0)
+      offences.push("entry outside config");
+    if (file === PROBE_CONFIG && entries > 1)
+      offences.push("entry more than once");
+    const rest = text
+      .replace(ALLOWED_PROBE_ENTRY, "")
+      .replace(/\bFAKE_LITELLM_SERVICE_KEY\b/g, "")
+      .replace(/\bPROBE_FAKE_SERVICE_KEY\b/g, "");
+    if (/LITELLM_SERVICE_KEY|LITELLM_["'`]|["'`]SERVICE_KEY/.test(rest))
+      offences.push("names the service key");
+    if (/process\.env\s*\??\.?\s*\[/.test(text))
+      offences.push("computed process.env key");
+    if (/\}\s*=\s*process\.env\b/.test(text))
+      offences.push("destructures process.env");
+    if (/\b(?:const|let|var)\s+\w+\s*=\s*process\.env\b(?!\s*[.[])/.test(text))
+      offences.push("aliases process.env");
+    if (/\.\.\.\s*process\.env\b/.test(text))
+      offences.push("spreads process.env");
+    return offences;
+  };
+
+  it("the probe key matcher flags reads, destructuring, aliases and a second config entry (LT1, Rule 50.6)", () => {
+    const other = "apps/dashboard/probe/other.ts";
+    const entry = "env: { LITELLM_SERVICE_KEY: FAKE_LITELLM_SERVICE_KEY },";
+    for (const bad of [
+      "const { LITELLM_SERVICE_KEY } = process.env;",
+      "const { LITELLM_SERVICE_KEY: k } = process.env;",
+      "const k = process.env.LITELLM_SERVICE_KEY;",
+      'const k = process.env["LITELLM_SERVICE_KEY"];',
+      'const k = process.env["LITELLM_" + "SERVICE_KEY"];',
+      "const k = process.env[name];",
+      "const { A } = process.env;",
+      "const e = process.env;",
+      "const e = { ...process.env };",
+    ]) {
+      expect(probeKeyOffences(PROBE_CONFIG, bad), bad).not.toEqual([]);
+    }
+    expect(probeKeyOffences(PROBE_CONFIG, entry)).toEqual([]);
+    expect(probeKeyOffences(PROBE_CONFIG, `${entry}\n${entry}`)).not.toEqual(
+      [],
+    );
+    expect(probeKeyOffences(other, entry)).not.toEqual([]);
+    expect(
+      probeKeyOffences(
+        other,
+        'import { FAKE_LITELLM_SERVICE_KEY } from "./c";\nconst { mode } = assertProbeAllowed(process.env);\nprocess.env.LITELLM_PROBE_TEAM ??= "x";\nconst k = process.env.PROBE_FAKE_SERVICE_KEY;',
+      ),
+    ).toEqual([]);
+  });
+
+  it("no non-test file under probe/ names LITELLM_SERVICE_KEY beyond the one fake injection in the config (LT1, LD18, LD28, Rule 50.6)", () => {
+    const files = walk(join(ROOT, "apps/dashboard/probe")).filter(
+      (f) => isCode(f) && !isTest(rel(f)),
+    );
+    const offenders = files.flatMap((f) =>
+      probeKeyOffences(rel(f), read(f)).map((o) => `${rel(f)}: ${o}`),
+    );
+    expect(offenders).toEqual([]);
+    const config = files.find((f) => rel(f) === PROBE_CONFIG);
+    expect(config && read(config).match(ALLOWED_PROBE_ENTRY)?.length).toBe(1);
   });
 
   it("no source under app/ or components/ interpolates the key into a string sent to the browser", () => {

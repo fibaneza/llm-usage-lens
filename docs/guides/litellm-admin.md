@@ -143,8 +143,9 @@ aws ssm put-parameter --name /llm-usage-lens/<env>/litellm/service-key \
 4. As `internal-admin`, open **Settings → LiteLLM**: enter the `https` base
    URL, run the connection test (it must report `ok` before the URL saves),
    check the edition shown, then link dashboard teams to LiteLLM teams.
-5. Review the operation toggles. Destructive operations (remove member,
-   reset spend, delete key) and self-service key requests start **off**.
+5. Review the operation toggles. The destructive operations (reset member
+   spend, delete key) and self-service key requests start **off**; remove
+   member starts **on** (LiteLLM spec LD10, amended 2026-11-14).
 
 ## 6. Rotate the service key
 
@@ -179,3 +180,172 @@ Identify the IAM role names (or canonical usage keys) LiteLLM uses to call
 Bedrock, and the gateway account id(s), and enter them in Settings. Until
 then, combined totals are hidden from Viewers and Leads and Admins see a
 "gateway not configured" warning.
+
+## 9. Team links
+
+A dashboard team reaches LiteLLM only through a team link. In **Settings →
+LiteLLM → Team links**, an `internal-admin` or `internal-org-admin` (LD24)
+links a dashboard team to an existing LiteLLM team, or removes the link.
+Every link write is audited with the actor.
+
+- Create the LiteLLM team in LiteLLM first (the LiteLLM UI or
+  `POST /team/new` with an operator key), then link it here. The dashboard
+  service key is never used for this.
+- A write on an unlinked team returns `409 CONFLICT` "The team is not
+  connected to LiteLLM" (LD26).
+- `POST /api/litellm/teams` (create in LiteLLM and link, `internal-admin`
+  only) exists as an API but has no page. If its link loses a race, the
+  LiteLLM team it created stays in LiteLLM; remove it there by hand.
+
+## 10. Operation toggles and guardrails
+
+The toggles in Settings → LiteLLM and the gateway config file (LiteLLM spec —
+*Guardrail configuration*) can only **narrow** what the gateway allows,
+never widen it. An operation the allowlist lacks cannot be switched on.
+
+- `internal-admin` and `internal-org-admin` change toggles (LD24); each
+  change is audited and an Admin can reset it.
+- The code-only guardrails (the allowlist, the request-body denylists, the
+  connection host bound `LITELLM_ALLOWED_HOSTS`) have no switch.
+- The connection (base URL, test) stays `internal-admin` only.
+
+## 11. The team configuration page (Leads)
+
+A Lead configures their own team's LiteLLM settings on the team
+configuration page, reached from the **Configure team** link. Today it is
+`/dashboard/litellm/team-config?team=<teamId>`; ui-compact Slice B moves it
+to Management → Team (LD25). Viewers, plain members and the Auditor get a
+`404`; a Lead sees only teams in their scope.
+
+- **Members:** add (from the dashboard team's members), remove, budget,
+  limits, reset spend, reset budget, disable and enable.
+- **Keys:** generate, update, block, unblock, delete, rotate.
+- **Team:** budget and limits (a Lead and an `internal-org-admin` lower
+  only; only an `internal-admin` sets or raises them, LD26), and models
+  (restrict to a subset of the team's models only).
+
+## 12. Keys
+
+- **Shown once.** Generate and rotate return the key value once, in a
+  dialog; the dashboard stores and logs only the token hash (`tokenId`). A
+  lost value is not recoverable: rotate the key.
+- **Rotation.** Enterprise uses LiteLLM regenerate with a grace period. OSS
+  generates a new key with the old key's models, remaining expiry and
+  blocked state, then blocks the old key; delete the old key once clients
+  have moved.
+- **Revocation.** Block a key to stop it at once (reversible with unblock);
+  delete it when it is no longer needed (`deleteKey` toggle, off by
+  default).
+- A key or member owned by a privileged LiteLLM user (`proxy_admin`,
+  `proxy_admin_viewer` or the service user) is refused with
+  `409 PRIVILEGED_TARGET` (LT18).
+
+## 13. Members
+
+- **Inviting.** LiteLLM 1.109.1 has no invite or join-link endpoint (LD16).
+  Add the person to the dashboard team first (a pending member by email is
+  fine, Phase 4R.4); they then appear in the team configuration page's
+  add-member list.
+- **Orphaned members** are LiteLLM team members with no dashboard
+  identity. `GET /api/litellm/orphans` lists them for an Admin or Auditor;
+  the Settings list arrives with unit A. Remove or link them in LiteLLM by
+  hand.
+
+## 14. Privacy under the Organisation cap
+
+Until an `internal-admin` records the per-user approval (Access Control —
+*Organisation cap*), the LiteLLM views show per-user counts only, for every
+role. The keys list drops the user id and key name (LD27) and shows the
+last four characters of the token hash instead; spend logs drop the person.
+
+Accepted residual risks (LiteLLM spec — *Residual risks*):
+
+- An Admin or Auditor can join a key's `tokenId` in the keys list with the
+  key audit records and re-identify that key's spend. **Accepted by the
+  user, 2026-11-17.**
+- A Lead viewing a team member in *Users* sees that person's LiteLLM spend
+  across all their teams (OSS cannot filter it by team).
+
+## 15. Troubleshooting by error code
+
+| Code or message | Meaning | Action |
+|---|---|---|
+| `LITELLM_UNAVAILABLE` (`503`) | LiteLLM did not answer, or answered outside the contract | Check that LiteLLM is up and the security group rule (§5); after an upgrade, check the contract snapshot |
+| `OPERATION_DISABLED` (`403`) | The operation's toggle is off | Switch it on in Settings → LiteLLM (§10) if it should be allowed |
+| `OPERATION_UNAVAILABLE` (`403`) | The operation needs LiteLLM Enterprise and this deployment is OSS | None on OSS; for rotation, OSS uses generate then block (§12) |
+| `PRIVILEGED_TARGET` (`409`) | The member or key belongs to a privileged LiteLLM user | Manage that user in LiteLLM with an operator key |
+| "The team is not connected to LiteLLM" (`409`) | The dashboard team has no team link | Link it (§9) |
+| "not connected" on the LiteLLM page | No connection is configured | An `internal-admin` sets the base URL and runs the connection test (§5) |
+
+## 16. The end-to-end probe (local only)
+
+`pnpm probe:litellm` checks the gateway against a real **local** LiteLLM
+(LD28). It runs only with `LITELLM_PROBE=1`, refuses `APP_ENV=prod` and any
+LiteLLM base URL other than `localhost:4000`, and is never part of
+`pnpm test:e2e`, `pnpm check` or CI. The service key stays in
+`apps/dashboard/.env.local`. The probe takes the e2e lock and uses the local
+`bedrock-usage` table, so it does not run alongside `pnpm test:e2e`.
+
+**Variables.**
+
+| Variable | Mode | Meaning |
+|---|---|---|
+| `LITELLM_PROBE=1` | both | The opt-in; without it the probe refuses to start |
+| `LITELLM_PROBE_MODE=fake` | fake | Set by `probe:litellm:fake`; any value other than `fake`, `real` or unset is refused |
+| `LITELLM_PROBE_BASE_URL` | real | Must be exactly `http://localhost:4000` |
+| `LITELLM_PROBE_TEAM` | real | The dashboard team id linked to `llmul-probe` (fake mode uses `team-probe`) |
+| `LITELLM_PROBE_MODEL` | both | The model for the chat requests; default `claude-haiku` |
+
+**Once: the fixture team (real mode).**
+
+1. In the local LiteLLM, create the team `llmul-probe` with an operator
+   key, allowing one cheap model (Claude Haiku class).
+2. In the dashboard, create or pick a dashboard team and link it to
+   `llmul-probe` in Settings → LiteLLM → Team links (§9). The stored
+   connection must point at `http://localhost:4000`. The walk grants and
+   removes the Lead's scope itself.
+
+**Each run.**
+
+```bash
+# Real local LiteLLM
+LITELLM_PROBE=1 LITELLM_PROBE_BASE_URL=http://localhost:4000 \
+  LITELLM_PROBE_TEAM=<dashboard team id> pnpm probe:litellm
+
+# Named fake mode (no LiteLLM needed)
+LITELLM_PROBE=1 pnpm probe:litellm:fake
+```
+
+The probe signs in as Admin, the Lead and a Viewer with the forged e2e
+session, adds one member, generates keys named `llmul-probe-<run id>`,
+lowers the member's budget and limits, blocks, unblocks and rotates a key,
+sends about 5 short chat requests **directly to LiteLLM** with the test key
+(well under US$0.01 per run), checks that the spend appears, and resets the
+member's spend. It switches `deleteKey` and `resetMemberSpend` on for the
+run and restores them afterwards. Cleanup, also after a failure, deletes
+its keys and removes its member; before each run it also clears what a
+previous run left for its fixed identities.
+
+**After a killed run** (cleanup did not run):
+
+1. In Settings → LiteLLM, set `deleteKey` and `resetMemberSpend` back to
+   their previous values (off by default).
+2. Block, then delete, any `llmul-probe-*` key left on the fixture team
+   (team configuration page, or LiteLLM with an operator key).
+3. The next run clears the leftover Lead scope and memberships itself.
+
+**Left behind by design:** the audit records, LiteLLM's spend logs and, on
+OSS, the LiteLLM user that adding the member created. Remove those users in
+LiteLLM by hand (`POST /user/delete` with an operator key) when they pile
+up.
+
+**Fake mode** runs the same walk against a separate HTTP fake LiteLLM on
+`127.0.0.1:3312`. The probe never falls back to it on its own. In the shared
+local `bedrock-usage` table it leaves:
+
+- the `team-probe` account, deactivated;
+- the audit records of every write it made;
+- the operation toggles' document, with its version moved on (values
+  restored);
+- the LiteLLM connection pointing at the fake, only if the previous URL no
+  longer answered at teardown (the e2e dev-login spec saves its own).

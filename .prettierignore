@@ -1,6 +1,7 @@
 # Build output and dependencies
 **/.next/**
 **/.next-probe-r5/**
+**/.next-probe-litellm/**
 **/node_modules/**
 **/coverage/**
 **/next-env.d.ts

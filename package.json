@@ -26,7 +26,9 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:empty": "tsx scripts/seed-empty.ts",
     "db:seed:large": "tsx scripts/seed-large.ts",
-    "db:seed:ranking": "tsx scripts/seed-ranking.ts"
+    "db:seed:ranking": "tsx scripts/seed-ranking.ts",
+    "probe:litellm": "pnpm --filter @llm-usage-lens/dashboard exec node ../../scripts/e2e-lock.mjs playwright test --config probe/playwright.probe.config.ts",
+    "probe:litellm:fake": "LITELLM_PROBE_MODE=fake pnpm --filter @llm-usage-lens/dashboard exec node ../../scripts/e2e-lock.mjs playwright test --config probe/playwright.probe.config.ts"
   },
   "lint-staged": {
     "apps/dashboard/**/*.{ts,tsx}": [

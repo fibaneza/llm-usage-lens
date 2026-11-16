@@ -743,11 +743,12 @@ the `auth.signin.error` record; `withRoute` treats a session without
 ### L5 — Polish and verification (`feature/phase-l5-litellm-polish`)
 
 - [x] Spec: LiteLLM spec — *Polish and verification (L5)* (scope, accessibility floor, responsive, the role × operation matrix, the probe, the runbook outline; agent decisions, 2026-11-17)
-- [ ] Accessibility floor and responsive checks on `/dashboard/litellm` and `/dashboard/litellm/team-config` (axe per role, keyboard walk of tabs, picker and every dialog, cards below `md`)
-- [ ] Role × operation matrix test from the spec table, against the fake (workflow pilot candidate — *Workflow pilots*)
-- [ ] Runbook `docs/guides/litellm-admin.md` completed per the spec outline
-- [ ] Probe: `pnpm probe:litellm` (opt-in `LITELLM_PROBE=1`, local `localhost:4000` only, never `prod`; outside `pnpm test:e2e`, `pnpm check` and CI) on the `llmul-probe` fixture team, with the fake mode `pnpm probe:litellm:fake` (LiteLLM spec LD28)
-- [ ] Verify: axe clean at 375 / 768 / 1024 / 1440 / 1920; matrix green; the probe run on the local LiteLLM (or the named fake mode, stated in the report), with its keys and member cleaned up and toggles restored
+- [ ] **L5b** (after ui-compact B2 lands; split 2026-11-17, coordinator): accessibility floor and responsive checks on the LiteLLM pages at their `/dashboard/manage/*` routes (axe per role, keyboard walk of tabs, picker and every dialog, cards below `md`)
+- [x] Role × operation matrix test from the spec table, against the fake (workflow pilot candidate — *Workflow pilots*; built without a workflow; the page row moves to L5b)
+- [x] Runbook `docs/guides/litellm-admin.md` completed per the spec outline (§11's page path is updated in L5b after B2)
+- [x] Probe: `pnpm probe:litellm` (opt-in `LITELLM_PROBE=1`, local `localhost:4000` only, never `prod`; outside `pnpm test:e2e`, `pnpm check` and CI) on the `llmul-probe` fixture team, with the fake mode `pnpm probe:litellm:fake` (LiteLLM spec LD28)
+- [x] Verify (L5): matrix green; the probe run in the named fake mode (`pnpm probe:litellm:fake`, 9/9, 2026-11-17) with its keys and member cleaned up and toggles restored; a real local LiteLLM run is a user action
+- [ ] Verify (L5b): axe clean at 375 / 768 / 1024 / 1440 / 1920
 
 ### L6 — Combined usage and *My usage* (`feature/phase-l6-litellm-combined`)
 

@@ -39,24 +39,18 @@ export type TestUserOptions = {
   authMethod?: "entra" | "master" | "local";
 };
 
-// Signs a real Auth.js session JWT with the dev server's AUTH_SECRET and
-// plants it as a cookie. This is not an auth bypass: proxy.ts and the
-// authorized() callback verify the token exactly as in production — only the
-// Entra ID round-trip is skipped (auth-setup guide; Rule 50.4 still holds).
-// The token carries `signedInAt` because sessions end 8 hours after sign-in
-// regardless of activity and a token without it is rejected.
-export async function signInAsTestUser(
-  context: BrowserContext,
-  {
-    signedInAt = Math.floor(Date.now() / 1000),
-    roles = [...DEFAULT_TEST_ROLES],
-    authTime,
-    oid = "e2e-user",
-    tid = "e2e-tenant",
-    authMethod = "entra",
-  }: TestUserOptions = {},
-): Promise<void> {
-  const sessionToken = await encode({
+// Encodes the Auth.js session JWT for a forged test sign-in (the same token
+// signInAsTestUser plants as a cookie). Shared with the L5 probe's setup, which
+// signs requests outside a browser context.
+export async function buildSessionToken({
+  signedInAt = Math.floor(Date.now() / 1000),
+  roles = [...DEFAULT_TEST_ROLES],
+  authTime,
+  oid = "e2e-user",
+  tid = "e2e-tenant",
+  authMethod = "entra",
+}: TestUserOptions = {}): Promise<string> {
+  return encode({
     token: {
       ...E2E_USER,
       sub: "e2e-user",
@@ -70,6 +64,19 @@ export async function signInAsTestUser(
     secret: E2E_AUTH_SECRET,
     salt: SESSION_COOKIE,
   });
+}
+
+// Signs a real Auth.js session JWT with the dev server's AUTH_SECRET and
+// plants it as a cookie. This is not an auth bypass: proxy.ts and the
+// authorized() callback verify the token exactly as in production — only the
+// Entra ID round-trip is skipped (auth-setup guide; Rule 50.4 still holds).
+// The token carries `signedInAt` because sessions end 8 hours after sign-in
+// regardless of activity and a token without it is rejected.
+export async function signInAsTestUser(
+  context: BrowserContext,
+  options: TestUserOptions = {},
+): Promise<void> {
+  const sessionToken = await buildSessionToken(options);
 
   await context.addCookies([
     {

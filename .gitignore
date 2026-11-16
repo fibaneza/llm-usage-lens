@@ -186,3 +186,4 @@ cdk.out/
 # others
 docs/todo.md
 .next-probe-r5
+.next-probe-litellm

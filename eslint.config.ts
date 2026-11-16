@@ -11,6 +11,7 @@ export default tseslint.config(
     ignores: [
       "**/.next/**",
       "**/.next-probe-r5/**",
+      "**/.next-probe-litellm/**",
       "**/node_modules/**",
       "**/next-env.d.ts",
       "**/coverage/**",
