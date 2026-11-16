@@ -58,6 +58,14 @@ describe("ci e2e job (llm-usage-lens-build.yml)", () => {
     );
   });
 
+  // Run 43878743673: on ubuntu-latest (26.04) Playwright 1.60 cannot install
+  // Chromium. .github/ACTIONS.md (e2e job, Runner note) documents the pin.
+  it("pins runs-on to a versioned ubuntu image, not ubuntu-latest (run 43878743673; ACTIONS.md Runner)", () => {
+    expect(e2e).not.toBe("");
+    const runsOn = /^ {4}runs-on:\s*(\S+)\s*$/m.exec(e2e)?.[1];
+    expect(runsOn).toMatch(/^ubuntu-\d{2}\.\d{2}$/);
+  });
+
   it("has a dynamodb-local service on the same image as the test job (goal: service)", () => {
     expect(e2e).not.toBe("");
     const testImage = serviceImage(jobBlock("test"));

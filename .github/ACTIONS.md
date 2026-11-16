@@ -48,12 +48,27 @@ servers' env is pinned in `apps/dashboard/playwright.config.ts`.
   `~/.cache/ms-playwright`, keyed on the `@playwright/test` version.
 - **Artifacts:** on failure only, `apps/dashboard/test-results` and
   `apps/dashboard/playwright-report`, kept 7 days.
-- **Cost:** about 2-3 min of tests plus 2-4 min of installs and browser
-  setup, so roughly 5-8 runner-minutes per run (estimate; the first
-  green run's measured time replaces it). The
-  repository is private, so the minutes count against the GitHub free tier
-  (2,000 min/month on Free). The cost is accepted, not avoided (CLAUDE.md,
-  *Cost posture*).
+- **Measured (run 43882190808, 2026-11-16):** about 1.3 min of setup
+  (install, browser install from cache, table and seed), then about
+  22.5 min of tests for 330 of 350 cases on 1 worker. The run stopped at
+  23m53s on a runner shutdown signal, so a full run on 1 worker is about
+  24-25 min. The same run's `test` job (Vitest) took 13m44s. CI now runs
+  Playwright on 2 workers (`playwright.config.ts`, CI-only); re-measure
+  on the first green run and replace these figures.
+- **Timeouts:** `e2e` 45 min and `test` 25 min. The measured times came
+  close to the earlier 30 and 15 min limits.
+- **Cost:** with 2 workers, expect roughly 13-16 min for `e2e`, plus
+  about 14 min for `test` and 2-3 min for `quality` and `build`. That is
+  about 30-35 runner-minutes per push or pull-request run (each job bills
+  its own minutes). The repository is private, so the minutes count
+  against the GitHub free tier (2,000 min/month on Free): about 55-65
+  runs a month. The cost is accepted, not avoided (CLAUDE.md, *Cost
+  posture*).
+- **Next speed lever (follow-up, not evaluated yet):** run CI e2e against
+  a production build (`next build` + `next start`) instead of `next dev`.
+  This removes the per-route first-compile time that dominates on CI. It
+  needs the dev-login and env pinning in `playwright.config.ts` checked
+  against a production server first.
 
 ### `bedrock-simulator-build.yml` job graph
 

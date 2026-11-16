@@ -46,7 +46,7 @@ jobs:
     name: test
     needs: [quality]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     services:
       dynamodb-local:
         image: amazon/dynamodb-local:2.5.4
@@ -99,7 +99,7 @@ jobs:
     # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.60 cannot
     # install Chromium (run 43878743673). Revisit on a Playwright upgrade.
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     services:
       dynamodb-local:
         image: amazon/dynamodb-local:2.5.4
