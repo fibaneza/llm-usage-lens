@@ -274,6 +274,34 @@ async function mockApi(page: Page, { emptyUsers = false } = {}) {
       account("111122223333", "Legacy Sandbox", false),
     ]),
   );
+
+  // Settings access sections (4R.4) and the LiteLLM panel (L3b) fetch these on
+  // mount; unrouted they hit the real server and the skeletons never clear.
+  const empty = (pattern: RegExp, body: unknown) =>
+    page.route(pattern, json(body));
+  await empty(/\/api\/access\/org-units(\?|$)/, {
+    teams: [],
+    departments: [],
+  });
+  await empty(/\/api\/access\/(pending|stale)(\?|$)/, { items: [] });
+  await empty(/\/api\/identities(\?|$)/, { items: [] });
+  await empty(/\/api\/group-mappings(\?|$)/, { items: [] });
+  await empty(/\/api\/role-grants(\?|$)/, { items: [] });
+  await empty(/\/api\/password-users(\?|$)/, { items: [] });
+  await empty(/\/api\/governance\/password-sign-in(\?|$)/, {
+    enabled: true,
+    version: 1,
+  });
+  await empty(/\/api\/governance\/per-user-approval(\?|$)/, {
+    approved: false,
+  });
+  await empty(/\/api\/governance\/identity-map-rules(\?|$)/, {
+    rules: [],
+    version: 0,
+  });
+  await empty(/\/api\/governance\/identity-map-rules\/suggestions(\?|$)/, {
+    items: [],
+  });
 }
 
 async function open(page: Page, path: string, width = 1440) {
