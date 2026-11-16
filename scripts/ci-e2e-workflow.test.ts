@@ -191,6 +191,26 @@ describe("ci e2e-dev job (llm-usage-lens-build.yml)", () => {
     expect(seed).toBeLessThan(steps.indexOf(run));
   });
 
+  // Coordinator follow-up (ci/e2e-dev-guard): fail unless exactly the 10
+  // dev-login cases ran, none skipped (ACTIONS.md e2e-dev job).
+  it("writes a JSON report and then asserts exactly 10 cases, none skipped (ACTIONS.md e2e-dev)", () => {
+    expect(run).toMatch(/--reporter=list,json/);
+    expect(block(run, "env", 8)).toMatch(
+      /^\s+PLAYWRIGHT_JSON_OUTPUT_FILE:\s*.*e2e-dev-report\.json\s*$/m,
+    );
+    const guard = steps.findIndex((s) =>
+      /^ {8}run:\s*pnpm exec tsx scripts\/e2e-assert-count\.ts .*e2e-dev-report\.json 10\s*$/m.test(
+        s,
+      ),
+    );
+    expect(guard).toBeGreaterThan(steps.indexOf(run));
+  });
+
+  it("is listed in the workflow header comment", () => {
+    const header = workflow.slice(0, workflow.indexOf("\non:"));
+    expect(header).toMatch(/e2e-dev/);
+  });
+
   it("shares the dynamodb-local image, uses no secrets and SHA-pins remote actions (Rule 50)", () => {
     expect(serviceImage(job)).toBe(serviceImage(jobBlock("test")));
     expect(job).not.toMatch(/secrets\./);

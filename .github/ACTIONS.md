@@ -32,13 +32,14 @@ Q&A runs where nothing is pushed. The rest of this document walks through the
 
 ### `llm-usage-lens-build.yml` job graph
 
-`quality` runs first; `test`, `build`, `e2e` and `e2e-dev` need it and run in parallel
-(`quality → test | build | e2e | e2e-dev`). The `e2e` job (implementation-phases
-Phase 5, *Add Playwright to GitHub Actions CI*) starts a `dynamodb-local`
-service (same image as `test`), creates and seeds the table, installs
-Chromium and runs `pnpm test:e2e` (both Playwright projects) with
-`E2E_LOCK=off`, since CI has no other session. It uses no secrets: the dev
-servers' env is pinned in `apps/dashboard/playwright.config.ts`.
+`quality` runs first; `test`, `build`, `e2e` and `e2e-dev` need it and
+run in parallel (`quality → test | build | e2e | e2e-dev`). The `e2e` job
+(implementation-phases Phase 5, *Add Playwright to GitHub Actions CI*)
+starts a `dynamodb-local` service (same image as `test`), creates and
+seeds the table, installs Chromium and runs `pnpm test:e2e` (both
+Playwright projects) with `E2E_LOCK=off`, since CI has no other session.
+It uses no secrets: the web servers' env is pinned in
+`apps/dashboard/playwright.config.ts`.
 
 - **Concurrency:** the group is per workflow and ref, and
   `cancel-in-progress` is `${{ github.event_name == 'pull_request' }}`.
@@ -76,7 +77,18 @@ servers' env is pinned in `apps/dashboard/playwright.config.ts`.
   specs, 10 cases on `next dev`, with `E2E_SERVERS=dev`. It has the same
   setup and runner pin as `e2e`, and a 15-minute timeout. Playwright's
   `--grep` follows the spec paths with no `--` separator. With `--`,
-  Playwright reads every later argument as a file filter.
+  Playwright reads every later argument as a file filter. A guard step
+  then fails the job unless exactly 10 cases ran with none skipped
+  (`scripts/e2e-assert-count.ts`, reading the JSON report from
+  `PLAYWRIGHT_JSON_OUTPUT_FILE`). That catches a dropped filter (more
+  cases) and production servers (all skipped).
+- **`e2e-dev` first run (43942889368, 52f6c5b, 2026-11-16, red):** the
+  job took 3m23s, with 2.1 min of tests. Ten cases ran: 4 passed, 1 was
+  flaky, 2 failed and 3 did not run. Each failing sign-in waited on
+  Playwright's 5 s `expect` default while the cold `next dev` compiled
+  the server action and `/dashboard`. The same cases take 2.1-2.6 s once
+  the routes are warm (run 43927910942). Under CI on `next dev` only, the
+  `expect` timeout is now 15 s. Re-measure on the next green run.
 - **History on `next dev`, 2026-11-16:** run 43882190808 (1 worker)
   spent about 22.5 min on 330 of 350 cases, then stopped at 23m53s on a
   runner shutdown signal. Run 43922339732 (2 workers) finished 354 of
@@ -86,8 +98,10 @@ servers' env is pinned in `apps/dashboard/playwright.config.ts`.
   past the 45-min job timeout. The runner had stopped responding, and its
   logs were unavailable. Run 43927910942 (2 workers) reached 351 of 411
   cases in about 13.5 min, then stopped on a runner shutdown signal. Two
-  dev servers plus two browsers likely exhausted the runner's memory. The `test` job (Vitest) takes 11-14 min.
-- **Timeouts:** `e2e` 45 min, `e2e-dev` 15 min and `test` 25 min.
+  dev servers plus two browsers likely exhausted the runner's memory.
+- **Timeouts:** `e2e` 45 min, `e2e-dev` 15 min and `test` 25 min. The
+  `test` job (Vitest) took 11-14 min on 2026-11-16 and 16m10s in run
+  43939025415, so the 25-min limit leaves about 9 min of headroom.
 - **Measured on production servers (run 43939025415, a5e0bb6,
   2026-11-16, green):** the `e2e` job took 7m35s. Setup (install, browser
   from cache, table and seed) took about 1 min. The two parallel builds

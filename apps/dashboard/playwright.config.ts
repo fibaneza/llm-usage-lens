@@ -54,6 +54,13 @@ export default defineConfig({
   // rather than flaky wall-clock sleeps (Rule 60.24). Production servers do
   // not compile on request, so CI fails a stuck test sooner.
   timeout: E2E_PRODUCTION_SERVERS ? 30_000 : 60_000,
+  // The CI e2e-dev job starts `next dev` cold on 2 vCPUs: a dev-login
+  // redirect compiles the server action and /dashboard first, which took
+  // over 5 s (run 43942889368; 2.1-2.6 s once warm). Local and production
+  // servers keep Playwright's 5 s default.
+  expect: {
+    timeout: process.env.CI && !E2E_PRODUCTION_SERVERS ? 15_000 : 5_000,
+  },
   outputDir: "test-results",
   use: {
     baseURL: E2E_BASE_URL,
