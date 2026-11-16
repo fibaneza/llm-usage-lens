@@ -54,7 +54,7 @@ Values are lower-kebab-case, case-sensitive, and live only in
 | Role | Kind | LiteLLM analogue | Source | Reads | Writes |
 |---|---|---|---|---|---|
 | `internal-admin` | Global; a small named group (≥ 2 people) plus the master user | `proxy_admin` | Entra app role; in-app grant by an `internal-admin`; the master user | Everything | Everything: any team, any user, all configuration. **Only role that grants or revokes `internal-admin` and `internal-org-admin`** |
-| `internal-org-admin` | Global | — (between `proxy_admin` and `org_admin`) | Entra app role, or in-app grant by an `internal-admin` | Every team and department | Admin scopes, members, moves and visibility in **any** team or department. **No configuration**, no global-role grants |
+| `internal-org-admin` | Global | — (between `proxy_admin` and `org_admin`) | Entra app role, or in-app grant by an `internal-admin` | Every team and department | Admin scopes, members, moves and visibility in **any** team or department. **No configuration**, except the LiteLLM operation toggles (incl. reset) and team links (LiteLLM spec LD24; user, 2026-11-16, extending D14); no global-role grants |
 | `internal-auditor` | Global | `proxy_admin_viewer` | **Entra app role only** | Everything, read-only, incl. the audit log and access review; never key values or secrets | Nothing — every write returns `403` |
 | `internal-viewer` | Global; **the default** | `internal_user` | Entra app role, or the default | Own usage (*My usage*); their member team as visibility allows | Nothing |
 | `internal-team-admin` | Scoped: **one or more** teams and/or departments, each a separate admin scope | `team_admin` (team scope), `org_admin` (department scope) | UI or SSO group mapping | Everything in its scopes | Members, team-scope admin grants (never on themselves) and visibility in its scopes; with a department scope also moves between that department's teams and the department cap |
@@ -62,8 +62,10 @@ Values are lower-kebab-case, case-sensitive, and live only in
 
 **Configuration** (only `internal-admin`): group mappings, account CRUD
 (Phase 4.9), the per-user approval, password users and the password
-sign-in switch, the LiteLLM gateway and
-edition, audit retention, identity links.
+sign-in switch, the LiteLLM gateway configuration, connection and
+edition, LiteLLM team creation, audit retention, identity links. The
+LiteLLM operation toggles and team links are also writable by
+`internal-org-admin` (LiteLLM spec LD24; user, 2026-11-16).
 
 - **Union.** Effective permission = global role grants ∪ admin-scope grants,
   then narrowed by inheritance.
@@ -430,7 +432,8 @@ the user 2026-11-15; Design System — *Settings Page*).
 | Move a member to another team | ✓ | ✓ | ✓ both teams in scope | ✗ (remove; the destination admin adds) | ✗ |
 | Edit visibility | ✓ | ✓ | ✓ dept, its cap and its teams | ✓ teams in scope | ✗ |
 | Grant or revoke `internal-org-admin` / `internal-admin` | ✓ **only** | ✗ | ✗ | ✗ | ✗ |
-| Configuration | ✓ | ✗ | ✗ | ✗ | ✗ |
+| LiteLLM operation toggles (incl. reset) and team links (LiteLLM LD24; user, 2026-11-16, extending D14) | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Configuration (everything else in *Configuration* above) | ✓ | ✗ | ✗ | ✗ | ✗ |
 
 **Identity links** (shared contract): `usageIdentities[]`, `aliases[]`,
 `litellmUserId`, per `oid`, `internal-admin` only. An alias or usage

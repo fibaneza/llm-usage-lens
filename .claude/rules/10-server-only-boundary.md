@@ -38,7 +38,10 @@ credentials must never reach the browser.
      `403` `FORBIDDEN` when the session lacks the `internal-admin` role (legacy
      `Admin` alias outside `APP_ENV=prod`), before input parsing
      (`withRoute(..., { requireAdmin: true })`; enforced by
-     `app/api/write-routes.integration.test.ts`).
+     `app/api/write-routes.integration.test.ts`). Exception (user,
+     2026-11-16; LiteLLM spec LD24): `PUT /api/litellm/toggles` and the
+     team-links writes also accept `internal-org-admin`; the LiteLLM
+     connection writes stay `internal-admin` only.
    - Validate query/body with Zod (`400` on failure).
    - Return `{ data: T }` on success, `{ error: { code, message } }` on failure.
    - Use the `DateRangeQuerySchema` 90-day cap on custom ranges.

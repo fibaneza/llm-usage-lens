@@ -970,3 +970,100 @@ describe("self-service write routes are enumerated and gated", () => {
     },
   );
 });
+
+// LD24 / LT22 (docs/specs/2026-11-10-litellm.md): the only LiteLLM writes open
+// to internal-org-admin are the operation toggles and the team links; the
+// connection PUT and test stay internal-admin only, as does every other write
+// outside the matrix list (Rule 10.3 exception; Rule 50.4). Unlike the matrix
+// sweeps above, this block also refuses a team lead (internal-team-admin).
+describe("LiteLLM writes: org-admin allowed on toggles and team links only (LD24, LT22)", () => {
+  const ORG_ADMIN_WRITES = [
+    "PUT litellm/toggles/route.ts",
+    "PUT litellm/team-links/[teamId]/route.ts",
+    "DELETE litellm/team-links/[teamId]/route.ts",
+  ];
+  const ADMIN_ONLY_LITELLM = [
+    "PUT litellm/connection/route.ts",
+    "POST litellm/connection/test/route.ts",
+  ];
+  const find = (name: string) => {
+    const route = writeRoutes.find((r) => label(r) === name);
+    expect(route, `${name} must exist`).toBeDefined();
+    return route as WriteRoute;
+  };
+  const ORG_ADMIN_SESSION = {
+    user: { oid: "oid-test", name: "O", roles: ["internal-org-admin"] },
+  };
+  const REFUSED_SESSIONS: [string, unknown][] = [
+    [
+      "internal-viewer",
+      { user: { oid: "oid-test", roles: ["internal-viewer"] } },
+    ],
+    [
+      "a team lead (internal-team-admin)",
+      { user: { oid: "oid-test", roles: ["internal-team-admin"] } },
+    ],
+    ["no roles", { user: { oid: "oid-test" } }],
+  ];
+
+  it("the registry lists exactly these three as matrix writes and the connection pair as admin-only", () => {
+    const kind = (name: string) =>
+      ROUTE_REGISTRY.find((e) => e.key === name)?.kind;
+    for (const name of ORG_ADMIN_WRITES)
+      expect(kind(name)).toBe("matrix-write");
+    for (const name of ADMIN_ONLY_LITELLM)
+      expect(kind(name)).toBe("admin-write");
+  });
+
+  it.each(ORG_ADMIN_WRITES)(
+    "%s: internal-admin and org-admin pass the role gate; viewer, team lead and no roles get 403 before parsing",
+    async (name) => {
+      const route = find(name);
+      for (const session of [ADMIN_SESSION, ORG_ADMIN_SESSION]) {
+        setSession(session);
+        const res = await call(route, "{}");
+        expect([401, 403]).not.toContain(res.status);
+      }
+      for (const [, session] of REFUSED_SESSIONS) {
+        for (const [, body] of BODIES) {
+          setSession(session);
+          await expectError(await call(route, body), 403, "FORBIDDEN");
+        }
+      }
+    },
+  );
+
+  it.each(ORG_ADMIN_WRITES)(
+    "%s: a stored internal-org-admin RoleGrant without the claim passes the role gate (Rule 50.4)",
+    async (name) => {
+      const route = find(name);
+      const { grantRole } = await import("@/lib/data/access/role-grants");
+      const { ctxAt, ok } =
+        await import("@/lib/data/access/access-test-support");
+      ok(
+        await grantRole(
+          { oid: "oid-granted", role: "internal-org-admin", reason: "test" },
+          ctxAt(),
+        ),
+      );
+      setSession({ user: { oid: "oid-granted", roles: [] } });
+      const res = await call(route, "{}");
+      expect([401, 403]).not.toContain(res.status);
+    },
+  );
+
+  it.each(ADMIN_ONLY_LITELLM)(
+    "%s: an org-admin gets 403 FORBIDDEN naming internal-admin before parsing",
+    async (name) => {
+      const route = find(name);
+      for (const [, body] of BODIES) {
+        setSession(ORG_ADMIN_SESSION);
+        const res = await call(route, body);
+        await expectError(res, 403, "FORBIDDEN");
+      }
+      setSession(ORG_ADMIN_SESSION);
+      const raw = await (await call(route, "{}")).json();
+      expect(raw.error.message).toBe("internal-admin role required");
+    },
+  );
+});

@@ -407,15 +407,20 @@ describe("2. a refused caller gets 403 before parsing or any table access (Enfor
           for (const params of [entry.params.invalid, entry.params.valid]) {
             resetDeniedAudit();
             signInRaw(session);
-            await expectError(
+            const parsed = await expectError(
               await send(entry, { body, params }),
               403,
               "FORBIDDEN",
             );
+            // LD24: the toggles refusal is the `permit` gate's fixed message.
+            if (entry.key === "PUT litellm/toggles/route.ts") {
+              expect(parsed.error.message).toBe("Insufficient permission");
+            }
           }
         }
       }
       expect(await nonAuditItems()).toEqual(before);
+      noUpstreamCall(entry);
     },
   );
 

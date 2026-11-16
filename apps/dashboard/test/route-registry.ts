@@ -465,7 +465,9 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     validBody: {},
   }),
 
-  // ---- admin-only writes, litellm (LiteLLM spec - API routes) ----
+  // ---- litellm writes: connection stays admin-only; toggles and team links
+  // are internal-admin or internal-org-admin (LD24, LT22) and so register as
+  // matrix writes below the admin-only ones ----
   adminWrite("PUT", "litellm/connection/route.ts", {
     family: "litellm",
     action: "litellm.connection.update",
@@ -473,15 +475,18 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   }),
   adminWrite("POST", "litellm/connection/test/route.ts", {
     family: "litellm",
+    // LD24/LT22: an org-admin's refused test records a `denied` entry; the
+    // test itself changes no state and writes no success record.
+    action: "litellm.connection.test",
     validBody: {},
   }),
-  adminWrite("PUT", "litellm/team-links/[teamId]/route.ts", {
+  matrixWrite("PUT", "litellm/team-links/[teamId]/route.ts", {
     family: "litellm",
     action: "litellm.teamlink.link",
     validParams: { teamId: "team-a" },
     validBody: { litellmTeamId: "lt-team-a", version: null },
   }),
-  adminWrite("DELETE", "litellm/team-links/[teamId]/route.ts", {
+  matrixWrite("DELETE", "litellm/team-links/[teamId]/route.ts", {
     family: "litellm",
     action: "litellm.teamlink.unlink",
     validParams: { teamId: "team-a" },
@@ -497,7 +502,7 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     badInput: { params: { teamId: LONG } },
     successStatuses: [200],
   }),
-  adminWrite("PUT", "litellm/toggles/route.ts", {
+  matrixWrite("PUT", "litellm/toggles/route.ts", {
     family: "litellm",
     action: "litellm.toggles.update",
     validBody: { version: null, toggles: { getTeam: false } },

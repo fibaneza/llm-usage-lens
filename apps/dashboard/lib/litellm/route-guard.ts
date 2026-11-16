@@ -69,3 +69,32 @@ export async function adminOrAuditorRefusal(
     ? null
     : jsonError(403, "FORBIDDEN", "Admin or Auditor role required");
 }
+
+// Admin, Org Admin or Auditor: the read side of the toggles, connection and
+// team-link routes (LiteLLM spec - LD24; Rule 10.3).
+export async function litellmReadRefusal(
+  session: Session | null,
+): Promise<Response | null> {
+  const roles = await globalRolesFor(session);
+  return roles?.some(
+    (r) =>
+      r === "internal-admin" ||
+      r === "internal-org-admin" ||
+      r === "internal-auditor",
+  )
+    ? null
+    : jsonError(403, "FORBIDDEN", "Admin, Org Admin or Auditor role required");
+}
+
+// `permit` for the toggle and team-link writes: internal-admin or
+// internal-org-admin (LD24). Stored role grants count.
+export async function permitAdminOrOrgAdmin(
+  _request: Request,
+  session: Session,
+): Promise<boolean> {
+  const roles = await globalRolesFor(session);
+  return (
+    roles?.some((r) => r === "internal-admin" || r === "internal-org-admin") ??
+    false
+  );
+}

@@ -21,7 +21,8 @@ import { isValidLiteLLMId } from "@/lib/litellm/allowlist";
 import { LiteLLMError } from "@/lib/litellm/client";
 import { confirmTeamExists } from "@/lib/litellm/operations";
 import {
-  adminOrAuditorRefusal,
+  litellmReadRefusal,
+  permitAdminOrOrgAdmin,
   liteLLMErrorResponse,
   openModeRefusal,
 } from "@/lib/litellm/route-guard";
@@ -60,7 +61,7 @@ const auditContext = (actor: string) => ({
 const notFound = () => jsonError(404, "NOT_FOUND", NOT_FOUND_MESSAGE);
 
 export const GET = withRoute(async (_request, ctx, session) => {
-  const refused = openModeRefusal() ?? (await adminOrAuditorRefusal(session));
+  const refused = openModeRefusal() ?? (await litellmReadRefusal(session));
   if (refused) return refused;
   const link = await getTeamLink(await teamIdOf(ctx));
   return link ? jsonData(link) : notFound();
@@ -100,7 +101,7 @@ export const PUT = withRoute(
     return jsonData(saved.value);
   },
   {
-    requireAdmin: true,
+    permit: permitAdminOrOrgAdmin,
     denied: {
       action: "litellm.teamlink.link",
       pattern: "/api/litellm/team-links/[teamId]",
@@ -124,7 +125,7 @@ export const DELETE = withRoute(
     return jsonData(removed.value);
   },
   {
-    requireAdmin: true,
+    permit: permitAdminOrOrgAdmin,
     denied: {
       action: "litellm.teamlink.unlink",
       pattern: "/api/litellm/team-links/[teamId]",

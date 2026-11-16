@@ -64,6 +64,14 @@ const ADMIN = session(["internal-admin"]);
 const AUDITOR = session(["internal-auditor"]);
 const VIEWER = session(["internal-viewer"]);
 const LEAD = session(["internal-team-admin"]);
+const ORG_ADMIN = {
+  user: {
+    oid: "oid-org",
+    name: "O",
+    email: "o@company.com",
+    roles: ["internal-org-admin"],
+  },
+};
 
 let fake: ReturnType<typeof createFakeLiteLLM>;
 function install(opts: Parameters<typeof gatewayHandler>[0] = {}) {
@@ -546,5 +554,79 @@ describe("DELETE /api/litellm/team-links/[teamId] (unlinkTeam)", () => {
       "NOT_FOUND",
     );
     expect(await auditActions()).toHaveLength(0);
+  });
+});
+
+// LD24 / LT22 (spec 2026-11-10-litellm.md): internal-org-admin reads and writes
+// team links; each write is audited with the org-admin as actor. A role held
+// only through a stored RoleGrant counts (Rule 50.4).
+describe("internal-org-admin on /api/litellm/team-links (LD24, LT22)", () => {
+  it("reads answer 200 (list and one)", async () => {
+    const h = await load();
+    await link(h, "team-a", TEAM_ID);
+    authMock.mockResolvedValue(ORG_ADMIN);
+    expect((await h.LIST(get(LIST_URL), ctxFor())).status).toBe(200);
+    expect((await h.GET(get(ONE_URL("team-a")), ctxFor("team-a"))).status).toBe(
+      200,
+    );
+  });
+
+  it("PUT links a team and DELETE unlinks it, each audited with the org-admin as actor", async () => {
+    authMock.mockResolvedValue(ORG_ADMIN);
+    const h = await load();
+    expect((await link(h, "team-a", TEAM_ID)).status).toBe(200);
+    expect(await linkItem("team-a")).toBeDefined();
+    const res = await h.DELETE(
+      send("DELETE", ONE_URL("team-a")),
+      ctxFor("team-a"),
+    );
+    expect(res.status).toBe(200);
+    expect(await linkItem("team-a")).toBeUndefined();
+    const records = await auditActions();
+    expect(records.map((r) => r.action).sort()).toEqual([
+      "litellm.teamlink.link",
+      "litellm.teamlink.unlink",
+    ]);
+    for (const r of records) {
+      expect(r).toMatchObject({ actor: "oid-org", result: "success" });
+    }
+  });
+
+  it("an internal-org-admin held only as a stored RoleGrant (no claim) reads and writes (Rule 50.4)", async () => {
+    const { grantRole } = await import("@/lib/data/access/role-grants");
+    const { ctxAt, ok } = await import("@/lib/data/access/access-test-support");
+    authMock.mockResolvedValue({ user: { oid: "oid-granted" } });
+    ok(
+      await grantRole(
+        { oid: "oid-granted", role: "internal-org-admin", reason: "test" },
+        ctxAt(),
+      ),
+    );
+    const h = await load();
+    expect((await h.LIST(get(LIST_URL), ctxFor())).status).toBe(200);
+    expect((await link(h, "team-a", TEAM_ID)).status).toBe(200);
+    expect((await auditActions())[0]).toMatchObject({ actor: "oid-granted" });
+  });
+
+  it("a team lead and a viewer still get 403 on both writes with one denied record each (LT22)", async () => {
+    const h = await load();
+    await link(h, "team-a", TEAM_ID);
+    for (const s of [LEAD, VIEWER]) {
+      authMock.mockResolvedValue(s);
+      await expectError(
+        await link(h, "team-b", OTHER_TEAM_ID),
+        403,
+        "FORBIDDEN",
+      );
+      await expectError(
+        await h.DELETE(send("DELETE", ONE_URL("team-a")), ctxFor("team-a")),
+        403,
+        "FORBIDDEN",
+      );
+    }
+    const denied = (await auditActions()).filter((r) => r.result === "denied");
+    expect(denied).toHaveLength(2);
+    expect(await linkItem("team-a")).toBeDefined();
+    expect(await linkItem("team-b")).toBeUndefined();
   });
 });

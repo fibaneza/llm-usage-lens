@@ -260,6 +260,7 @@ export const AUDIT_ACTIONS = [
   "auth.signin.success",
   "auth.signout",
   "litellm.connection.update",
+  "litellm.connection.test",
   "litellm.toggles.update",
   "litellm.toggles.reset",
   "litellm.teamlink.link",

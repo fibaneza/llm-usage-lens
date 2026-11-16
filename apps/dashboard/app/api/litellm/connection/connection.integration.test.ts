@@ -616,3 +616,19 @@ describe("AUTH_ACCESS_MODE=open (LT11)", () => {
     await expectError(await GET(get(), ctx), 401, "UNAUTHORIZED");
   });
 });
+
+// LD24 / LT22 (spec 2026-11-10-litellm.md): the connection is readable by an
+// internal-org-admin but stays Admin-only to write. The 403 and its `denied`
+// record for the PUT and the test are asserted once, by the route-contract
+// suite (test/route-registry.ts), not repeated here (Rule 60.23).
+describe("internal-org-admin on /api/litellm/connection (LD24)", () => {
+  it("GET answers 200 for an org-admin", async () => {
+    authMock.mockResolvedValue({
+      user: { oid: "oid-org", name: "O", roles: ["internal-org-admin"] },
+    });
+    const { GET } = await load();
+    const res = await GET(get(), ctx);
+    expect(res.status).toBe(200);
+    await expectNoLeak(res);
+  });
+});

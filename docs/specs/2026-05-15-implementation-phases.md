@@ -706,6 +706,14 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [x] Dev login as a chosen identity (Access Control — *Dev login*, amended 2026-11-16), additive to `auth.ts` once the 4R.4 fix is on `main`
 - [ ] Verify (landed 2026-11-16 at the user's direction; the e2e case dev-login.spec.ts:73 waits for the L3b fix B4; the stored-roles change follows as L3c2): an existing identity's email or `oid` signs in as that identity with its stored `lastSeenRoles` (amended L3c2: the form role is ignored when an identity is given, an unknown email or `oid` is refused, no `dev-` identity); with no identity the form role decides access; rejected in `prod` and with Entra configured (T7, LT21)
 
+### L3d — Org-admin config writes (`feature/phase-l3d-org-admin-config`)
+
+*Added 2026-11-16 at the user's direction (LiteLLM spec LD24); after L3c, before L4.*
+
+- [x] `internal-org-admin` may `PUT /api/litellm/toggles` (including reset) and write team links; `PUT /api/litellm/connection` and `POST /api/litellm/connection/test` stay `internal-admin` only; reads add org-admin; Rules 10.3 and 50.4 amended
+- [ ] **L3d2 — Settings → LiteLLM panel for org-admin** (per-section edit flags: toggles and team links editable, connection read-only), built in unit A (improvements) together with the Auditor read-only view (agent decision, 2026-11-16, coordinator: `components/settings/**` belongs to unit A, which already reworks the panel's visibility)
+- [x] Verify: `write-routes.integration.test.ts` allowed (org-admin toggles, team links) and refused (org-admin connection `PUT` and test `403`, one `denied` record; Viewer, Lead `403`) cases; LT22
+
 ### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)
 
 - [ ] Write routes for every allowlisted write (members, budgets, resets, enable/disable, keys incl. shown-once generate and edition-aware rotate, team models, team/member/key limits, team budget, team create and link); limit and budget validation against current team values; audit records; orphaned-member list (workflow pilot candidate — *Workflow pilots*)

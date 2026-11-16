@@ -39,5 +39,11 @@ export const POST = withRoute(
       ConnectionTestResultSchema.parse(await testLiteLLMConnection(candidate)),
     );
   },
-  { requireAdmin: true },
+  {
+    requireAdmin: true,
+    denied: {
+      action: "litellm.connection.test",
+      pattern: "/api/litellm/connection/test",
+    },
+  },
 );

@@ -55,6 +55,14 @@ const session = (roles: string[]) => ({
 const ADMIN = session(["internal-admin"]);
 const AUDITOR = session(["internal-auditor"]);
 const VIEWER = session(["internal-viewer"]);
+const ORG_ADMIN = {
+  user: {
+    oid: "oid-org",
+    name: "O",
+    email: "o@company.com",
+    roles: ["internal-org-admin"],
+  },
+};
 
 let fake: ReturnType<typeof createFakeLiteLLM>;
 
@@ -463,5 +471,71 @@ describe("PUT /api/litellm/toggles", () => {
       ),
     ).rejects.toMatchObject({ code: "OPERATION_DISABLED", status: 403 });
     expect(fake.calls).toHaveLength(0);
+  });
+});
+
+// LD24 / LT22 (spec 2026-11-10-litellm.md): internal-org-admin reads and writes
+// the operation toggles, reset included; every write is audited with the
+// actor. A role held only through a stored RoleGrant counts (Rule 50.4).
+describe("internal-org-admin on /api/litellm/toggles (LD24, LT22)", () => {
+  it("GET answers 200 for an org-admin (reads add org-admin, API routes table)", async () => {
+    authMock.mockResolvedValue(ORG_ADMIN);
+    const { GET } = await load();
+    expect((await GET(get(), ctx)).status).toBe(200);
+  });
+
+  it("PUT saves toggles and writes one success audit record with the org-admin as actor", async () => {
+    authMock.mockResolvedValue(ORG_ADMIN);
+    const { PUT } = await load();
+    const res = await PUT(
+      put({ version: null, toggles: { createTeam: false } }),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    expect((await stored())?.toggles).toEqual({ createTeam: false });
+    const records = await auditActions();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      action: "litellm.toggles.update",
+      actor: "oid-org",
+      result: "success",
+    });
+  });
+
+  it("reset succeeds for an org-admin and is audited as litellm.toggles.reset by that actor", async () => {
+    const { PUT } = await load();
+    await PUT(put({ version: null, toggles: { createTeam: false } }), ctx);
+    authMock.mockResolvedValue(ORG_ADMIN);
+    const res = await PUT(put({ version: 1, reset: true }), ctx);
+    expect(res.status).toBe(200);
+    expect((await stored())?.toggles ?? {}).toEqual({});
+    const reset = (await auditActions()).filter(
+      (r) => r.action === "litellm.toggles.reset",
+    );
+    expect(reset).toHaveLength(1);
+    expect(reset[0]).toMatchObject({ actor: "oid-org", result: "success" });
+  });
+
+  it("an internal-org-admin held only as a stored RoleGrant (no claim) reads and writes (Rule 50.4)", async () => {
+    const { grantRole } = await import("@/lib/data/access/role-grants");
+    const { ctxAt, ok } = await import("@/lib/data/access/access-test-support");
+    authMock.mockResolvedValue({ user: { oid: "oid-granted" } });
+    ok(
+      await grantRole(
+        { oid: "oid-granted", role: "internal-org-admin", reason: "test" },
+        ctxAt(),
+      ),
+    );
+    const { GET, PUT } = await load();
+    expect((await GET(get(), ctx)).status).toBe(200);
+    const res = await PUT(
+      put({ version: null, toggles: { createTeam: false } }),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    expect((await auditActions())[0]).toMatchObject({
+      actor: "oid-granted",
+      result: "success",
+    });
   });
 });

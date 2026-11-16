@@ -25,7 +25,8 @@ import {
 import { loadGatewayConfig } from "@/lib/litellm/gateway-config";
 import { resolveOperationSettings } from "@/lib/litellm/operation-settings";
 import {
-  adminOrAuditorRefusal,
+  litellmReadRefusal,
+  permitAdminOrOrgAdmin,
   openModeRefusal,
 } from "@/lib/litellm/route-guard";
 
@@ -64,7 +65,7 @@ function view(saved: OperationToggles | null): OperationTogglesView {
 }
 
 export const GET = withRoute(async (_request, _ctx, session) => {
-  const refused = openModeRefusal() ?? (await adminOrAuditorRefusal(session));
+  const refused = openModeRefusal() ?? (await litellmReadRefusal(session));
   if (refused) return refused;
   return jsonData(view(await getOperationToggles()));
 });
@@ -137,7 +138,7 @@ export const PUT = withRoute(
     return jsonData(view(saved.value));
   },
   {
-    requireAdmin: true,
+    permit: permitAdminOrOrgAdmin,
     denied: deniedRecord,
   },
 );
