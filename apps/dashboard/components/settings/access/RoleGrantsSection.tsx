@@ -389,6 +389,11 @@ export function RoleGrantsSection({
             setSteppedUp(true);
           }}
           onClose={() => setStepUpOpen(false)}
+          onRedirect={() => {
+            setStepUpOpen(false);
+            setGranting(false);
+            setRevoking(null);
+          }}
         />
       ) : null}
     </div>

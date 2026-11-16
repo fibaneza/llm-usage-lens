@@ -51,7 +51,7 @@ async function mockApi(page: Page) {
 }
 
 async function openSettings(page: Page) {
-  await page.goto("/dashboard/settings");
+  await page.goto("/dashboard/settings/accounts");
   await waitForHydration(page);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.getByText("Payments Prod")).toBeVisible();
@@ -62,7 +62,9 @@ test.describe("settings page -- admin", () => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
   });
 
-  test("shows the registry (inactive marked), sync status and retention with no console errors", async ({
+  // Unit D: the registry (AWS accounts tab) and sync status plus retention
+  // (Sync and data tab) are separate routes now.
+  test("the AWS accounts tab shows the registry with the inactive account marked, no console errors", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -75,10 +77,28 @@ test.describe("settings page -- admin", () => {
     await expect(
       page.getByRole("row").filter({ hasText: "Legacy Sandbox" }),
     ).toContainText(/inactive/i);
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test("the Sync and data tab shows sync status and retention, no console errors", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const pageErrors: Error[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error));
+    const consoleErrors = collectConsoleErrors(page);
+    await mockApi(page);
+    await page.goto("/dashboard/settings/sync");
+    await waitForHydration(page);
+
     await expect(
       page.getByText(/never synced|has not synced yet/i),
     ).toBeVisible();
     await expect(page.getByText(/365 days/)).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 2, name: "Account registry" }),
+    ).toHaveCount(0);
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
   });

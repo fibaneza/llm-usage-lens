@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { redirect } from "next/navigation";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StepUpDialog } from "./StepUpDialog";
 import type { AccessViewer, StepUpActions } from "./types";
@@ -91,5 +92,74 @@ describe("StepUpDialog by sign-in method (B3)", () => {
       screen.getByRole("button", { name: "Confirm with dev login" }),
     );
     expect(await screen.findByText(/couldn't confirm it's you/i)).toBeVisible();
+  });
+});
+
+// Access Control D33 (review D step-up return): a successful step-up ends in a
+// server-action redirect, which Next surfaces as a thrown NEXT_REDIRECT error.
+// It is navigation, not a failure: the dialog must not show the failure
+// message, and the error must propagate so Next can navigate. A genuine
+// failure still shows the one generic message.
+describe("StepUpDialog and the step-up redirect (D33)", () => {
+  const listeners = process.listeners("unhandledRejection");
+  afterEach(() => {
+    process.removeAllListeners("unhandledRejection");
+    for (const l of listeners) process.on("unhandledRejection", l);
+  });
+
+  function redirectError(): unknown {
+    try {
+      redirect("/dashboard/settings/access/roles");
+    } catch (error) {
+      return error;
+    }
+    throw new Error("redirect() did not throw");
+  }
+
+  it("a thrown Next redirect shows no failure message and is re-thrown, not swallowed", async () => {
+    const seen: unknown[] = [];
+    process.removeAllListeners("unhandledRejection");
+    process.on("unhandledRejection", (reason) => seen.push(reason));
+    const thrown = redirectError();
+    const stepUp = actions();
+    stepUp.devLogin.mockRejectedValue(thrown);
+    render(
+      <StepUpDialog
+        authMethod="local"
+        stepUp={stepUp}
+        section="role-grants"
+        onDone={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm with dev login" }),
+    );
+    await vi.waitFor(() => expect(seen).toContain(thrown));
+    expect(screen.queryByText(/couldn't confirm it's you/i)).toBeNull();
+  });
+
+  it("a genuine thrown failure still shows the one generic message", async () => {
+    const seen: unknown[] = [];
+    process.removeAllListeners("unhandledRejection");
+    process.on("unhandledRejection", (reason) => seen.push(reason));
+    const stepUp = actions();
+    stepUp.devLogin.mockRejectedValue(new Error("boom"));
+    render(
+      <StepUpDialog
+        authMethod="local"
+        stepUp={stepUp}
+        section="role-grants"
+        onDone={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm with dev login" }),
+    );
+    expect(
+      await screen.findByText(/couldn't confirm it's you/i),
+    ).toBeInTheDocument();
+    expect(seen).toEqual([]);
   });
 });

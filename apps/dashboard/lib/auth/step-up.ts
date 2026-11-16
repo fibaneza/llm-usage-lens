@@ -7,8 +7,8 @@ import { isGlobalRole } from "@/lib/auth/roles";
 // The identifier comes from the session, never from the form.
 // D33: the step-up returns to the section that asked for it.
 export const STEP_UP_REDIRECTS = {
-  "role-grants": "/dashboard/settings#role-grants",
-  "password-users": "/dashboard/settings#password-users",
+  "role-grants": "/dashboard/settings/access/roles#role-grants",
+  "password-users": "/dashboard/settings/access/sign-in#password-users",
 } as const;
 
 export type StepUpSection = keyof typeof STEP_UP_REDIRECTS;

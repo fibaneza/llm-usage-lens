@@ -32,11 +32,17 @@ const entraSession = { user: { authMethod: "entra" } };
 
 // Access Control spec - "Recent authentication" (D33): the return target is a
 // fixed allowlist keyed by section.
+// Access Control D33 + Design System Settings Page: the return lands on the
+// section's final tab URL (the index redirect would drop the fragment).
+const FINAL = {
+  "role-grants": "/dashboard/settings/access/roles#role-grants",
+  "password-users": "/dashboard/settings/access/sign-in#password-users",
+} as const;
+
 describe("STEP_UP_REDIRECTS", () => {
-  it("is exactly the two allowlisted settings anchors", () => {
+  it("is exactly the two allowlisted final tab URLs", () => {
     expect(STEP_UP_REDIRECTS).toEqual({
-      "role-grants": "/dashboard/settings#role-grants",
-      "password-users": "/dashboard/settings#password-users",
+      ...FINAL,
     });
   });
 });
@@ -45,7 +51,7 @@ describe("step-up section key (D33)", () => {
   it.each(["role-grants", "password-users"] as const)(
     "all three builders return to the %s anchor",
     (section) => {
-      const anchor = `/dashboard/settings#${section}`;
+      const anchor = FINAL[section];
       expect(buildEntraStepUp(section, entraSession)?.redirectTo).toBe(anchor);
       expect(
         buildPasswordStepUp(passwordSession, form({ password: "pw" }), section)
@@ -80,10 +86,10 @@ describe("step-up section key (D33)", () => {
 });
 
 describe("buildEntraStepUp", () => {
-  it("asks Entra for a fresh login within 900 seconds and returns to /dashboard/settings#role-grants", () => {
+  it("asks Entra for a fresh login within 900 seconds and returns to /dashboard/settings/access/roles#role-grants", () => {
     expect(buildEntraStepUp("role-grants", entraSession)).toEqual({
       providerId: "microsoft-entra-id",
-      redirectTo: "/dashboard/settings#role-grants",
+      redirectTo: FINAL["role-grants"],
       authorizationParams: { prompt: "login", max_age: "900" },
     });
   });
@@ -98,7 +104,7 @@ describe("buildPasswordStepUp", () => {
     );
     expect(result).toEqual({
       providerId: "password",
-      redirectTo: "/dashboard/settings#role-grants",
+      redirectTo: FINAL["role-grants"],
       credentials: {
         email: "root.admin@example.test",
         password: "correct horse",
@@ -157,7 +163,7 @@ describe("buildMasterStepUp", () => {
     );
     expect(result).toEqual({
       providerId: "master-user",
-      redirectTo: "/dashboard/settings#role-grants",
+      redirectTo: FINAL["role-grants"],
       credentials: { username: "root", password: "pw", totp: "654321" },
     });
     expect(JSON.stringify(result)).not.toContain("attacker");

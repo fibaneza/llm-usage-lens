@@ -39,7 +39,8 @@ import type { AccessViewer, StepUpActions } from "./types";
 // own Suspense + ErrorBoundary with a Skeleton fallback; one failing section
 // never breaks the others), 10.3 / 50.3 (roles resolved on the server and
 // passed down; the write routes enforce them again). "Recent authentication"
-// (redirectTo is the fixed `/dashboard/settings#role-grants`: the Role grants section
+// (redirectTo is the fixed final tab URL
+// `/dashboard/settings/access/roles#role-grants`: the Role grants section
 // owns the `role-grants` anchor).
 //
 // Module under test: `components/settings/access/AccessSections.tsx`
@@ -368,5 +369,67 @@ describe("AccessSections - one failure never breaks the others (Rule 40.4)", () 
       const section = document.getElementById(slug) as HTMLElement;
       expect(section.querySelector('[data-slot="skeleton"]')).not.toBeNull();
     }
+  });
+});
+
+// Unit D (Design System "Settings Page", 2026-11-16): each Access sub-tab and
+// the Audit tab render a subset. `sections?: readonly AccessSectionSlug[]`
+// narrows what AccessSections renders to those slugs; the viewer's
+// capabilities still gate every one (defence in depth), and a section that is
+// not rendered fetches nothing. Without the prop all permitted sections render
+// (the tests above).
+describe("AccessSections - sections prop (unit D)", () => {
+  it("renders only the named sections, in canonical order", async () => {
+    const api = stubAccessApi(baseRoutes());
+    renderWithProviders(
+      <AccessSections
+        viewer={ADMIN}
+        stepUp={stepUp}
+        sections={["role-grants", "group-mappings"]}
+      />,
+    );
+    await screen.findByRole("heading", { level: 2, name: "Role grants" });
+    const shown = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((h) => h.textContent);
+    expect(shown).toEqual(["Group mappings", "Role grants"]);
+    expect(api.calls.some((c) => c.path === "/api/password-users")).toBe(false);
+    expect(api.calls.some((c) => c.path.startsWith("/api/teams/"))).toBe(false);
+  });
+
+  it("never renders a named section the viewer cannot use, and fetches nothing for it", () => {
+    const api = stubAccessApi(baseRoutes());
+    renderWithProviders(
+      <AccessSections
+        viewer={ORG_ADMIN}
+        stepUp={stepUp}
+        sections={["role-grants", "audit-log"]}
+      />,
+    );
+    expect(headingOf("role-grants")).not.toBeInTheDocument();
+    expect(headingOf("audit-log")).not.toBeInTheDocument();
+    expect(api.calls).toEqual([]);
+  });
+
+  it("an empty list renders nothing", () => {
+    const api = stubAccessApi(baseRoutes());
+    renderWithProviders(
+      <AccessSections viewer={ADMIN} stepUp={stepUp} sections={[]} />,
+    );
+    expect(screen.queryAllByRole("heading")).toEqual([]);
+    expect(api.calls).toEqual([]);
+  });
+
+  it("keeps each section's anchor slug so the hash resolver can scroll to it", async () => {
+    stubAccessApi(baseRoutes());
+    renderWithProviders(
+      <AccessSections
+        viewer={ADMIN}
+        stepUp={stepUp}
+        sections={["password-users"]}
+      />,
+    );
+    await screen.findByRole("heading", { level: 2, name: "Password users" });
+    expect(document.getElementById("password-users")?.tagName).toBe("SECTION");
   });
 });

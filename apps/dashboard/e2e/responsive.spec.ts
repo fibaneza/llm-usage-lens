@@ -250,7 +250,7 @@ test.describe("mobile sidebar sheet - dismissal", () => {
 
     await sheet.getByRole("link", { name: "Settings" }).click();
 
-    await expect(page).toHaveURL(/\/dashboard\/settings(\?|$)/);
+    await expect(page).toHaveURL(/\/dashboard\/settings\/accounts(\?|$)/);
     await expect(sheet).toBeHidden();
     await expect(
       page.getByRole("heading", { level: 1, name: "Settings" }),

@@ -536,7 +536,7 @@ test.describe("fluid workspace", () => {
       path: `/dashboard/departments/dept-eng?${QUERY}`,
     },
     { name: "Team Detail", path: `/dashboard/teams/team-a?${QUERY}` },
-    { name: "Settings", path: "/dashboard/settings" },
+    { name: "Settings", path: "/dashboard/settings/accounts" },
   ];
   for (const { name, path } of TABLE_PAGES) {
     test(`${name} tables sit on a card surface with dividers and row hover`, async ({
@@ -692,7 +692,7 @@ test.describe("fluid workspace", () => {
   });
 
   test("the Settings account form is capped at 72ch", async ({ page }) => {
-    await open(page, "/dashboard/settings");
+    await open(page, "/dashboard/settings/accounts");
     await page.getByRole("button", { name: /add account/i }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();

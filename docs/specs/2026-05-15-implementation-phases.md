@@ -549,7 +549,7 @@ Components are introduced in the sub-phase where they are first needed:
 
 **Goal:** Admin page for managing account registry, viewing sync status and data retention. Only page with write operations (CRUD). Tag coverage moved to Phase 4.9b (decided 2026-11-10).
 
-**Sections (3):**
+**Sections (3)** *(since 2026-11-16 these are tabs of route pages, not one scroll: see Settings admin area — unit D)*:
 1. Account registry (add / edit / deactivate accounts, map to department/team)
 2. Sync status (last run time, success/error count, next scheduled run)
 3. Data retention (TTL configuration display)
@@ -760,6 +760,19 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ---
 
+## Settings admin area (unit D; decided 2026-11-16)
+
+### D — Settings split into tabbed route pages (`feature/settings-admin-area`)
+
+*Added 2026-11-16 at the user's direction ("the Settings screenshot is too large"); [Design System — *Settings Page*](2026-05-15-design-system.md). Structure only: routes, tab rows, visibility, redirects. It uses the existing `Tabs` and section components and waits for no ui-compact component (scope limit).*
+
+- [x] Routes `/dashboard/settings/{accounts,sync,litellm,audit}` and `/dashboard/settings/access/{people,visibility,roles,identities,sign-in}`; `/dashboard/settings` and `/dashboard/settings/access` redirect on the server to the first visible tab or sub-tab; a tab the caller cannot use is not rendered and its URL returns the same `404` as a missing page (each page authorizes itself per request)
+- [x] Pure visibility function in `lib/settings-tabs.ts` driven by `accessCapabilities`; tab row and Access sub-tab row on the existing `Tabs`, active by route, horizontal scroll at 375
+- [x] Hash resolver: old `/dashboard/settings#<section-slug>` links (including `#role-grants`, `#password-users`) land on the right tab and sub-tab; the step-up itself returns to the final tab URL (Access Control D33a)
+- [x] Verify: per-role tabs and sub-tabs exactly as the matrix (admin, org-admin, auditor, team admin, viewer without scope, master user); a forbidden tab URL is `404`; hash redirects; Back works across tabs; every tab axe clean and without horizontal page scroll at 375/768/1024/1440; no tab taller than about two screens at 1440×900; every old per-role section assertion still holds on its new tab
+
+---
+
 ## Decision policy (decided 2026-11-15, user)
 
 When a unit meets an open decision — a spec gap, an ambiguity, a choice
@@ -861,7 +874,7 @@ up building inside a unit; it never merges or skips the review.
       - My usage: spend-by-day chart and spend-by-model breakdown (lazy Recharts, model tokens), "Request a budget increase" link (`mailto:` or copyable address)
       - One Audit page with an App · Gateway source filter (composition; each source keeps its permission)
       - `ScopeLine` on scoped pages; sync badges hidden for lead and user; the date range stays on every page
-      - Settings route tabs (AWS accounts, Sync and data, LiteLLM, Access) and the second rows inside Access and LiteLLM are built by unit D of the LiteLLM role-views run; this task keeps their look consistent only
+      - Settings route tabs (AWS accounts, Sync and data, LiteLLM, Access) and the second row inside Access are built by unit D of the LiteLLM role-views run; the second row inside LiteLLM is owned by unit A2 (agent decision, 2026-11-17, coordinator); this task keeps their look consistent only
       - **Depends on Phase 4R.5** (navigation data, role filter, landing pages) and **LiteLLM unit L4** (Team page writes); until each lands, the dependent part waits
       - **Open — user decision pending (asked 2026-11-16):** whether a lead keeps a scoped "AWS-billed cost" tile on the Team page or loses the Bedrock/AWS cost view of its teams entirely (Access Control — *Navigation and landing by role*); the tile is not built until answered
       - Tests (Rule 60.24a): one per-role navigation suite (each item absent and its route `404` for a role that may not see it); one e2e journey per role (admin, lead, user); axe clean and no horizontal scroll at 375 / 768 / 1024 / 1440

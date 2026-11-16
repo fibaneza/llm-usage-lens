@@ -708,6 +708,11 @@ export function PasswordUsersSection({
             setSteppedUp(true);
           }}
           onClose={() => setStepUpOpen(false)}
+          onRedirect={() => {
+            setStepUpOpen(false);
+            setCreating(false);
+            setDialog(null);
+          }}
         />
       ) : null}
     </div>

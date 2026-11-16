@@ -1,5 +1,6 @@
 "use client";
 
+import { unstable_rethrow } from "next/navigation";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
@@ -38,6 +39,7 @@ export function StepUpDialog({
   section,
   onDone,
   onClose,
+  onRedirect,
 }: {
   authMethod: AccessViewer["authMethod"];
   stepUp: StepUpActions;
@@ -46,6 +48,9 @@ export function StepUpDialog({
   // the write again.
   onDone: () => void;
   onClose: () => void;
+  // The step-up ended in a redirect to the final tab; the caller closes the
+  // write dialog too, since the page it covered is navigating away.
+  onRedirect?: () => void;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,9 +65,18 @@ export function StepUpDialog({
         return;
       }
       onDone();
-    } catch {
-      // A thrown redirect leaves the page; any other failure is the one
-      // generic message (no detail that helps an attacker).
+    } catch (caught) {
+      // A successful step-up ends in a server-action redirect, thrown as a
+      // Next router error (D33). It is navigation, not a failure: close the
+      // dialog (a same-page redirect does not remount it) and re-throw so Next
+      // navigates. Any other failure is the one generic message (no detail
+      // that helps an attacker).
+      try {
+        unstable_rethrow(caught);
+      } catch (navigation) {
+        (onRedirect ?? onClose)();
+        throw navigation;
+      }
       setError(STEP_UP_FAILED);
     } finally {
       setPending(false);

@@ -21,7 +21,9 @@ import {
 // so it gets a second dev server on its own port with a distinct distDir
 // (two `next dev` in one directory otherwise collide on .next). Select it with
 // `--project=role-probe`; the default chromium project ignores the spec.
-const PROBE_SPEC = /role-landing\.spec\.ts$/;
+// Unit D (settings-tabs.spec.ts) also runs here: its team-admin case needs the
+// probe's stored admin scope.
+const PROBE_SPEC = /(role-landing|settings-tabs)\.spec\.ts$/;
 
 // Headless Playwright E2E for the dashboard. The devcontainer has no display
 // server, so headless is forced — never pass --headed or --ui here. Smoke

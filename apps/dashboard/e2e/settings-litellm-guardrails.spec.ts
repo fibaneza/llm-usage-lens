@@ -115,7 +115,7 @@ async function mockApi(page: Page, fake: ReturnType<typeof createFakeToggles>) {
 }
 
 async function openPanel(page: Page) {
-  await page.goto("/dashboard/settings");
+  await page.goto("/dashboard/settings/litellm");
   await waitForHydration(page);
   await expect(
     page.getByRole("heading", { level: 2, name: "LiteLLM" }),

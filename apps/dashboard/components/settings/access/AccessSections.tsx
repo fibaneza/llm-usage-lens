@@ -12,13 +12,14 @@ import { PasswordUsersSection } from "@/components/settings/access/PasswordUsers
 import { PerUserApprovalSection } from "@/components/settings/access/PerUserApprovalSection";
 import { RoleGrantsSection } from "@/components/settings/access/RoleGrantsSection";
 import { TeamAdminsSection } from "@/components/settings/access/TeamAdminsSection";
+import { VisibilitySection } from "@/components/settings/access/VisibilitySection";
 import { IdentityLinkSuggestions } from "@/components/settings/IdentityLinkSuggestions";
 import { IdentityMapRulesEditor } from "@/components/settings/IdentityMapRulesEditor";
 import type {
   AccessViewer,
   StepUpActions,
 } from "@/components/settings/access/types";
-import { VisibilitySection } from "@/components/settings/access/VisibilitySection";
+import { isSectionVisible, type AccessSectionSlug } from "@/lib/settings-tabs";
 
 // Source: docs/specs/2026-11-10-access-control.md - "Permission matrix";
 // design-system "Settings Page" (Access: a section the caller cannot use is
@@ -27,16 +28,23 @@ import { VisibilitySection } from "@/components/settings/access/VisibilitySectio
 export function AccessSections({
   viewer,
   stepUp,
+  sections,
 }: {
   viewer: AccessViewer;
   stepUp: StepUpActions;
+  // Unit D: the Access sub-tab or Audit tab narrows what renders; the
+  // capabilities still gate each section.
+  sections?: readonly AccessSectionSlug[];
 }) {
   const capabilities = accessCapabilities(viewer);
+  const visible = (slug: AccessSectionSlug) =>
+    (sections === undefined || sections.includes(slug)) &&
+    isSectionVisible(slug, capabilities);
   const canEditLinks = capabilities.identityLinks === "edit";
 
   return (
     <>
-      {capabilities.members ? (
+      {visible("members") ? (
         <AccessSection
           slug="members"
           heading="Members"
@@ -46,7 +54,7 @@ export function AccessSections({
           <MembersSection viewer={viewer} />
         </AccessSection>
       ) : null}
-      {capabilities.teamAdmins ? (
+      {visible("team-admins") ? (
         <AccessSection
           slug="team-admins"
           heading="Team admins"
@@ -56,7 +64,7 @@ export function AccessSections({
           <TeamAdminsSection viewer={viewer} />
         </AccessSection>
       ) : null}
-      {capabilities.visibility ? (
+      {visible("visibility") ? (
         <AccessSection
           slug="visibility"
           heading="Visibility"
@@ -66,7 +74,7 @@ export function AccessSections({
           <VisibilitySection viewer={viewer} />
         </AccessSection>
       ) : null}
-      {capabilities.pendingAccess ? (
+      {visible("pending-access") ? (
         <AccessSection
           slug="pending-access"
           heading="Pending and stale access"
@@ -76,7 +84,7 @@ export function AccessSections({
           <PendingAccessSection />
         </AccessSection>
       ) : null}
-      {capabilities.groupMappings !== "none" ? (
+      {visible("group-mappings") ? (
         <AccessSection
           slug="group-mappings"
           heading="Group mappings"
@@ -88,7 +96,7 @@ export function AccessSections({
           />
         </AccessSection>
       ) : null}
-      {capabilities.roleGrants !== "none" ? (
+      {visible("role-grants") ? (
         <AccessSection
           slug="role-grants"
           heading="Role grants"
@@ -102,7 +110,7 @@ export function AccessSections({
           />
         </AccessSection>
       ) : null}
-      {capabilities.identityLinks !== "none" ? (
+      {visible("identity-links") ? (
         <AccessSection
           slug="identity-links"
           heading="Identity links"
@@ -112,7 +120,7 @@ export function AccessSections({
           <IdentityLinksSection canEdit={canEditLinks} />
         </AccessSection>
       ) : null}
-      {capabilities.identityLinks !== "none" ? (
+      {visible("identity-mapping") ? (
         <AccessSection
           slug="identity-mapping"
           heading="Identity mapping"
@@ -124,7 +132,7 @@ export function AccessSections({
           </div>
         </AccessSection>
       ) : null}
-      {capabilities.passwordUsers !== "none" ? (
+      {visible("password-users") ? (
         <AccessSection
           slug="password-users"
           heading="Password users"
@@ -138,7 +146,7 @@ export function AccessSections({
           />
         </AccessSection>
       ) : null}
-      {capabilities.perUserApproval !== "none" ? (
+      {visible("per-user-approval") ? (
         <AccessSection
           slug="per-user-approval"
           heading="Per-user approval"
@@ -149,7 +157,7 @@ export function AccessSections({
           />
         </AccessSection>
       ) : null}
-      {capabilities.auditLog ? (
+      {visible("audit-log") ? (
         <AccessSection
           slug="audit-log"
           heading="Audit log"
@@ -159,7 +167,7 @@ export function AccessSections({
           <AuditLogSection />
         </AccessSection>
       ) : null}
-      {capabilities.accessReview ? (
+      {visible("access-review") ? (
         <AccessSection
           slug="access-review"
           heading="Access review"

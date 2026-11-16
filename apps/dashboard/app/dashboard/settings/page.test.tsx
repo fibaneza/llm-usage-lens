@@ -1,44 +1,55 @@
-import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Source: System Architecture -- Authentication & Access (Account-mutation
-// role); Rules 50.3, 60.7. The page is an async Server Component that calls
-// `auth()` (from "@/auth"), derives admin via `hasAdminRole` and passes
-// `isAdmin` to `SettingsContent`.
+// Source: Design System "Settings Page" (unit D, 2026-11-16): `/dashboard/
+// settings` redirects on the server to the caller's first visible tab;
+// implementation-phases unit D Verify. Module under test: the index
+// `app/dashboard/settings/page.tsx`, an async Server Component that resolves
+// the viewer (`auth()` + `loadSettingsAccessViewer`), computes
+// `settingsTabsFor(viewer)` and calls `redirect(tabs[0].href)`. (The old
+// page.test.tsx isAdmin assertions moved to accounts/page.test.tsx.)
 const auth = vi.fn();
 vi.mock("@/auth", () => ({ auth: () => auth() }));
-
-const content = vi.fn((props: { isAdmin: boolean }) => (
-  <div data-testid="content">{String(props.isAdmin)}</div>
-));
-vi.mock("@/components/settings/SettingsContent", () => ({
-  SettingsContent: (props: { isAdmin: boolean }) => content(props),
+const loadViewer = vi.fn();
+vi.mock("@/lib/auth/settings-access", () => ({
+  loadSettingsAccessViewer: (session: unknown) => loadViewer(session),
+}));
+vi.mock("next/navigation", () => ({
+  redirect: (url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  },
+  notFound: () => {
+    throw new Error("NEXT_NOT_FOUND");
+  },
 }));
 
-import SettingsPage from "./page";
+import SettingsIndexPage from "./page";
 
 afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("SettingsPage", () => {
-  it("passes isAdmin=true for a session with the Admin role", async () => {
-    auth.mockResolvedValue({
-      user: { oid: "oid-test", roles: ["internal-admin"] },
+describe("Settings index", () => {
+  it.each([
+    ["internal-admin", ["internal-admin"]],
+    ["internal-auditor", ["internal-auditor"]],
+    ["a viewer without a scope", ["internal-viewer"]],
+  ])("%s is redirected to the first visible tab", async (_n, roles) => {
+    auth.mockResolvedValue({ user: { oid: "oid-1", roles } });
+    loadViewer.mockResolvedValue({
+      roles,
+      authMethod: "entra",
+      adminScopes: [],
     });
-    render(await SettingsPage());
-    expect(screen.getByTestId("content")).toHaveTextContent("true");
+    await expect(SettingsIndexPage()).rejects.toThrow(
+      "NEXT_REDIRECT:/dashboard/settings/accounts",
+    );
   });
 
-  it("passes isAdmin=false without the Admin role", async () => {
-    auth.mockResolvedValue({ user: { oid: "oid-test", roles: ["Reader"] } });
-    render(await SettingsPage());
-    expect(screen.getByTestId("content")).toHaveTextContent("false");
-  });
-
-  it("passes isAdmin=false without a session", async () => {
+  it("a session that builds no viewer still lands on the registry", async () => {
     auth.mockResolvedValue(null);
-    render(await SettingsPage());
-    expect(screen.getByTestId("content")).toHaveTextContent("false");
+    loadViewer.mockResolvedValue(undefined);
+    await expect(SettingsIndexPage()).rejects.toThrow(
+      "NEXT_REDIRECT:/dashboard/settings/accounts",
+    );
   });
 });

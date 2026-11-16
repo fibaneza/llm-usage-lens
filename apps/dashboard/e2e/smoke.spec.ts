@@ -38,7 +38,13 @@ test.describe("dashboard shell", () => {
       await waitForHydration(page);
 
       // Still on the dashboard route — the forged session was accepted.
-      await expect(page).toHaveURL(item.href);
+      // Settings (unit D) redirects its index to the first tab, so the URL
+      // only has to stay under the nav item's route.
+      await expect(page).toHaveURL(
+        (url) =>
+          url.pathname === item.href ||
+          url.pathname.startsWith(`${item.href}/`),
+      );
       // PageTitle renders the route's single <h1> from the nav item.
       await expect(
         page.getByRole("heading", { level: 1, name: item.pageTitle }),

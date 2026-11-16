@@ -35,7 +35,7 @@ async function mockApi(page: Page) {
 }
 
 async function openSettings(page: Page) {
-  await page.goto("/dashboard/settings");
+  await page.goto("/dashboard/settings/litellm");
   await waitForHydration(page);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 }
@@ -151,14 +151,24 @@ test.describe("settings LiteLLM section", () => {
     await expect(page.getByText("Connection ok")).toBeVisible();
   });
 
-  test("is absent for internal-viewer", async ({ page, context }) => {
+  // Unit D: the panel is its own tab. An internal-viewer has no LiteLLM tab and
+  // the tab URL is the 404 page (Design System "Settings Page"; LiteLLM LD24).
+  test("is absent for internal-viewer: no tab, and the tab URL is a 404", async ({
+    page,
+    context,
+  }) => {
     await signInAsTestUser(context, { roles: ["internal-viewer"] });
     await mockApi(page);
-    await openSettings(page);
+    await page.goto("/dashboard/settings/accounts");
+    await waitForHydration(page);
 
     await expect(
       page.getByRole("heading", { name: /account registry/i }),
     ).toBeVisible();
+    await expect(page.getByRole("tab", { name: "LiteLLM" })).toHaveCount(0);
+
+    const response = await page.goto("/dashboard/settings/litellm");
+    expect(response?.status()).toBe(404);
     await expect(page.getByRole("heading", { name: "LiteLLM" })).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: /test connection/i }),

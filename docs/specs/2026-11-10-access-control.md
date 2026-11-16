@@ -692,10 +692,17 @@ password).
     never shows the password form to a dev-login session).
   - `redirectTo` is the Settings section that started the step-up, chosen
     from a fixed allowlist of exactly two values:
-    `/dashboard/settings#role-grants` and
-    `/dashboard/settings#password-users` (the table above; D33). The
-    action takes a section key (`role-grants` | `password-users`), never a
-    URL; any other value is refused. There is no return-URL parameter.
+    `/dashboard/settings/access/roles#role-grants` and
+    `/dashboard/settings/access/sign-in#password-users` (the table above;
+    D33). The action takes a section key (`role-grants` | `password-users`),
+    never a URL; any other value is refused. There is no return-URL
+    parameter. The Settings split (2026-11-16, Design System — *Settings
+    Page*) moved the sections onto tab routes, so the allowlist URLs changed
+    from the earlier `/dashboard/settings#role-grants` and
+    `/dashboard/settings#password-users`; the section keys are unchanged.
+    The fragment is best-effort (D33a): the step-up lands on the tab URL
+    directly and the anchor scrolls when the section is present. The Settings
+    hash resolver remains only for old `/dashboard/settings#<slug>` links.
 - **UI.** On `REAUTH_REQUIRED` the dialog that sent the write (Role grants,
   or a Password users action or the password sign-in switch) shows "Confirm
   it's you" with the control for `session.user.authMethod` (a button for Entra;
@@ -945,6 +952,7 @@ user holds a proxy role). A new code is added here first. A bad or foreign list 
 | D31 | A password user who needs TOTP but never enrolled | new enrolment route / admin reset link | **Admin reset link**; its setup flow enrols TOTP when required — reuses the audited admin flow. (agent decision, 2026-11-15: it reuses the audited admin flow and adds no enrolment route) |
 | D32 | Last-admin checks | read then write / one transaction | **One `TransactWriteItems`** with a `ConditionCheck` on another enabled admin's items; concurrent removals conflict and one gets `409 CONFLICT` (*Enforcement* item 8; no TOCTOU on a lockout invariant). (agent decision, 2026-11-15: a read-then-write check leaves a lockout race) |
 | D33 | D28's open questions | — | **No `denied` record** on `REAUTH_REQUIRED` (a challenge, not a refusal; the step-up sign-in is audited and a span event, later a counter, marks challenges); the **Entra `auth_time` claim** stays a user action (auth guide; fails closed without it); **re-auth extends** to password-user create, reset, TOTP reset and delete and to the password sign-in switch — not group mappings, memberships, visibility or links (sudo-mode practice, ASVS re-authentication before sensitive operations); the **return target** is the starting Settings section from a two-value allowlist; a step-up **restarts the session cap** (a new authentication issues a new session). (agent decision, 2026-11-15: each resolves a D28 question with the sudo-mode and ASVS precedent) |
+| D33a | Where the step-up returns | the starting section's `#section` fragment as a hard requirement / the final Settings tab URL | **The step-up returns to the final Settings tab URL; the `#section` fragment is best-effort**, because Next drops fragments on server-action redirects. Landing on the tab satisfies D33, since the tab holds the section. (agent decision, coordinator, 2026-11-17, under the user's delegation: the framework cannot carry the fragment and the tab already shows the section)  |
 | D34 | Pending and stale lists in Settings | build now / defer | **Build now, in 4R.4** (user, 2026-11-15, reversing the orchestrator's earlier deferral): a Settings list of pending and stale items with a scoped read route, test-first. The access review keeps flagging stale items |
 | D35 | Non-person key and D27 matching | canonicalise the ARN / keep it raw | **`byUser` keeps the raw non-person key; D27 rules match on the session name** (after the last `/` or `:`) — the spec follows the tested code; raw ARNs are stored lower-cased by the links key schema. (agent decision, 2026-11-15: the spec follows the tested code; 2026-11-16: lower-casing recorded) |
 | D36 | `POST /api/account/password` from a non-password session | no record / `denied` | **One `denied` record** — it is an authorization refusal (D17). (agent decision, 2026-11-15: a refusal is an authorization event (D17)) |

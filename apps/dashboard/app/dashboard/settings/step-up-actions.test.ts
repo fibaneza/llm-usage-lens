@@ -38,6 +38,13 @@ beforeEach(() => {
   auth.mockResolvedValue(passwordSession);
 });
 
+// Access Control D33 + Design System Settings Page: the return lands on the
+// section's final tab URL (the index redirect would drop the fragment).
+const FINAL = {
+  "role-grants": "/dashboard/settings/access/roles#role-grants",
+  "password-users": "/dashboard/settings/access/sign-in#password-users",
+} as const;
+
 describe("step-up-actions - section key (D33)", () => {
   it.each(["role-grants", "password-users"] as const)(
     "stepUpWithEntra(%s) signs in returning to that anchor",
@@ -46,7 +53,7 @@ describe("step-up-actions - section key (D33)", () => {
       await stepUpWithEntra(section);
       expect(signIn).toHaveBeenCalledWith(
         "microsoft-entra-id",
-        { redirectTo: `/dashboard/settings#${section}` },
+        { redirectTo: FINAL[section] },
         { prompt: "login", max_age: "900" },
       );
     },
@@ -59,7 +66,7 @@ describe("step-up-actions - section key (D33)", () => {
       expect(signIn).toHaveBeenCalledWith(
         "password",
         expect.objectContaining({
-          redirectTo: `/dashboard/settings#${section}`,
+          redirectTo: FINAL[section],
         }),
       );
     },
@@ -90,7 +97,7 @@ describe("stepUpWithEntra - session and method guard (B3, T32)", () => {
     expect(signIn).toHaveBeenCalledTimes(1);
     expect(signIn).toHaveBeenCalledWith(
       "microsoft-entra-id",
-      { redirectTo: "/dashboard/settings#role-grants" },
+      { redirectTo: FINAL["role-grants"] },
       { prompt: "login", max_age: "900" },
     );
   });
@@ -125,7 +132,7 @@ describe("stepUpWithDevLogin - the dev-login session's own step-up (B3, T32)", (
       expect(await stepUpWithDevLogin(section)).toBeUndefined();
       expect(signIn).toHaveBeenCalledWith("dev-login", {
         role: "internal-admin",
-        redirectTo: `/dashboard/settings#${section}`,
+        redirectTo: FINAL[section],
       });
     },
   );
