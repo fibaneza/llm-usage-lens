@@ -5,7 +5,7 @@ import {
   E2E_LITELLM_BASE_URL,
   E2E_LITELLM_USER,
 } from "./support/constants";
-import { seedStoredIdentity } from "./support/identity";
+import { deleteStoredIdentity, seedStoredIdentity } from "./support/identity";
 import { signInAsTestUser } from "./support/session";
 
 // Runs against the E2E dev server, which sets AUTH_DEV_LOGIN=true and no Entra
@@ -73,6 +73,15 @@ async function ensureFakeLiteLLMConnection(context: BrowserContext) {
 test.describe("dev login identity option (L3c, L3c2)", () => {
   // Both LiteLLM tests save the one shared connection; run them in order.
   test.describe.configure({ mode: "serial" });
+
+  const SEEDED_OIDS = [
+    "00000000-0000-4000-8000-0000000e2e01",
+    "00000000-0000-4000-8000-0000000e2e02",
+  ];
+
+  test.afterAll(async () => {
+    for (const oid of SEEDED_OIDS) await deleteStoredIdentity(oid);
+  });
 
   test.beforeAll(async () => {
     await seedStoredIdentity({
