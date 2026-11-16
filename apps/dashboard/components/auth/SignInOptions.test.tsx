@@ -137,7 +137,31 @@ describe("SignInOptions dev identity option", () => {
     expect(screen.queryByLabelText(/sign in as/i)).toBeNull();
   });
 
-  it("submits the typed identity with the chosen role (Dev login)", async () => {
+  // Amended L3c2: the role comes from the stored user, so the Role select is
+  // disabled while an identity is typed, with a hint saying why.
+  it("enables the Role select and shows no hint while the identity is empty (Dev login, L3c2)", () => {
+    render(<SignInOptions entra={false} devLogin {...actions} />);
+    expect(screen.getByLabelText(/role/i)).toBeEnabled();
+    expect(screen.queryByText(/role comes from the stored user/i)).toBeNull();
+  });
+
+  it("disables the Role select and hints that the role comes from the stored user while an identity is typed (Dev login, L3c2)", async () => {
+    render(<SignInOptions entra={false} devLogin {...actions} />);
+    const user = userEvent.setup();
+    const field = screen.getByLabelText("Sign in as (email or user id)");
+    await user.type(field, "ada@example.com");
+
+    expect(screen.getByLabelText(/role/i)).toBeDisabled();
+    expect(
+      screen.getByText(/role comes from the stored user/i),
+    ).toBeInTheDocument();
+
+    await user.clear(field);
+    expect(screen.getByLabelText(/role/i)).toBeEnabled();
+    expect(screen.queryByText(/role comes from the stored user/i)).toBeNull();
+  });
+
+  it("submits the typed identity (Dev login)", async () => {
     const devLoginAction = vi.fn<DevLoginAction>(async () => null);
     render(
       <SignInOptions
@@ -152,7 +176,6 @@ describe("SignInOptions dev identity option", () => {
       screen.getByLabelText("Sign in as (email or user id)"),
       "Ada@Example.com",
     );
-    await user.selectOptions(screen.getByLabelText(/role/i), "internal-viewer");
     await user.click(
       screen.getByRole("button", { name: "Sign in as Ada@Example.com" }),
     );
@@ -160,7 +183,6 @@ describe("SignInOptions dev identity option", () => {
     await waitFor(() => expect(devLoginAction).toHaveBeenCalledTimes(1));
     const formData = devLoginAction.mock.calls[0]?.[1];
     expect(formData?.get("identity")).toBe("Ada@Example.com");
-    expect(formData?.get("role")).toBe("internal-viewer");
   });
 
   it("shows a visible alert after a refused sign-in (Dev login: refusal is visible, no 500)", async () => {

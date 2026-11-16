@@ -5,6 +5,7 @@ import {
   E2E_LITELLM_BASE_URL,
   E2E_LITELLM_USER,
 } from "./support/constants";
+import { seedStoredIdentity } from "./support/identity";
 import { signInAsTestUser } from "./support/session";
 
 // Runs against the E2E dev server, which sets AUTH_DEV_LOGIN=true and no Entra
@@ -66,9 +67,27 @@ async function ensureFakeLiteLLMConnection(context: BrowserContext) {
   await context.clearCookies();
 }
 
-test.describe("dev login identity option (L3c)", () => {
+// Amended L3c2: the dev login only signs in as a stored identity, so each case
+// seeds its Identity row in DynamoDB Local first (support/identity.ts). The Role
+// select is disabled while an identity is typed, so no case picks a role.
+test.describe("dev login identity option (L3c, L3c2)", () => {
   // Both LiteLLM tests save the one shared connection; run them in order.
   test.describe.configure({ mode: "serial" });
+
+  test.beforeAll(async () => {
+    await seedStoredIdentity({
+      oid: "00000000-0000-4000-8000-0000000e2e01",
+      email: E2E_LITELLM_USER.email,
+      displayName: "Ada Lovelace",
+      lastSeenRoles: ["internal-viewer"],
+    });
+    await seedStoredIdentity({
+      oid: "00000000-0000-4000-8000-0000000e2e02",
+      email: "nobody.here@example.test",
+      displayName: "Nobody Here",
+      lastSeenRoles: ["internal-viewer"],
+    });
+  });
 
   test("signing in as a LiteLLM user's email shows that user's spend in My usage (Views by role)", async ({
     context,
@@ -79,7 +98,7 @@ test.describe("dev login identity option (L3c)", () => {
     await page
       .getByLabel("Sign in as (email or user id)")
       .fill(E2E_LITELLM_USER.email.toUpperCase());
-    await page.getByLabel(/role/i).selectOption("internal-viewer");
+    await expect(page.getByLabel(/role/i)).toBeDisabled();
     await page
       .getByRole("button", {
         name: `Sign in as ${E2E_LITELLM_USER.email.toUpperCase()}`,
@@ -103,7 +122,6 @@ test.describe("dev login identity option (L3c)", () => {
     await page
       .getByLabel("Sign in as (email or user id)")
       .fill("nobody.here@example.test");
-    await page.getByLabel(/role/i).selectOption("internal-viewer");
     await page
       .getByRole("button", { name: "Sign in as nobody.here@example.test" })
       .click();
@@ -113,6 +131,21 @@ test.describe("dev login identity option (L3c)", () => {
     await expect(
       page.getByText("Your account is not linked to LiteLLM"),
     ).toBeVisible();
+  });
+
+  test("an email that is not stored is refused with a visible error and no session (Dev login, L3c2)", async ({
+    page,
+  }) => {
+    await page.goto("/sign-in");
+    await page
+      .getByLabel("Sign in as (email or user id)")
+      .fill("never.stored@example.test");
+    await page
+      .getByRole("button", { name: "Sign in as never.stored@example.test" })
+      .click();
+
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page).toHaveURL(/\/sign-in/);
   });
 
   test("an invalid identity is refused with a visible error and no session (Dev login)", async ({

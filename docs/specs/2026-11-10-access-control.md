@@ -166,7 +166,7 @@ per request and apply on the next request.
 | Entra ID (OIDC) | All environments; **required in `prod` once SSO is approved** — until then `prod` runs in *Pre-SSO mode* | From the token |
 | **Master user** (username + password) | All environments; **required** in Pre-SSO `prod` | Always `internal-admin` |
 | **Password users** (email + password, amended 2026-11-14) | All environments, while password sign-in is on (*Password users*) | In-app role grants, member team and admin scopes, set in Settings |
-| Dev login (no password) | **Outside production and only while Entra is not configured** | Chosen at sign-in; the default is `internal-admin` |
+| Dev login (no password) | **Outside production and only while Entra is not configured** | With no identity: chosen at sign-in, default `internal-admin`. With an identity: that stored user's `lastSeenRoles` (amended L3c2, user, 2026-11-16) |
 
 **Master user** (break-glass and first-time setup; amends System
 Architecture *Sign-in providers*):
@@ -193,7 +193,24 @@ Architecture *Sign-in providers*):
   login.
 
 **Dev login.** Outside production and only while Entra is not configured, a
-no-password login offers a role choice (R1) and, from L3c (user, 2026-11-16), an optional identity: an email or a dashboard `oid`. A given identity that exists in DynamoDB signs in as that identity (its `oid`, email and name); an unknown email signs in as a dev identity with that email and a stable `dev-` `oid`. The chosen role still decides access; no role is read from the identity. **It is rejected by env
+no-password login offers a role choice (R1) and, from L3c (user, 2026-11-16), an
+optional identity: an email or a dashboard `oid`. **Amended L3c2 (user,
+2026-11-16; a dev-debugging aid, not a production feature):** with the identity
+empty, the session is the Local Developer (`local:dev@localhost`) with the role
+chosen on the form (default `internal-admin`), as before. With an identity, it
+must match a stored identity (by `oid`, or by lower-cased email), and the session
+is that user's: its `oid`, email and name, and as role claim the stored
+`lastSeenRoles` filtered to valid global roles (the claim that user had at their
+last real sign-in); an absent or empty claim gets the baseline a password user
+with no roles gets (`internal-viewer`, via `resolveGlobalRoles`). The form's role is
+ignored entirely, and the sign-in page disables the Role select while an identity
+is typed. In-app grants, team-lead scopes and affiliations then apply per request
+as for that user. An identity that is not stored (unknown email or unknown `oid`)
+is refused with the one generic failure; the synthetic `dev-` identity for an
+unknown email is removed. A `master:` `oid` is refused (case-insensitive) before
+any store read, and a dev sign-in as a stored identity never overwrites its stored
+provenance (`authMethod`, `tid`, `lastSeenRoles`); only `lastSignInAt` moves.
+**It is rejected by env
 validation when Entra is configured** (amending *Sign-in providers*, which
 allowed both outside production). Production fail-closed checks are
 unchanged; no production bypass exists (Rule 70.11).

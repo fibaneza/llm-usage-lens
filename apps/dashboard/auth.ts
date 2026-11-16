@@ -162,28 +162,33 @@ if (enabledSignInProviders.entra) {
   providers.push(MicrosoftEntraID);
 }
 if (enabledSignInProviders.devLogin) {
-  // Local development only: fixed identity, role chosen on the sign-in page.
+  // Local development only: a stored identity signs in with its stored roles;
+  // the posted role applies only to the Local Developer.
   providers.push(
     Credentials({
       id: DEV_LOGIN_PROVIDER_ID,
       name: "Local developer",
       credentials: { role: {}, identity: {} },
       authorize: async (credentials) => {
-        const role = credentials?.role ?? INTERNAL_ADMIN_ROLE;
-        if (!isGlobalRole(role)) return null;
         // Loaded on demand: the resolver reads DynamoDB (server-only).
         const { resolveDevIdentity } = await import("@/lib/auth/dev-identity");
         const resolved = await resolveDevIdentity(credentials?.identity);
         if (!resolved.ok) return null;
         const { oid, email, name } = resolved.identity;
         if (oid.toLowerCase().startsWith(MASTER_OID_PREFIX)) return null;
+        let roles = resolved.identity.roles;
+        if (!roles) {
+          const role = credentials?.role ?? INTERNAL_ADMIN_ROLE;
+          if (!isGlobalRole(role)) return null;
+          roles = [role];
+        }
         return {
           id: oid,
           name,
           ...(email ? { email } : {}),
           oid,
           tid: "local",
-          roles: [role],
+          roles,
           authMethod: "local",
         };
       },

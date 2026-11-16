@@ -2,7 +2,7 @@ import "server-only";
 
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { GSI1_NAME, IdentityRecordSchema } from "@llm-usage-lens/shared";
-import type { z } from "zod";
+import { z } from "zod";
 
 import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 
@@ -94,13 +94,14 @@ export type DevIdentityMatch = {
   oid: string;
   email?: string;
   displayName?: string;
+  lastSeenRoles: string[];
 };
 
 const DevIdentityMatchSchema = IdentityRecordSchema.pick({
   oid: true,
   email: true,
   displayName: true,
-});
+}).extend({ lastSeenRoles: z.array(z.string()).default([]) });
 
 // Dev login (Access Control spec): a stored identity by oid.
 export async function findIdentityByOid(

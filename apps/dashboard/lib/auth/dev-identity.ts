@@ -1,7 +1,5 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
-
 import { z } from "zod";
 
 import {
@@ -9,16 +7,27 @@ import {
   findIdentityByOid,
 } from "@/lib/data/access/identities";
 import { MASTER_OID_PREFIX } from "@/lib/auth/master-oid";
+import {
+  INTERNAL_VIEWER_ROLE,
+  isGlobalRole,
+  type GlobalRole,
+} from "@/lib/auth/roles";
 
 // Source: docs/specs/2026-11-10-access-control.md - "Dev login" (L3c). An
-// optional identity: an email or a dashboard oid. No role is read from it; the
-// role comes only from the sign-in form. Server-only by construction: the
+// optional identity: an email or a dashboard oid. A stored identity signs in with
+// its stored lastSeenRoles (viewer when none are valid); the typed string never
+// supplies a role. Server-only by construction: the
 // DynamoDB lookups are loaded on demand from the server-only data layer, so
 // the empty identity (today's local developer) needs no store.
 const LOCAL_DEFAULT_EMAIL = "dev@localhost";
 const MAX_LENGTH = 254;
 
-export type DevIdentity = { oid: string; email?: string; name: string };
+export type DevIdentity = {
+  oid: string;
+  email?: string;
+  name: string;
+  roles?: GlobalRole[];
+};
 export type DevIdentityResult =
   | { ok: true; identity: DevIdentity }
   | { ok: false };
@@ -40,11 +49,14 @@ function fromStored(match: {
   oid: string;
   email?: string;
   displayName?: string;
+  lastSeenRoles?: string[];
 }): DevIdentity {
+  const roles = (match.lastSeenRoles ?? []).filter(isGlobalRole);
   return {
     oid: match.oid,
     ...(match.email ? { email: match.email } : {}),
     name: match.displayName ?? match.email ?? match.oid,
+    roles: roles.length > 0 ? roles : [INTERNAL_VIEWER_ROLE],
   };
 }
 
@@ -66,15 +78,7 @@ export async function resolveDevIdentity(
     const lowered = email.data.toLowerCase();
     const stored = await findIdentityByEmail(lowered);
     if (stored) return { ok: true, identity: fromStored(stored) };
-    const digest = createHash("sha256").update(lowered).digest("hex");
-    return {
-      ok: true,
-      identity: {
-        oid: `dev-${digest.slice(0, 32)}`,
-        email: lowered,
-        name: lowered,
-      },
-    };
+    return { ok: false };
   }
 
   const oid = OidSchema.safeParse(token.data);

@@ -213,10 +213,15 @@ describe("local login (dev only)", () => {
       },
     );
 
-    it("signs in as the resolved identity with authMethod local (Dev login, user menu)", async () => {
+    it("signs in as the resolved identity with authMethod local and its stored roles (Dev login, L3c2)", async () => {
       resolveDevIdentity.mockResolvedValue({
         ok: true,
-        identity: { oid: "oid-ada", email: "ada@example.com", name: "Ada" },
+        identity: {
+          oid: "oid-ada",
+          email: "ada@example.com",
+          name: "Ada",
+          roles: ["internal-auditor"],
+        },
       });
       const user = await authorize({
         role: "internal-viewer",
@@ -227,26 +232,27 @@ describe("local login (dev only)", () => {
         email: "ada@example.com",
         name: "Ada",
         authMethod: "local",
-        roles: ["internal-viewer"],
+        roles: ["internal-auditor"],
       });
     });
 
-    it("takes the role only from the Role field, never from the identity (Dev login)", async () => {
+    it("ignores a posted role entirely when the identity carries stored roles, even an invalid or missing one (Dev login, L3c2)", async () => {
       resolveDevIdentity.mockResolvedValue({
         ok: true,
-        identity: {
-          oid: "oid-ada",
-          email: "ada@example.com",
-          name: "Ada",
-          roles: ["internal-admin"],
-          lastSeenRoles: ["internal-admin"],
-        },
+        identity: { oid: "oid-ada", name: "Ada", roles: ["internal-viewer"] },
       });
-      const user = await authorize({
-        role: "internal-viewer",
-        identity: "ada@example.com",
+      for (const role of ["internal-admin", "root", "", undefined]) {
+        const user = await authorize({ role, identity: "oid-ada" });
+        expect(user?.roles).toEqual(["internal-viewer"]);
+      }
+    });
+
+    it("uses the posted role when the resolved identity has no stored roles, the Local Developer (Dev login, L3c2)", async () => {
+      const user = await authorize({ role: "internal-auditor" });
+      expect(user).toMatchObject({
+        oid: "local:dev@localhost",
+        roles: ["internal-auditor"],
       });
-      expect(user?.roles).toEqual(["internal-viewer"]);
     });
 
     // Rule 50 / Dev login: authorize refuses a master-prefixed oid, whatever
@@ -263,11 +269,8 @@ describe("local login (dev only)", () => {
       expect(out ?? null).toBeNull();
     });
 
-    it("still refuses an invalid role when the identity is valid (Dev login)", async () => {
-      const out = await authorize({
-        role: "root",
-        identity: "ada@example.com",
-      });
+    it("still refuses an invalid role when there is no identity (Dev login, R1)", async () => {
+      const out = await authorize({ role: "root" });
       expect(out ?? null).toBeNull();
     });
 

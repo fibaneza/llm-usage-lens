@@ -10,11 +10,12 @@ export const ADMIN_ROLE = "Admin";
 export const INTERNAL_ADMIN_ROLE = "internal-admin";
 export const INTERNAL_ORG_ADMIN_ROLE = "internal-org-admin";
 export const INTERNAL_AUDITOR_ROLE = "internal-auditor";
+export const INTERNAL_VIEWER_ROLE = "internal-viewer";
 export const GLOBAL_ROLES = [
   INTERNAL_ADMIN_ROLE,
   INTERNAL_ORG_ADMIN_ROLE,
   INTERNAL_AUDITOR_ROLE,
-  "internal-viewer",
+  INTERNAL_VIEWER_ROLE,
 ] as const;
 export type GlobalRole = (typeof GLOBAL_ROLES)[number];
 

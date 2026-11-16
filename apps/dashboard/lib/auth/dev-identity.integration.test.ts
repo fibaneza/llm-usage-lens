@@ -20,11 +20,13 @@ import {
 
 import { resolveDevIdentity } from "./dev-identity";
 
-// Source: docs/specs/2026-11-10-access-control.md - "Dev login" (L3c, user,
-// 2026-11-16): an optional identity (an email or a dashboard oid); a stored
-// identity signs in as itself, an unknown email as a dev identity with a
-// stable `dev-` oid; no role is read from the identity. Threat T7 / LT21 (the
-// env rejection) is covered by pre-sso.test.ts and auth-config.test.ts.
+// Source: docs/specs/2026-11-10-access-control.md - "Dev login" (L3c, amended
+// L3c2, user, 2026-11-16): an optional identity (an email or a dashboard oid);
+// a stored identity signs in as itself with its stored lastSeenRoles as the
+// role claim (`identity.roles`); an unknown email or oid is refused; the empty
+// identity is the Local Developer with no stored roles (the form decides).
+// Threat T7 / LT21 (the env rejection) is covered by pre-sso.test.ts and
+// auth-config.test.ts.
 // Rule 60.22: DynamoDB Local, no mocks of the data layer.
 //
 // Ruled (tdd-test-engineer): undefined and "" are the empty identity; any
@@ -64,6 +66,7 @@ function identityOf(out: Awaited<ReturnType<typeof resolveDevIdentity>>): {
   oid: string;
   email?: string;
   name: string;
+  roles?: string[];
 } {
   if (!out.ok) throw new Error("expected a resolved identity");
   return out.identity;
@@ -93,6 +96,7 @@ describe("resolveDevIdentity", () => {
         oid: STORED_OID,
         email: "ada@example.com",
         name: "Ada Lovelace",
+        roles: ["internal-auditor"],
       });
     },
   );
@@ -102,6 +106,7 @@ describe("resolveDevIdentity", () => {
       oid: STORED_OID,
       email: "ada@example.com",
       name: "Ada Lovelace",
+      roles: ["internal-auditor"],
     });
   });
 
@@ -135,25 +140,68 @@ describe("resolveDevIdentity", () => {
     ).toMatchObject({ oid: late, name: "Late Person" });
   });
 
-  it("an unknown email becomes a dev identity with the lower-cased email and a stable dev- oid (Dev login)", async () => {
-    const first = identityOf(
-      await resolveDevIdentity("New.Person@Example.com"),
-    );
-    const again = identityOf(
-      await resolveDevIdentity("new.person@example.com"),
-    );
-    const other = identityOf(await resolveDevIdentity("other@example.com"));
-    expect(first.email).toBe("new.person@example.com");
-    expect(first.oid).toMatch(/^dev-/);
-    expect(again.oid).toBe(first.oid);
-    expect(other.oid).toMatch(/^dev-/);
-    expect(other.oid).not.toBe(first.oid);
-    expect(first.name).not.toBe("");
+  // Dev login (amended L3c2): "an identity that is not stored (unknown email or
+  // unknown oid) is refused with the one generic failure"; no dev- identity.
+  it.each(["new.person@example.com", "New.Person@Example.com"])(
+    "an unknown email %s is refused, not minted as a dev- identity (Dev login, L3c2)",
+    async (input) => {
+      expect(await resolveDevIdentity(input)).toEqual({ ok: false });
+    },
+  );
+
+  it("an unknown oid is refused (Dev login, L3c2)", async () => {
+    expect(
+      await resolveDevIdentity("11111111-1111-4111-8111-111111111111"),
+    ).toEqual({ ok: false });
   });
 
-  it("returns no role, whatever the stored identity holds (Dev login: no role is read from the identity)", async () => {
-    const out = await resolveDevIdentity("ada@example.com");
-    expect(JSON.stringify(out)).not.toMatch(/internal-|roles|lastSeenRoles/);
+  it("the empty identity carries no stored roles, so the form role decides (Dev login, L3c2)", async () => {
+    const identity = identityOf(await resolveDevIdentity(""));
+    expect(identity.roles).toBeUndefined();
+  });
+
+  // Dev login (amended L3c2): the role claim is the stored lastSeenRoles
+  // filtered to valid global roles; absent or empty gets the password-user
+  // baseline resolveGlobalRoles(undefined) = ["internal-viewer"] (roles.ts).
+  it.each([
+    ["two valid roles", ["internal-viewer", "internal-admin"]],
+    [
+      "valid roles beside junk and the legacy Admin alias",
+      ["internal-viewer", "internal-admin", "Admin", "bogus"],
+    ],
+  ])(
+    "takes the stored lastSeenRoles, filtered to global roles: %s (Dev login, L3c2)",
+    async (_label, lastSeenRoles) => {
+      await putRaw({ ...STORED, lastSeenRoles });
+      const roles = identityOf(
+        await resolveDevIdentity("ada@example.com"),
+      ).roles;
+      expect([...(roles ?? [])].sort()).toEqual([
+        "internal-admin",
+        "internal-viewer",
+      ]);
+    },
+  );
+
+  it.each([
+    ["an empty claim", { lastSeenRoles: [] }],
+    ["only invalid entries", { lastSeenRoles: ["Admin", "bogus"] }],
+    ["an absent claim", { lastSeenRoles: undefined }],
+  ])(
+    "falls back to the password-user baseline internal-viewer for %s (Dev login, L3c2)",
+    async (_label, over) => {
+      await putRaw({ ...STORED, ...over });
+      expect(identityOf(await resolveDevIdentity(STORED_OID)).roles).toEqual([
+        "internal-viewer",
+      ]);
+    },
+  );
+
+  it("returns the stored role claim, not an elevated one, by email and by oid alike (Dev login, L3c2)", async () => {
+    const byEmail = identityOf(await resolveDevIdentity("ada@example.com"));
+    const byOid = identityOf(await resolveDevIdentity(STORED_OID));
+    expect(byEmail.roles).toEqual(["internal-auditor"]);
+    expect(byOid.roles).toEqual(["internal-auditor"]);
   });
 
   it.each([
@@ -286,6 +334,28 @@ describe("dev sign-in as a stored identity leaves the stored record's provenance
       lastSeenRoles: ["internal-auditor"],
       email: "ada@example.com",
       displayName: "Ada Lovelace",
+    });
+    // "only lastSignInAt moves" (Dev login, amended L3c2)
+    expect((await stored(STORED_OID))?.lastSignInAt).not.toBe(
+      STORED.lastSignInAt,
+    );
+  });
+
+  it("keeps a stored password user's provenance and roles too, whatever role is posted (Dev login, L3c2)", async () => {
+    await putRaw({
+      ...STORED,
+      authMethod: "password",
+      lastSeenRoles: ["internal-org-admin"],
+    });
+    const ok = await devSignIn({
+      role: "internal-viewer",
+      identity: STORED_OID,
+    });
+    expect(ok).toBe(true);
+    expect(await stored(STORED_OID)).toMatchObject({
+      authMethod: "password",
+      tid: STORED.tid,
+      lastSeenRoles: ["internal-org-admin"],
     });
   });
 });

@@ -704,7 +704,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 *Split from L3b (agent decision, 2026-11-16: `auth.ts` is held for the 4R.4 fix, so the views ship first; reversible).*
 
 - [x] Dev login as a chosen identity (Access Control — *Dev login*, amended 2026-11-16), additive to `auth.ts` once the 4R.4 fix is on `main`
-- [ ] Verify (landed 2026-11-16 at the user's direction; the e2e case dev-login.spec.ts:73 waits for the L3b fix B4; the stored-roles change follows as L3c2): an existing identity's email or `oid` signs in as that identity; an unknown email gets a stable `dev-` `oid`; the chosen role decides access; rejected in `prod` and with Entra configured (T7, LT21)
+- [ ] Verify (landed 2026-11-16 at the user's direction; the e2e case dev-login.spec.ts:73 waits for the L3b fix B4; the stored-roles change follows as L3c2): an existing identity's email or `oid` signs in as that identity with its stored `lastSeenRoles` (amended L3c2: the form role is ignored when an identity is given, an unknown email or `oid` is refused, no `dev-` identity); with no identity the form role decides access; rejected in `prod` and with Entra configured (T7, LT21)
 
 ### L4 — Lead and admin writes (`feature/phase-l4-litellm-writes`)
 

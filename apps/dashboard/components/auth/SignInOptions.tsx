@@ -48,6 +48,8 @@ export function SignInOptions({
             Role
             <select
               name="role"
+              disabled={identity.trim() !== ""}
+              aria-describedby={identity.trim() ? "dev-role-hint" : undefined}
               defaultValue={INTERNAL_ADMIN_ROLE}
               className={FIELD_CLASS}
             >
@@ -58,6 +60,11 @@ export function SignInOptions({
               ))}
             </select>
           </label>
+          {identity.trim() ? (
+            <p id="dev-role-hint" className="text-muted-foreground text-sm">
+              The role comes from the stored user.
+            </p>
+          ) : null}
           <label className="text-foreground flex flex-col gap-1 text-left text-sm">
             Sign in as (email or user id)
             <input
