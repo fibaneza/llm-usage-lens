@@ -40,6 +40,15 @@ Chromium and runs `pnpm test:e2e` (both Playwright projects) with
 `E2E_LOCK=off`, since CI has no other session. It uses no secrets: the dev
 servers' env is pinned in `apps/dashboard/playwright.config.ts`.
 
+- **Concurrency:** the group is per workflow and ref, and
+  `cancel-in-progress` is `${{ github.event_name == 'pull_request' }}`.
+  A new push to a pull request cancels that PR's superseded run, but a
+  push to `main` never cancels the `main` run in progress, so it
+  finishes, e2e included. Previously every event cancelled, so
+  back-to-back pushes left no completed `main` run (the runs at 39fa452
+  and 5e8a5a5 were cancelled). GitHub keeps at most one pending run per
+  group. A third push while one `main` run is running and one is pending
+  replaces the pending one, so the newest commit is always tested.
 - **Runner:** `ubuntu-24.04`, pinned rather than `ubuntu-latest`. The
   first run (43878743673) failed at the browser install because
   `ubuntu-latest` is now 26.04, which Playwright 1.60 does not support.

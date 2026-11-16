@@ -49,13 +49,20 @@ describe("ci e2e job (llm-usage-lens-build.yml)", () => {
   const steps = stepsOf(e2e);
   const step = (re: RegExp) => steps.find((s) => re.test(s)) ?? "";
 
-  it("triggers on push to main and pull_request, cancelling superseded runs (goal: trigger)", () => {
+  // Coordinator follow-up: runs at 39fa452 and 5e8a5a5 on main were cancelled
+  // by the next push, so no full e2e on main completed. .github/ACTIONS.md
+  // (the concurrency note) documents that only PR runs are superseded.
+  it("triggers on push to main and pull_request, cancelling superseded pull-request runs only, never runs on main (coordinator follow-up; ACTIONS.md concurrency)", () => {
     expect(block(workflow, "on", 0)).toMatch(
       /^ {2}push:\n {4}branches: \[main\]\n {2}pull_request:/m,
     );
-    expect(block(workflow, "concurrency", 0)).toMatch(
-      /^ {2}cancel-in-progress: true$/m,
+    const concurrency = block(workflow, "concurrency", 0);
+    expect(concurrency).not.toBe("");
+    expect(concurrency).not.toMatch(/^ {2}cancel-in-progress:\s*true\s*$/m);
+    expect(concurrency).toMatch(
+      /^ {2}cancel-in-progress:\s*\$\{\{\s*github\.event_name\s*==\s*['"]pull_request['"]\s*\}\}\s*$/m,
     );
+    expect(concurrency).toMatch(/^ {2}group:.*github\.ref/m);
   });
 
   // Run 43878743673: on ubuntu-latest (26.04) Playwright 1.60 cannot install

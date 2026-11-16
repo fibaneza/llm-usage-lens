@@ -11,7 +11,9 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded pull-request runs only; a push to main never cancels
+  # the main run in progress, so every main run completes (.github/ACTIONS.md).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
