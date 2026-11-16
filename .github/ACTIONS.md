@@ -4,7 +4,7 @@ This folder holds the project's GitHub-side automation.
 
 | File | Trigger | Purpose |
 | --- | --- | --- |
-| [`workflows/llm-usage-lens-build.yml`](workflows/llm-usage-lens-build.yml) | Push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), then `test` (Vitest against DynamoDB Local), `build` (`pnpm build:ci`) and `e2e` (headless Playwright, both projects, against DynamoDB Local) in parallel |
+| [`workflows/llm-usage-lens-build.yml`](workflows/llm-usage-lens-build.yml) | Push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), then `test` (Vitest against DynamoDB Local), `build` (`pnpm build:ci`), `e2e` (headless Playwright, both projects, production servers, against DynamoDB Local) and `e2e-dev` (the dev-login specs on `next dev`) in parallel |
 | [`workflows/llm-usage-lens-deploy.yml`](workflows/llm-usage-lens-deploy.yml) | `workflow_dispatch` (environment = dev or prod) | Builds the dashboard image, pushes it to ECR (tag = commit SHA) and runs `cdk deploy` of the DashboardServiceStack only, assuming `vars.DEPLOY_ROLE_ARN` via GitHub OIDC (no static keys). Never deploys the FoundationStack. **Running it is a user action.** |
 | [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) | Pull request events | Inline review comments + PR comment with HIGH/MEDIUM security findings; HIGH findings submit a REQUEST_CHANGES review and fail the check |
 | [`workflows/claude-code-review.yml`](workflows/claude-code-review.yml) | Push of release tags (`v*`, `*-rc*`, `*-beta*`) and `workflow_dispatch` | Release audit (code review + security) scoped to commits since the previous release tag; files GitHub issues for HIGH/MEDIUM security and HIGH code-review findings |
@@ -32,8 +32,8 @@ Q&A runs where nothing is pushed. The rest of this document walks through the
 
 ### `llm-usage-lens-build.yml` job graph
 
-`quality` runs first; `test`, `build` and `e2e` need it and run in parallel
-(`quality → test | build | e2e`). The `e2e` job (implementation-phases
+`quality` runs first; `test`, `build`, `e2e` and `e2e-dev` need it and run in parallel
+(`quality → test | build | e2e | e2e-dev`). The `e2e` job (implementation-phases
 Phase 5, *Add Playwright to GitHub Actions CI*) starts a `dynamodb-local`
 service (same image as `test`), creates and seeds the table, installs
 Chromium and runs `pnpm test:e2e` (both Playwright projects) with
@@ -58,15 +58,25 @@ servers' env is pinned in `apps/dashboard/playwright.config.ts`.
 - **Artifacts:** on failure only, `apps/dashboard/test-results` and
   `apps/dashboard/playwright-report`, kept 7 days.
 - **Servers (2026-11-17):** under `CI`, each of the two web servers runs
-  `next build` then `next start` (its own distDir, so the two tables never
-  share a data cache) instead of `next dev`, which compiled every route
-  cold on the 2-vCPU runner. Production refuses the dev-only login, so
-  these servers configure the master user with a dummy Argon2id hash that
-  no password matches. The specs that need the dev login
+  `next build` then `next start` instead of `next dev`, which compiled
+  every route cold on the 2-vCPU runner. Each server has its own distDir:
+  `.next` for the main server and `.next-probe-r5` for the role-probe
+  server. That way the two tables never share a data cache. Both builds
+  run at once before the first test, so the CI-only web-server timeout is
+  600 s (180 s locally). Production refuses the dev-only login, so these
+  servers configure the master user with a dummy Argon2id hash. Its salt
+  is under Argon2's 8-byte minimum, so no password verifies. They run with
+  `APP_ENV=dev` and a production `NODE_ENV`, so the `APP_ENV=prod` startup
+  path is covered by unit tests only. The CI-only settings are
+  `retries: 1` (was 2) and a 30 s test timeout (60 s locally). Local runs
+  are unchanged.
+- **`e2e-dev` job (2026-11-17):** the specs that need the dev login
   (`dev-login.spec.ts`, `sign-in-role-choice.spec.ts`, the settings-tabs
-  step-up case) skip under CI; local `next dev` runs still cover them.
-  The CI-only settings are `retries: 1` (was 2) and a 30 s test timeout
-  (60 s locally). Local runs are unchanged.
+  step-up case) skip on production servers. This job runs only those
+  specs, 10 cases on `next dev`, with `E2E_SERVERS=dev`. It has the same
+  setup and runner pin as `e2e`, and a 15-minute timeout. Playwright's
+  `--grep` follows the spec paths with no `--` separator. With `--`,
+  Playwright reads every later argument as a file filter.
 - **History on `next dev`, 2026-11-16:** run 43882190808 (1 worker)
   spent about 22.5 min on 330 of 350 cases, then stopped at 23m53s on a
   runner shutdown signal. Run 43922339732 (2 workers) finished 354 of
@@ -74,15 +84,26 @@ servers' env is pinned in `apps/dashboard/playwright.config.ts`.
   role-landing cases passed only on retry (`page.goto: net::ERR_ABORTED`).
   Run 43926308954 (2 workers) stayed in the E2E step for more than 55 min,
   past the 45-min job timeout. The runner had stopped responding, and its
-  logs were unavailable. Two dev servers plus two browsers likely
-  exhausted the runner's memory. The `test` job (Vitest) takes 11-14 min.
-- **Timeouts:** `e2e` 45 min and `test` 25 min.
-- **Cost:** about 14 min for `test` and 2-3 min for `quality` and
-  `build`, plus `e2e` (re-measure on the first green run on production
-  servers and record it here). The repository is private, so the minutes
-  count against the GitHub free tier (2,000 min/month on Free), and each
-  job bills its own minutes. The cost is accepted, not avoided
-  (CLAUDE.md, *Cost posture*).
+  logs were unavailable. Run 43927910942 (2 workers) reached 351 of 411
+  cases in about 13.5 min, then stopped on a runner shutdown signal. Two
+  dev servers plus two browsers likely exhausted the runner's memory. The `test` job (Vitest) takes 11-14 min.
+- **Timeouts:** `e2e` 45 min, `e2e-dev` 15 min and `test` 25 min.
+- **Measured on production servers (run 43939025415, a5e0bb6,
+  2026-11-16, green):** the `e2e` job took 7m35s. Setup (install, browser
+  from cache, table and seed) took about 1 min. The two parallel builds
+  plus server start took about 1.5 min, with no sign of memory pressure,
+  so the builds stay parallel. The 411 cases took 4.9 min on 2 workers:
+  400 passed, 10 skipped (the dev-login cases) and 1 flaky. The flaky
+  case, `role-landing.spec.ts:165`, passed on retry. In the same run,
+  `quality` took 2m02s, `build` 1m09s and `test` 16m10s.
+- **Cost:** about 31 runner-minutes per push or pull-request run.
+  `test` takes about 16 min, `e2e` about 7.5 min, `quality` and `build`
+  about 3 min together, and `e2e-dev` an estimated 3-4 min (one cold
+  `next dev` for 10 cases). The repository is private, so the minutes
+  count against the GitHub free tier (2,000 min/month on Free), about 60
+  runs a month, and each job bills its own minutes. `test` is now the
+  longest job. The cost is accepted, not avoided (CLAUDE.md, *Cost
+  posture*).
 
 ### `bedrock-simulator-build.yml` job graph
 

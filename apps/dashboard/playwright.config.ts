@@ -30,6 +30,8 @@ const PROBE_SPEC = /(role-landing|settings-tabs)\.spec\.ts$/;
 // so CI serves production builds (E2E_PRODUCTION_SERVERS). Production refuses
 // the dev-only login, so those servers configure the master user instead, with
 // a dummy Argon2id hash no password matches; forged sessions verify the same.
+// The hash's salt ("salt") is 4 bytes, under Argon2's 8-byte minimum, so
+// verification throws for every password: the master user can never sign in.
 const UNUSABLE_ARGON2ID_HASH = "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA";
 
 // Headless Playwright E2E for the dashboard. The devcontainer has no display

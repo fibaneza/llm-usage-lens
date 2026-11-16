@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { signInAsTestUser } from "./support/session";
 import {
   DEV_LOGIN_ONLY_REASON,
   E2E_PRODUCTION_SERVERS,
 } from "./support/constants";
+import { signInAsTestUser } from "./support/session";
 
 // Contract R1 decision 7: the local login offers a role choice (the four
 // global roles); the chosen role decides what the session can do.

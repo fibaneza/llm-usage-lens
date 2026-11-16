@@ -152,3 +152,63 @@ jobs:
             apps/dashboard/test-results
             apps/dashboard/playwright-report
           retention-days: 7
+
+  # The e2e job serves production builds, which refuse the dev-only login, so
+  # the specs that need it run here on `next dev` (.github/ACTIONS.md).
+  e2e-dev:
+    name: e2e-dev
+    needs: [quality]
+    # Same pin as e2e (run 43878743673).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      dynamodb-local:
+        image: amazon/dynamodb-local:2.5.4
+        ports:
+          - 8000:8000
+    env:
+      E2E_LOCK: "off"
+      E2E_SERVERS: dev
+      DYNAMODB_ENDPOINT: http://localhost:8000
+      AWS_REGION: us-east-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Node setup
+        uses: ./.github/actions/node-setup
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Read Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('./apps/dashboard/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright browser
+        working-directory: apps/dashboard
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Wait for DynamoDB Local
+        run: |
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null http://localhost:8000 && exit 0
+            sleep 1
+          done
+          echo "DynamoDB Local did not become ready" >&2
+          exit 1
+      - name: Create table
+        run: pnpm db:create-table
+      - name: Seed
+        run: pnpm db:seed
+      - name: E2E (dev-login specs)
+        run: pnpm test:e2e e2e/dev-login.spec.ts e2e/sign-in-role-choice.spec.ts e2e/settings-tabs.spec.ts --grep "dev-only local login|dev login identity option|local login role choice|step-up returns to the right tab"
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-artifacts-dev
+          path: |
+            apps/dashboard/test-results
+            apps/dashboard/playwright-report
+          retention-days: 7

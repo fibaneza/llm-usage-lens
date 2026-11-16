@@ -3,10 +3,12 @@ export const E2E_PORT = 3211;
 // CI runs the suite against production builds (`next build` + `next start`)
 // instead of `next dev` (.github/ACTIONS.md — e2e job); local runs keep
 // `next dev`. Production refuses the dev-only login (auth guide — Dev-only
-// local login), so specs that need it skip under production servers.
-export const E2E_PRODUCTION_SERVERS = !!process.env.CI;
+// local login), so specs that need it skip under production servers and run
+// in the CI e2e-dev job, which sets E2E_SERVERS=dev.
+export const E2E_PRODUCTION_SERVERS =
+  !!process.env.CI && process.env.E2E_SERVERS !== "dev";
 export const DEV_LOGIN_ONLY_REASON =
-  "the dev-only login is refused by production builds; local next dev runs cover it";
+  "the dev-only login is refused by production builds; the CI e2e-dev job and local next dev runs cover it";
 export const E2E_BASE_URL = `http://127.0.0.1:${E2E_PORT}`;
 
 // Signing key for the throwaway E2E dev server only — a fixed, public test

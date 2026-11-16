@@ -148,3 +148,56 @@ describe("ci e2e job (llm-usage-lens-build.yml)", () => {
     }
   });
 });
+
+// Coordinator follow-up to ci-e2e-speed: the main e2e job serves production
+// builds, which refuse the dev-only login, so the dev-login specs run in their
+// own job on `next dev` (.github/ACTIONS.md — e2e-dev job).
+describe("ci e2e-dev job (llm-usage-lens-build.yml)", () => {
+  const job = jobBlock("e2e-dev");
+  const steps = stepsOf(job);
+  const run = steps.find((s) => /^ {8}run:\s*pnpm test:e2e\b/m.test(s)) ?? "";
+
+  it("needs quality, runs on a pinned ubuntu image with a short timeout (ACTIONS.md e2e-dev)", () => {
+    expect(job).not.toBe("");
+    expect(job).toMatch(/^ {4}needs:\s*\[quality\]\s*$/m);
+    expect(/^ {4}runs-on:\s*(\S+)\s*$/m.exec(job)?.[1]).toMatch(
+      /^ubuntu-\d{2}\.\d{2}$/,
+    );
+    const minutes = Number(/^ {4}timeout-minutes:\s*(\d+)\s*$/m.exec(job)?.[1]);
+    expect(minutes).toBeGreaterThan(0);
+    expect(minutes).toBeLessThanOrEqual(20);
+  });
+
+  it("forces next dev servers and turns the e2e lock off in the job env (ACTIONS.md e2e-dev)", () => {
+    const env = block(job, "env", 4);
+    expect(env).toMatch(/^\s+E2E_SERVERS:\s*"?dev"?\s*$/m);
+    expect(env).toMatch(/^\s+E2E_LOCK:\s*"?off"?\s*$/m);
+  });
+
+  it("runs only the three dev-login specs after the table is seeded (ACTIONS.md e2e-dev)", () => {
+    expect(run).not.toBe("");
+    for (const spec of [
+      "e2e/dev-login.spec.ts",
+      "e2e/sign-in-role-choice.spec.ts",
+      "e2e/settings-tabs.spec.ts",
+    ]) {
+      expect(run).toContain(spec);
+    }
+    expect(run).toMatch(/--grep/);
+    const seed = steps.findIndex((s) =>
+      /^ {8}run:\s*pnpm db:seed\s*$/m.test(s),
+    );
+    expect(seed).toBeGreaterThanOrEqual(0);
+    expect(seed).toBeLessThan(steps.indexOf(run));
+  });
+
+  it("shares the dynamodb-local image, uses no secrets and SHA-pins remote actions (Rule 50)", () => {
+    expect(serviceImage(job)).toBe(serviceImage(jobBlock("test")));
+    expect(job).not.toMatch(/secrets\./);
+    const uses = [...job.matchAll(/uses:\s*(\S+)/g)].map((m) => m[1] ?? "");
+    expect(uses.length).toBeGreaterThan(0);
+    for (const u of uses.filter((x) => !x.startsWith("./"))) {
+      expect(u).toMatch(/@[0-9a-f]{40}$/);
+    }
+  });
+});
