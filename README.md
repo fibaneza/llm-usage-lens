@@ -6,6 +6,8 @@ Enterprise observability dashboard and serverless collector for **Amazon Bedrock
 
 See [CLAUDE.md](CLAUDE.md) for project conventions, [ONBOARDING.md](ONBOARDING.md) for contributor setup, and [docs/specs/](docs/specs/) for the source-of-truth specs.
 
+**Status:** the dashboard is built in strict phase order and developed against DynamoDB Local with seed data; the Lambda collector (Phase 6) is the last deliverable and is not in the repository yet. The task and Verify checkboxes in [Implementation Phases](docs/specs/2026-05-15-implementation-phases.md) are the record of what has landed.
+
 ---
 
 ## Features
@@ -23,17 +25,22 @@ See [CLAUDE.md](CLAUDE.md) for project conventions, [ONBOARDING.md](ONBOARDING.m
 ```
 .
 ├── apps/
-│   ├── dashboard/            # Next.js 16 (App Router) analytics dashboard & API routes
-│   └── collector/            # AWS Lambda hourly collector for real Bedrock data (Phase 6)
+│   └── dashboard/            # Next.js 16 (App Router) analytics dashboard & API routes
 ├── packages/
 │   └── shared/               # Shared domain schemas, pricing tables, and normalizers
 ├── infra/                    # AWS CDK platform infrastructure (ECS Fargate, ALB, CloudWatch)
-├── scripts/                  # DynamoDB table management and realistic data seeders
+├── scripts/                  # DynamoDB Local table management and realistic data seeders
 ├── tools/
-│   └── bedrock-simulator/    # Standalone AWS SAM test harness for generating Bedrock traffic
+│   └── bedrock-simulator/    # Standalone AWS SAM test harness for generating Bedrock traffic (not in the workspace)
+├── poc/                      # Isolated proof of concept: the dashboard image on one EC2 instance (not the deployment path)
+├── prompts/                  # Prompts for the guarded, agent-driven build runs
+├── docs/                     # Specifications (docs/specs/) and runbooks (docs/guides/)
+├── .claude/                  # Claude Code rules, agents, slash commands, and hooks
 ├── .devcontainer/            # DevContainer configuration, Docker Compose, and OTel/Grafana stack
-└── docs/                     # Specifications (docs/specs/) and runbooks (docs/guides/)
+└── .github/                  # CI, deploy, and review workflows (see .github/ACTIONS.md)
 ```
+
+The pnpm workspace is `apps/*`, `packages/*`, and `infra`. `apps/collector` (the hourly AWS Lambda collector for real Bedrock data) is added in Phase 6.
 
 ---
 
@@ -60,7 +67,7 @@ Copy the template to `.env.local`:
 cp apps/dashboard/.env.example apps/dashboard/.env.local
 ```
 
-The template is pre-configured for local development with `APP_ENV=dev`, local mock login (`AUTH_DEV_LOGIN=true`), and a development `AUTH_SECRET`.
+The template is pre-configured for local development with `APP_ENV=dev`, the local developer login (`AUTH_DEV_LOGIN=true`), and a development `AUTH_SECRET`. Microsoft Entra ID sign-in and AWS credentials are covered in the [auth setup guide](docs/guides/auth-setup.md); the LiteLLM connection in the [LiteLLM runbook](docs/guides/litellm-admin.md).
 
 ### 3. Start local data store (DynamoDB Local)
 
@@ -99,7 +106,7 @@ Other seed variants:
 pnpm dev
 ```
 
-Visit [http://localhost:3000](http://localhost:3000) and click **Sign in with Dev User** (select any role to test scoped views).
+Visit [http://localhost:3000](http://localhost:3000) and click **Sign in as local developer** (choose a role to test scoped views).
 
 ---
 
@@ -124,7 +131,7 @@ Dashboard environment variables live in `apps/dashboard/` and follow this preced
 | `pnpm dev` | Starts the Next.js dev server on `http://localhost:3000` |
 | `pnpm build` | Compiles the Next.js production build |
 | `pnpm build:ci` | Builds with placeholder environment variables for CI validation |
-| `pnpm check` | **Full pre-merge gate:** runs `typecheck`, `lint`, `format:check`, `vitest run`, and `build:ci` |
+| `pnpm check` | **Full pre-merge gate**, stopping at the first failure: `typecheck`, `lint`, `format:check`, `vitest run`, `build:ci`, then a scan of the built browser bundle for the LiteLLM service key (requires DynamoDB Local) |
 | `pnpm typecheck` | Type-checks monorepo packages (`tsc --noEmit`) and root scripts |
 | `pnpm lint` | ESLint v9 flat config check |
 | `pnpm format:check` | Checks formatting with Prettier (`pnpm format` to auto-fix) |
@@ -132,6 +139,8 @@ Dashboard environment variables live in `apps/dashboard/` and follow this preced
 | `pnpm test:integration` | Runs Vitest integration tests against DynamoDB Local on `:8000` |
 | `pnpm test` | Runs both Vitest projects (requires DynamoDB Local) |
 | `pnpm test:e2e` | Runs headless Playwright end-to-end tests in `apps/dashboard/e2e` |
+| `pnpm exec vitest run path/to/file.test.ts` | Runs a single test file |
+| `pnpm --filter @llm-usage-lens/infra synth` | `cdk synth` for the platform stacks (needs the CDK context; never deploys) |
 
 `pnpm test:e2e` takes a cross-worktree lock (`scripts/e2e-lock.mjs`, a directory `e2e-run.lock` in the git common dir) because every worktree's run shares port 3211 and the `bedrock-usage` table. A second run waits and polls every 15 s. A lock is taken over only when its owner pid is dead or it is older than `E2E_LOCK_STALE_MIN` (default 45). After `E2E_LOCK_WAIT_MIN` (default 60) minutes of waiting it exits with code 75. `E2E_LOCK_OWNER` labels the holder; `E2E_LOCK=off` skips the lock.
 
@@ -139,8 +148,11 @@ Dashboard environment variables live in `apps/dashboard/` and follow this preced
 
 - **Pre-commit:** Scans staged files with Gitleaks for secrets, then runs `lint-staged` (ESLint `--fix` + Prettier).
 - **Commit-msg:** Validates commit message format against Conventional Commits via Commitlint.
-- **Pre-push:** Runs `pnpm typecheck` and `pnpm test:unit` when dashboard paths change, plus simulator checks when `tools/bedrock-simulator/` changes.
-- **CI Workflow:** The `llm-usage-lens-build.yml` workflow runs full typechecking, linting, formatting, integration tests against DynamoDB Local, and `build:ci`.
+- **Pre-push:** Runs `pnpm typecheck` and the Vitest unit project when `apps/`, `packages/`, `scripts/`, or `infra/` change, the simulator's typecheck and tests when `tools/bedrock-simulator/` changes, then a Gitleaks scan of the pushed commits.
+- **CI Workflow:** `llm-usage-lens-build.yml` runs on every push to `main` and on every pull request: `quality` (lint, format, typecheck, Gitleaks), `test` (both Vitest projects against DynamoDB Local), and `build` (`pnpm build:ci`).
+- **Deploy:** `llm-usage-lens-deploy.yml` is manual (`workflow_dispatch`) only; deploying is always a user action.
+
+Hooks are never bypassed with `--no-verify`. See [Git Hooks](docs/guides/git-hooks.md) and [.github/ACTIONS.md](.github/ACTIONS.md) for every workflow.
 
 ---
 
@@ -149,7 +161,7 @@ Dashboard environment variables live in `apps/dashboard/` and follow this preced
 When developing inside the provided VS Code DevContainer, an integrated observability stack is automatically available:
 
 - **Dashboard:** [http://localhost:3000](http://localhost:3000)
-- **Grafana:** [http://localhost:3001](http://localhost:3001) (Pre-configured dashboards; admin password seeded in `.devcontainer/grafana/grafana_admin_password.txt`)
+- **Grafana:** [http://localhost:3001](http://localhost:3001) (Pre-configured dashboards; the admin password is in the git-ignored `.devcontainer/grafana/grafana_admin_password.txt`, seeded from `grafana_admin_password.txt.example`)
 - **Prometheus:** [http://localhost:9090](http://localhost:9090)
 - **Loki:** [http://localhost:3100](http://localhost:3100)
 - **OpenTelemetry Collector:** Ports `4317` (gRPC) and `4318` (HTTP)
@@ -169,9 +181,21 @@ See [.devcontainer/README.md](.devcontainer/README.md) for pipeline details and 
   - [Access Control & RBAC](docs/specs/2026-11-10-access-control.md)
   - [LiteLLM Integration](docs/specs/2026-11-10-litellm.md)
   - [ECS Platform & CDK Infrastructure](docs/specs/2026-11-10-platform.md)
+  - [Bedrock Simulator](docs/specs/2026-05-24-bedrock-simulator.md)
 - **Runbooks & Guides:**
+  - [Learning Path](docs/guides/learning-path.md) — start here if you are new to the project
   - [Auth Setup (Entra ID & AWS Credentials)](docs/guides/auth-setup.md)
   - [Dashboard Deployment Runbook](docs/guides/dashboard-deployment.md)
+  - [Operations Runbook](docs/guides/operations.md)
+  - [Collector Infrastructure Runbook](docs/guides/aws-infrastructure.md)
   - [LiteLLM Administration](docs/guides/litellm-admin.md)
   - [Bedrock Simulator Runbook](docs/guides/bedrock-simulator.md)
   - [Git Hooks & Secret Scanning](docs/guides/git-hooks.md)
+  - [GitHub & Actions Practice](docs/guides/github-best-practices.md)
+  - [Dynamic Workflows](docs/guides/dynamic-workflows.md)
+- **Reference:**
+  - [LiteLLM contract snapshot](docs/litellm/README.md)
+  - [Strata design system](docs/design-system/README.md)
+  - [Future improvements](docs/future-improvements.md)
+  - [EC2 proof of concept](poc/README.md)
+  - [Build-run prompts](prompts/README.md)
