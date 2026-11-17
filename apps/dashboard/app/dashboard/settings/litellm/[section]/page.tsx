@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { auth } from "@/auth";
 import { LiteLLMConnectionSection } from "@/components/settings/litellm-panel/LiteLLMConnectionSection";
@@ -31,7 +32,7 @@ export default async function LiteLLMSectionPage({
     ?.subTabs.find((s) => s.id === section);
   if (!subTab) notFound();
 
-  let body;
+  let body: ReactNode;
   switch (subTab.id) {
     case "connection":
       body = <LiteLLMConnectionSection canEdit={capabilities.editConnection} />;
@@ -49,7 +50,7 @@ export default async function LiteLLMSectionPage({
       notFound();
   }
   return (
-    <SettingsSection heading="LiteLLM" title="the LiteLLM connection">
+    <SettingsSection heading="LiteLLM" title={subTab.label}>
       {body}
     </SettingsSection>
   );

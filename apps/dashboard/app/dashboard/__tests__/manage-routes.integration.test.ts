@@ -67,7 +67,6 @@ vi.mock("@/components/settings/AccountsTab", () => ({
   AccountsTab: () => null,
 }));
 vi.mock("@/components/settings/SyncTab", () => ({ SyncTab: () => null }));
-vi.mock("@/components/settings/LiteLLMTab", () => ({ LiteLLMTab: () => null }));
 vi.mock("@/components/settings/access/AccessSections", () => ({
   AccessSections: () => null,
 }));

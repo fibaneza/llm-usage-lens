@@ -38,7 +38,7 @@ export type AccessSectionSlug =
   | "audit-log"
   | "access-review";
 
-export type AccessSubTab = {
+export type SettingsSubTab = {
   id: AccessSubTabId | LiteLLMSubTabId;
   label: string;
   href: string;
@@ -49,7 +49,7 @@ export type SettingsTab = {
   id: SettingsTabId;
   label: string;
   href: string;
-  subTabs: readonly AccessSubTab[];
+  subTabs: readonly SettingsSubTab[];
   sections: readonly AccessSectionSlug[];
 };
 
