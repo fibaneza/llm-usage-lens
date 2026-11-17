@@ -70,3 +70,20 @@ describe("SettingsHashResolver", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 });
+
+// Unit A2. Source: Design System "Settings Page" - LiteLLM sub-tabs (D-A2-4).
+describe("SettingsHashResolver - LiteLLM sub-tabs (unit A2)", () => {
+  it("#guardrails replaces the URL with the Guardrails route", () => {
+    openWithHash("/dashboard/settings/litellm/connection", "#guardrails");
+    render(<SettingsHashResolver tabs={settingsTabsFor(ADMIN)} />);
+    expect(replace).toHaveBeenCalledWith(
+      "/dashboard/settings/litellm/guardrails",
+    );
+  });
+
+  it("does nothing when already on the route the hash names", () => {
+    openWithHash("/dashboard/settings/litellm/guardrails", "#guardrails");
+    render(<SettingsHashResolver tabs={settingsTabsFor(ADMIN)} />);
+    expect(replace).not.toHaveBeenCalled();
+  });
+});

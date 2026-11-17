@@ -1,16 +1,13 @@
-import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Source: Design System "Settings Page" (unit D, 2026-11-16: the LiteLLM tab is
-// visible to internal-admin, internal-org-admin and internal-auditor; any other
-// caller gets the same 404 as a missing page); LiteLLM spec LD24; Rule 10.3 /
-// 60.10 (authorization read per request, in the page itself - a layout is not
-// re-run on soft navigation). Module under test:
-// `app/dashboard/settings/litellm/page.tsx`: resolves the viewer, calls
-// `notFound()` unless `litellmPanelCapabilities(viewer.roles).visible`, else
-// renders `<LiteLLMTab capabilities={litellmPanelCapabilities(viewer.roles)} />`
-// (unit D rework after unit A1, cec7e44; LD24: admin edits all, org-admin edits
-// Guardrails and Team links, auditor read-only).
+// Source: Design System "Settings Page" - LiteLLM sub-tabs (unit A2,
+// 2026-11-17, D-A2-2): `/dashboard/settings/litellm` redirects on the server to
+// the caller's first visible sub-tab (Connection for all three LiteLLM roles);
+// a caller without the LiteLLM tab (litellmPanelCapabilities().visible false;
+// LD24) gets the same 404 as a missing page. Rule 10.3 / 60.10 (authorized per
+// request in the page). Module under test:
+// `app/dashboard/settings/litellm/page.tsx` (redirect only; the panel moved to
+// `[section]/page.tsx`).
 const auth = vi.fn();
 vi.mock("@/auth", () => ({ auth: () => auth() }));
 const loadViewer = vi.fn();
@@ -25,24 +22,21 @@ vi.mock("next/navigation", () => ({
     throw new Error(`NEXT_REDIRECT:${url}`);
   },
 }));
-vi.mock("@/components/settings/LiteLLMTab", () => ({
-  LiteLLMTab: (props: { capabilities: unknown }) => (
-    <div data-testid="tab">{JSON.stringify(props.capabilities)}</div>
-  ),
-}));
-
-import { litellmPanelCapabilities } from "@/lib/auth/litellm-panel";
-
-// Slice B2 B2-10: the gate matrix lives in the manage-routes integration test.
 vi.mock("@/lib/manage-access", async () => {
   const mod = await import("@/test/fakes/manage-access-fake");
   return mod.fakeManageAccess;
 });
 
-import LiteLLMSettingsPage from "./page";
+import {
+  resetManageAccess,
+  setManageAccess,
+} from "@/test/fakes/manage-access-fake";
+
+import LiteLLMSettingsIndexPage from "./page";
 
 afterEach(() => {
   vi.clearAllMocks();
+  resetManageAccess();
 });
 
 function as(roles: string[], scoped = false) {
@@ -54,41 +48,36 @@ function as(roles: string[], scoped = false) {
   });
 }
 
-describe("LiteLLM settings page", () => {
+describe("LiteLLM settings index", () => {
   it.each([["internal-admin"], ["internal-org-admin"], ["internal-auditor"]])(
-    "passes the %s capabilities to the tab",
+    "%s is redirected to Connection",
     async (role) => {
       as([role]);
-      render(await LiteLLMSettingsPage());
-      expect(JSON.parse(screen.getByTestId("tab").textContent ?? "")).toEqual(
-        litellmPanelCapabilities([role]),
+      await expect(LiteLLMSettingsIndexPage()).rejects.toThrow(
+        "NEXT_REDIRECT:/dashboard/settings/litellm/connection",
       );
     },
   );
 
-  it("an org-admin cannot edit the connection but edits guardrails and team links", async () => {
-    as(["internal-org-admin"]);
-    render(await LiteLLMSettingsPage());
-    expect(
-      JSON.parse(screen.getByTestId("tab").textContent ?? ""),
-    ).toMatchObject({
-      editConnection: false,
-      editGuardrails: true,
-      editTeamLinks: true,
-    });
-  });
-
   it.each([
     ["a viewer without a scope", ["internal-viewer"], false],
     ["a team-scope admin", ["internal-viewer"], true],
+    ["legacy Admin", ["Admin"], false],
+    ["no roles", [], false],
   ])("%s gets the not-found page", async (_n, roles, scoped) => {
     as(roles, scoped);
-    await expect(LiteLLMSettingsPage()).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(LiteLLMSettingsIndexPage()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
   it("a session that builds no viewer gets the not-found page", async () => {
     auth.mockResolvedValue(null);
     loadViewer.mockResolvedValue(undefined);
-    await expect(LiteLLMSettingsPage()).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(LiteLLMSettingsIndexPage()).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("a closed Settings (management gate) wins over the role", async () => {
+    setManageAccess({ settings: false });
+    as(["internal-admin"]);
+    await expect(LiteLLMSettingsIndexPage()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });

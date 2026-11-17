@@ -139,3 +139,54 @@ describe("SettingsTabs", () => {
     ).not.toHaveAttribute("aria-current");
   });
 });
+
+// Unit A2. Source: Design System "Settings Page" - LiteLLM sub-tabs (D-A2-3)
+// and "Tabs vs secondary navigation": a second route-tab row named "LiteLLM
+// sections" under the LiteLLM tab, links with aria-current="page" on the active
+// one; no Access row at the same time.
+describe("SettingsTabs - LiteLLM sub-tabs (unit A2)", () => {
+  it.each([
+    ["internal-admin", ADMIN],
+    ["internal-org-admin", ORG_ADMIN],
+    ["internal-auditor", AUDITOR],
+  ] as const)(
+    "%s: on a LiteLLM route shows the four sub-tab links, the current one marked",
+    (_name, viewer) => {
+      pathname.current = "/dashboard/settings/litellm/team-links";
+      render(<SettingsTabs tabs={settingsTabsFor(viewer)} />);
+      const sub = screen.getByRole("tablist", { name: "LiteLLM sections" });
+      expect(tabNames(sub)).toEqual([
+        "Connection",
+        "Guardrails",
+        "Team links",
+        "Users",
+      ]);
+      expect(
+        within(sub).getByRole("tab", { name: "Guardrails" }),
+      ).toHaveAttribute("href", "/dashboard/settings/litellm/guardrails");
+      expect(
+        within(sub).getByRole("tab", { name: "Team links" }),
+      ).toHaveAttribute("aria-current", "page");
+      for (const name of ["Connection", "Guardrails", "Users"]) {
+        expect(within(sub).getByRole("tab", { name })).not.toHaveAttribute(
+          "aria-current",
+        );
+      }
+      expect(screen.getByRole("tab", { name: "LiteLLM" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      expect(
+        screen.queryByRole("tablist", { name: "Access sections" }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("shows no LiteLLM row on other tabs", () => {
+    pathname.current = "/dashboard/settings/access/people";
+    render(<SettingsTabs tabs={settingsTabsFor(ADMIN)} />);
+    expect(
+      screen.queryByRole("tablist", { name: "LiteLLM sections" }),
+    ).not.toBeInTheDocument();
+  });
+});

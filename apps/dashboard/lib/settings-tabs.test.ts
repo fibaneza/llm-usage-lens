@@ -160,9 +160,13 @@ describe("settingsTabsFor - role matrix", () => {
     expect(tabs.map((t) => t.href)).not.toContain(`${BASE}/audit`);
   });
 
-  it("only the Access tab has sub-tabs", () => {
+  // Unit A2 (Design System "Settings Page", LiteLLM sub-tabs): the LiteLLM
+  // tab joins Access as the second tab with a second row.
+  it("only the Access and LiteLLM tabs have sub-tabs", () => {
     for (const tab of settingsTabsFor(ADMIN)) {
-      expect(tab.subTabs.length > 0).toBe(tab.id === "access");
+      expect(tab.subTabs.length > 0).toBe(
+        tab.id === "access" || tab.id === "litellm",
+      );
     }
   });
 });
@@ -230,5 +234,45 @@ describe("settingsTabsFor - LiteLLM tab follows litellmPanelCapabilities", () =>
   it("hides the tab when the capabilities say not visible, whatever the role", () => {
     visibleOverride.value = false;
     expect(settingsTabsFor(ADMIN).map((t) => t.id)).not.toContain("litellm");
+  });
+});
+
+// Unit A2. Source: Design System "Settings Page" - LiteLLM sub-tabs (D-A2-1,
+// D-A2-3): the LiteLLM tab carries the four sub-tabs as route segments, in
+// order, for exactly the roles whose litellmPanelCapabilities(...).visible is
+// true (LD24: admin, org-admin, auditor); no other role has the tab at all, so
+// its sub-tab URLs are the same 404. Security matrix: complete (Rule 60.24a).
+describe("settingsTabsFor - LiteLLM sub-tabs (unit A2)", () => {
+  const SUB = [
+    ["connection", "Connection", `${BASE}/litellm/connection`],
+    ["guardrails", "Guardrails", `${BASE}/litellm/guardrails`],
+    ["team-links", "Team links", `${BASE}/litellm/team-links`],
+    ["users", "Users", `${BASE}/litellm/users`],
+  ];
+  const litellmSubTabs = (viewer: Parameters<typeof settingsTabsFor>[0]) =>
+    settingsTabsFor(viewer)
+      .find((t) => t.id === "litellm")
+      ?.subTabs.map((s) => [s.id, s.label, s.href]);
+
+  it.each([
+    ["internal-admin", ADMIN],
+    ["the master user", MASTER],
+    ["internal-org-admin", ORG_ADMIN],
+    ["internal-auditor", AUDITOR],
+  ] as const)(
+    "%s sees Connection, Guardrails, Team links and Users, in order, as routes",
+    (_name, viewer) => {
+      expect(litellmSubTabs(viewer)).toEqual(SUB);
+    },
+  );
+
+  it.each([
+    ["a team-scope admin", TEAM_ADMIN],
+    ["a department-scope admin", DEPT_ADMIN],
+    ["a viewer without a scope", PLAIN_VIEWER],
+    ["no resolvable viewer", null],
+    ["legacy Admin", { roles: ["Admin"], adminScopes: [] }],
+  ] as const)("%s has no LiteLLM tab and so no sub-tabs", (_name, viewer) => {
+    expect(litellmSubTabs(viewer)).toBeUndefined();
   });
 });

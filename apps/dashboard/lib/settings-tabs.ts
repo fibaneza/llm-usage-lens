@@ -19,6 +19,11 @@ export type AccessSubTabId =
   | "roles"
   | "identities"
   | "sign-in";
+export type LiteLLMSubTabId =
+  | "connection"
+  | "guardrails"
+  | "team-links"
+  | "users";
 export type AccessSectionSlug =
   | "members"
   | "team-admins"
@@ -34,7 +39,7 @@ export type AccessSectionSlug =
   | "access-review";
 
 export type AccessSubTab = {
-  id: AccessSubTabId;
+  id: AccessSubTabId | LiteLLMSubTabId;
   label: string;
   href: string;
   sections: readonly AccessSectionSlug[];
@@ -115,6 +120,15 @@ export function isSectionVisible(
   }
 }
 
+// Design System "Settings Page" - LiteLLM sub-tabs (unit A2, 2026-11-17): each
+// is a route segment; visibility follows litellmPanelCapabilities.
+const LITELLM_SUB_TABS: readonly { id: LiteLLMSubTabId; label: string }[] = [
+  { id: "connection", label: "Connection" },
+  { id: "guardrails", label: "Guardrails" },
+  { id: "team-links", label: "Team links" },
+  { id: "users", label: "Users" },
+];
+
 function tab(
   id: SettingsTabId,
   label: string,
@@ -141,7 +155,15 @@ export function settingsTabsFor(
 
   const capabilities = accessCapabilities(viewer);
   if (litellmPanelCapabilities(viewer.roles).visible) {
-    tabs.push(tab("litellm", "LiteLLM"));
+    tabs.push(
+      tab("litellm", "LiteLLM", {
+        subTabs: LITELLM_SUB_TABS.map((sub) => ({
+          ...sub,
+          href: `${SETTINGS_BASE_PATH}/litellm/${sub.id}`,
+          sections: [],
+        })),
+      }),
+    );
   }
 
   const subTabs = SUB_TABS.flatMap((sub) => {

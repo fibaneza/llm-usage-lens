@@ -96,3 +96,31 @@ describe("resolveSettingsHash", () => {
     );
   });
 });
+
+// Unit A2. Source: Design System "Settings Page" - LiteLLM sub-tabs (D-A2-4):
+// an old `#<connection|guardrails|team-links|users>` link lands on the matching
+// LiteLLM route. The target is the bare route (no fragment): the route has no
+// anchor of that name.
+describe("resolveSettingsHash - LiteLLM sub-tabs (unit A2)", () => {
+  it.each([
+    ["connection", `${BASE}/litellm/connection`],
+    ["guardrails", `${BASE}/litellm/guardrails`],
+    ["team-links", `${BASE}/litellm/team-links`],
+    ["users", `${BASE}/litellm/users`],
+  ])(
+    "#%s lands on its LiteLLM route for the three LiteLLM roles",
+    (slug, route) => {
+      for (const viewer of [ADMIN, ORG_ADMIN, AUDITOR]) {
+        expect(resolveSettingsHash(`#${slug}`, settingsTabsFor(viewer))).toBe(
+          route,
+        );
+      }
+    },
+  );
+
+  it("returns null for a LiteLLM slug when the caller has no LiteLLM tab", () => {
+    expect(
+      resolveSettingsHash("#guardrails", settingsTabsFor(PLAIN_VIEWER)),
+    ).toBeNull();
+  });
+});

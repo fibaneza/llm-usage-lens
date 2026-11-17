@@ -81,6 +81,8 @@ const SETTINGS_URLS = [
   `${BASE}/accounts`,
   `${BASE}/sync`,
   `${BASE}/litellm`,
+  `${BASE}/litellm/connection`,
+  `${BASE}/litellm/guardrails`,
   `${BASE}/access`,
   `${BASE}/access/people`,
   `${BASE}/access/visibility`,
@@ -88,8 +90,8 @@ const SETTINGS_URLS = [
 
 // URLs each role must get the 404 page for.
 const FORBIDDEN: [string, string[]][] = [
-  ["internal-admin", [`${BASE}/access/nope`]],
-  ["master user", [`${BASE}/access/nope`]],
+  ["internal-admin", [`${BASE}/access/nope`, `${BASE}/litellm/nope`]],
+  ["master user", [`${BASE}/access/nope`, `${BASE}/litellm/nope`]],
   [
     "internal-org-admin",
     [

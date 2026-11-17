@@ -167,6 +167,10 @@ test.describe("settings LiteLLM section", () => {
 
     const response = await page.goto("/dashboard/settings/litellm");
     expect(response?.status()).toBe(404);
+    for (const section of ["connection", "guardrails", "team-links", "users"]) {
+      const sub = await page.goto(`/dashboard/settings/litellm/${section}`);
+      expect(sub?.status()).toBe(404);
+    }
     await expect(page.getByRole("heading", { name: "LiteLLM" })).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: /test connection/i }),
@@ -350,6 +354,161 @@ test.describe("settings LiteLLM by role (LD24)", () => {
     await expect(page.getByLabel("Dashboard team ID")).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Unlink payments" }),
+    ).toBeVisible();
+  });
+});
+
+// Unit A2. Design System "Settings Page" - LiteLLM sub-tabs (2026-11-17): the
+// second route-tab row (links, aria-current="page"), the redirect of the index,
+// old #slug links, Back across sub-tabs (gap G3, closed for Settings), the 404
+// for an unknown section, and the G7 empty states. Fixtures only (Rule 60.24).
+test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
+  const BASE = "/dashboard/settings/litellm";
+  const sub = (page: Page) =>
+    page.getByRole("tablist", { name: "LiteLLM sections" });
+
+  async function mockEmptyLinks(page: Page) {
+    await page.route(/\/api\/litellm\/team-links(\?|$)/, (route) =>
+      route.fulfill({ json: { data: { items: [] } } }),
+    );
+    await page.route(/\/api\/litellm\/toggles$/, (route) =>
+      route.fulfill({
+        json: { data: { version: 0, edition: "oss", operations: {} } },
+      }),
+    );
+  }
+
+  test("the index lands on Connection, marked aria-current; Back steps from Guardrails to Connection", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await mockEmptyLinks(page);
+    await page.goto(BASE);
+    await waitForHydration(page);
+    await expect(page).toHaveURL(`${BASE}/connection`);
+    await expect(
+      sub(page).getByRole("tab", { name: "Connection" }),
+    ).toHaveAttribute("aria-current", "page");
+
+    await sub(page).getByRole("tab", { name: "Guardrails" }).click();
+    await expect(page).toHaveURL(`${BASE}/guardrails`);
+    await expect(
+      sub(page).getByRole("tab", { name: "Guardrails" }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(
+      sub(page).getByRole("tab", { name: "Connection" }),
+    ).not.toHaveAttribute("aria-current");
+
+    await page.goBack();
+    await expect(page).toHaveURL(`${BASE}/connection`);
+    await expect(
+      sub(page).getByRole("tab", { name: "Connection" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  for (const role of [
+    "internal-admin",
+    "internal-org-admin",
+    "internal-auditor",
+  ]) {
+    test(`${role} sees the four sub-tabs in order`, async ({
+      page,
+      context,
+    }) => {
+      await signInAsTestUser(context, { roles: [role] });
+      await mockApi(page);
+      await page.goto(`${BASE}/connection`);
+      await waitForHydration(page);
+      expect(
+        (await sub(page).getByRole("tab").allTextContents()).map((t) =>
+          t.trim(),
+        ),
+      ).toEqual(["Connection", "Guardrails", "Team links", "Users"]);
+    });
+  }
+
+  test("an old #guardrails link lands on the Guardrails route", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await mockEmptyLinks(page);
+    await page.goto(`${BASE}#guardrails`);
+    await expect(page).toHaveURL(`${BASE}/guardrails`);
+  });
+
+  test("an old #team-links link on the Settings root lands on the Team links route", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await mockApi(page);
+    await mockEmptyLinks(page);
+    await page.goto("/dashboard/settings#team-links");
+    await expect(page).toHaveURL(`${BASE}/team-links`);
+  });
+
+  test("an unknown section is the 404 page, even for an admin", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    const response = await page.goto(`${BASE}/nope`);
+    expect(response?.status()).toBe(404);
+  });
+
+  test("Team links with no team linked explains the empty state; an editor is pointed at the form", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await mockEmptyLinks(page);
+    await page.goto(`${BASE}/team-links`);
+    await waitForHydration(page);
+    const status = page.getByRole("status").filter({
+      hasText: "No LiteLLM team is linked yet.",
+    });
+    await expect(status).toContainText(/the form below links one/i);
+    await expect(page.getByLabel("Dashboard team ID")).toBeVisible();
+  });
+
+  test("Team links with no team linked tells an auditor who links teams", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
+    await mockApi(page);
+    await mockEmptyLinks(page);
+    await page.goto(`${BASE}/team-links`);
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("status").filter({
+        hasText: "No LiteLLM team is linked yet.",
+      }),
+    ).toContainText(/an admin or org-admin links teams/i);
+  });
+
+  test("Users with no team linked explains what the search lists", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await mockEmptyLinks(page);
+    await page.goto(`${BASE}/users`);
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("status").filter({
+        hasText: /user search lists litellm users/i,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("searchbox", { name: /search users/i }),
     ).toBeVisible();
   });
 });

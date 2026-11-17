@@ -125,9 +125,12 @@ async function openPanel(page: Page) {
 }
 
 // L3b: toggles and the guardrail summary sit on the Guardrails tab (LiteLLM
-// spec -- Views by role, Settings tabs).
+// spec -- Views by role, Settings tabs); since unit A2 (Design System
+// "Settings Page" - LiteLLM sub-tabs) the tab is the route
+// /dashboard/settings/litellm/guardrails.
 async function openGuardrails(page: Page) {
   await page.getByRole("tab", { name: "Guardrails" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/settings\/litellm\/guardrails$/);
 }
 
 test.describe("settings LiteLLM guardrail configuration", () => {

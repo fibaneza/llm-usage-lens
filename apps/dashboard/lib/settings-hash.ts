@@ -9,6 +9,10 @@ export function resolveSettingsHash(
 ): string | null {
   const slug = hash.startsWith("#") ? hash.slice(1) : hash;
   if (slug === "") return null;
+  const litellm = tabs
+    .find((t) => t.id === "litellm")
+    ?.subTabs.find((s) => s.id === slug);
+  if (litellm) return litellm.href;
   const groups = tabs.flatMap((t) => [
     { href: t.href, sections: t.sections },
     ...t.subTabs,

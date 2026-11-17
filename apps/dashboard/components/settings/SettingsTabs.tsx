@@ -55,6 +55,9 @@ export function SettingsTabs({ tabs }: { tabs: readonly SettingsTab[] }) {
   const access = tabs.find(
     (t) => t.id === "access" && isActive(pathname, t.href),
   );
+  const litellm = tabs.find(
+    (t) => t.id === "litellm" && isActive(pathname, t.href),
+  );
   return (
     <div className="flex flex-col gap-4">
       <TabRow label="Settings sections" items={tabs} pathname={pathname} />
@@ -62,6 +65,13 @@ export function SettingsTabs({ tabs }: { tabs: readonly SettingsTab[] }) {
         <TabRow
           label="Access sections"
           items={access.subTabs}
+          pathname={pathname}
+        />
+      ) : null}
+      {litellm && litellm.subTabs.length > 0 ? (
+        <TabRow
+          label="LiteLLM sections"
+          items={litellm.subTabs}
           pathname={pathname}
         />
       ) : null}
