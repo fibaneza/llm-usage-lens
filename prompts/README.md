@@ -100,8 +100,9 @@ and worker sessions (`improvements`, `rbac_worker`, `litellm_worker`). How to
 start, resume, clear and stop each one is in
 [`README-sessions.md`](README-sessions.md); the reference is
 [`docs/guides/session-roles.md`](../docs/guides/session-roles.md). A worker
-runs 2 agents for a goal with no plan, and its plan's per-session peak for a
-plan unit (at most 80 agents running at once across all sessions). Workers
+runs 2 agents for a goal with no plan, and its allocation from the shared pool for a
+plan unit (80 agents running at once, summed across all sessions and
+distributed dynamically by the coordinator). Workers
 stop at "ready to merge"; the coordinator lands every unit, and the user
 pushes.
 

@@ -167,11 +167,14 @@ between phases.
   `workflow-authoring` skill — never from memory. Keep the design's phases
   and file ownership; a unit with nothing to fan out is still one
   *build → test → fix → gate* pipeline.
-- **Stay inside your peak.** The brief gives your session's peak: the most
-  agents you run at once, your share of the 80 that may run at once across
-  all sessions (user, 2026-11-18). Report the agents you started in the
-  `ready` line. Never go above your peak, and don't borrow another session's
-  share.
+- **Stay inside your allocation.** All sessions share one pool of 80 agents
+  running at once (user, 2026-11-18: "cap is 80 on total, sum all sessions", distributed "properly and dynamically between sessions", and sessions may be added or removed as needed). The coordinator gives your session an
+  allocation, in the brief and later as `agents <session>: <n>`, and changes
+  it as sessions start, idle or finish. Never run more agents at once than
+  your current allocation, and never borrow another session's share. If you
+  need more, say so in a `progress` line; if you need fewer, say so too, so
+  the coordinator can move the rest. Report the agents you started in the
+  `ready` line.
 - **Models, named on every agent** (Rule 70 — *Model routing*):
   `typescript-developer` and `tdd-test-engineer` on sonnet; gate runs and
   git summaries on haiku; a hard design question on opus. Say which model

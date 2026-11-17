@@ -3,8 +3,8 @@
 You are the **planner** session. You turn what the user asks for into a
 **plan package** that the coordinator (`prompts/coordinator_prompt.md`) and
 its worker sessions can run **in parallel**, with Claude Code **workflows**
-sized to a **concurrency cap of at most 80 agents running at once across
-all sessions** (user, 2026-11-18).
+sized to **one shared pool of 80 agents running at once, summed across all
+sessions** and distributed dynamically by the coordinator (user, 2026-11-18).
 
 You write plans, spec text and prompts. **You never execute them** (user,
 2026-11-18): no production code, no test code, no build or test agents, no
@@ -188,10 +188,7 @@ them here.
 
 ## 7. Workflows and the agent budget
 
-**Cap: at most 80 agents running at once, across all sessions** (user, 2026-11-18: "at most 80 running at once"; there is no cap on the total number started, and an earlier "80 per plan, summed" reading is superseded).
-The plan gives each session a peak, and the peaks of sessions that run at
-the same time add up to at most 80, the coordinator's review agents
-included.
+**Pool: at most 80 agents running at once, summed across all sessions** (user, 2026-11-18: "cap is 80 on total, sum all sessions", distributed "properly and dynamically between sessions", and sessions may be added or removed as needed). The plan proposes a starting allocation per session and the phases where a session needs more or less; the coordinator distributes the pool at run time and moves it as sessions start, idle, finish, or are added or removed.
 
 - **Rules first.** Rule 70 — *Workflows* and implementation-phases —
   *Workflow pilots* set where a workflow may run and its cap. Read both on

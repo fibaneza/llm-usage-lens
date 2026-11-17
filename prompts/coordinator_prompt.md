@@ -441,20 +441,29 @@ checkout. A plan is a proposal until you have taken it in:
 - **Default:** a worker runs at most 2 agents at a time (§1 item 6). The
   user may raise a session's cap; record the number and the date in
   `state.md`.
-- **A plan with workflows has a concurrency cap: at most 80 agents running
-  at once, across all sessions, the coordinator's review agents included**
-  (user, 2026-11-18: "at most 80 running at once"; there is no cap on the total number started, and an earlier "80 per plan, summed" reading is superseded). Split it into per-session peaks (for example 40/20/20).
+- **One shared pool of 80 agents.** At most 80 agents run at once, summed
+  across every active session, the coordinator's review agents included
+  (user, 2026-11-18: "cap is 80 on total, sum all sessions", distributed "properly and dynamically between sessions", and sessions may be added or removed as needed). The coordinator distributes the pool dynamically:
+  - give each active session an **allocation** sized to its work (a unit in
+    its build fan-out gets more; a unit in its gate or a review gets less);
+  - when a session goes idle, freezes, finishes a unit or is removed, take
+    its allocation back into the pool and give it to whoever needs it;
+  - when the user adds a session, give it an allocation out of the pool,
+    shrinking the others if needed;
+  - the allocations of the active sessions never add up to more than 80;
+  - tell a worker its new allocation in one line (`agents <session>: <n>`),
+    and record it in `state.md`.
 - **The rule comes first.** Rule 70 — *Workflows* and implementation-phases
   — *Workflow pilots* say where a workflow may run and its cap. While the
   text on `main` allows fewer agents than the plan needs, or lists
   workflows only as pilots for named units, land the amendment (the plan's
   spec unit, or your own docs change at the user's direction) before any
   workflow outside the old text starts.
-- **Keep the ledger.** `state.md` holds, per plan, each session's peak and
-  the agents it reports running (the `agents` field of the `ready` line).
-  The peaks of sessions running at once never add up to more than 80.
-- **Concurrency follows usage, not the budget.** The plan gives each
-  session a peak (default 10). In the caution tier (§3) halve it; at the
+- **Keep the ledger.** `state.md` holds each active session's allocation,
+  the agents it reports running, and the pool's free part (80 minus the
+  allocations). Update it on every change of allocation.
+- **Concurrency follows usage, not the budget.** The plan proposes each
+  session's starting allocation (default 10). In the caution tier (§3) halve it; at the
   freeze, zero. Two sessions at their peak at once is the case to watch:
   read usage before each wave and after the first five minutes of it.
 - **Every worker runs its plan units as a workflow (user, 2026-11-18: "all

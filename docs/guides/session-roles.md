@@ -185,8 +185,8 @@ instruction wins over it.
 | Usage, 5-hour window | Caution at 60 %: halve concurrency, skip optional work. Freeze at 75 %: start no agent, commit what passed, write the report, send `frozen` |
 | Usage, weekly window | Caution at 85 %, freeze at 95 % |
 | Review fan-out | Not started at or above 80 % of the 5-hour window |
-| Agents at once | At most 80 running at once across all sessions, review agents included, split into per-session peaks (user, 2026-11-18); no cap on the total started |
-| Per-session peak | The plan gives each session a peak (default 10); a goal with no plan keeps the Rule 70 loop and 2 agents |
+| Agents | One shared pool: at most 80 agents running at once, summed across every active session, review agents included (user, 2026-11-18) |
+| Per-session allocation | The coordinator hands out the pool dynamically, sized to each session's work, and moves it as sessions start, idle, finish, or are added or removed; a goal with no plan keeps the Rule 70 loop and 2 agents |
 | Models | sonnet for code and tests, opus for reviews and design, haiku for gate re-runs; named on every dispatch |
 
 An exception to a usage tier is the user's, for one unit and one window.
@@ -207,8 +207,8 @@ An exception to a usage tier is the user's, for one unit and one window.
 - On `main`: `planner_prompt.md`, [`planner-session.md`](planner-session.md),
   `worker_prompt.md`, this guide, and the revised `coordinator_prompt.md`
   (the session list in §0a, plan intake in §2c, agents in §3a, brief files).
-- The cap is **at most 80 agents running at once** across all sessions (user,
-  2026-11-18). Rule 70 — *Workflows* on `main` still says "at most 5 agents"
+- The cap is **one pool of 80 agents running at once**, summed across all
+  sessions and distributed dynamically (user, 2026-11-18). Rule 70 — *Workflows* on `main` still says "at most 5 agents"
   for named pilot units; M4's branch amends it, and until that lands a
   worker builds a unit outside the pilots with the Rule 70 loop.
 - The worker sessions get their `_worker` names when the user renames them.
