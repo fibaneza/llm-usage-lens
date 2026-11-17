@@ -33,11 +33,13 @@ All data is stored in a single DynamoDB table (`bedrock-usage`) with one GSI. Th
 | DailyRollup | `ACCT#{accountId}` | `DAILY#{YYYY-MM-DD}` | `DATE#{YYYY-MM-DD}` | `ACCT#{accountId}` |
 | SyncStatus | `SYSTEM` | `SYNC#LATEST` | — | — |
 
+Forward note (2026-11-17): from Phase 5 unit PERF-1b the `AccountMeta` GSI1 keys become `ACCOUNTS` / `DEPT#{departmentId}#ACCT#{accountId}` (*Access Patterns* below). Until that unit ships, the row above is what the code writes.
+
 Access-control entities (identity, member affiliation, admin scopes, role grants, group mappings, visibility, password users and their SSO reservations and references, audit records, the per-user approval, the password sign-in switch) share this table under new key prefixes — see [Access Control spec](2026-11-10-access-control.md) — *Data model additions* (decided 2026-11-10). `byUser` keys are canonical usage identities (the lower-cased email after the SSO prefix; same spec — *Canonical usage identity*), canonicalised on read until the Phase 6 collector writes them. LiteLLM entities (connection, operation toggles, team links and their claims, gateway configuration, key requests) use the `LITELLM#` prefix — see [LiteLLM spec](2026-11-10-litellm.md) — *Data model additions*; no service key or key value is ever stored.
 
 ## Entity: AccountMeta
 
-Maps an AWS account to the organizational hierarchy. Managed via the Settings page.
+Maps an AWS account to the organizational hierarchy. Managed via the Settings page. The GSI1 keys below change in Phase 5 unit PERF-1b (forward note under *Entity Map*; *Access Patterns*).
 
 ```
 PK:      ACCT#{accountId}           e.g. ACCT#123456789012
@@ -63,8 +65,75 @@ Attributes:
 | Pattern | Key condition |
 |---------|---------------|
 | Get one account | `PK = ACCT#{id}`, `SK = META` |
-| All accounts in a department | `GSI1: gsi1pk = DEPT#{deptId}` |
-| All accounts (settings page) | Table scan with a `begins_with(PK, "ACCT#") AND SK = META` filter — other entities also use `SK = META` (Access Control spec — *Data model additions*) (v1 expects ≤100 active accounts; design headroom to ~500) |
+| All accounts in a department | `GSI1: gsi1pk = DEPT#{deptId}`. **Replaced in PERF-1b** by `gsi1pk = ACCOUNTS` with `begins_with(gsi1sk, "DEPT#{deptId}#")` (below) |
+| All accounts (settings page) | Table scan with a `begins_with(PK, "ACCT#") AND SK = META` filter — other entities also use `SK = META` (Access Control spec — *Data model additions*) (v1 expects ≤100 active accounts; design headroom to ~500). **Replaced in PERF-1b** by the account registry index below |
+
+**The account list is never an uncached Scan on a request path (agent
+decision, 2026-11-17, Phase 5 *Performance and caching*).** A Scan reads the
+whole table (rollups, audit records, identities), so its time and read cost
+grow with the table, not with the number of accounts. Two steps:
+
+1. **PERF-1** — every request path reads the list through the cached wrapper
+   (`getAllAccountsCached`, 1 hour, tag `accounts`, invalidated on account
+   writes — Design System — *Caching Strategy*), as the Phase 4R routes already
+   do through `lib/api/org-lookup.ts`. The account registry is not
+   authorization data (Access Control — *Enforcement* item 4 lists what is
+   never cached). This holds on write paths too: a write route may resolve
+   a team or department from the cached list, and it is the one exception
+   to "no write-path read comes from a cache" (Design System — *Caching
+   Strategy*; LiteLLM spec — *Caching*). PERF-1 adds no new staleness
+   beyond this existing 1-hour cache.
+   **Residual risk, accepted (agent decision, 2026-11-17).** An account
+   write calls `revalidateTag("accounts")` on the task that served it only.
+   The other Fargate task keeps its list for up to 1 hour, so a request it
+   serves, a write included, can see an account under its old team or
+   department, or miss a new one, for that long. Accepted because: the
+   Phase 4R write routes on `main` already behave this way; account changes
+   are rare and made only by an `internal-admin`; roles, grants, scopes,
+   affiliations and team links are still read live on every request, so a
+   stale list cannot grant a permission, it can only place an account in
+   last hour's structure; and removing the window needs a shorter TTL or
+   invalidation shared between tasks, which is deferred with the shared
+   cache (`docs/future-improvements.md` — *Shared cache (Valkey)*, which
+   names this window). The user can overturn this by asking for a shorter
+   TTL on the account list.
+2. **PERF-1b — account registry index.** `AccountMeta` moves to one GSI1
+   partition: `gsi1pk = ACCOUNTS`, `gsi1sk = DEPT#{departmentId}#ACCT#{accountId}`.
+   "All accounts" becomes one `Query` on `gsi1pk = ACCOUNTS`; "all accounts in
+   a department" becomes the same `Query` with
+   `begins_with(gsi1sk, "DEPT#{deptId}#")`. Both still loop on
+   `LastEvaluatedKey` (Rule 20.6). `ACCOUNTS` is a new GSI1 partition value
+   on the existing index. It collides with none in use (`DEPT#…`, `DATE#…`,
+   `MEMBERS#…`, `AUDIT#…`, `LITELLM#…`, `IDENTS`, `ROLEGRANTS`, `GROUPMAPS`)
+   and follows the bare-word pattern of the last three. No new index or IAM
+   change.
+   Options considered: a sparse second GSI (needs a FoundationStack change and
+   deploy) and mirrored registry items (can diverge from `AccountMeta`).
+   Reversible.
+   **Migration (agent decision, 2026-11-17).** Account writes set the new
+   keys; the seeds and `scripts/create-table.ts` follow. Accounts written
+   before PERF-1b are moved by a one-off backfill, never by re-saving them
+   by hand: a manual re-save silently leaves out any account nobody opens,
+   and a deactivated account cannot be re-saved.
+   - **Backfill script** `scripts/backfill-account-registry.ts` (the
+     repo-root `scripts/` pattern): it reads every `AccountMeta`, active or
+     deactivated, sets the two GSI1 keys with a conditional `UpdateItem`
+     that changes nothing else, and then writes the marker item
+     `PK = SYSTEM`, `SK = MIGRATION#ACCOUNT_REGISTRY`. It is idempotent: a
+     second run updates nothing and leaves the marker.
+   - **Dual read until the marker exists.** With the marker, both patterns
+     are the `Query` above. Without it, both are served from the Scan as
+     today (the department pattern filters that list in memory), so an
+     account with old keys is never dropped and correctness never depends
+     on the backfill having run. Both paths sit behind the cached wrapper of
+     step 1, so the fallback costs at most one Scan per hour per task.
+   - **Deployed environments.** Repo-root scripts refuse non-local
+     endpoints (Rule 10.5). Running the backfill against a deployed table
+     therefore needs an explicit, user-run mode and a recorded exception to
+     that rule. That is the user's decision, taken when PERF-1b is built
+     (implementation-phases — *Decision policy*); until then a deployed
+     environment stays on the Scan fallback, which is correct.
+   Until PERF-1b ships the entity map above stays as written.
 
 ## Entity: DailyRollup
 

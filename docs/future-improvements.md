@@ -350,6 +350,67 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ## Development process
 
+### Shared cache (Valkey)
+
+- **Status:** Deferred (decided 2026-11-17, user; Phase 5 *Performance and
+  caching*, unit PERF-5).
+- **What:** A Redis-protocol driver behind the LiteLLM read cache
+  (`lib/litellm/read-cache.ts`), enabled by a `CACHE_URL` variable in
+  `env.ts`, with the in-process cache as the default. A `valkey` service in
+  `.devcontainer/docker-compose.yml` (started on demand) and in
+  `poc/docker-compose.yml`; in AWS, ElastiCache for Valkey in the dashboard's
+  subnets, reachable from the task security group only, with TLS and auth.
+  Never stored there: authorization data, sessions, key values. Rollups stay
+  in the per-task Next.js cache.
+- **Why deferred:** Data changes hourly and production runs two tasks. A
+  shared cache only removes the short window in which the two tasks disagree
+  after a LiteLLM write, and the `no-cache` refetch already covers the writer.
+  It adds a paid resource (CLAUDE.md — *Cost posture*) and a network hop.
+  As specified it does not cover the account list, which lives in the
+  per-task Next.js cache and can be up to 1 hour old on the task that did
+  not serve an account write (accepted; Data Model spec — *Access
+  Patterns*). If this is adopted, decide in the same spec change whether
+  the account list moves to the shared cache or gets shared invalidation.
+- **Adopt when:** users report stale LiteLLM data that the refresh button
+  does not clear, **or** an account change that shows late on one task
+  causes a wrong result, **or** cold-cache latency after a deploy is a
+  measured problem in PERF-0's baseline, **or** the service runs more than
+  two tasks.
+- **References:** [Design System spec](specs/2026-05-15-design-system.md) —
+  *Technology decisions*, *Caching Strategy*;
+  [Platform spec](specs/2026-11-10-platform.md) — *Not created*, *Runtime*;
+  [LiteLLM spec](specs/2026-11-10-litellm.md) — *Caching*.
+
+### Collector pre-aggregates
+
+- **Status:** Deferred to the Phase 6 design (decided 2026-11-17, user).
+- **What:** The hourly collector writes organisation, department and team
+  daily summary items, so the Overview and the list pages read tens of small
+  items instead of every account's rollup for the range.
+- **Why deferred:** It changes Rule 20.7 (rankings computed in memory from
+  all rollups) and the Data Model spec, and the collector does not exist yet.
+  The per-day rollup cache is enough at the v1 size (≤100 accounts × 30 days).
+- **Adopt when:** PERF-0's baseline shows the aggregate routes over their
+  budget at the v1 size, **or** the account count passes 100, **or** Phase 6
+  design starts (decide it there, not after).
+- **References:** [Data Model spec](specs/2026-05-15-data-model.md) —
+  *Entity: DailyRollup*; Rule 20.7.
+
+### LiteLLM spend snapshot in DynamoDB
+
+- **Status:** Deferred (decided 2026-11-17, user).
+- **What:** The collector copies LiteLLM's daily spend per team and user into
+  the table each hour, so LiteLLM spend pages read DynamoDB like the Bedrock
+  pages. This is the supported alternative to reading LiteLLM's database,
+  which the dashboard never does (LiteLLM spec — *Network*).
+- **Why deferred:** The allowlisted daily-spend reads with the 60-second
+  read cache cover the current pages.
+- **Adopt when:** a LiteLLM spend view needs a range, a join or a ranking the
+  API cannot serve within its budget, **or** LiteLLM outages make the spend
+  pages unusable.
+- **References:** [LiteLLM spec](specs/2026-11-10-litellm.md) — *Caching*,
+  *Network*.
+
 ### Opus 4.8 dynamic workflows
 
 - **Status:** Deferred (analysis complete; not adopted in v1).

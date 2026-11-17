@@ -44,6 +44,11 @@ patterns) and current Next.js App Router guidance.
     approval are read per request, and filtering by scope happens after the
     cache read (Access Control spec — *Enforcement*).
     `export const revalidate = 3600` stays as the declarative default.
+    From the Phase 5 *Performance and caching* units (specified 2026-11-17,
+    not built): a request memo may reuse a read **within one request** only,
+    which is not caching; LiteLLM reads are cached only through the fixed
+    list in the LiteLLM spec — *Caching*; and nothing is cached in browser
+    storage (Design System — *Caching Strategy*).
 11. **Charts and other browser-only libraries** load via
     `next/dynamic(() => import(...), { ssr: false })`. Recharts is always
     wrapped in `ResponsiveContainer`.
