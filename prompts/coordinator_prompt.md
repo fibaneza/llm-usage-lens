@@ -198,6 +198,22 @@ never overrides a rule; it only adds coordination.
   compare. An overlap outside the shared list is raised with both workers
   before either continues on that file.
 
+## 2b. The planner session (file relay; user, 2026-11-18)
+
+- **Role.** `planner` writes plans and specs only. It never executes them:
+  no production or test code, no edits in unit worktrees, no unit runs.
+  Never brief it with a build unit; units go to the worker sessions.
+- **Channel.** `planner` runs in a different permission mode from the
+  coordinator, so live messages to it are held and expire undelivered. Use
+  the file relay instead:
+  - the coordinator appends numbered messages (`## P<n> · <UTC time>`) to
+    `temp/coordinator/to-planner.md`;
+  - the user tells `planner` "check the relay";
+  - `planner` appends one-line replies (`<UTC time> re P<n>: …`) to
+    `temp/coordinator/from-planner.md`;
+  - the coordinator reads that file on its idle check.
+- Both files are gitignored scratch (`temp/`) and are never committed.
+
 ## 3. Usage (one shared pool)
 
 - All sessions draw on the same 5-hour and weekly limits. Read usage before
