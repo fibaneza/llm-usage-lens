@@ -207,7 +207,7 @@ Until a principal or account id is configured, combined totals are hidden
 from Viewers and Leads, and Admins, Auditors and org-admins see "gateway not
 configured — totals may double count". The organisation's LiteLLM part
 covers LiteLLM teams only (spend on keys outside any team is not included;
-pending user decision U1).
+the user declined the proxy-wide read, U1, 2026-11-17).
 
 ## 9. Team links
 

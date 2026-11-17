@@ -777,8 +777,8 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 - [x] `GatewayConfig` (`/api/litellm/gateway`, audited; Settings → LiteLLM → Gateway sub-tab); combined totals on Overview, Teams and Team Detail per shared contract §5 (parts shown, gateway slice, reconciliation, unconfigured warning); *My usage* combined card; R5 landings extended (Overview and My usage open on the combined headline); `getUserDailySpend` paging fix
 - [x] Users: the person's combined figure on Management → Users (user detail, under the Organisation cap); **not built:** a combined column on the Users list (one LiteLLM call per row; LD38 — a bulk read is a future improvement)
-- [ ] **Not built (user decision U1):** the organisation's LiteLLM part covers LiteLLM teams only; spend on keys outside any team needs a proxy-wide read that widens the allowlist
-- [x] Spec: LiteLLM spec — *Combined usage and My usage (L6)*, LD38, LT29–LT34 (agent decisions, 2026-11-17); user decisions U1 (proxy-wide read) and U2 (production gateway values) listed, not decided
+- **Declined (user decision U1, 2026-11-17: no):** the organisation's LiteLLM part covers LiteLLM teams only; spend on keys outside any team would need a proxy-wide read that widens the allowlist, so it is not built
+- [x] Spec: LiteLLM spec — *Combined usage and My usage (L6)*, LD38, LT29–LT34 (agent decisions, 2026-11-17); user decisions U1 (proxy-wide read: no, 2026-11-17) and U2 (production gateway values: open) recorded
 - [x] Verify: counted-once fixture (gateway traffic not doubled; `lib/litellm/combined.test.ts`, both gateway forms); hidden combined totals without a gateway for Viewers and Leads (route matrix, server-side hidden body; e2e My usage); warning for Admins and Auditors (and org-admin, LD38; route matrix, e2e Overview)
 
 ### L7 — Self-service key requests (`feature/phase-l7-litellm-key-requests`)
@@ -840,7 +840,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ## Management improvements (units M0–M5; user-directed 2026-11-17)
 
-*Added 2026-11-17 at the user's direction: sixteen requests about the LiteLLM area, app teams, users, the source of each cost figure and on-demand budget resets, run now, before L7, L8 and the rest of Phase 5 (prompt: `prompts/management_improvements_prompt.md`). Decisions D1–D7 and D14–D19 (with D4a and D16a) are recorded in the specs below with their reasons (MI-D… in Access Control and the LiteLLM spec); user decisions are marked, the answers Q1–Q4 are user decisions, and Q7 (a LiteLLM "service" dimension) was asked 2026-11-17 and is open with the default in force: none (D19). Unit **M4** (budget reset requests, the reset ledger and notifications, D8–D13) records its own block, its spec sections and the run directions (order, tests near the end, workflow) itself. One branch and one squash commit per unit (Rule 30.4); M1, M2, M3 and M5 branch from `main` once M0 is on it, or from M0's tip at the coordinator's word.*
+*Added 2026-11-17 at the user's direction: sixteen requests about the LiteLLM area, app teams, users, the source of each cost figure and on-demand budget resets, run now, before L7, L8 and the rest of Phase 5 (prompt: `prompts/management_improvements_prompt.md`). Decisions D1–D7 and D14–D19 (with D4a and D16a) are recorded in the specs below with their reasons (MI-D… in Access Control and the LiteLLM spec); user decisions are marked, the answers Q1–Q4 are user decisions, and Q7 (a LiteLLM "service" dimension) was answered no by the user on 2026-11-17 (D19). Unit **M4** (budget reset requests, the reset ledger and notifications, D8–D13) records its own block, its spec sections and the run directions (order, tests near the end, workflow) itself. One branch and one squash commit per unit (Rule 30.4); M1, M2, M3 and M5 branch from `main` once M0 is on it, or from M0's tip at the coordinator's word.*
 
 ### M0 — Spec for the management items (`docs/management-improvements`)
 

@@ -304,8 +304,8 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ### LiteLLM "service" dimension on Cost by service
 
-- **Status:** Deferred (asked 2026-11-17 as Q7 of the management
-  improvements; open; default in force: no LiteLLM service dimension, D19).
+- **Status:** Deferred. Q7 of the management improvements was answered
+  **no** by the user (2026-11-17): no LiteLLM service dimension (D19).
 - **What:** Let a LiteLLM dimension (a key alias or a request tag) stand for
   "service", so Cost by service's LiteLLM panel can split LiteLLM-reported
   spend by service.
@@ -313,7 +313,7 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
   (Rule 20.10); a LiteLLM alias or tag is chosen freely by its owner, so a
   mapping would be a guess presented as attribution. The panel says
   "LiteLLM does not report cost by service" instead.
-- **Adopt when:** the user answers Q7 with a naming rule for keys or tags
+- **Adopt when:** the user reverses Q7 with a naming rule for keys or tags
   that teams follow, and an allowlisted read returns spend by that
   dimension within the LD34 call budget.
 - **References:** [Design System](specs/2026-05-15-design-system.md) —
