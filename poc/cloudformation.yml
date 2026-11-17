@@ -2,9 +2,11 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   LLM Usage Lens POC - one EC2 instance (Amazon Linux 2023, Docker, Compose,
   SSM Session Manager), its security group and IAM role, and a private ECR
-  repository. Uses an existing VPC and subnet, and optionally adds a listener
-  to an existing Application Load Balancer. Does not deploy or start the
-  application. Deleting this stack deletes the ECR repository and its images.
+  repository. Uses an existing VPC and subnet, and optionally publishes the
+  application through an existing Application Load Balancer: either by adding
+  a listener (listener mode) or by adding one rule to an existing listener
+  that another application uses (rule mode, under BasePath). Does not deploy
+  or start the application. Deleting this stack deletes the ECR repository and its images.
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -26,6 +28,15 @@ Metadata:
           - AlbAllowedInboundCidr
           - AlbListenerPort
           - AlbCertificateArn
+      - Label:
+          {
+            default: Existing ALB listener rule (optional,
+            instead of a listener),
+          }
+        Parameters:
+          - ExistingAlbListenerArn
+          - AlbRulePriority
+          - BasePath
       - Label: { default: ECR }
         Parameters: [EcrRepositoryName, UntaggedImageRetentionDays]
       - Label: { default: S3 artifact bucket (optional) }
@@ -102,8 +113,10 @@ Parameters:
     ConstraintDescription: must be empty or the ARN of an Application Load Balancer.
     Description: >-
       Optional ARN of an existing Application Load Balancer in VpcId. When
-      set, the stack adds one listener and one target group to it and creates
-      a new security group for it (output AlbSecurityGroupId). CloudFormation
+      set, the stack adds one target group to it and creates a new security
+      group for it (output AlbSecurityGroupId), and either one listener
+      (listener mode) or, with ExistingAlbListenerArn, one listener rule (rule
+      mode). CloudFormation
       cannot attach that group to a load balancer it does not own: attach it
       with poc/scripts/alb-security-group.sh. The load balancer, its existing
       security groups and its certificates are never created, changed or
@@ -134,6 +147,39 @@ Parameters:
     Description: >-
       ACM certificate for the listener. Set: the listener is HTTPS. Empty: the
       listener is plain HTTP (use only on an internal load balancer).
+  ExistingAlbListenerArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^arn:aws[a-z-]*:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:listener/app/[A-Za-z0-9-]+/[a-f0-9]+/[a-f0-9]+$"
+    ConstraintDescription: must be empty or the ARN of an Application Load Balancer listener.
+    Description: >-
+      Rule mode. ARN of an existing listener (for example the HTTPS 443
+      listener another application already uses). The stack adds one rule to
+      it that forwards BasePath and BasePath/* to this POC; the listener, its
+      certificate and its other rules are never created, changed or deleted.
+      Requires ExistingAlbArn, AlbRulePriority and BasePath, and no
+      AlbCertificateArn (the listener already has its own). Empty (default):
+      no rule.
+  AlbRulePriority:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^([1-9][0-9]{0,3}|[1-4][0-9]{4}|50000)$"
+    ConstraintDescription: must be empty or a rule priority from 1 to 50000.
+    Description: >-
+      Rule mode. Priority of the new rule, 1 to 50000. It must be unused on
+      the listener and lower than any catch-all rule of the other application.
+      Required with ExistingAlbListenerArn.
+  BasePath:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^(/[a-z0-9-]+)+$"
+    ConstraintDescription: must be empty or lower-case /segments such as /llm-lens, with no trailing slash.
+    Description: >-
+      URL prefix the image was built with (NEXT_PUBLIC_BASE_PATH). The health
+      check path becomes BasePath/api/health, and in rule mode the rule
+      forwards BasePath and BasePath/* only (never BasePath*, which would also
+      match a sibling such as /llm-lens-other). Required with
+      ExistingAlbListenerArn. Empty (default): the app serves from /.
   EcrRepositoryName:
     Type: String
     Default: llm-usage-lens-poc
@@ -171,15 +217,31 @@ Rules:
     Assertions:
       - Assert: !Not [!Equals [!Ref AllowedInboundCidr, "0.0.0.0/0"]]
         AssertDescription: AllowedInboundCidr must not be 0.0.0.0/0.
+  # Rule mode and listener mode never mix (Platform spec - Base path, BP-D7).
+  RuleModeIsComplete:
+    RuleCondition: !Not [!Equals [!Ref ExistingAlbListenerArn, ""]]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ExistingAlbArn, ""]]
+        AssertDescription: ExistingAlbListenerArn requires ExistingAlbArn.
+      - Assert: !Not [!Equals [!Ref AlbRulePriority, ""]]
+        AssertDescription: ExistingAlbListenerArn requires AlbRulePriority.
+      - Assert: !Not [!Equals [!Ref BasePath, ""]]
+        AssertDescription: ExistingAlbListenerArn requires BasePath (an empty prefix would make the rule match every path).
+      - Assert: !Equals [!Ref AlbCertificateArn, ""]
+        AssertDescription: ExistingAlbListenerArn and AlbCertificateArn cannot be set together (rule mode adds no listener or certificate).
 
 Conditions:
   HasInboundCidr: !Not [!Equals [!Ref AllowedInboundCidr, ""]]
   IsArm64: !Equals [!Ref InstanceArchitecture, arm64]
   HasAlb: !Not [!Equals [!Ref ExistingAlbArn, ""]]
   HasAlbCertificate: !Not [!Equals [!Ref AlbCertificateArn, ""]]
+  IsRuleMode: !Not [!Equals [!Ref ExistingAlbListenerArn, ""]]
+  IsListenerMode: !And
+    - !Condition HasAlb
+    - !Not [!Condition IsRuleMode]
   HasArtifactBucket: !Not [!Equals [!Ref ArtifactBucketName, ""]]
   HasAlbInboundCidr: !And
-    - !Condition HasAlb
+    - !Condition IsListenerMode
     - !Not [!Equals [!Ref AlbAllowedInboundCidr, ""]]
 
 Resources:
@@ -303,9 +365,10 @@ Resources:
           Value: !Sub ${InstanceName}-sg
 
   # Optional: publish the app through an EXISTING load balancer. The stack
-  # creates the listener, the target group and a NEW security group for the
-  # load balancer. It never reuses, edits or deletes the load balancer's
-  # existing security groups, the load balancer itself or its certificates.
+  # creates the target group, a NEW security group for the load balancer and
+  # either a listener (listener mode) or one rule on an existing listener (rule
+  # mode). It never reuses, edits or deletes the load balancer's existing
+  # security groups, the load balancer itself, its listeners or its certificates.
   #
   # CloudFormation cannot attach a security group to a load balancer it does
   # not own, so AlbSecurityGroup is attached (in addition to the existing
@@ -372,7 +435,7 @@ Resources:
         - Id: !Ref Instance
           Port: !Ref AppPort
       HealthCheckProtocol: HTTP
-      HealthCheckPath: /api/health
+      HealthCheckPath: !Sub ${BasePath}/api/health
       HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
@@ -386,9 +449,27 @@ Resources:
         - Key: Name
           Value: !Sub ${InstanceName}-tg
 
+  # Rule mode: the app owns the prefix, so the rule forwards the request
+  # unchanged. Two patterns, never BasePath* (BP-D4).
+  AlbListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: IsRuleMode
+    Properties:
+      ListenerArn: !Ref ExistingAlbListenerArn
+      Priority: !Ref AlbRulePriority
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - !Ref BasePath
+              - !Sub ${BasePath}/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref AlbTargetGroup
+
   AlbListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
-    Condition: HasAlb
+    Condition: IsListenerMode
     Properties:
       LoadBalancerArn: !Ref ExistingAlbArn
       Port: !Ref AlbListenerPort
@@ -504,16 +585,20 @@ Outputs:
     Value: !Ref AppPort
   AlbArn:
     Condition: HasAlb
-    Description: The existing load balancer the listener was added to (not owned by this stack).
+    Description: The existing load balancer the listener or rule was added to (not owned by this stack).
     Value: !Ref ExistingAlbArn
   AlbSecurityGroupId:
     Condition: HasAlb
     Description: New security group to attach to the existing load balancer (poc/scripts/alb-security-group.sh attach).
     Value: !Ref AlbSecurityGroup
   AlbListenerArn:
-    Condition: HasAlb
-    Description: Listener added to the existing load balancer.
+    Condition: IsListenerMode
+    Description: Listener added to the existing load balancer (listener mode).
     Value: !Ref AlbListener
+  AlbListenerRuleArn:
+    Condition: IsRuleMode
+    Description: Rule added to the existing listener (rule mode).
+    Value: !Ref AlbListenerRule
   AlbTargetGroupArn:
     Condition: HasAlb
     Description: Target group that forwards to the instance on AppPort.

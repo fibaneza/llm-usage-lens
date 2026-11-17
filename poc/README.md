@@ -5,8 +5,12 @@ dashboard image on a small EC2 instance with Docker Compose, pulls the image
 from a private ECR repository, and is administered only through AWS Systems
 Manager (SSM) Session Manager.
 
-Everything for the POC lives in `poc/`. Nothing outside this directory was
-changed. This is **not** the project's deployment path: that is ECS Fargate
+Everything specific to the POC lives in `poc/`. The one thing it needs from
+the rest of the repository is the dashboard's optional **base path**
+(`NEXT_PUBLIC_BASE_PATH`, unit BP): every URL of the app starts with one
+prefix, `/llm-lens` here, so the POC can share an HTTPS listener with another
+application ([Platform spec - *Base path*](../docs/specs/2026-11-10-platform.md)).
+This is **not** the project's deployment path: that is ECS Fargate
 with the CDK app in `infra/`
 ([Platform spec](../docs/specs/2026-11-10-platform.md),
 [deployment guide](../docs/guides/dashboard-deployment.md)). The POC uses
@@ -64,11 +68,13 @@ developer machine                          existing VPC / subnet
   changes or deletes the bucket.
 - No SSH, no key pair, no inbound rule by default. Browsers reach the app
   through SSM port forwarding.
-- Optionally, the stack adds a listener and a target group to an **existing**
-  Application Load Balancer (*Publish through an existing load balancer*),
-  with a **new** security group of its own for that load balancer. It never
-  creates a load balancer and never reuses, edits or deletes the load
-  balancer's existing security groups.
+- Optionally, the stack adds a target group and either a listener (listener
+  mode) or one rule on a listener another application already uses (rule
+  mode, path prefix `/llm-lens`) to an **existing** Application Load Balancer
+  (*Publish through an existing load balancer*), with a **new** security group
+  of its own for that load balancer. It never creates a load balancer and
+  never reuses, edits or deletes the load balancer's existing security groups
+  or listeners.
 
 ### What repository inspection found
 
@@ -76,7 +82,7 @@ developer machine                          existing VPC / subnet
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dockerfile and context   | [`apps/dashboard/Dockerfile`](../apps/dashboard/Dockerfile), built from the **repository root**. Next.js standalone output; starts `node apps/dashboard/server.js`.                                                                                               |
 | Port                     | The container listens on `3000` (`PORT=3000`, `HOSTNAME=0.0.0.0`).                                                                                                                                                                                                  |
-| Health endpoint          | `GET /api/health`: no session needed; `200` while the process serves; the body says `ok` or `degraded` (DynamoDB unreachable). Its `litellm` field is always `not-configured`, so it does not prove LiteLLM connectivity.                                           |
+| Health endpoint          | `GET /llm-lens/api/health` (`GET /api/health` without a base path): no session needed; `200` while the process serves; the body says `ok` or `degraded` (DynamoDB unreachable). Its `litellm` field is always `not-configured`, so it does not prove LiteLLM connectivity.                                           |
 | Architecture             | The base image `node:22-alpine` is multi-architecture and the app has no native build step, so both `linux/arm64` and `linux/amd64` work. The POC defaults to **arm64** (`t4g.small`, Graviton).                                                                    |
 | DynamoDB                 | **Required.** The app stores all its data in one DynamoDB table and is developed against DynamoDB Local. The hostname `dynamodb-local` is one the app recognises as local ([`lib/dynamodb.ts`](../apps/dashboard/lib/dynamodb.ts)), so it uses no AWS credentials. |
 | DynamoDB Admin           | Included: the devcontainer already uses `aaronshaf/dynamodb-admin` for the same purpose.                                                                                                                                                                            |
@@ -235,7 +241,10 @@ aws cloudformation deploy \
 | `ExistingAlbArn`             | empty                | Optional existing Application Load Balancer; see *Publish through an existing load balancer*.             |
 | `AlbAllowedInboundCidr`      | empty                | Optional CIDR the new load balancer security group allows on `AlbListenerPort`.                           |
 | `AlbListenerPort`            | `443`                | Port of the listener the stack adds; must be free on the load balancer.                                   |
-| `AlbCertificateArn`          | empty                | ACM certificate: set gives an HTTPS listener, empty gives HTTP.                                           |
+| `AlbCertificateArn`          | empty                | ACM certificate: set gives an HTTPS listener, empty gives HTTP. Listener mode only.                       |
+| `ExistingAlbListenerArn`     | empty                | Rule mode: ARN of the existing listener that receives one rule. Needs `ExistingAlbArn`, `AlbRulePriority` and `BasePath`; refused together with `AlbCertificateArn`. |
+| `AlbRulePriority`            | empty                | Rule mode: priority of the new rule, 1 to 50000, unused on that listener.                                 |
+| `BasePath`                   | empty                | The prefix the image was built with, such as `/llm-lens`. Required in rule mode; the health check path becomes `BasePath/api/health`. |
 | `EcrRepositoryName`          | `llm-usage-lens-poc` | Private repository created (and deleted) by the stack.                                                    |
 | `UntaggedImageRetentionDays` | `7`                  | Lifecycle: days before untagged images expire.                                                            |
 
@@ -249,7 +258,8 @@ Outputs: `InstanceId`, `InstancePrivateIp`, `InstanceSecurityGroupId`,
 `EcrRepositoryUri`, `EcrRepositoryName`, `ImagePlatform`, `AppPort`, `Region`,
 `AccountId`, with a bucket `ArtifactBucketName` and `ArtifactKeyPrefix`, and
 with the load balancer option `AlbArn`,
-`AlbSecurityGroupId`, `AlbListenerArn` and `AlbTargetGroupArn`. Keep the instance ID for the later commands:
+`AlbSecurityGroupId`, `AlbTargetGroupArn` and `AlbListenerArn` (listener
+mode) or `AlbListenerRuleArn` (rule mode). Keep the instance ID for the later commands:
 
 ```bash
 export INSTANCE_ID=$(aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue | [0]" --output text)
@@ -270,7 +280,18 @@ pushes that one tag. It reads the repository URI and the target platform from
 the stack outputs, discovers the account with STS, and logs Docker in to ECR
 with `aws ecr get-login-password`. It never prints or stores credentials.
 
+The image is built **with the base path `/llm-lens`** (Docker build argument
+`NEXT_PUBLIC_BASE_PATH`): the prefix is compiled into the bundles, so it cannot
+change at run time. `--base-path <prefix>` builds another one (lower-case
+`/segments`, no trailing slash; `--base-path ""` serves from `/`). Keep the
+stack's `BasePath`, the Compose healthcheck (`POC_BASE_PATH`) and
+`NEXT_PUBLIC_APP_URL` in line with it.
+
 Other forms:
+
+```bash
+poc/scripts/build-and-push.sh --region "$AWS_REGION" --stack-name "$STACK_NAME" --base-path /llm-lens
+```
 
 ```bash
 poc/scripts/build-and-push.sh --profile my-sso-profile --region ap-southeast-2 --stack-name llm-usage-lens-poc
@@ -483,7 +504,8 @@ Edit `.env` (`nano .env` or `vi .env`). Required values:
 | `IMAGE_TAG`                            | `latest`.                                                                                                                          |
 | `APP_ENV`                              | `dev`. (`prod` additionally requires a KMS key, TOTP and an `https` LiteLLM URL, which this POC does not provide.)                 |
 | `AUTH_SECRET`                          | A new random value: `openssl rand -base64 33`. The repository's local placeholder is rejected.                                     |
-| `AUTH_URL`, `NEXT_PUBLIC_APP_URL`      | The URL the browser uses. `http://localhost:3000` with port forwarding (default).                                                  |
+| `AUTH_URL`                             | The browser's **origin only**, with no path: `http://localhost:3000/` with port forwarding (default).                              |
+| `NEXT_PUBLIC_APP_URL`                  | The origin plus the base path: `http://localhost:3000/llm-lens` (default).                                                         |
 | `AUTH_MASTER_USERNAME`                 | A username for the master sign-in, for example `poc-admin`. Not a secret.                                                          |
 | `AUTH_MASTER_PASSWORD_HASH`            | Argon2id hash of the password, **in single quotes** (it contains `$`).                                                             |
 | `AWS_REGION`, `DYNAMODB_TABLE_NAME`    | Keep the defaults (`ap-southeast-2`, `bedrock-usage`).                                                                             |
@@ -567,7 +589,7 @@ docker compose ps
 ```
 
 ```bash
-curl -s http://127.0.0.1:3000/api/health
+curl -s http://127.0.0.1:3000/llm-lens/api/health
 ```
 
 Expected: `{"data":{"status":"ok","dependencies":{"dynamodb":"ok","litellm":"not-configured"}}}`.
@@ -596,30 +618,40 @@ From the developer machine, forward local port 3000 to the instance:
 aws ssm start-session --target "$INSTANCE_ID" --region "$AWS_REGION" --document-name AWS-StartPortForwardingSession --parameters '{"portNumber":["3000"],"localPortNumber":["3000"]}'
 ```
 
-Then open <http://localhost:3000> and sign in with the master user.
+Then open <http://localhost:3000/llm-lens> and sign in with the master user.
+Every URL of the app starts with `/llm-lens`; `http://localhost:3000/` and
+`http://localhost:3000/api/health` answer `404`.
 
 Direct access instead (only if needed): redeploy the stack with
 `AllowedInboundCidr=<your trusted CIDR>`, set `APP_BIND_ADDRESS=0.0.0.0` and
-`AUTH_URL` / `NEXT_PUBLIC_APP_URL` to `http://<instance address>:3000` in
-`.env`, and run `docker compose up -d`. The traffic is then plain HTTP;
+`AUTH_URL` to `http://<instance address>:3000/` and `NEXT_PUBLIC_APP_URL` to
+`http://<instance address>:3000/llm-lens` in `.env`, and run `docker compose up -d`. The traffic is then plain HTTP;
 prefer port forwarding. The instance needs an address your network can reach.
 
 ### Publish through an existing load balancer (optional)
 
 The stack can attach the app to an Application Load Balancer you already
-have. It creates, and later deletes, only its own resources:
+have. It creates, and later deletes, only its own resources. There are two
+modes, and the template refuses a mix of both:
+
+| Mode                | Use when                                                  | The stack adds                                  | Parameters                                                                                  |
+| ------------------- | --------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Rule mode**       | Another application already uses the listener, for example HTTPS 443 | One rule on that listener: path patterns `/llm-lens` and `/llm-lens/*`, forwarded unchanged to the target group | `ExistingAlbArn`, `ExistingAlbListenerArn`, `AlbRulePriority`, `BasePath` |
+| **Listener mode**   | The load balancer has a free port for the POC             | A listener of its own on `AlbListenerPort`, forwarding everything to the target group | `ExistingAlbArn`, `AlbListenerPort`, `AlbCertificateArn` (HTTPS) or empty (HTTP), `AlbAllowedInboundCidr` |
+
+Both modes also create:
 
 | Created by the stack                 | Purpose                                                                                                   |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Listener on the existing ALB         | `AlbListenerPort`, HTTPS with `AlbCertificateArn` or HTTP without; forwards to the target group           |
-| Target group                         | The instance on `AppPort`; health check `GET /api/health`                                                 |
-| **New** security group for the ALB   | Outbound: `AppPort` to the instance only. Inbound: `AlbListenerPort` from `AlbAllowedInboundCidr`, if set |
+| Target group                         | The instance on `AppPort`; health check `GET <BasePath>/api/health`                                       |
+| **New** security group for the ALB   | Outbound: `AppPort` to the instance only. Inbound (listener mode only): `AlbListenerPort` from `AlbAllowedInboundCidr`, if set |
 | Inbound rule on the instance's group | `AppPort` from the new ALB security group only                                                            |
 
 It does **not** create, change or delete the load balancer, the load
-balancer's existing security groups, its other listeners, its certificates,
-its subnets or DNS. The existing security groups are not reused: the
-instance trusts only the new group.
+balancer's existing security groups, its existing listeners (rule mode adds
+one rule to the listener and nothing else), its certificates, its subnets or
+DNS. The existing security groups are not reused: the instance trusts only the
+new group.
 
 CloudFormation cannot attach a security group to a load balancer the stack
 does not own, so that one step is a script. It **adds** the new group to the
@@ -629,17 +661,41 @@ Requirements on the existing resources:
 
 - An Application Load Balancer in the same VPC as the instance, whose subnets
   can route to the instance's subnet, with fewer than five security groups.
-- `AlbListenerPort` is not used by another listener on it.
-- For HTTPS, an ACM certificate in the same region for the hostname you use.
-  The stack references the certificate; it never deletes it.
-- Inbound access to the new listener: either set `AlbAllowedInboundCidr`, or
-  rely on a rule the load balancer's existing groups already have.
+- Rule mode: the listener ARN, a rule priority that no rule on the listener
+  uses and that is lower than any catch-all rule of the other application,
+  and confirmation that the other application serves nothing under
+  `/llm-lens` (the rule forwards that prefix to the POC). The load balancer
+  already accepts inbound traffic on the listener's port, so nothing is
+  opened for it.
+- Listener mode: `AlbListenerPort` is not used by another listener on it; for
+  HTTPS, an ACM certificate in the same region for the hostname you use (the
+  stack references it and never deletes it); and inbound access to the new
+  listener, either `AlbAllowedInboundCidr` or a rule the load balancer's
+  existing groups already have.
 
-1. Deploy (or update) the stack with the load balancer parameters:
+The values below are placeholders (`000000000000`): the script refuses them.
+Put your real ARNs, priority and IDs in `poc/stack.env` (gitignored; keys in
+[`stack.env.example`](stack.env.example)) or on the command line.
+
+1. Build and push the image with the prefix (*Build and push the image*;
+   `/llm-lens` is the default), then deploy (or update) the stack.
+
+   Rule mode:
 
    ```bash
-   poc/scripts/deploy-stack.sh --region "$AWS_REGION" --stack-name "$STACK_NAME" --vpc-id vpc-0123456789abcdef0 --subnet-id subnet-0123456789abcdef0 --alb-arn arn:aws:elasticloadbalancing:ap-southeast-2:000000000000:loadbalancer/app/my-alb/0123456789abcdef --alb-listener-port 443 --alb-certificate-arn arn:aws:acm:ap-southeast-2:000000000000:certificate/00000000-0000-0000-0000-000000000000 --alb-allowed-inbound-cidr 203.0.113.0/24
+   poc/scripts/deploy-stack.sh --region "$AWS_REGION" --stack-name "$STACK_NAME" --vpc-id vpc-0123456789abcdef0 --subnet-id subnet-0123456789abcdef0 --alb-arn arn:aws:elasticloadbalancing:ap-southeast-2:000000000000:loadbalancer/app/my-alb/0123456789abcdef --alb-listener-arn arn:aws:elasticloadbalancing:ap-southeast-2:000000000000:listener/app/my-alb/0123456789abcdef/0123456789abcdef --alb-rule-priority 100 --base-path /llm-lens
    ```
+
+   Listener mode:
+
+   ```bash
+   poc/scripts/deploy-stack.sh --region "$AWS_REGION" --stack-name "$STACK_NAME" --vpc-id vpc-0123456789abcdef0 --subnet-id subnet-0123456789abcdef0 --alb-arn arn:aws:elasticloadbalancing:ap-southeast-2:000000000000:loadbalancer/app/my-alb/0123456789abcdef --alb-listener-port 8443 --alb-certificate-arn arn:aws:acm:ap-southeast-2:000000000000:certificate/00000000-0000-0000-0000-000000000000 --alb-allowed-inbound-cidr 203.0.113.0/24 --base-path /llm-lens
+   ```
+
+   `--alb-listener-arn` together with `--alb-listener-port` or
+   `--alb-certificate-arn` is refused before any AWS call. In listener mode the
+   listener forwards **every** request on its port to the app, so pick a port
+   no other application uses; `--base-path` there only moves the health check.
 
 2. Attach the new security group to the load balancer:
 
@@ -653,33 +709,55 @@ Requirements on the existing resources:
 
 3. On the instance, edit `.env` and run `docker compose up -d`:
 
-   | Variable                          | Value                                                                               |
-   | --------------------------------- | ----------------------------------------------------------------------------------- |
-   | `APP_BIND_ADDRESS`                | `0.0.0.0`, so the load balancer can reach the published port.                       |
-   | `APP_PORT`                        | The stack's `AppPort` (default `3000`).                                             |
-   | `AUTH_URL`, `NEXT_PUBLIC_APP_URL` | The URL users open, for example `https://poc.example.com` (add `:port` if not 443). |
+   | Variable                          | Value                                                                                                         |
+   | --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+   | `APP_BIND_ADDRESS`                | `0.0.0.0`, so the load balancer can reach the published port.                                                 |
+   | `APP_PORT`                        | The stack's `AppPort` (default `3000`).                                                                       |
+   | `AUTH_URL`                        | The origin users open, with **no path**: `https://poc.example.com/` (add `:port` if not 443).                 |
+   | `NEXT_PUBLIC_APP_URL`             | The same origin plus the prefix: `https://poc.example.com/llm-lens`.                                          |
+
+   With Microsoft Entra ID, register the redirect URI
+   `https://poc.example.com/llm-lens/api/auth/callback/microsoft-entra-id`
+   (a user action in Entra;
+   [auth setup guide](../docs/guides/auth-setup.md)).
 
 4. Check the target. It is healthy once the group is attached and the app
-   answers `/api/health`:
+   answers `/llm-lens/api/health`:
 
    ```bash
    aws elbv2 describe-target-health --region "$AWS_REGION" --target-group-arn "$(aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey=='AlbTargetGroupArn'].OutputValue | [0]" --output text)"
+   ```
+
+   Then, from a machine that can reach the load balancer:
+
+   ```bash
+   curl -s https://poc.example.com/llm-lens/api/health
    ```
 
 Notes:
 
 - Until step 2 is done the target stays unhealthy: the instance accepts the
   app port only from the new group.
-- With an empty `AlbCertificateArn` the listener is plain HTTP; use that only
-  on an internal load balancer.
-- The listener forwards **every** request on its port to the app. If the
-  load balancer already serves other applications on that port, use another
-  port; the POC does not add rules to an existing listener.
+- The rule matches `/llm-lens` and `/llm-lens/*`, never `/llm-lens*`, so a
+  sibling such as `/llm-lens-other` still reaches the other application. The
+  load balancer does not strip the prefix; the app owns it. The app's cookies
+  carry `Path=/llm-lens` and `llm-lens.*` names, so the browser does not send
+  them to the other application.
+- Browsing the load balancer's `/` or `/api/health` reaches the other
+  application, not the POC. Only the prefix is ours.
+- With an empty `AlbCertificateArn` a listener-mode listener is plain HTTP;
+  use that only on an internal load balancer. Rule mode uses the listener's
+  own certificate.
+- Switching from listener mode to rule mode: run the `detach` command from
+  *Cleanup*, update the stack with `--alb-arn ""` (this deletes the listener),
+  then deploy rule mode as in step 1, with `--alb-certificate-arn ""` if the
+  stack still holds one. Rule mode is refused while `AlbCertificateArn` is set.
 - Security groups on a load balancer are additive: the new group's inbound
   rule adds to whatever the existing groups allow, and the existing groups'
   outbound rules still apply to the other targets.
 - Removing the load balancer option later: run the `detach` command from
-  *Cleanup* first, then update the stack with `--alb-arn ""`.
+  *Cleanup* first, then update the stack with `--alb-arn ""` and
+  `--alb-listener-arn ""` (this deletes the rule).
 
 ### Load sample data (optional)
 
@@ -706,7 +784,7 @@ The seed scripts only ever target a local endpoint (`http://localhost:8000`).
 3. `aws ssm start-session --target "$INSTANCE_ID" --region "$AWS_REGION"`, then `sudo -i` and `cd /opt/llm-usage-lens-poc`.
 4. `docker compose pull` (log in to ECR again first if the 12-hour token expired).
 5. `docker compose up -d`
-6. `docker compose ps`, `curl -s http://127.0.0.1:3000/api/health`, `docker compose logs --tail 100 app`.
+6. `docker compose ps`, `curl -s http://127.0.0.1:3000/llm-lens/api/health`, `docker compose logs --tail 100 app`.
 
 There is no automatic deployment, polling or pipeline. If
 `docker-compose.yml` or `.env.example` changed, repeat the bundle step in
@@ -727,7 +805,7 @@ On the instance, as root, in `/opt/llm-usage-lens-poc`:
 | List containers and health             | `docker compose ps`                                                                                  |
 | Logs                                   | `docker compose logs --tail 200 app` (add `-f` to follow; other services: `dynamodb-local`, `dynamodb-admin`) |
 | Health state of the app container      | `docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q app)"`                   |
-| App health endpoint                    | `curl -s http://127.0.0.1:3000/api/health`                                                           |
+| App health endpoint                    | `curl -s http://127.0.0.1:3000/llm-lens/api/health`                                                  |
 | Restart one service                    | `docker compose restart app`                                                                         |
 | Stop / start everything                | `docker compose stop` / `docker compose up -d`                                                       |
 | Docker disk usage                      | `docker system df` and `df -h /`                                                                     |
@@ -814,9 +892,9 @@ first: it deletes everything under it).
 Deleting the stack removes **only what the stack created**: the instance and
 its root volume, its security group and IAM role, the ECR repository (with
 the app image and the mirrored images), and
-with the load balancer option the POC listener, target group and the new
-security group. It never deletes the existing load balancer, that load
-balancer's own security groups or other listeners, the ACM certificate, the
+with the load balancer option the POC listener or rule, target group and the
+new security group. It never deletes the existing load balancer, that load
+balancer's own security groups, listeners or other rules, the ACM certificate, the
 VPC or the subnet.
 
 > **Warning: deleting the stack permanently deletes the ECR repository and
@@ -867,7 +945,7 @@ Cost (no prices quoted here; see the linked pages):
 - **Systems Manager:** Session Manager has no additional charge for EC2
   instances ([Systems Manager pricing](https://aws.amazon.com/systems-manager/pricing/)).
 - **Load balancer:** the existing load balancer is already billed; the added
-  listener and target group add no fixed charge, but traffic through them
+  listener or rule and target group add no fixed charge, but traffic through them
   counts towards its capacity units
   ([ELB pricing](https://aws.amazon.com/elasticloadbalancing/pricing/)).
 - **Public IPv4:** if the subnet assigns a public IPv4 address, AWS charges
@@ -956,6 +1034,7 @@ Security:
 | `s3-config` run locally (public `amazon/aws-cli` image)               | Passed: empty `S3_BUCKET` writes an empty read-only `config.yaml` and exits 0; a bucket it cannot read exits 1, so `app` does not start |
 | S3 changes to `cloudformation.yml` (parsed YAML)                      | Passed: the S3 read policy, outputs and boot-script substitutions resolve to declared parameters. Service-side validation and the S3 Compose install at boot **not run** |
 | `deploy-stack.sh` and `alb-security-group.sh` against a stub AWS CLI  | Passed: attach keeps existing groups, detach removes only the POC group, limits and missing parameters are refused; `stack.env` values load, command-line options override them, unfilled placeholders are refused |
+| Rule mode, mode mix refusals, health path and script options (unit BP) | Passed: `scripts/poc-base-path.test.ts` evaluates the template's Rules, Conditions and parameter patterns, and runs the scripts against stub `aws` and `docker`; no AWS or Docker is touched. A rule on a real listener, `aws cloudformation validate-template` and the ALB forwarding **not run** |
 | `docker compose config` with `.env.example`                           | Passed; four services, all images from `ECR_REPOSITORY_URI`, all host ports on `127.0.0.1` |
 | Resources, outputs and IAM actions as described                       | Checked by reading the parsed YAML                          |
 | Lifecycle policy text is valid JSON with the two intended rules       | Passed                                                      |

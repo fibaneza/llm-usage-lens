@@ -35,7 +35,7 @@ export function addDashboardIngress(
     protocol: elbv2.ApplicationProtocol.HTTP,
     targetType: elbv2.TargetType.IP,
     targets: [service],
-    healthCheck: { path: HEALTH_PATH },
+    healthCheck: { path: `${inputs.basePath}${HEALTH_PATH}` },
   });
 
   const lb = inputs.loadBalancer;

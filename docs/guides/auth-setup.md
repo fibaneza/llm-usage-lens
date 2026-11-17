@@ -29,6 +29,7 @@ Do not use static `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. Short-lived SSO
 - Create a free Entra tenant if you do not have one (Azure portal → Microsoft Entra ID).
 - App registrations → **New registration**. Name it; pick "Single tenant".
 - Redirect URI → platform **Web** → `http://localhost:3000/api/auth/callback/microsoft-entra-id`
+- **With a base path (unit BP):** the redirect URI is `https://<host>/llm-lens/api/auth/callback/microsoft-entra-id` (the prefix between host and `/api/auth`). `AUTH_URL` stays the origin only, `https://<host>`, with no path (Platform spec — *Base path*, BP-D9). Registering the URI in Entra is a user action.
 - Copy the **Application (client) ID** and **Directory (tenant) ID**.
 - Certificates & secrets → **New client secret** → copy the secret **value** (shown once).
 - App roles → **Create app role**: display name "Admin", allowed member types **Users/Groups**, value `Admin`. Then Enterprise applications → this app → Users and groups → assign the people who may manage accounts in Settings (assigning a group requires Entra ID P1/P2; on a free tenant assign users directly). Roles are read at sign-in, so a change takes effect at the user's next sign-in; every session ends 8 hours after sign-in, even for an active user. The first deploy of this rule signs everyone out once (older sessions carry no sign-in time). Entra emits assigned roles in the ID token's `roles` claim; members without `Admin` can still read every page but get `403` from the account write routes (System Architecture spec — *Authentication & Access*).
@@ -45,7 +46,7 @@ pnpm add next-auth@beta
 
 ```
 AUTH_SECRET=                # generate with: npx auth secret
-AUTH_URL=http://localhost:3000
+AUTH_URL=http://localhost:3000   # origin only; never includes the base path
 AUTH_MICROSOFT_ENTRA_ID_ID=<application/client id>
 AUTH_MICROSOFT_ENTRA_ID_SECRET=<client secret value>
 AUTH_MICROSOFT_ENTRA_ID_ISSUER=https://login.microsoftonline.com/<tenant id>/v2.0

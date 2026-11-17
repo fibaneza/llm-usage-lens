@@ -42,14 +42,19 @@ export type TestUserOptions = {
 // Encodes the Auth.js session JWT for a forged test sign-in (the same token
 // signInAsTestUser plants as a cookie). Shared with the L5 probe's setup, which
 // signs requests outside a browser context.
-export async function buildSessionToken({
-  signedInAt = Math.floor(Date.now() / 1000),
-  roles = [...DEFAULT_TEST_ROLES],
-  authTime,
-  oid = "e2e-user",
-  tid = "e2e-tenant",
-  authMethod = "entra",
-}: TestUserOptions = {}): Promise<string> {
+export async function buildSessionToken(
+  {
+    signedInAt = Math.floor(Date.now() / 1000),
+    roles = [...DEFAULT_TEST_ROLES],
+    authTime,
+    oid = "e2e-user",
+    tid = "e2e-tenant",
+    authMethod = "entra",
+  }: TestUserOptions = {},
+  // The JWT salt is the session cookie's name; the prefixed project (unit BP,
+  // BP-D12) uses its own app-specific name (support/base-path-session.ts).
+  salt: string = SESSION_COOKIE,
+): Promise<string> {
   return encode({
     token: {
       ...E2E_USER,
@@ -62,7 +67,7 @@ export async function buildSessionToken({
       ...(signedInAt === null ? {} : { signedInAt }),
     },
     secret: E2E_AUTH_SECRET,
-    salt: SESSION_COOKIE,
+    salt,
   });
 }
 

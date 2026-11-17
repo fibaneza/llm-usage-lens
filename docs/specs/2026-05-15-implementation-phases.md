@@ -820,6 +820,21 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ---
 
+## Base path (unit BP; decided 2026-11-17)
+
+### BP — serve the dashboard under a URL prefix (`feature/base-path`)
+
+*Added 2026-11-17 at the user's direction ("all path for the app should start with a prefix, i.e: llm-lens/ … create a rule"): the POC adds a listener rule to an existing ALB listener on port 443 that another application already uses. Outside the phase order (Rule 30). [Platform spec — *Base path*](2026-11-10-platform.md) records BP-D1 to BP-D7, BP-D9, BP-D13, BP-D15 and Q1 to Q3; [Access Control — *Decisions*](2026-11-10-access-control.md) records BP-D8, BP-D10 to BP-D12 and BP-D14 and threat items T40 to T43. Q1 (`/llm-lens` is final) and Q2 (the ECS platform does not serve under the prefix) are user answers, 2026-11-17; Q3 (listener ARN, free rule priority, no clash under `/llm-lens`) is open and lives only in gitignored `poc/stack.env`. Runs at the coordinator's direction (prompt: `prompts/base_path_prompt.md`). One branch, one squash commit (Rule 30.4).*
+
+- [x] Spec amendment: Platform *Base path*, *Runtime* and *Load balancer*; Access Control *Decisions* and *Threat model*; `docs/guides/auth-setup.md`; `docs/guides/testing.md`; Rule 50.2 exception; this block
+- [x] App: `lib/base-path.ts` (BP-D13); `NEXT_PUBLIC_BASE_PATH` in `env.ts`, `.env.example` and `next.config.ts` (BP-D1, BP-D2); `withBasePath` at the raw-URL sites (BP-D3); `auth.ts` (`basePath`, `pages`, `redirect` callback, `authorized`, cookie names and path: BP-D9 to BP-D12); `[...nextauth]` route wrapper; `sidebar_state` path; Dockerfile `ARG`/`ENV` (BP-D6); sign-out menu item keeps its form mounted (BP-D14)
+- [x] `infra/`: optional `basePath` context; health path and `NEXT_PUBLIC_APP_URL` carry the prefix when one is configured, `AUTH_URL` stays origin-only (BP-D9); synth output unchanged with none (Q2, T12)
+- [x] POC: rule mode in `poc/cloudformation.yml`, deploy and build scripts, `stack.env.example`, Compose healthcheck, `.env.example` and `README.md` (BP-D5 to BP-D7, BP-D15; T13)
+- [x] Prefixed Playwright project (port 3214, started on request — BP-D15; [testing guide](../guides/testing.md) — *Prefixed e2e project*)
+- [ ] Verify: with `NEXT_PUBLIC_BASE_PATH=/llm-lens`, every URL the app serves or links to starts with `/llm-lens` and nothing outside it answers (`/`, `/api/health`, `/dashboard`, `/llm-lens-other/...` are `404`) — T5 to T11; with the variable empty, behaviour is unchanged (branch gate green with `main` merged in, unprefixed full e2e passed once); the POC template has rule mode and T13 passed, and `poc/README.md` commands match the template, scripts and Compose file; the review approved, including the security pass on BP-D8, BP-D11 and BP-D12 (T7, T8); no AWS deploy, ALB change, image push or Entra registration was done (user actions)
+
+---
+
 ## Decision policy (decided 2026-11-15, user)
 
 When a unit meets an open decision — a spec gap, an ambiguity, a choice
@@ -1142,6 +1157,9 @@ AUTH_MASTER_PASSWORD_HASH=            # Argon2id PHC string ($argon2id$…); SSM
 AUTH_MASTER_TOTP_SECRET=              # base32; required with APP_ENV=prod; SSM SecureString in AWS
 AUDIT_LOG_GROUP_NAME=                 # optional (4R.2): CloudWatch audit log group; unset → the CloudWatch copy is skipped
 TOTP_KMS_KEY_ID=                      # required when APP_ENV=prod (4R.2 R2b-2): the project CMK ARN, set by the DashboardServiceStack; encrypts password users' TOTP secrets (envelope)
+
+# Base path (unit BP; build-time, optional; Platform spec — Base path)
+NEXT_PUBLIC_BASE_PATH=                # empty (serve from /) or /llm-lens-style prefix; AUTH_URL stays origin-only
 
 # AWS / DynamoDB
 AWS_REGION=ap-southeast-2

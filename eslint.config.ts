@@ -12,6 +12,7 @@ export default tseslint.config(
       "**/.next/**",
       "**/.next-probe-r5/**",
       "**/.next-probe-litellm/**",
+      "**/.next-base-path/**",
       "**/node_modules/**",
       "**/next-env.d.ts",
       "**/coverage/**",

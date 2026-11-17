@@ -207,7 +207,10 @@ review = quality-reviewer + spec-guardian + ecc reviewers
         the full e2e on every push to `main` and every pull request. A red
         run goes back into the loop on a `fix/` branch. The coordinator's
         local full `pnpm test:e2e` is only the fallback, when CI is red for
-        an unrelated reason or unavailable.
+        an unrelated reason or unavailable. The prefixed `base-path`
+        project is not in CI yet (Platform — BP-D15, 2026-11-17); a unit
+        that touches the prefix, auth or URL building runs it locally at
+        its green gate.
       - Otherwise the coordinator does not run e2e, except to produce
         evidence a worker can no longer produce (an unreachable run).
     - **The full suite runs in CI (amended 2026-11-15, user).** Sessions

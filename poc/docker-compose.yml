@@ -37,10 +37,16 @@ services:
       dynamodb-local:
         condition: service_healthy
     healthcheck:
-      # GET /api/health needs no session and answers 200 while the process
+      # GET <prefix>/api/health needs no session and answers 200 while the process
       # serves; the body reports "degraded" when DynamoDB is unreachable.
       test:
-        ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "--spider",
+          "http://127.0.0.1:3000${POC_BASE_PATH-/llm-lens}/api/health",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3

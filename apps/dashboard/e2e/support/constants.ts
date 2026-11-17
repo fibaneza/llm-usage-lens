@@ -55,3 +55,26 @@ export const E2E_PROBE_PORT = 3213;
 export const E2E_PROBE_BASE_URL = `http://127.0.0.1:${E2E_PROBE_PORT}`;
 export const E2E_PROBE_TABLE = "bedrock-usage-probe-r5";
 export const E2E_PROBE_DIST_DIR = ".next-probe-r5";
+
+// Unit BP (Platform spec - Base path; docs/guides/testing.md - Prefixed e2e
+// project): the app served under /llm-lens by its own production server (built
+// with NEXT_PUBLIC_BASE_PATH), port 3214 (3211 main, 3212 fake LiteLLM, 3213
+// role probe), its own distDir. AUTH_URL is origin-only (BP-D9).
+export const E2E_BASE_PATH = "/llm-lens";
+export const E2E_PREFIX_PORT = 3214;
+export const E2E_PREFIX_ORIGIN = `http://127.0.0.1:${E2E_PREFIX_PORT}`;
+export const E2E_PREFIX_DIST_DIR = ".next-base-path";
+// The prefixed project (and its extra production build) exists only when
+// asked for: E2E_BASE_PATH_PROJECT=1, or a CLI argument naming it
+// (`--project=base-path`, `e2e/base-path`). Keeps the E2E budget (Rule 70.12)
+// for every other run; the green gate runs it once.
+export function basePathProjectRequested(
+  argv: readonly string[],
+  env: Readonly<Record<string, string | undefined>>,
+): boolean {
+  // argv[0..1] are node and the CLI script, whose path may contain anything.
+  return (
+    env.E2E_BASE_PATH_PROJECT === "1" ||
+    argv.slice(2).some((arg) => arg.includes("base-path"))
+  );
+}

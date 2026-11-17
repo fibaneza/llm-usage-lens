@@ -2,19 +2,36 @@ import { defineConfig, devices } from "@playwright/test";
 
 import {
   E2E_AUTH_SECRET,
+  E2E_BASE_PATH,
   E2E_BASE_URL,
   E2E_LITELLM_HOST,
   E2E_LITELLM_PORT,
   E2E_LITELLM_SERVICE_KEY,
   E2E_PORT,
+  E2E_PREFIX_DIST_DIR,
+  E2E_PREFIX_ORIGIN,
+  E2E_PREFIX_PORT,
   E2E_PROBE_BASE_URL,
   E2E_PROBE_DIST_DIR,
   E2E_PROBE_PORT,
   E2E_PROBE_TABLE,
   E2E_PRODUCTION_SERVERS,
   E2E_TABLE,
+  basePathProjectRequested,
   devServerWarmUp,
 } from "./e2e/support/constants";
+
+// Unit BP (Platform spec - Base path; docs/guides/testing.md - Prefixed e2e
+// project): one small project runs e2e/base-path*.spec.ts against the app
+// built with NEXT_PUBLIC_BASE_PATH=/llm-lens on its own production server
+// (port 3214, own distDir). The other projects ignore these specs. The project
+// and its production build exist only when asked for (--project=base-path, a
+// spec path naming base-path, or E2E_BASE_PATH_PROJECT=1): Playwright starts
+// every webServer, and the build is costly (Rule 70.12 - E2E budget). Workers
+// do not see the CLI arguments, so the decision is passed on through the env.
+const BASE_PATH_SPEC = /base-path[^/]*\.spec\.ts$/;
+const BASE_PATH_PROJECT = basePathProjectRequested(process.argv, process.env);
+if (BASE_PATH_PROJECT) process.env.E2E_BASE_PATH_PROJECT = "1";
 
 // The 4R.5 role probe (e2e/role-landing.spec.ts; Phase 4R.5 Verify: "e2e per
 // role; seeded probe per role") is its own Playwright project in the normal
@@ -80,13 +97,24 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: PROBE_SPEC,
+      testIgnore: [PROBE_SPEC, BASE_PATH_SPEC],
     },
     {
       name: "role-probe",
       use: { ...devices["Desktop Chrome"], baseURL: E2E_PROBE_BASE_URL },
       testMatch: PROBE_SPEC,
     },
+    ...(BASE_PATH_PROJECT
+      ? [
+          {
+            name: "base-path",
+            // baseURL is the origin only: a path in baseURL does not prefix
+            // goto("/dashboard"), so specs use explicit /llm-lens URLs.
+            use: { ...devices["Desktop Chrome"], baseURL: E2E_PREFIX_ORIGIN },
+            testMatch: BASE_PATH_SPEC,
+          },
+        ]
+      : []),
   ],
   webServer: [
     {
@@ -116,8 +144,36 @@ export default defineConfig({
       table: E2E_PROBE_TABLE,
       distDir: E2E_PROBE_DIST_DIR,
     }),
+    ...(BASE_PATH_PROJECT ? [prefixedServer()] : []),
   ],
 });
+
+// Unit BP: always a production build, because the base path is compiled into
+// the bundle (Platform spec - BP-D1, BP-D6). Production refuses the dev-only
+// login, so it configures the unusable master user like CI does. Readiness is
+// the prefixed health endpoint (BP-D5); AUTH_URL stays origin-only (BP-D9).
+function prefixedServer() {
+  const base = devServer({
+    port: E2E_PREFIX_PORT,
+    baseUrl: E2E_PREFIX_ORIGIN,
+    table: E2E_TABLE,
+    distDir: E2E_PREFIX_DIST_DIR,
+  });
+  return {
+    ...base,
+    command: `pnpm exec next build && pnpm exec next start --port ${E2E_PREFIX_PORT}`,
+    url: `${E2E_PREFIX_ORIGIN}${E2E_BASE_PATH}/api/health`,
+    timeout: 600_000,
+    env: {
+      ...base.env,
+      NEXT_PUBLIC_BASE_PATH: E2E_BASE_PATH,
+      NEXT_PUBLIC_APP_URL: `${E2E_PREFIX_ORIGIN}${E2E_BASE_PATH}`,
+      AUTH_DEV_LOGIN: "",
+      AUTH_MASTER_USERNAME: "e2e-master",
+      AUTH_MASTER_PASSWORD_HASH: UNUSABLE_ARGON2ID_HASH,
+    },
+  };
+}
 
 function devServer({
   port,

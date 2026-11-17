@@ -76,6 +76,15 @@ const BaseSchema = z
     // Platform spec — "Inputs": non-secret LiteLLM gateway host allowlist
     // (container environment LITELLM_ALLOWED_HOSTS); unset omits it.
     litellmAllowedHosts: z.string().min(1).optional(),
+    // Platform spec - Base path (BP-D2, Q2): optional prefix the image was built
+    // with. Same format as parseBasePath in apps/dashboard/lib/base-path.ts;
+    // infra does not import the app, so the check is repeated here. It only
+    // derives the health path and the app URLs; the listener rule stays
+    // host-based.
+    basePath: z
+      .string()
+      .regex(/^(\/[a-z0-9-]+)*$/)
+      .default(""),
   })
   .superRefine((v, ctx) => {
     if ((v.entraClientId === undefined) !== (v.entraIssuer === undefined)) {

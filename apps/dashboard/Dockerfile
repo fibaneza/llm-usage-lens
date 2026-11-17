@@ -17,9 +17,14 @@ FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY apps/dashboard apps/dashboard
+# Optional URL prefix, compiled into the bundles (Platform spec - Base path,
+# BP-D6); empty serves from /. next.config.ts validates it, since env
+# validation is skipped here.
+ARG NEXT_PUBLIC_BASE_PATH=""
 # Env validation is skipped only here; runtime env comes from the task definition.
 ENV SKIP_ENV_VALIDATION=1 \
     NEXT_TELEMETRY_DISABLED=1 \
+    NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH} \
     # Build-time placeholder only; no client code reads NEXT_PUBLIC_APP_URL today.
     NEXT_PUBLIC_APP_URL=http://localhost:3000
 RUN mkdir -p apps/dashboard/public \

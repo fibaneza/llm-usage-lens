@@ -111,7 +111,13 @@ export function UserMenu({ user, signOutAction }: UserMenuProps) {
           </Link>
         </DropdownMenuItem>
         <form action={signOutAction}>
-          <DropdownMenuItem asChild>
+          {/* Radix closes the menu on select and unmounts this form before the
+              browser submits it ("form is not connected"); keep it mounted
+              until the action's redirect navigates away. */}
+          <DropdownMenuItem
+            asChild
+            onSelect={(event) => event.preventDefault()}
+          >
             <button type="submit" className="w-full">
               <LogOut />
               Sign out

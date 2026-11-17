@@ -86,3 +86,38 @@ describe("next.config distDir override (e2e role-probe server)", () => {
     expect([undefined, ".next"]).toContain(defaulted.distDir);
   });
 });
+
+// Unit BP, Platform spec - Base path: BP-D1 (NEXT_PUBLIC_BASE_PATH sets
+// Next's basePath; empty serves from /), BP-D2 (an invalid value fails the
+// build; the Dockerfile builds with SKIP_ENV_VALIDATION=1 so next.config.ts
+// validates through parseBasePath itself). Test T1 of the BP brief.
+describe("next.config basePath (BP-D1, BP-D2)", () => {
+  async function loadConfig() {
+    vi.resetModules();
+    return (await import("./next.config")).default;
+  }
+
+  it("serves from / when NEXT_PUBLIC_BASE_PATH is empty", async () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "");
+    expect((await loadConfig()).basePath ?? "").toBe("");
+  });
+
+  it("sets basePath from NEXT_PUBLIC_BASE_PATH", async () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/llm-lens");
+    expect((await loadConfig()).basePath).toBe("/llm-lens");
+  });
+
+  it("keeps the security headers on the unprefixed source (Next prepends the prefix)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/llm-lens");
+    const rules = (await (await loadConfig()).headers?.()) ?? [];
+    expect(rules.some((r) => r.source === "/:path*")).toBe(true);
+  });
+
+  it.each(["llm-lens", "/llm-lens/", "/Llm", "//x", "/a b", "https://x/y"])(
+    "fails on the invalid value %s",
+    async (value) => {
+      vi.stubEnv("NEXT_PUBLIC_BASE_PATH", value);
+      await expect(loadConfig()).rejects.toThrow();
+    },
+  );
+});

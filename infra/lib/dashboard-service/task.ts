@@ -222,7 +222,7 @@ export function addDashboardTask(
         ? { LITELLM_ALLOWED_HOSTS: inputs.litellmAllowedHosts }
         : {}),
       NODE_ENV: "production",
-      NEXT_PUBLIC_APP_URL: `https://${inputs.dashboardHostname}`,
+      NEXT_PUBLIC_APP_URL: `https://${inputs.dashboardHostname}${inputs.basePath}`,
       AUTH_URL: `https://${inputs.dashboardHostname}`,
       AUDIT_LOG_GROUP_NAME: `${prefix}/audit`,
       ...(entra

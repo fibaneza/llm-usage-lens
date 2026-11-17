@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import NoAccessPage from "./page";
 
@@ -21,5 +21,24 @@ describe("/no-access page", () => {
     expect(
       screen.getByRole("link", { name: /sign (in|out)/i }),
     ).toHaveAttribute("href", expect.stringContaining("/sign-in"));
+  });
+
+  // Unit BP, Platform spec - Base path: BP-D3 / BP-D13 (the raw anchor is a
+  // withBasePath site; Next's Link prefix does not cover it).
+  it("links back to sign-in with the base path when one is set (BP-D3)", async () => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/llm-lens");
+    const { default: Prefixed } = await import("./page");
+    render(await Prefixed());
+    expect(
+      screen.getByRole("link", { name: /sign (in|out)/i }),
+    ).toHaveAttribute("href", "/llm-lens/sign-in");
+  });
+
+  it("links to the plain /sign-in with no base path (BP-D1)", async () => {
+    render(await NoAccessPage());
+    expect(
+      screen.getByRole("link", { name: /sign (in|out)/i }),
+    ).toHaveAttribute("href", "/sign-in");
   });
 });

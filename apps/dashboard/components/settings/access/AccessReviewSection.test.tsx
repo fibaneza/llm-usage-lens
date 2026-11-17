@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AccessReviewSection } from "./AccessReviewSection";
 
@@ -30,5 +30,20 @@ describe("AccessReviewSection", () => {
       screen.getAllByText(/audited|recorded in the audit log/i).length,
     ).toBeGreaterThan(0);
     expect(screen.getAllByText(/csv/i).length).toBeGreaterThan(0);
+  });
+});
+
+// Unit BP, Platform spec - Base path: BP-D3, BP-D13 (the raw download link is
+// one of the four sites that use withBasePath). The prefixed e2e smoke checks
+// the same link in a browser (T11).
+describe("AccessReviewSection under a base path (BP-D3)", () => {
+  it("prefixes the download link", async () => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/llm-lens");
+    const { AccessReviewSection: Prefixed } =
+      await import("./AccessReviewSection");
+    render(<Prefixed />);
+    const link = screen.getByRole("link", { name: /export access review/i });
+    expect(link).toHaveAttribute("href", "/llm-lens/api/access-review");
   });
 });

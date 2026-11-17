@@ -78,3 +78,45 @@ describe("mutateApi", () => {
     expect(fn.mock.calls[0]?.[1]?.body).toBeUndefined();
   });
 });
+
+// Unit BP, Platform spec - Base path: BP-D3 (fetch-api.ts is the one chokepoint
+// that prefixes "/api/..." literals) and BP-D13 (BASE_PATH read at load).
+// Test T3 of the BP brief; the empty prefix is covered by the cases above.
+describe("fetchApi and mutateApi under a base path (BP-D3)", () => {
+  async function loadPrefixed() {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/llm-lens");
+    return import("@/lib/query/fetch-api");
+  }
+
+  it("fetchApi requests the prefixed URL and keeps the query string", async () => {
+    const fn = stubFetch({ data: { n: 1 } });
+    const mod = await loadPrefixed();
+    await mod.fetchApi("/api/x?a=1", schema);
+    expect(String(fn.mock.calls[0]?.[0])).toBe("/llm-lens/api/x?a=1");
+  });
+
+  it.each(["POST", "PUT", "PATCH", "DELETE"] as const)(
+    "mutateApi %s requests the prefixed URL",
+    async (method) => {
+      const fn = stubFetch({ data: { n: 1 } });
+      const mod = await loadPrefixed();
+      await mod.mutateApi("/api/x", method, { a: 1 }, schema);
+      expect(String(fn.mock.calls[0]?.[0])).toBe("/llm-lens/api/x");
+      expect(fn.mock.calls[0]?.[1]).toMatchObject({ method });
+    },
+  );
+
+  it("does not double a path that already carries the prefix", async () => {
+    const fn = stubFetch({ data: { n: 1 } });
+    const mod = await loadPrefixed();
+    await mod.fetchApi("/llm-lens/api/x", schema);
+    expect(String(fn.mock.calls[0]?.[0])).toBe("/llm-lens/api/x");
+  });
+
+  it("mutateApi with no prefix keeps the plain URL", async () => {
+    const fn = stubFetch({ data: { n: 1 } });
+    await mutateApi("/api/x", "POST", undefined, schema);
+    expect(String(fn.mock.calls[0]?.[0])).toBe("/api/x");
+  });
+});

@@ -26,6 +26,7 @@ import {
   createPasswordProvider,
   createPasswordSetupProvider,
 } from "@/lib/auth/password-providers";
+import { authCookies, resolveRedirect } from "@/lib/auth/base-path-auth";
 import { parseSessionToken } from "@/lib/auth/session-token";
 import { recordSecurityEvent } from "@/lib/auth/security-events";
 import {
@@ -39,6 +40,7 @@ import {
   isWithinSessionLifetime,
   sessionCapSeconds,
 } from "@/lib/auth/session-lifetime";
+import { BASE_PATH, stripBasePath, withBasePath } from "@/lib/base-path";
 
 // `next build` runs with NODE_ENV=production and may lack runtime secrets, so
 // the runtime guard must not fire then; it still fires when
@@ -265,21 +267,53 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // on every request); the jwt callback enforces the absolute 8-hour lifetime
   // (System Architecture — "Account-mutation role").
   session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_SECONDS },
+  // Unit BP: with a prefix Auth.js needs its own basePath (BP-D9), prefixed
+  // pages (BP-D11) and path-scoped, app-named cookies (BP-D8, BP-D12). Without
+  // one the Auth.js defaults stay.
+  ...(BASE_PATH === ""
+    ? {}
+    : {
+        basePath: withBasePath("/api/auth"),
+        cookies: authCookies(
+          BASE_PATH,
+          env.AUTH_URL?.startsWith("https://") === true,
+        ),
+      }),
   pages: {
-    signIn: "/sign-in",
-    error: "/no-access",
+    signIn: withBasePath("/sign-in"),
+    error: withBasePath("/no-access"),
   },
   callbacks: {
+    // Under a prefix the origin is AUTH_URL's: NextRequest rewrites a loopback
+    // IP in the request URL to "localhost", so Auth.js's baseUrl can differ
+    // from the origin the browser used. Without a prefix baseUrl is unchanged.
+    redirect: ({ url, baseUrl }) =>
+      resolveRedirect(
+        url,
+        BASE_PATH !== "" && env.AUTH_URL
+          ? new URL(env.AUTH_URL).origin
+          : baseUrl,
+        BASE_PATH,
+      ),
     // Gates the routes matched by proxy.ts.
     // A logged-out /api/* call gets the JSON 401 that withRoute returns, not a
     // redirect to /sign-in (Data Model — "API Routes"; Rule 10.3, Rule 50.4).
     // Pages keep the redirect. The proxy matcher already skips /api/auth/* and
     // /api/health, and the route handlers keep their own checks.
+    // Unit BP (BP-D10): with AUTH_URL set next-auth rebuilds the request
+    // without Next's basePath, so strip the prefix here and return an explicit
+    // prefixed redirect for pages.
     authorized: ({ auth, request }) => {
       if (auth?.user?.oid) return true;
-      return isApiPath(request?.nextUrl?.pathname)
-        ? unauthenticatedResponse()
-        : false;
+      const nextUrl = request?.nextUrl;
+      const pathname = stripBasePath(nextUrl?.pathname ?? "");
+      if (isApiPath(pathname)) return unauthenticatedResponse();
+      if (BASE_PATH === "") return false;
+      const callbackUrl = withBasePath(`${pathname}${nextUrl?.search ?? ""}`);
+      // Absolute: Next's proxy rejects a relative Location.
+      const signIn = new URL(withBasePath("/sign-in"), nextUrl?.origin);
+      signIn.searchParams.set("callbackUrl", callbackUrl);
+      return Response.redirect(signIn, 307);
     },
     // Fail closed (Access Control spec — Threat model T1): a malformed token
     // or a failed identity upsert yields no session.

@@ -80,6 +80,22 @@ The pre-push hook runs `unit` and `infra`; CI runs everything
 Read results, not logs: redirect a run to a file and read the exit code and
 the `Test Files` / `Tests` lines (Rule 70.12).
 
+### Prefixed e2e project (unit BP)
+
+Unit BP (Platform spec — _Base path_) adds **one small Playwright project**
+for the app served under `/llm-lens`. It has its own production server on
+port **3214** (3211 to 3213 are the main server, the fake LiteLLM server and
+the role-probe server), its own `NEXT_DIST_DIR`, and is built with
+`NEXT_PUBLIC_BASE_PATH=/llm-lens`. Specs are `e2e/base-path*.spec.ts`; the
+main project ignores them and the prefixed project runs only them. Specs use
+explicit prefixed URLs (a `baseURL` with a path does not prefix
+`goto("/dashboard")`). The session forge adds its cookie with `domain` and
+`path`, not `url` (`addCookies({ url })` drops the last path segment), and
+takes the cookie name and path from the same module as the auth config
+(Access Control — BP-D12). Readiness is `/llm-lens/api/health`; `AUTH_URL` is
+origin-only. It starts only when requested (`E2E_BASE_PATH_PROJECT=1` or `--project=base-path`), because Playwright starts every `webServer`; CI does not run it yet (Platform — BP-D15). It runs once, at the green gate (Rule 70.12 — _E2E budget_):
+`pnpm --filter @llm-usage-lens/dashboard exec node ../../scripts/e2e-lock.mjs playwright test --project=base-path`.
+
 ### E2E without LiteLLM
 
 CI's e2e job starts from a freshly seeded table (`pnpm db:create-table`,

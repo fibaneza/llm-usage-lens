@@ -1,6 +1,8 @@
 import { ApiErrorBodySchema } from "@llm-usage-lens/shared";
 import { z } from "zod";
 
+import { withBasePath } from "@/lib/base-path";
+
 // Source: docs/specs/2026-05-15-data-model.md — "API Routes"; Rule 20.11
 // (response shape validated on both ends).
 
@@ -38,7 +40,7 @@ export async function fetchApi<S extends z.ZodType>(
   path: string,
   dataSchema: S,
 ): Promise<z.output<S>> {
-  return parseApiResponse(await fetch(path), dataSchema);
+  return parseApiResponse(await fetch(withBasePath(path)), dataSchema);
 }
 
 export async function mutateApi<S extends z.ZodType>(
@@ -47,7 +49,7 @@ export async function mutateApi<S extends z.ZodType>(
   body: unknown,
   dataSchema: S,
 ): Promise<z.output<S>> {
-  const res = await fetch(path, {
+  const res = await fetch(withBasePath(path), {
     method,
     ...(body === undefined
       ? {}

@@ -9,6 +9,7 @@ import { z } from "zod";
 import { accessErrorResponse } from "@/lib/api/access-route";
 import { BadRequestError, jsonData, parseInput } from "@/lib/api/respond";
 import { getPasswordUserListItem } from "@/lib/data/access/password-users";
+import { withBasePath } from "@/lib/base-path";
 
 // Source: docs/specs/2026-11-10-access-control.md - "Password users" (Setup
 // D22: the link is shown once, never stored or logged) and "API routes
@@ -38,7 +39,7 @@ export function parsePathEmail(raw: string | undefined): string {
 // The link host is the request Host, never x-forwarded-host (Enforcement).
 export function setupLink(request: Request, token: string): string {
   const host = request.headers.get("host") || new URL(request.url).host;
-  return `https://${host}/account/setup#${token}`;
+  return `https://${host}${withBasePath("/account/setup")}#${token}`;
 }
 
 export type PasswordUserRouteContext = {

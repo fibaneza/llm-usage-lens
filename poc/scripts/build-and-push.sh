@@ -7,6 +7,7 @@ set -euo pipefail
 
 readonly IMAGE_TAG="latest"
 readonly DEFAULT_STACK_NAME="llm-usage-lens-poc"
+readonly DEFAULT_BASE_PATH="/llm-lens"
 
 usage() {
   cat <<'EOF'
@@ -18,9 +19,12 @@ Options:
   --stack-name <name>      CloudFormation stack name (default: llm-usage-lens-poc)
   --platform <platform>    linux/arm64 or linux/amd64 (default: the stack's ImagePlatform output)
   --repository-uri <uri>   ECR repository URI without a tag; skips the stack lookup
+  --base-path <prefix>     URL prefix compiled into the image (default: /llm-lens);
+                           lower-case /segments, or "" to serve from /
   -h, --help               Show this help
 
-The image is always tagged and pushed as <repository-uri>:latest.
+The image is always tagged and pushed as <repository-uri>:latest. The base path
+is compiled into the image: build one image per prefix.
 EOF
 }
 
@@ -35,10 +39,11 @@ region="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
 stack_name="$DEFAULT_STACK_NAME"
 platform=""
 repository_uri=""
+base_path="$DEFAULT_BASE_PATH"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --profile | --region | --stack-name | --platform | --repository-uri)
+    --profile | --region | --stack-name | --platform | --repository-uri | --base-path)
       [[ $# -ge 2 ]] || die "$1 needs a value"
       case "$1" in
         --profile) profile="$2" ;;
@@ -46,6 +51,7 @@ while [[ $# -gt 0 ]]; do
         --stack-name) stack_name="$2" ;;
         --platform) platform="$2" ;;
         --repository-uri) repository_uri="$2" ;;
+        --base-path) base_path="$2" ;;
       esac
       shift 2
       ;;
@@ -59,6 +65,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Same format as NEXT_PUBLIC_BASE_PATH (Platform spec - Base path, BP-D2).
+[[ -z "$base_path" || "$base_path" =~ ^(/[a-z0-9-]+)+$ ]] ||
+  die "--base-path must be empty or lower-case /segments such as /llm-lens, with no trailing slash"
 
 aws_cli() {
   local args=()
@@ -136,12 +146,13 @@ aws_cli ecr get-login-password |
   docker login --username AWS --password-stdin "$registry" >/dev/null ||
   die "docker login to ECR failed"
 
-log "Building $image for $platform"
+log "Building $image for $platform (base path: ${base_path:-none})"
 # --provenance=false keeps the push to one image manifest, so "latest" does
 # not leave attestation manifests behind as untagged images.
 docker buildx build \
   --platform "$platform" \
   --provenance=false \
+  --build-arg "NEXT_PUBLIC_BASE_PATH=$base_path" \
   --file "$dockerfile" \
   --tag "$image" \
   --load \

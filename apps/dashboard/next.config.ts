@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { initialEnv, updateInitialEnv } from "@next/env";
 import type { NextConfig } from "next";
 
+import { parseBasePath } from "./lib/base-path";
 import { applyAppEnvFile } from "./lib/env-files";
 
 // Disable Next.js anonymous telemetry — must be set before the config is
@@ -37,6 +38,9 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Platform spec - Base path (BP-D1, BP-D2): build-time, optional. The
+  // Dockerfile skips env validation, so the value is validated here.
+  basePath: parseBasePath(process.env.NEXT_PUBLIC_BASE_PATH),
   // The role-probe e2e server builds into its own dir so it never clashes with
   // the main dev server's .next (tool config; Rule 50.2).
   distDir: process.env.NEXT_DIST_DIR || ".next",

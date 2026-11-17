@@ -5,8 +5,7 @@
 // least privilege).
 import { GSI1_NAME } from "@llm-usage-lens/shared";
 import { App } from "aws-cdk-lib";
-import { Match } from "aws-cdk-lib/assertions";
-import type { Template } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
 import { DashboardServiceStack } from "../lib/dashboard-service-stack";
@@ -722,6 +721,77 @@ describe("DashboardServiceStack create mode - own internal ALB", () => {
     }
   });
 });
+
+// Unit BP, Platform spec - Base path (Q2, user 2026-11-17): the ECS platform
+// does not serve under the prefix; its rule stays host-based. With the optional
+// context key `basePath` set, infra only derives the health path and the app
+// URLs: the target group checks <prefix>/api/health, NEXT_PUBLIC_APP_URL
+// carries the prefix, AUTH_URL stays origin-only (BP-D9). With none, the synth
+// is unchanged: every assertion above runs without the key. Test T12.
+describe.each(["import", "create"] as Mode[])(
+  "DashboardServiceStack with a base path (%s mode)",
+  (mode) => {
+    const synthPrefixed = (basePath: string) => {
+      const app = new App();
+      const stack = new DashboardServiceStack(app, "App", {
+        inputs: parseAppInputs({ ...contextFor(mode, "dev"), basePath }),
+        env: { account: ACCOUNT, region: REGION },
+      });
+      return Template.fromStack(stack);
+    };
+    const t = synthPrefixed("/llm-lens");
+
+    it("health-checks <prefix>/api/health", () => {
+      t.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
+        HealthCheckPath: "/llm-lens/api/health",
+      });
+    });
+
+    it("puts the prefix in NEXT_PUBLIC_APP_URL and keeps AUTH_URL origin-only", () => {
+      t.hasResourceProperties("AWS::ECS::TaskDefinition", {
+        ContainerDefinitions: [
+          Match.objectLike({
+            Environment: Match.arrayWith([
+              {
+                Name: "NEXT_PUBLIC_APP_URL",
+                Value: `https://${HOST}/llm-lens`,
+              },
+              { Name: "AUTH_URL", Value: `https://${HOST}` },
+            ]),
+          }),
+        ],
+      });
+    });
+
+    it("keeps the listener rule host-based, with no path condition (Q2)", () => {
+      if (mode !== "import") return;
+      const rules = Object.values(
+        t.findResources("AWS::ElasticLoadBalancingV2::ListenerRule"),
+      );
+      expect(rules).toHaveLength(1);
+      for (const rule of rules) {
+        const fields = ((rule.Properties as Json).Conditions as Json[]).map(
+          (c) => c.Field,
+        );
+        expect(fields).toEqual(["host-header"]);
+      }
+    });
+
+    it.each(["llm-lens", "/llm-lens/", "/Llm", "//x"])(
+      "fails closed on the invalid basePath %j (BP-D2)",
+      (basePath) => {
+        expect(() => synthPrefixed(basePath)).toThrow();
+      },
+    );
+
+    it("treats an empty basePath as none: the health path stays /api/health", () => {
+      synthPrefixed("").hasResourceProperties(
+        "AWS::ElasticLoadBalancingV2::TargetGroup",
+        { HealthCheckPath: "/api/health" },
+      );
+    });
+  },
+);
 
 function Template_fromStack(stack: DashboardServiceStack): unknown {
   return App.of(stack)?.synth().getStackArtifact(stack.artifactId).template;

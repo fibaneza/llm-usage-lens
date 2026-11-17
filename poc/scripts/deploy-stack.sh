@@ -44,9 +44,15 @@ stack's current value on an update):
   --app-port <port>              AppPort
   --allowed-inbound-cidr <cidr>  AllowedInboundCidr (direct access to the instance)
   --alb-arn <arn>                ExistingAlbArn (existing Application Load Balancer)
-  --alb-listener-port <port>     AlbListenerPort
-  --alb-certificate-arn <arn>    AlbCertificateArn (HTTPS listener)
-  --alb-allowed-inbound-cidr <cidr>  AlbAllowedInboundCidr
+  --alb-listener-port <port>     AlbListenerPort (listener mode)
+  --alb-certificate-arn <arn>    AlbCertificateArn (listener mode, HTTPS listener)
+  --alb-allowed-inbound-cidr <cidr>  AlbAllowedInboundCidr (listener mode)
+  --alb-listener-arn <arn>       ExistingAlbListenerArn (rule mode: add one rule to this
+                                 existing listener; needs --alb-arn, --alb-rule-priority
+                                 and --base-path; never with --alb-listener-port or
+                                 --alb-certificate-arn)
+  --alb-rule-priority <n>        AlbRulePriority (rule mode, 1 to 50000, unused on the listener)
+  --base-path <prefix>           BasePath (the prefix the image was built with, e.g. /llm-lens)
   --parameter <Key=Value>        Any other template parameter; repeatable
 
 Other:
@@ -156,6 +162,9 @@ while [[ $# -gt 0 ]]; do
     --alb-listener-port) cli_params+=("AlbListenerPort=$2") ;;
     --alb-certificate-arn) cli_params+=("AlbCertificateArn=$2") ;;
     --alb-allowed-inbound-cidr) cli_params+=("AlbAllowedInboundCidr=$2") ;;
+    --alb-listener-arn) cli_params+=("ExistingAlbListenerArn=$2") ;;
+    --alb-rule-priority) cli_params+=("AlbRulePriority=$2") ;;
+    --base-path) cli_params+=("BasePath=$2") ;;
     --parameter)
       [[ "$2" == *=* ]] || die "--parameter needs Key=Value"
       cli_params+=("$2")
@@ -194,6 +203,38 @@ aws_cli() {
   aws ${args[@]+"${args[@]}"} "$@"
 }
 
+# Value of a template parameter set so far, or empty.
+param_value() {
+  local entry
+  for entry in ${overrides[@]+"${overrides[@]}"}; do
+    if [[ "$entry" == "$1="* ]]; then
+      printf '%s' "${entry#*=}"
+      return 0
+    fi
+  done
+}
+
+# Checks that need no AWS call run first. Placeholders are refused for every
+# value (Rule 50.9); the two load-balancer modes never mix (BP-D7); the base
+# path has the format of NEXT_PUBLIC_BASE_PATH (BP-D2).
+for entry in ${overrides[@]+"${overrides[@]}"}; do
+  case "${entry#*=}" in
+    CHANGE_ME | *:000000000000:*)
+      die "${entry%%=*} still holds a placeholder value; set the real value in poc/stack.env"
+      ;;
+  esac
+done
+base_path="$(param_value BasePath)"
+[[ -z "$base_path" || "$base_path" =~ ^(/[a-z0-9-]+)+$ ]] ||
+  die "--base-path must be empty or lower-case /segments such as /llm-lens, with no trailing slash"
+listener_arn="$(param_value ExistingAlbListenerArn)"
+if [[ -n "$listener_arn" ]]; then
+  [[ -z "$(param_value AlbCertificateArn)" && -z "$(param_value AlbListenerPort)" ]] ||
+    die "rule mode (--alb-listener-arn) adds no listener: do not set --alb-certificate-arn or --alb-listener-port"
+  [[ -n "$(param_value ExistingAlbArn)" ]] ||
+    die "--alb-listener-arn needs --alb-arn"
+fi
+
 template="$poc_dir/cloudformation.yml"
 this_script="poc/scripts/$(basename "${BASH_SOURCE[0]}")"
 
@@ -219,6 +260,10 @@ if [[ "$stack_exists" == "no" ]]; then
   joined=" ${overrides[*]:-} "
   [[ "$joined" == *" VpcId="* && "$joined" == *" SubnetId="* ]] ||
     die "the first deploy needs VpcId and SubnetId (poc/stack.env, or --vpc-id and --subnet-id)"
+  if [[ -n "$listener_arn" ]]; then
+    [[ -n "$(param_value AlbRulePriority)" && -n "$base_path" ]] ||
+      die "the first deploy in rule mode needs --alb-rule-priority and --base-path"
+  fi
 fi
 
 if [[ "$validate" == "yes" ]]; then

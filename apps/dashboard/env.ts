@@ -60,10 +60,16 @@ export const env = createEnv({
     // Deprecated fallback (unit CFG, A10): set display.orgName in config.yaml.
     // The top bar's name resolves file > this variable > "Organization".
     NEXT_PUBLIC_ORG_NAME: z.string().min(1).optional(),
+    // Optional URL prefix, build-time (Platform spec - Base path, BP-D1, BP-D2).
+    NEXT_PUBLIC_BASE_PATH: z
+      .string()
+      .regex(/^(\/[a-z0-9-]+)+$/)
+      .optional(),
   },
   experimental__runtimeEnv: {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_ORG_NAME: process.env.NEXT_PUBLIC_ORG_NAME,
+    NEXT_PUBLIC_BASE_PATH: process.env.NEXT_PUBLIC_BASE_PATH,
   },
   // Server vars are absent in the browser bundle, so cross-check server-side only.
   createFinalSchema: (shape, isServer) =>

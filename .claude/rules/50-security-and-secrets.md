@@ -18,8 +18,11 @@
 2. **Env vars are validated at build time** by `@t3-oss/env-nextjs` with Zod.
    Add new env vars to the schema, not to ad-hoc `process.env` reads.
    Exception: code outside the Next.js app — repo-root `scripts/**`, test
-   helpers, and tool config (`vitest.config.ts`, `playwright.config.ts`) —
-   may read `process.env` directly.
+   helpers, and tool config (`vitest.config.ts`, `playwright.config.ts`, `next.config.ts`) —
+   may read `process.env` directly. Second exception: the client-safe
+   `apps/dashboard/lib/base-path.ts` reads `NEXT_PUBLIC_BASE_PATH` directly,
+   because `env.ts` pulls server config into the client bundle (Platform
+   spec — *Base path*, BP-D13; `env.ts` still validates it).
 3. **Auth.js is the identity-provider abstraction.** Switching providers is a
    change to `apps/dashboard/auth.ts` (and its variables in `env.ts`) only —
    keep provider-specific code out of routes and components.

@@ -1,6 +1,7 @@
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { withBasePath } from "@/lib/base-path";
 
 // Source: docs/specs/2026-11-10-access-control.md - "Access review" (a CSV of
 // every identity with roles and sources, member team and admin scopes,
@@ -17,7 +18,7 @@ export function AccessReviewSection() {
       </p>
       <div>
         <Button asChild variant="outline" size="sm">
-          <a href="/api/access-review" download>
+          <a href={withBasePath("/api/access-review")} download>
             <Download aria-hidden />
             Export access review (CSV)
           </a>
