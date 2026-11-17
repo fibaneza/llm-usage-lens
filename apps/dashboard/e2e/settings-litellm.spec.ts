@@ -262,7 +262,7 @@ test.describe("settings LiteLLM base URL entry", () => {
 });
 
 // docs/specs/2026-11-10-litellm.md LD24 (org-admin edits Guardrails and Team
-// links, Connection read-only; Auditor read-only), LT20 / LT22; Design System
+// links, Connection read-only; Auditor read-only), LT22; Design System
 // -- Settings -> LiteLLM; implementation-phases L3d2. Fixtures only.
 test.describe("settings LiteLLM by role (LD24)", () => {
   async function mockConfigApi(page: Page) {

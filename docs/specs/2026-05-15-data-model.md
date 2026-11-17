@@ -32,6 +32,9 @@ All data is stored in a single DynamoDB table (`bedrock-usage`) with one GSI. Th
 | AccountMeta | `ACCT#{accountId}` | `META` | `DEPT#{departmentId}` | `ACCT#{accountId}` |
 | DailyRollup | `ACCT#{accountId}` | `DAILY#{YYYY-MM-DD}` | `DATE#{YYYY-MM-DD}` | `ACCT#{accountId}` |
 | SyncStatus | `SYSTEM` | `SYNC#LATEST` | — | — |
+| Migration marker (PERF-1b) | `SYSTEM` | `MIGRATION#ACCOUNT_REGISTRY` | — | — |
+
+The `SYSTEM` partition holds one-off system items: the sync status and, from PERF-1b, the account-registry migration marker that the backfill writes (*Access Patterns* — PERF-1b *Migration*). Neither item is on GSI1.
 
 Forward note (2026-11-17): from Phase 5 unit PERF-1b the `AccountMeta` GSI1 keys become `ACCOUNTS` / `DEPT#{departmentId}#ACCT#{accountId}` (*Access Patterns* below). Until that unit ships, the row above is what the code writes.
 
@@ -87,7 +90,11 @@ grow with the table, not with the number of accounts. Two steps:
    write calls `revalidateTag("accounts")` on the task that served it only.
    The other Fargate task keeps its list for up to 1 hour, so a request it
    serves, a write included, can see an account under its old team or
-   department, or miss a new one, for that long. Accepted because: the
+   department, or miss a new one, for that long. The visible consequence:
+   an account moved out of team A stays visible to team A's Lead on that
+   other task for up to 1 hour, and the new team's Lead may not see it there
+   yet (cross-referenced from Access Control — *Enforcement* item 4).
+   Accepted because: the
    Phase 4R write routes on `main` already behave this way; account changes
    are rare and made only by an `internal-admin`; roles, grants, scopes,
    affiliations and team links are still read live on every request, so a
@@ -104,8 +111,9 @@ grow with the table, not with the number of accounts. Two steps:
    `begins_with(gsi1sk, "DEPT#{deptId}#")`. Both still loop on
    `LastEvaluatedKey` (Rule 20.6). `ACCOUNTS` is a new GSI1 partition value
    on the existing index. It collides with none in use (`DEPT#…`, `DATE#…`,
-   `MEMBERS#…`, `AUDIT#…`, `LITELLM#…`, `IDENTS`, `ROLEGRANTS`, `GROUPMAPS`)
-   and follows the bare-word pattern of the last three. No new index or IAM
+   `MEMBERS#…`, `ADMINS#…`, `AUDIT#…`, `LITELLM#…`, `IDENTS`, `ROLEGRANTS`,
+   `GROUPMAPS`, `LOCALUSERS`; Access Control — *Data model additions*) and
+   follows the bare-word pattern of the last four. No new index or IAM
    change.
    Options considered: a sparse second GSI (needs a FoundationStack change and
    deploy) and mirrored registry items (can diverge from `AccountMeta`).

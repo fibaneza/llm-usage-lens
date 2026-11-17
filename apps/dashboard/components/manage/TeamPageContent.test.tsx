@@ -838,8 +838,8 @@ describe("TeamPageContent add-member picker", () => {
 // control for a disabled operation is absent, not dead"); LiteLLM spec - Cost
 // visualisation and provenance (LT8 labels), LD20 (UTC day buckets labelled,
 // timestamps in Australia/Sydney), /api/litellm/me date range (Rule 20.8);
-// Rules 40.4, 60.12. These also carry the live cases moved from
-// LiteLLMContent.test.tsx (Team tab).
+// Rules 40.4, 60.12. The Keys, Team spend and time-rendering cases
+// below cover the LD20 and LT8 behaviour.
 const SENTINEL_KEY_VALUE = "sk-SENTINEL-KEY-VALUE";
 const okData = (data: unknown) => () => apiResponse({ data });
 const unavailable = () =>
@@ -941,6 +941,19 @@ describe("TeamPageContent team spend and budget (Management pages - Team usage)"
       within(spend).getByText("Spent this budget period"),
     ).toBeInTheDocument();
     expect(within(spend).getByText("$321.75")).toBeInTheDocument();
+  });
+
+  // C1 item 9 (B2b review): Design System - Layout, Key-value lists: a label
+  // and its value are a term and its definition.
+  it("pairs 'Spent this budget period' with its figure as a term and a definition (Key-value lists; B2b review)", async () => {
+    stub();
+    renderView("budgets");
+    const term = await within(await region("Team spend & budgets")).findByText(
+      "Spent this budget period",
+    );
+    expect(term.tagName).toBe("DT");
+    expect(term.nextElementSibling?.tagName).toBe("DD");
+    expect(term.nextElementSibling).toHaveTextContent("$321.75");
   });
 
   it("labels LiteLLM members and Keys spend as LiteLLM-reported too (LT8)", async () => {
@@ -1583,6 +1596,19 @@ describe("TeamPageContent view tabs (Team page views and links)", () => {
   );
 
   // Review B1: Component Inventory `PageTabs` (label prop -> tablist aria-label).
+  // C1 item 8 (B2b review): Design System - Component Inventory, PageTabs;
+  // WAI-ARIA tabs: every tab names the panel it controls.
+  it("each tab's aria-controls is the id of the one tabpanel (PageTabs; B2b review)", async () => {
+    stub();
+    renderConfig();
+    await screen.findByRole("tablist");
+    const panel = await screen.findByRole("tabpanel");
+    expect(panel.id).not.toBe("");
+    for (const tab of screen.getAllByRole("tab")) {
+      expect(tab).toHaveAttribute("aria-controls", panel.id);
+    }
+  });
+
   it("the view tablist has the accessible name 'Team views' (PageTabs label; review B1)", async () => {
     stub();
     renderConfig();
@@ -1762,5 +1788,52 @@ describe("TeamPageContent shown-once key dialog focus (L5b review warning)", () 
         screen.getByRole("button", { name: "Rotate key ci-key" }),
       ).toHaveFocus(),
     );
+  });
+});
+
+// C1 item 6 (B2b review; Design System - Performance patterns, no request
+// waterfalls): the memberSum spend read and the team detail read start together.
+// The spend panel used to mount only after the detail answered, so its request
+// waited on the first.
+describe("TeamPageContent spend panel requests (no waterfall; C1 item 6)", () => {
+  const pending = () => new Promise<Response>(() => {});
+
+  it("the detail and the include=memberSum reads are both issued while neither has answered", async () => {
+    const api = stub({
+      "GET /api/litellm/teams/t1": pending as unknown as Handler,
+    });
+    renderView("budgets");
+    const teamReads = (withMemberSum: boolean) =>
+      api.calls.filter(
+        (c) =>
+          c.path === "/api/litellm/teams/t1" &&
+          c.search.includes("include=memberSum") === withMemberSum,
+      ).length;
+    await waitFor(() => expect(teamReads(false)).toBeGreaterThan(0));
+    await waitFor(() => expect(teamReads(true)).toBeGreaterThan(0));
+  });
+});
+
+// C1 item 9 (B2b review): the not-configured empty state is the shared
+// EmptyState (Design System - Component Inventory, `EmptyState`), whose title
+// is the semibold message, not a bare muted paragraph.
+describe("TeamSpendPanel empty state (shared EmptyState; C1 item 9)", () => {
+  it("LiteLLM not configured renders the EmptyState title", async () => {
+    stub({
+      "GET /api/litellm/teams/t1": () =>
+        apiResponse({
+          data: {
+            configured: false,
+            connected: true,
+            spendSource: "litellm-team",
+            daily: [],
+          },
+        }),
+    });
+    renderView("budgets");
+    const message = await within(
+      await region("Team spend & budgets"),
+    ).findByText("LiteLLM not configured");
+    expect(message).toHaveClass("font-semibold");
   });
 });

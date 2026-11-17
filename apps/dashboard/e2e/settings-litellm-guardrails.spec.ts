@@ -5,7 +5,7 @@ import { signInAsTestUser } from "./support/session";
 
 // docs/specs/2026-11-10-litellm.md -- "Guardrail configuration" (LD19:
 // effective value and source ui|file|spec per operation, writes and reads;
-// "reset to file defaults"; the code-only guardrails shown read-only),
+// "Reset to defaults"; the code-only guardrails shown read-only),
 // "Gateway guardrails" item 6 (wildcard warning on the panel),
 // implementation-phases L2. The API is a stateful in-test fake served through
 // page.route, so nothing reaches the internet (Rule 60.24). Unit CFG
@@ -160,7 +160,7 @@ test.describe("settings LiteLLM guardrail configuration", () => {
     ).toBeVisible();
   });
 
-  test("toggling a read off shows source ui; reset to file defaults restores source file", async ({
+  test("toggling a read off shows source ui; Reset to defaults restores source file", async ({
     page,
   }) => {
     const fake = createFakeToggles();

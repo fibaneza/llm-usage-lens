@@ -265,3 +265,20 @@ describe("VisibilitySection", () => {
     );
   });
 });
+
+// Unit C1 item 7: the Scope picker opens on the page's team (?team=), the same
+// state as the Team page's picker (Design System - Management pages, Team).
+describe("VisibilitySection follows the page's selected team (?team=)", () => {
+  it("opens on 'Team: Risk' for ?team=team-risk and reads that team's visibility", async () => {
+    const api = stubAccessApi(routes());
+    renderWithProviders(<VisibilitySection viewer={ADMIN} />, {
+      searchParams: { team: "team-risk" },
+    });
+    expect(await screen.findByLabelText("Scope")).toHaveDisplayValue(
+      "Team: Risk",
+    );
+    expect(
+      api.to("GET /api/teams/team-risk/visibility").length,
+    ).toBeGreaterThan(0);
+  });
+});

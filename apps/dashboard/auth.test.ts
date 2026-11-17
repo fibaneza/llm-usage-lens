@@ -1573,7 +1573,7 @@ describe("auth.ts password sessions follow the stored credentialVersion (F7)", (
   });
 });
 
-describe("auth.ts callbacks: Entra sync, audit records, session token (moved from auth.r2)", () => {
+describe("auth.ts callbacks: Entra sync, audit records, session token (Access Control spec - Identity, SSO mapping and defaults; Audit log D18)", () => {
   // Source: docs/specs/2026-11-10-access-control.md — "Identity, SSO mapping and
   // defaults" (sync at every Entra sign-in), "Audit log" D18 (sign-in and
   // sign-out records with the method), threats T1/T8 (a token that fails
@@ -2146,7 +2146,7 @@ describe("auth.ts callbacks: Entra sync, audit records, session token (moved fro
   });
 });
 
-describe("auth.ts config, local login and callbacks (moved from auth.r1)", () => {
+describe("auth.ts config, local login and callbacks (Access Control spec - Sign-in methods; T1, T7)", () => {
   // Source: docs/specs/2026-11-10-access-control.md — Identity, SSO mapping and
   // defaults; Sign-in methods; Threat model T1, T7. Contract R1 decisions 2-5,
   // 7, 9. Stream B modules are mocked with the agreed signatures.

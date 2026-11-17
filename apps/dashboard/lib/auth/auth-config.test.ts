@@ -293,7 +293,7 @@ describe("resolveSignInProviders", () => {
   });
 });
 
-describe("access mode and R1 sign-in rules (moved from auth-config.access)", () => {
+describe("access mode and sign-in rules (Access Control spec - Environment, Sign-in methods; T7, T21)", () => {
   // Source: docs/specs/2026-11-10-access-control.md — Environment; Sign-in
   // methods; Threat model T7 (no dev login beside Entra) and T21 (APP_ENV
   // required; open never in prod; prod needs Entra and TOTP for the master

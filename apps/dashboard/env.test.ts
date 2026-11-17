@@ -395,7 +395,7 @@ describe("env.ts TOTP_KMS_KEY_ID", () => {
   });
 });
 
-describe("env.ts R1 rules: APP_ENV, access mode, master user (moved from env.r1)", () => {
+describe("env.ts access rules: APP_ENV, access mode, master user (Access Control spec - Environment; T7, T21)", () => {
   // Source: docs/specs/2026-11-10-access-control.md — Environment; Threat model
   // T7, T21. Contract R1 decision 8. env.ts validation (SKIP_ENV_VALIDATION off).
   const ENTRA = {
@@ -542,7 +542,7 @@ describe("env.ts R1 rules: APP_ENV, access mode, master user (moved from env.r1)
   });
 });
 
-describe("env.ts AUDIT_LOG_GROUP_NAME (moved from env.r2)", () => {
+describe("env.ts AUDIT_LOG_GROUP_NAME (Access Control spec - Audit log, CloudWatch copy)", () => {
   // Source: docs/specs/2026-11-10-access-control.md — Audit log (CloudWatch
   // copy); contract R2 decision 12: AUDIT_LOG_GROUP_NAME is optional (unset
   // means skip delivery).

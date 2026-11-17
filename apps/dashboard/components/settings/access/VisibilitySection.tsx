@@ -9,6 +9,7 @@ import type {
   TeamVisibility,
 } from "@llm-usage-lens/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { parseAsString, useQueryState } from "nuqs";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/display/EmptyState";
@@ -261,7 +262,14 @@ function DepartmentVisibilityPanel({ departmentId }: { departmentId: string }) {
 export function VisibilitySection({ viewer }: { viewer: AccessViewer }) {
   const capabilities = accessCapabilities(viewer);
   const orgUnits = sectionData(useOrgUnits());
+  // Follows the Team page's picker (?team=) until the user picks a scope here.
+  const [pageTeam] = useQueryState("team", parseAsString);
   const [chosen, setChosen] = useState<string | null>(null);
+  const [seenPageTeam, setSeenPageTeam] = useState(pageTeam);
+  if (seenPageTeam !== pageTeam) {
+    setSeenPageTeam(pageTeam);
+    setChosen(null);
+  }
 
   if (orgUnits === undefined) {
     return <Skeleton className="h-48 w-full" />;
@@ -280,7 +288,10 @@ export function VisibilitySection({ viewer }: { viewer: AccessViewer }) {
         }))
       : []),
   ];
-  const scope = options.find((o) => o.key === chosen) ?? options[0];
+  const scope =
+    options.find((o) => o.key === chosen) ??
+    options.find((o) => o.key === `team:${pageTeam}`) ??
+    options[0];
   if (scope === undefined) return <EmptyState title="No teams to manage." />;
 
   return (

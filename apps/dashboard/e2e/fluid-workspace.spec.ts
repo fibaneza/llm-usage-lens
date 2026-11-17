@@ -544,6 +544,22 @@ test.describe("fluid workspace", () => {
     }) => {
       await open(page, path);
       await expect(page.locator("main table").first()).toBeVisible();
+      // Client-fetched sections (the Settings registry and access tables)
+      // mount their skeleton after open() last saw none and swap in the table
+      // when the query resolves; the report below must not run mid-swap.
+      await expect(page.locator('main [data-slot="skeleton"]')).toHaveCount(0);
+      if (name === "Settings") {
+        await expect(
+          page
+            .locator("section", {
+              has: page.getByRole("heading", {
+                level: 2,
+                name: "Account registry",
+              }),
+            })
+            .locator("tbody tr"),
+        ).not.toHaveCount(0);
+      }
 
       // Visually hidden chart data tables are skipped by size or by a clipped
       // (sr-only) ancestor.

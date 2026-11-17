@@ -623,7 +623,11 @@ remains). The export is audited.
    **Authorization data is never cached** (roles, grants, affiliations,
    scopes, mappings, visibility, links, the approval), so changes apply on
    the next request on every task with no `revalidateTag`; no cross-task
-   invalidation is relied on. Every Route Handler response under `/api/*`
+   invalidation is relied on. The cached account list is not authorization
+   data, but it places accounts in teams and departments, so a moved account
+   stays visible to its old team's Lead on the other task for up to 1 hour
+   (Data Model — *Access Patterns*, PERF-1 residual risk; 2026-11-17).
+   Every Route Handler response under `/api/*`
    sets `Cache-Control: private, no-store` (delivered 2026-11-11 with the
    security-review fixes, ahead of R3). Auth.js's own handler sets its own
    headers. The proxy answers a logged-out `/api/*` request with the same

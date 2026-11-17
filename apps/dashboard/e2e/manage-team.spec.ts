@@ -41,6 +41,31 @@ const REMOVE_PATH = "/api/litellm/teams/t1/members/oid-ada";
 // breakpoints with the write controls rendered (an admin).
 const BREAKPOINTS = [375, 768, 1024, 1440] as const;
 
+// Project standard (accessibility.spec.ts): WCAG 2 A/AA, serious or critical.
+async function expectNoBlockingViolations(page: Page, label?: string) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+  expect(
+    results.violations
+      .filter((v) => v.impact === "serious" || v.impact === "critical")
+      .map((v) => ({
+        id: v.id,
+        impact: v.impact,
+        nodes: v.nodes.map((n) => n.target.join(" ")),
+      })),
+    label,
+  ).toEqual([]);
+}
+
+// The budget-period spend (team_info.spend) covers at least the daily range
+// (LiteLLM spec LD36), so the fixture's daily rows sum to the same figure
+// instead of an empty range reading $0.00 beside "Spent this budget period".
+const DAILY = [
+  { date: "2026-11-14", spend: 200.25 },
+  { date: "2026-11-15", spend: 121.5 },
+];
+
 async function mockApi(page: Page) {
   await page.route(/\/api\/sync-status(\?|$)/, (route) =>
     route.fulfill({ json: { data: { state: "never-synced" } } }),
@@ -78,7 +103,7 @@ async function mockApi(page: Page) {
             rpmLimit: null,
             tpmLimit: null,
           },
-          daily: [],
+          daily: DAILY,
           enabledOperations: OPS,
         });
       case "GET /api/litellm/teams/t1/members":
@@ -190,23 +215,63 @@ test.describe("Management -> Team page", () => {
           `Team page (${view}) overflows horizontally at ${width}px`,
         ).toBeLessThanOrEqual(overflow.clientWidth);
 
-        const results = await new AxeBuilder({ page })
-          .withTags(["wcag2a", "wcag2aa"])
-          .analyze();
-        const blocking = results.violations.filter(
-          (v) => v.impact === "serious" || v.impact === "critical",
-        );
-        expect(
-          blocking.map((v) => ({
-            id: v.id,
-            impact: v.impact,
-            nodes: v.nodes.map((n) => n.target.join(" ")),
-          })),
-          `axe on the ${view} view`,
-        ).toEqual([]);
+        await expectNoBlockingViolations(page, `axe on the ${view} view`);
       }
     });
   }
+
+  // C1 item 5 (review of unit L5b; Rule 40.6 breakpoints, Design System -
+  // Layout, Key-value lists): the "Current rate limits" value wraps inside its
+  // Budget and limits panel at 375px instead of running past the panel edge.
+  test("the Current rate limits value stays inside its Budget and limits panel at 375px (C1 item 5; Rule 40.6)", async ({
+    page,
+    context,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 900 });
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.route(/\/api\/litellm\/teams\/t1(\?|$)/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            connected: true,
+            spendSource: "litellm-team",
+            team: {
+              alias: "Payments",
+              spend: 321.75,
+              maxBudget: 500,
+              softBudget: null,
+              budgetDuration: "30d",
+              models: ["claude-sonnet"],
+              rpmLimit: 1000000,
+              tpmLimit: 2000000000,
+            },
+            daily: DAILY,
+            enabledOperations: OPS,
+          },
+        },
+      }),
+    );
+    await page.goto(`${TEAM_URL}&view=budgets`);
+    await waitForHydration(page);
+    const panel = page.getByRole("region", { name: "Budget and limits" });
+    const value = panel
+      .locator("dt", { hasText: "Current rate limits" })
+      .locator("xpath=following-sibling::dd[1]");
+    await expect(value).toContainText("req/min");
+    const panelBox = await panel.boundingBox();
+    const valueBox = await value.boundingBox();
+    expect(panelBox).not.toBeNull();
+    expect(valueBox).not.toBeNull();
+    if (!panelBox || !valueBox) return;
+    expect(valueBox.x).toBeGreaterThanOrEqual(panelBox.x);
+    expect(valueBox.x + valueBox.width).toBeLessThanOrEqual(
+      panelBox.x + panelBox.width + 0.5,
+    );
+    // The text itself does not spill out of its own box either.
+    const spill = await value.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(spill).toBeLessThanOrEqual(0);
+  });
 
   // Review blocker U1 + B2-6: the AlertDialog confirm in a real browser (Design
   // System: AlertDialog confirms destructive actions, names the person and the
@@ -404,7 +469,7 @@ async function mockSpendSources(page: Page) {
         rpmLimit: null,
         tpmLimit: null,
       },
-      daily: [],
+      daily: DAILY,
       memberSum: { ...MEMBER_SUM, total: 250, daily: [] },
       enabledOperations: OPS,
     }),
@@ -485,13 +550,6 @@ test.describe("Management -> Team: spend source (App Teams)", () => {
       page.getByRole("button", { name: "Generate key" }),
     ).toHaveCount(0);
     // L4b review round 1: axe on the populated Team spend panel.
-    const results = await new AxeBuilder({ page })
-      .withTags(["wcag2a", "wcag2aa"])
-      .analyze();
-    expect(
-      results.violations
-        .filter((v) => v.impact === "serious" || v.impact === "critical")
-        .map((v) => v.id),
-    ).toEqual([]);
+    await expectNoBlockingViolations(page);
   });
 });

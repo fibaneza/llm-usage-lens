@@ -92,7 +92,12 @@ function BudgetAndLimits({
           },
           {
             term: "Current rate limits",
-            value: `${current.rpmLimit ?? "No limit"} req/min, ${current.tpmLimit ?? "No limit"} tokens/min`,
+            value: (
+              <span className="flex min-w-0 flex-col py-1">
+                <span>{`${current.rpmLimit ?? "No limit"} req/min`}</span>
+                <span>{`${current.tpmLimit ?? "No limit"} tokens/min`}</span>
+              </span>
+            ),
             mono: true,
           },
         ]}

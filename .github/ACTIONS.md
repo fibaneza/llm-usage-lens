@@ -124,7 +124,9 @@ It uses no secrets: the web servers' env is pinned in
   plus server start took about 1.5 min, with no sign of memory pressure,
   so the builds stay parallel. The 411 cases took 4.9 min on 2 workers:
   400 passed, 10 skipped (the dev-login cases) and 1 flaky. The flaky
-  case, `role-landing.spec.ts:165`, passed on retry. In the same run,
+  case, `role-landing.spec.ts:165`, passed on retry (that case was removed
+  in slice B1, 6f95c16; the current file passed `--repeat-each 5`
+  normally and with `CI=1`, unit C1, 2026-11-17). In the same run,
   `quality` took 2m02s, `build` 1m09s and `test` 16m10s.
 - **Cost:** about 31-35 runner-minutes per push or pull-request run.
   `test` takes about 16 min, `e2e` 7.5-12 min, `quality` and `build`

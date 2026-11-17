@@ -181,13 +181,9 @@ function LinkedTeamViews({
     detail.isPending ? PANEL_SKELETON : children;
 
   const accessSlot = <Fragment key="access">{access}</Fragment>;
-  // Mounted once the detail has answered: the tabs wrapper goes away for a
-  // team that is not configured, which would remount (and refetch) it.
-  const spend = detail.isPending ? (
-    <Fragment key="spend">{PANEL_SKELETON}</Fragment>
-  ) : (
-    <SpendPanel key="spend" teamId={teamId} withBudgets />
-  );
+  // Mounted at once, beside the detail read, so the member-sum read does not
+  // wait on it (Design System - Performance patterns, no request waterfalls).
+  const spend = <SpendPanel key="spend" teamId={teamId} withBudgets />;
   const content = !showTabs
     ? [spend, accessSlot]
     : view === "members"
@@ -222,9 +218,11 @@ function LinkedTeamViews({
             </Panel>,
           ];
 
-  if (!showTabs) return <div className="flex flex-col gap-4">{content}</div>;
+  // One tree for both states: the spend panel (and its in-flight read) is not
+  // remounted when the detail answers "not configured" and the tab list goes.
   return (
     <PageTabs
+      hideList={!showTabs}
       label="Team views"
       value={view}
       onValueChange={(next) => void setView(next)}

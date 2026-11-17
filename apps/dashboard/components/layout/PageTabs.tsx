@@ -10,6 +10,9 @@ type PageTabsProps<T extends string> = {
   onValueChange: (value: T) => void;
   items: readonly { value: T; label: string; badge?: ReactNode }[];
   panelId?: string;
+  // Keeps the panel in the same place in the tree while the tab list is
+  // absent, so the content below does not remount when the list comes or goes.
+  hideList?: boolean;
   children: ReactNode;
 };
 
@@ -22,6 +25,7 @@ export function PageTabs<T extends string>({
   onValueChange,
   items,
   panelId,
+  hideList = false,
   children,
 }: PageTabsProps<T>) {
   return (
@@ -33,23 +37,31 @@ export function PageTabs<T extends string>({
       }}
       className="gap-3"
     >
-      <TabsList
-        aria-label={label}
-        className="h-9 [scrollbar-width:none] flex-nowrap gap-1 overflow-x-auto"
+      {hideList ? null : (
+        <TabsList
+          aria-label={label}
+          className="h-9 [scrollbar-width:none] flex-nowrap gap-1 overflow-x-auto"
+        >
+          {items.map((item) => (
+            <TabsTrigger
+              key={item.value}
+              value={item.value}
+              {...(panelId ? { "aria-controls": panelId } : {})}
+              className="focus-visible:ring-focus-ring focus-visible:ring-offset-background rounded-control max-md:min-h-touch h-9 gap-1.5 py-0 focus-visible:ring-offset-2"
+            >
+              {item.label}
+              {item.badge}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      )}
+      <TabsContent
+        value={value}
+        id={panelId}
+        {...(hideList
+          ? { role: "presentation", "aria-labelledby": undefined }
+          : {})}
       >
-        {items.map((item) => (
-          <TabsTrigger
-            key={item.value}
-            value={item.value}
-            {...(panelId ? { "aria-controls": panelId } : {})}
-            className="focus-visible:ring-focus-ring focus-visible:ring-offset-background rounded-control max-md:min-h-touch h-9 gap-1.5 py-0 focus-visible:ring-offset-2"
-          >
-            {item.label}
-            {item.badge}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      <TabsContent value={value} id={panelId}>
         {children}
       </TabsContent>
     </Tabs>

@@ -1,5 +1,6 @@
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useQueryState, parseAsString } from "nuqs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -362,5 +363,51 @@ describe("MembersSection", () => {
     expect(
       await screen.findByRole("row", { name: /oid-ghost/ }),
     ).toBeInTheDocument();
+  });
+});
+
+// Unit C1 item 7: on the Team page the access sections follow the page's team
+// picker, whose state is `?team=` (Design System - Management pages, Team page
+// views and links: the page is one team's view; the picker is the one chooser).
+describe("MembersSection follows the page's selected team (?team=)", () => {
+  it("opens on the team in ?team=, not the first registry team", async () => {
+    const api = stubAccessApi(routes());
+    renderWithProviders(<MembersSection viewer={ADMIN} />, {
+      searchParams: { team: "team-risk" },
+    });
+    expect(await screen.findByLabelText("Team")).toHaveDisplayValue("Risk");
+    expect(api.to("GET /api/teams/team-risk/members").length).toBeGreaterThan(
+      0,
+    );
+    expect(api.to(MEMBERS_URL)).toEqual([]);
+  });
+
+  it("switches team when the page's picker changes ?team= after mount", async () => {
+    stubAccessApi(routes());
+    let setTeam: (team: string) => unknown = () => undefined;
+    function PagePicker() {
+      const [, set] = useQueryState("team", parseAsString);
+      setTeam = set;
+      return null;
+    }
+    renderWithProviders(
+      <>
+        <PagePicker />
+        <MembersSection viewer={ADMIN} />
+      </>,
+    );
+    await screen.findByRole("row", { name: /Alice Adams/ });
+    await act(async () => {
+      await setTeam("team-risk");
+    });
+    expect(await screen.findByLabelText("Team")).toHaveDisplayValue("Risk");
+  });
+
+  it("ignores a ?team= that is not in its list and keeps the first team", async () => {
+    stubAccessApi(routes());
+    renderWithProviders(<MembersSection viewer={ADMIN} />, {
+      searchParams: { team: "team-nope" },
+    });
+    expect(await screen.findByLabelText("Team")).toHaveDisplayValue("Payments");
   });
 });

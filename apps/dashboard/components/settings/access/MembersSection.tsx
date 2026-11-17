@@ -4,6 +4,7 @@ import { MemberRowSchema } from "@llm-usage-lens/shared";
 import type { MemberRow, OrgUnits } from "@llm-usage-lens/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft, Trash2 } from "lucide-react";
+import { parseAsString, useQueryState } from "nuqs";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { z } from "zod";
@@ -125,11 +126,19 @@ export function MembersSection({ viewer }: { viewer: AccessViewer }) {
   const capabilities = accessCapabilities(viewer);
   const queryClient = useQueryClient();
   const teams = sectionData(useOrgUnits())?.teams;
+  // On the Team page the page's picker owns ?team=; this section follows it
+  // (Design System - Management pages, Team page views and links). A pick here
+  // stays local until the page's team changes again.
+  const [pageTeam] = useQueryState("team", parseAsString);
   const [chosen, setChosen] = useState<string | null>(null);
-  const teamId =
-    chosen !== null && teams?.some((t) => t.id === chosen)
-      ? chosen
-      : teams?.[0]?.id;
+  const [seenPageTeam, setSeenPageTeam] = useState(pageTeam);
+  if (seenPageTeam !== pageTeam) {
+    setSeenPageTeam(pageTeam);
+    setChosen(null);
+  }
+  const known = (id: string | null) =>
+    id !== null && teams?.some((t) => t.id === id) ? id : null;
+  const teamId = known(chosen) ?? known(pageTeam) ?? teams?.[0]?.id;
   const membersKey = ["access", "members", teamId] as const;
   const membersQuery = useQuery({
     queryKey: membersKey,

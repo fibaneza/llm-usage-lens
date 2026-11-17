@@ -60,10 +60,13 @@ test.describe("Settings -> LiteLLM -> Guardrails with a config.yaml (unit CFG)",
 
   // Review W2 (review-blockers.md): the loader-to-UI wiring. display.orgName in
   // e2e.yaml beats NEXT_PUBLIC_ORG_NAME (pinned to "Organization" by
-  // playwright.config.ts) and reaches the top bar (A10).
-  test("display.orgName from the file reaches the top bar", async ({
+  // playwright.config.ts) and shows under the brand in the sidebar (A10;
+  // AppSidebar.tsx), not in the top bar.
+  test("display.orgName from the file reaches the sidebar", async ({
     page,
   }) => {
-    await expect(page.getByText("E2E Config Org").first()).toBeVisible();
+    await expect(
+      page.locator('[data-slot="sidebar"]').getByText("E2E Config Org"),
+    ).toBeVisible();
   });
 });

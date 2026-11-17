@@ -1,7 +1,7 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { productionServers } from "../apps/dashboard/e2e/support/constants";
 import { checkSelectedCount, runAssertCount } from "./e2e-assert-count";
@@ -54,7 +54,14 @@ describe("productionServers (playwright web-server mode)", () => {
 // Review warning (ci/e2e-dev-followups): the CLI always runs the check, and a
 // report without numeric stats fails instead of passing silently.
 describe("runAssertCount (e2e-dev guard CLI)", () => {
-  const dir = mkdtempSync(join(tmpdir(), "e2e-count-"));
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "e2e-count-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
   const report = (name: string, body: unknown) => {
     const path = join(dir, name);
     writeFileSync(path, JSON.stringify(body));
@@ -83,4 +90,44 @@ describe("runAssertCount (e2e-dev guard CLI)", () => {
       expect(runAssertCount(argv)).toBe(2);
     },
   );
+
+  // C1 item 3 (e2e-dev review nits): an unreadable or unparsable report is a
+  // clear exit-1 failure naming the file, never an uncaught stack trace.
+  const captureStderr = () => {
+    const chunks: string[] = [];
+    vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+      chunks.push(String(chunk));
+      return true;
+    });
+    return chunks;
+  };
+
+  it("returns 1 with a message naming the file when the report is missing", () => {
+    const stderr = captureStderr();
+    const missing = join(dir, "missing.json");
+    expect(runAssertCount([missing, "10"])).toBe(1);
+    expect(stderr.join("")).toContain(missing);
+  });
+
+  it("returns 1 with a message naming the file when the report is not JSON", () => {
+    const stderr = captureStderr();
+    const path = join(dir, "garbage.json");
+    writeFileSync(path, "{not json");
+    expect(runAssertCount([path, "10"])).toBe(1);
+    expect(stderr.join("")).toContain(path);
+  });
+
+  // The report is parsed with a Zod schema: shapes the hand-rolled check
+  // let through are rejected too.
+  it.each([
+    ["an array", []],
+    ["null stats", { stats: null }],
+    [
+      "a negative count that still sums to the expected total",
+      { stats: { ...ok.stats, expected: 11, unexpected: -1 } },
+    ],
+    ["a fractional count", { stats: { ...ok.stats, flaky: 0.5 } }],
+  ])("returns 1 for a report that is %s", (label, body) => {
+    expect(runAssertCount([report(`shape-${label}.json`, body), "10"])).toBe(1);
+  });
 });

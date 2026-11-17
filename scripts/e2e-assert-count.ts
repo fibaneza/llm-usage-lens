@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 
+import { z } from "zod";
+
 // The CI e2e-dev job (.github/ACTIONS.md) must run exactly its dev-login
 // cases: a dropped --grep selects more, production servers skip them all.
 // Reads Playwright's JSON report `stats` and fails unless exactly `expected`
@@ -26,21 +28,20 @@ export function checkSelectedCount(
   };
 }
 
-const STAT_KEYS = ["expected", "skipped", "unexpected", "flaky"] as const;
+const count = z.number().int().nonnegative();
+const ReportSchema = z.object({
+  stats: z.object({
+    expected: count,
+    skipped: count,
+    unexpected: count,
+    flaky: count,
+  }),
+});
 
-/** The report's `stats`, or undefined when any count is missing or not a number. */
+/** The report's `stats`, or undefined when the report is not the expected shape. */
 export function parseStats(report: unknown): PlaywrightStats | undefined {
-  if (typeof report !== "object" || report === null) return undefined;
-  const stats = (report as { stats?: unknown }).stats;
-  if (typeof stats !== "object" || stats === null) return undefined;
-  const record = stats as Record<string, unknown>;
-  if (!STAT_KEYS.every((k) => Number.isInteger(record[k]))) return undefined;
-  return {
-    expected: record.expected as number,
-    skipped: record.skipped as number,
-    unexpected: record.unexpected as number,
-    flaky: record.flaky as number,
-  };
+  const parsed = ReportSchema.safeParse(report);
+  return parsed.success ? parsed.data.stats : undefined;
 }
 
 /** CLI body: 0 ok, 1 wrong count or malformed report, 2 bad arguments. */
@@ -53,7 +54,17 @@ export function runAssertCount(argv: readonly string[]): number {
     );
     return 2;
   }
-  const stats = parseStats(JSON.parse(readFileSync(reportPath, "utf8")));
+  let report: unknown;
+  try {
+    report = JSON.parse(readFileSync(reportPath, "utf8"));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    process.stderr.write(
+      `cannot read a JSON report at ${reportPath}: ${reason}\n`,
+    );
+    return 1;
+  }
+  const stats = parseStats(report);
   if (stats === undefined) {
     process.stderr.write(`no numeric stats in the report at ${reportPath}\n`);
     return 1;

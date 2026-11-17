@@ -15,9 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // internal-admin raises limits; the legacy Admin alias outside prod counts;
 // a suspended SSO scope grants nothing; a stored grant counts, Rule 50.4;
 // "A team outside the caller's scope returns the same 404"); Rules 10.3,
-// 50.3, 60.7. These cases moved from the retired
-// litellm/team-config/page.test.tsx; the auditor case is the one change
-// (read-only access now, the old page gave it a 404). The full caller x route
+// 50.3, 60.7. The auditor reads the page (Access Control - Navigation and
+// landing by role). The full caller x route
 // matrix runs in __tests__/manage-routes.integration.test.ts.
 //
 // Contract for the developer (app/dashboard/manage/team/page.tsx):

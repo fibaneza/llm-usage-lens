@@ -3,6 +3,7 @@
 import { CircleDollarSign, Gauge, Wallet } from "lucide-react";
 
 import { formatUsd } from "@/components/charts/chart-data";
+import { EmptyState } from "@/components/display/EmptyState";
 import { MetricCard } from "@/components/display/MetricCard";
 import { DailySpend } from "@/components/litellm/DailySpend";
 import { Unavailable } from "@/components/litellm/LiteLLMSection";
@@ -38,11 +39,7 @@ export function TeamSpendPanel({ teamId }: { teamId: string }) {
   }
   const data = result.data;
   if (data.configured === false) {
-    return (
-      <p className="text-muted-foreground py-6 text-sm">
-        LiteLLM not configured
-      </p>
-    );
+    return <EmptyState title="LiteLLM not configured" />;
   }
   if (!data.connected) {
     const { memberSum, daily } = data;
@@ -104,8 +101,10 @@ export function TeamSpendPanel({ teamId }: { teamId: string }) {
       </div>
       {memberSum ? <FiguresDiffer /> : null}
       <div className="text-cell flex flex-wrap items-center gap-x-4 gap-y-2">
-        <span className="text-muted-foreground">Spent this budget period</span>
-        <span className="font-mono tabular-nums">{formatUsd(team.spend)}</span>
+        <dl className="flex items-center gap-x-4">
+          <dt className="text-muted-foreground">Spent this budget period</dt>
+          <dd className="font-mono tabular-nums">{formatUsd(team.spend)}</dd>
+        </dl>
         {team.budgetDuration ? (
           <span className="text-muted-foreground">
             Resets every {team.budgetDuration}
