@@ -39,6 +39,8 @@ stack's current value on an update):
   --architecture <arch>          InstanceArchitecture: arm64 or x86_64
   --root-volume-size <GiB>       RootVolumeSizeGiB
   --ecr-repository-name <name>   EcrRepositoryName (default llm-usage-lens-poc)
+  --artifact-bucket <name>       ArtifactBucketName (existing S3 bucket the instance may read)
+  --artifact-prefix <prefix>     ArtifactKeyPrefix (default llm-usage-lens-poc)
   --app-port <port>              AppPort
   --allowed-inbound-cidr <cidr>  AllowedInboundCidr (direct access to the instance)
   --alb-arn <arn>                ExistingAlbArn (existing Application Load Balancer)
@@ -146,6 +148,8 @@ while [[ $# -gt 0 ]]; do
     --architecture) cli_params+=("InstanceArchitecture=$2") ;;
     --root-volume-size) cli_params+=("RootVolumeSizeGiB=$2") ;;
     --ecr-repository-name) cli_params+=("EcrRepositoryName=$2") ;;
+    --artifact-bucket) cli_params+=("ArtifactBucketName=$2") ;;
+    --artifact-prefix) cli_params+=("ArtifactKeyPrefix=$2") ;;
     --app-port) cli_params+=("AppPort=$2") ;;
     --allowed-inbound-cidr) cli_params+=("AllowedInboundCidr=$2") ;;
     --alb-arn) cli_params+=("ExistingAlbArn=$2") ;;

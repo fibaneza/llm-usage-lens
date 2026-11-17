@@ -14,38 +14,54 @@ neither and does not replace them.
 
 | File                                                 | Purpose                                                              |
 | ---------------------------------------------------- | -------------------------------------------------------------------- |
-| [`cloudformation.yml`](cloudformation.yml)           | EC2 instance, security group, IAM role, private ECR repository       |
-| [`docker-compose.yml`](docker-compose.yml)           | `app`, `dynamodb-local`, `dynamodb-admin`                            |
+| [`cloudformation.yml`](cloudformation.yml)           | EC2 instance, security group, IAM role, private ECR repository, optional S3 read |
+| [`docker-compose.yml`](docker-compose.yml)           | `app`, `s3-config`, `dynamodb-local`, `dynamodb-admin`, all from ECR |
 | [`.env.example`](.env.example)                       | Runtime environment template (placeholders only)                     |
+| [`config/config.yaml`](config/config.yaml)           | Template of the app's `config.yaml`, served from the S3 bucket       |
 | [`stack.env.example`](stack.env.example)                   | Template for `stack.env`, the gitignored deploy configuration  |
 | [`scripts/deploy-stack.sh`](scripts/deploy-stack.sh)       | Local: create or update the CloudFormation stack               |
 | [`scripts/alb-security-group.sh`](scripts/alb-security-group.sh) | Local: attach/detach the POC security group on the existing ALB |
 | [`scripts/build-and-push.sh`](scripts/build-and-push.sh)   | Local: build the image and push `latest` to ECR                |
+| [`scripts/mirror-images.sh`](scripts/mirror-images.sh)     | Local: copy `dynamodb-local`, `dynamodb-admin` and `aws-cli` into the same ECR repository |
 | [`scripts/make-ec2-bundle.sh`](scripts/make-ec2-bundle.sh) | Local: print one command that copies the runtime files to EC2  |
 | [`scripts/init-dynamodb.sh`](scripts/init-dynamodb.sh)     | EC2: create the table in DynamoDB Local                        |
 
 ## Architecture
 
 ```
-developer machine                         existing VPC / subnet
-┌───────────────────────┐   push latest   ┌─────────────┐
-│ build-and-push.sh     │ ──────────────▶ │ private ECR │
-│ (docker buildx build) │                 └──────┬──────┘
-└──────────┬────────────┘                        │ pull (instance role)
-           │ SSM Session Manager          ┌──────▼─────────────────────────┐
-           └────────────────────────────▶ │ EC2 (Amazon Linux 2023)        │
-                                          │  Docker Compose, network "poc" │
-                                          │   app ───────▶ dynamodb-local  │
-                                          │   dynamodb-admin ─▶ (same)     │
-                                          └──────┬─────────────────────────┘
-                                                 │ HTTPS/HTTP (outbound)
-                                          ┌──────▼──────────┐
-                                          │ external LiteLLM│  (not part of the POC)
-                                          └─────────────────┘
+developer machine                          existing VPC / subnet
+┌───────────────────────┐ push app image   ┌──────────────────────────────┐
+│ build-and-push.sh     │ ───────────────▶ │ private ECR (one repository) │
+│ mirror-images.sh      │ ───────────────▶ │ app, dynamodb-*, aws-cli     │
+│                       │ mirror images    └──────────────┬───────────────┘
+│ aws s3 cp             │ config.yaml,     ┌──────────────┴───────────────┐
+│                       │ ───────────────▶ │ S3 artifact bucket (optional)│
+└──────────┬────────────┘ Compose binary   └──────────────┬───────────────┘
+           │                                              │ pull / read
+           │ SSM Session Manager         ┌────────────────▼───────────────┐
+           └───────────────────────────▶ │ EC2 (Amazon Linux 2023)        │
+                                         │  Docker Compose, network "poc" │
+                                         │   s3-config ─▶ config.yaml     │
+                                         │   app ───────▶ dynamodb-local  │
+                                         │   dynamodb-admin ─▶ (same)     │
+                                         └────────────────┬───────────────┘
+                                                          │ HTTPS/HTTP (outbound)
+                                                 ┌────────▼────────┐
+                                                 │ external LiteLLM│  (not part of the POC)
+                                                 └─────────────────┘
 ```
 
-- CloudFormation installs Docker, the Compose plugin and the SSM Agent. It
-  never pulls or starts the application; that is a manual step.
+- CloudFormation installs Docker, the Compose plugin (the Amazon Linux
+  package, else the binary staged in the S3 bucket, else GitHub) and the SSM
+  Agent. It never pulls or starts the application; that is a manual step.
+- Every container image comes from the POC's own ECR repository: the app
+  image, plus `dynamodb-local`, `dynamodb-admin` and `aws-cli` mirrored into
+  the same repository by `mirror-images.sh`. The instance never pulls from
+  Docker Hub.
+- An optional, **existing** S3 bucket (stack parameter `ArtifactBucketName`)
+  carries the app's `config.yaml` and the Docker Compose binary. The
+  instance may only read under one key prefix; the stack never creates,
+  changes or deletes the bucket.
 - No SSH, no key pair, no inbound rule by default. Browsers reach the app
   through SSM port forwarding.
 - Optionally, the stack adds a listener and a target group to an **existing**
@@ -64,6 +80,7 @@ developer machine                         existing VPC / subnet
 | Architecture             | The base image `node:22-alpine` is multi-architecture and the app has no native build step, so both `linux/arm64` and `linux/amd64` work. The POC defaults to **arm64** (`t4g.small`, Graviton).                                                                    |
 | DynamoDB                 | **Required.** The app stores all its data in one DynamoDB table and is developed against DynamoDB Local. The hostname `dynamodb-local` is one the app recognises as local ([`lib/dynamodb.ts`](../apps/dashboard/lib/dynamodb.ts)), so it uses no AWS credentials. |
 | DynamoDB Admin           | Included: the devcontainer already uses `aaronshaf/dynamodb-admin` for the same purpose.                                                                                                                                                                            |
+| Configuration file       | The image bakes in an all-commented [`config.yaml`](../apps/dashboard/config/config.yaml) (no settings); `APP_CONFIG_FILE` points the app at another file. The POC's `s3-config` service copies one from S3 and sets `APP_CONFIG_FILE`; with no bucket it writes an empty file, which behaves the same as the built-in one. |
 | Runtime environment      | Validated at start by [`apps/dashboard/env.ts`](../apps/dashboard/env.ts); the variable names in [`.env.example`](.env.example) come from that schema.                                                                                                              |
 | LiteLLM settings         | `LITELLM_ALLOWED_HOSTS` (host or `host:port` allowlist) and `LITELLM_SERVICE_KEY` (Bearer key) are environment variables. The **base URL is not an environment variable**: an administrator enters it in **Settings → LiteLLM**, and it is stored in DynamoDB.     |
 | LiteLLM model/deployment | **There is none.** The dashboard administers LiteLLM (teams, users, keys, spend) and never calls a model, so no model or deployment setting exists.                                                                                                                  |
@@ -100,7 +117,13 @@ In AWS:
   `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`,
   `ecr:BatchGetImage` and `ecr:DescribeRepositories`; also
   `cloudformation:DescribeStacks` and `sts:GetCallerIdentity` for the script.
-  The EC2 role gets none of the push or delete permissions.
+  `mirror-images.sh` needs the same permissions. The EC2 role gets none of
+  the push or delete permissions.
+- With the S3 bucket: an **existing** bucket in the stack's region, and
+  `s3:PutObject` on `<bucket>/<prefix>/*` for the developer identity. If the
+  bucket uses SSE-KMS, the instance role also needs `kms:Decrypt` on that
+  key, which the stack does not grant: use SSE-S3 for the POC bucket, or add
+  the grant yourself.
 
 Outbound connectivity the subnet must already provide (internet egress
 through a NAT or internet gateway, or VPC endpoints; the POC adds neither):
@@ -109,15 +132,16 @@ through a NAT or internet gateway, or VPC endpoints; the POC adds neither):
 | ------------------------------------------------------------------ | ------------------------------------------------------------- |
 | SSM: `ssm`, `ssmmessages`, `ec2messages` (HTTPS)                   | Session Manager                                               |
 | ECR: `ecr.api`, `ecr.dkr` (HTTPS)                                  | `docker login`, `docker compose pull` of the app image        |
-| S3 in the same region (HTTPS)                                      | ECR image layers; Amazon Linux package repositories           |
-| Docker Hub (`registry-1.docker.io`, `auth.docker.io`, its CDN)     | `amazon/dynamodb-local` and `aaronshaf/dynamodb-admin` images |
-| `github.com` and its release CDN                                   | Compose plugin, only if the AL2023 repositories lack it       |
+| S3 in the same region (HTTPS)                                      | ECR image layers; Amazon Linux package repositories; the artifact bucket |
+| `github.com` and its release CDN                                   | Compose plugin, only if neither the AL2023 repositories nor the bucket provide it |
 | The external LiteLLM endpoint (its host and port)                  | The dashboard's LiteLLM administration                        |
 
-A subnet with VPC endpoints only (no internet) can run Session Manager and
-pull from ECR, but cannot pull the two Docker Hub images or download the
-Compose plugin. Treat that as a missing prerequisite: the POC does not work
-around it.
+Docker Hub is needed **only on the developer machine**, by
+`mirror-images.sh`. So a subnet with VPC endpoints only and no internet
+(`ssm`, `ssmmessages`, `ec2messages`, `ecr.api`, `ecr.dkr`, plus an S3
+gateway endpoint) can run the whole POC, provided you mirror the images and
+stage the Compose binary in the bucket (*Install Docker Compose from S3*).
+The POC creates none of those endpoints.
 
 For LiteLLM you also need its base URL, a service key
 ([LiteLLM runbook](../docs/guides/litellm-admin.md)) and network reachability
@@ -203,7 +227,9 @@ aws cloudformation deploy \
 | `InstanceType`               | `t4g.small`          | 2 GiB memory or more.                                                                                     |
 | `InstanceArchitecture`       | `arm64`              | `arm64` or `x86_64`; must match `InstanceType`. Selects the AMI and the `ImagePlatform` output.           |
 | `RootVolumeSizeGiB`          | `20`                 | Encrypted gp3, deleted with the instance.                                                                 |
-| `ComposeVersion`             | `v2.32.4`            | Used only when the Amazon Linux repositories have no Compose plugin package.                              |
+| `ComposeVersion`             | `v2.32.4`            | Used only when the Amazon Linux repositories have no Compose plugin package: from the bucket first, then GitHub. |
+| `ArtifactBucketName`         | empty                | Optional **existing** S3 bucket; the instance may read objects under `ArtifactKeyPrefix/`. Empty: no S3 access. |
+| `ArtifactKeyPrefix`          | `llm-usage-lens-poc` | Key prefix in that bucket, without leading or trailing slash.                                             |
 | `AppPort`                    | `3000`               | Host port; only matters with `AllowedInboundCidr`.                                                        |
 | `AllowedInboundCidr`         | empty                | Empty: no inbound rule at all. A trusted IPv4 CIDR opens `AppPort` to it. `0.0.0.0/0` is rejected.        |
 | `ExistingAlbArn`             | empty                | Optional existing Application Load Balancer; see *Publish through an existing load balancer*.             |
@@ -221,7 +247,8 @@ aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_N
 
 Outputs: `InstanceId`, `InstancePrivateIp`, `InstanceSecurityGroupId`,
 `EcrRepositoryUri`, `EcrRepositoryName`, `ImagePlatform`, `AppPort`, `Region`,
-`AccountId`, and with the load balancer option `AlbArn`,
+`AccountId`, with a bucket `ArtifactBucketName` and `ArtifactKeyPrefix`, and
+with the load balancer option `AlbArn`,
 `AlbSecurityGroupId`, `AlbListenerArn` and `AlbTargetGroupArn`. Keep the instance ID for the later commands:
 
 ```bash
@@ -264,6 +291,147 @@ another architecture, update the stack with the matching
 `--platform` overrides it. Building for the other architecture than your
 machine's uses emulation and is slow.
 
+## Mirror the third-party images
+
+The Compose stack pulls **every** image from the POC's ECR repository. Copy
+the three third-party images into it once, and again whenever you change a
+tag:
+
+```bash
+poc/scripts/mirror-images.sh --region "$AWS_REGION" --stack-name "$STACK_NAME"
+```
+
+| Source image               | ECR tag (same repository as the app) | `.env` variable      |
+| -------------------------- | ------------------------------------ | -------------------- |
+| `amazon/dynamodb-local`    | `dynamodb-local-<tag>`               | `DYNAMODB_LOCAL_TAG` |
+| `aaronshaf/dynamodb-admin` | `dynamodb-admin-<tag>`               | `DYNAMODB_ADMIN_TAG` |
+| `amazon/aws-cli`           | `aws-cli-<tag>`                      | `AWS_CLI_TAG`        |
+
+The default tag is `latest`. To pin versions, pass them and set the same
+values in `.env`:
+
+```bash
+poc/scripts/mirror-images.sh --region "$AWS_REGION" --stack-name "$STACK_NAME" --dynamodb-local-tag 2.6.0 --aws-cli-tag 2.22.0
+```
+
+The script takes the same `--profile`, `--platform` and `--repository-uri`
+options as `build-and-push.sh`. It copies registry to registry with
+`docker buildx imagetools` (nothing is pulled into your local Docker), and it
+copies only the target platform's image: the repository's lifecycle rule
+expires untagged images, which would break a multi-platform copy. The ECR
+tags never start with `latest`, so the rule that keeps one `latest` image
+does not touch them. Docker Hub's anonymous pull limits apply to your
+machine; `docker login` first if you hit them.
+
+## S3 artifact bucket (optional)
+
+One **existing** bucket carries two things to the instance: the app's
+`config.yaml` and, when needed, the Docker Compose binary. Deploy the stack
+with `ArtifactBucketName` (and optionally `ArtifactKeyPrefix`) so the
+instance role may read under `<prefix>/`:
+
+```bash
+poc/scripts/deploy-stack.sh --artifact-bucket my-poc-artifacts --artifact-prefix llm-usage-lens-poc
+```
+
+Layout under the prefix:
+
+```
+s3://<bucket>/<prefix>/
+├── config/config.yaml                                   read by the s3-config service
+└── compose/<ComposeVersion>/docker-compose-linux-<arch>  read at first boot or by hand
+    compose/<ComposeVersion>/docker-compose-linux-<arch>.sha256
+```
+
+Upload the configuration file (edit [`config/config.yaml`](config/config.yaml)
+first; it ships with every setting commented out):
+
+```bash
+aws s3 cp poc/config/config.yaml "s3://$S3_BUCKET/$S3_KEY_PREFIX/config/config.yaml" --region "$AWS_REGION"
+```
+
+On the instance, set `S3_BUCKET` and `S3_KEY_PREFIX` in `.env` to the same
+values. At every `docker compose up`, the one-shot `s3-config` service
+copies the file into the `app-config` volume and the app reads it at start.
+With `S3_BUCKET` empty, `s3-config` writes an empty `config.yaml` instead
+(the same as the image's built-in one), so S3 stays optional. A bucket that
+is set but unreadable stops the app from starting; `docker compose logs
+s3-config` shows why.
+
+## Install Docker Compose from S3
+
+Needed only when the instance has no internet and the Amazon Linux
+repositories do not provide the `docker-compose-plugin` package. Check on
+the instance first:
+
+```bash
+docker compose version
+```
+
+If that fails, stage the release binary through the bucket. On the
+**developer machine** (set `ARCH` to `aarch64` for Graviton/`arm64`
+instances, `x86_64` for `x86_64` ones, and use the stack's `ComposeVersion`):
+
+```bash
+export COMPOSE_VERSION=v2.32.4 ARCH=aarch64
+```
+
+```bash
+curl -fsSLO "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-$ARCH"
+```
+
+```bash
+curl -fsSLO "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-$ARCH.sha256"
+```
+
+```bash
+shasum -a 256 -c "docker-compose-linux-$ARCH.sha256"
+```
+
+```bash
+aws s3 cp "docker-compose-linux-$ARCH" "s3://$S3_BUCKET/$S3_KEY_PREFIX/compose/$COMPOSE_VERSION/" --region "$AWS_REGION"
+```
+
+```bash
+aws s3 cp "docker-compose-linux-$ARCH.sha256" "s3://$S3_BUCKET/$S3_KEY_PREFIX/compose/$COMPOSE_VERSION/" --region "$AWS_REGION"
+```
+
+A new instance installs it from there at first boot (the boot script tries
+the package, then the bucket, then GitHub). On an instance that is already
+running, install it by hand, as root:
+
+```bash
+export S3_BUCKET=my-poc-artifacts S3_KEY_PREFIX=llm-usage-lens-poc COMPOSE_VERSION=v2.32.4 ARCH=$(uname -m)
+```
+
+```bash
+cd "$(mktemp -d)"
+```
+
+```bash
+aws s3 cp "s3://$S3_BUCKET/$S3_KEY_PREFIX/compose/$COMPOSE_VERSION/docker-compose-linux-$ARCH" .
+```
+
+```bash
+aws s3 cp "s3://$S3_BUCKET/$S3_KEY_PREFIX/compose/$COMPOSE_VERSION/docker-compose-linux-$ARCH.sha256" .
+```
+
+```bash
+sha256sum -c "docker-compose-linux-$ARCH.sha256"
+```
+
+```bash
+install -D -m 0755 "docker-compose-linux-$ARCH" /usr/libexec/docker/cli-plugins/docker-compose
+```
+
+```bash
+docker compose version
+```
+
+`/usr/libexec/docker/cli-plugins` is where Amazon Linux's Docker looks for
+plugins. The checksum file names the binary, so the two must keep their
+release names.
+
 ## Connect to EC2
 
 SSH is not used: there is no key pair and port 22 is closed.
@@ -296,7 +464,8 @@ into the Session Manager shell. It creates:
 └── scripts/init-dynamodb.sh
 ```
 
-Repeat this step whenever those three files change.
+Repeat this step whenever those three files change. `config.yaml` is not
+in the bundle: it comes from the S3 bucket (*S3 artifact bucket*).
 
 ## Configure the application
 
@@ -408,12 +577,16 @@ Services and how they talk:
 
 | Service          | Image                              | Host port        | Notes                                                             |
 | ---------------- | ---------------------------------- | ---------------- | ----------------------------------------------------------------- |
-| `app`            | `${ECR_REPOSITORY_URI}:latest`     | `127.0.0.1:3000` | Reaches DynamoDB at `http://dynamodb-local:8000` on network `poc` |
-| `dynamodb-local` | `amazon/dynamodb-local`            | `127.0.0.1:8000` | Data in the named volume `dynamodb-data`                          |
-| `dynamodb-admin` | `aaronshaf/dynamodb-admin`         | `127.0.0.1:8001` | Reaches DynamoDB at `http://dynamodb-local:8000`                  |
+| `s3-config`      | `${ECR_REPOSITORY_URI}:aws-cli-<tag>`        | none             | One-shot, host network: copies `config.yaml` from S3 (or writes an empty one) into the `app-config` volume, then exits |
+| `app`            | `${ECR_REPOSITORY_URI}:latest`               | `127.0.0.1:3000` | Starts after `s3-config` succeeds; reads `/config/config.yaml`; reaches DynamoDB at `http://dynamodb-local:8000` on network `poc` |
+| `dynamodb-local` | `${ECR_REPOSITORY_URI}:dynamodb-local-<tag>` | `127.0.0.1:8000` | Data in the named volume `dynamodb-data`                          |
+| `dynamodb-admin` | `${ECR_REPOSITORY_URI}:dynamodb-admin-<tag>` | `127.0.0.1:8001` | Reaches DynamoDB at `http://dynamodb-local:8000`                  |
 
-All three share the dedicated network `llm-usage-lens-poc`. All host ports
-bind to loopback, so nothing is reachable from the network.
+`app`, `dynamodb-local` and `dynamodb-admin` share the dedicated network
+`llm-usage-lens-poc`; `s3-config` runs on the host network, the only way a
+container can use the instance role (the metadata hop limit is 1). All host
+ports bind to loopback, so nothing is reachable from the network.
+`docker compose ps -a` lists `s3-config` as `Exited (0)` after a good start.
 
 ### Open the app in a browser
 
@@ -537,7 +710,12 @@ The seed scripts only ever target a local endpoint (`http://localhost:8000`).
 
 There is no automatic deployment, polling or pipeline. If
 `docker-compose.yml` or `.env.example` changed, repeat the bundle step in
-*Connect to EC2* first. Old image layers stay on disk until pruned:
+*Connect to EC2* first.
+
+To change `config.yaml`: upload the new file (*S3 artifact bucket*), then
+`docker compose up -d --force-recreate s3-config app`. To change a mirrored
+image tag: re-run `mirror-images.sh` with the new tag, set it in `.env`, then
+`docker compose pull` and `docker compose up -d`. Old image layers stay on disk until pruned:
 `docker image prune -f`.
 
 ## Verify and troubleshoot
@@ -628,8 +806,14 @@ poc/scripts/alb-security-group.sh detach --region "$AWS_REGION" --stack-name "$S
 The script removes only the POC group from the load balancer and leaves its
 other security groups attached.
 
+The S3 bucket is **never** touched by the stack. Remove the POC's objects
+yourself when you no longer need them, for example with
+`aws s3 rm "s3://$S3_BUCKET/$S3_KEY_PREFIX/" --recursive` (check the prefix
+first: it deletes everything under it).
+
 Deleting the stack removes **only what the stack created**: the instance and
-its root volume, its security group and IAM role, the ECR repository, and
+its root volume, its security group and IAM role, the ECR repository (with
+the app image and the mirrored images), and
 with the load balancer option the POC listener, target group and the new
 security group. It never deletes the existing load balancer, that load
 balancer's own security groups or other listeners, the ACM certificate, the
@@ -698,13 +882,17 @@ Security:
   load balancer is. All container
   ports bind to loopback by default. DynamoDB Admin and DynamoDB Local are
   never published. Outbound traffic is unrestricted (needed for SSM, ECR,
-  S3, Docker Hub and LiteLLM).
+  S3 and LiteLLM; GitHub only for the Compose fallback).
 - **Instance role:** `AmazonSSMManagedInstanceCore` plus ECR pull on this
   one repository (`ecr:GetAuthorizationToken` on `*` as AWS requires;
   `BatchCheckLayerAvailability`, `GetDownloadUrlForLayer`, `BatchGetImage`
   on the repository ARN). It cannot push, delete images or delete the
-  repository. IMDSv2 is required with hop limit 1, so containers cannot read
-  the instance credentials.
+  repository. With `ArtifactBucketName`, also `s3:GetObject` under
+  `<bucket>/<prefix>/*` and `s3:ListBucket` limited to that prefix; no
+  write. IMDSv2 is required with hop limit 1, so containers on the Compose
+  network cannot read the instance credentials. The one exception is
+  `s3-config`, which runs on the host network to read `config.yaml`; it is a
+  one-shot `aws-cli` container that exits after the copy.
 - **Developer identity:** needs the push permissions listed in
   *Prerequisites*; they are not granted by this stack.
 - **Session Manager:** anyone with `ssm:StartSession` on the instance gets a
@@ -729,19 +917,23 @@ Security:
   untagged images expire after `UntaggedImageRetentionDays` (7). A second
   rule keeps at most one image tagged `latest`; with a single mutable tag it
   is a safeguard that normally has nothing to do. Scan-on-push is enabled.
-- **Third-party images:** `amazon/dynamodb-local` and
-  `aaronshaf/dynamodb-admin` default to `latest`, as in the devcontainer.
-  Pin them with `DYNAMODB_LOCAL_TAG` / `DYNAMODB_ADMIN_TAG` in `.env` if you
-  need repeatable pulls.
+- **Third-party images:** `amazon/dynamodb-local`,
+  `aaronshaf/dynamodb-admin` and `amazon/aws-cli` are mirrored into the POC
+  repository and default to `latest`, as in the devcontainer. A mirrored tag
+  does not change until you re-run `mirror-images.sh`; pin versions with its
+  tag options and the matching `.env` values for repeatable pulls.
+  Scan-on-push covers the mirrored images too.
 
 ## Assumptions and limits
 
 - **Not tested against AWS.** The stack has not been deployed, no image has
   been pushed, and connectivity and stack deletion have not been exercised.
   See *Validation status* below.
-- The Compose plugin install tries the Amazon Linux package first and falls
-  back to the GitHub release named by `ComposeVersion` (checksum verified).
-  Which path runs depends on the AMI's repositories at boot.
+- The Compose plugin install tries the Amazon Linux package first, then the
+  binary staged in the bucket, then the GitHub release named by
+  `ComposeVersion` (checksum verified either way). Which path runs depends on
+  the AMI's repositories and the network at boot. If none works, the boot
+  still finishes; install Compose by hand (*Install Docker Compose from S3*).
 - The `dynamodb-local` health check opens a TCP connection with `bash`
   inside that image. It could not be run here (no Docker daemon). If the
   service stays `unhealthy` while `curl -s http://127.0.0.1:8000` on the
@@ -758,9 +950,13 @@ Security:
 
 | Check                                                                 | Result                                                      |
 | --------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `bash -n` on all five scripts                                         | Passed                                                      |
+| `bash -n` on all six scripts; `shellcheck` on `mirror-images.sh`      | Passed                                                      |
+| `mirror-images.sh` platform lookup against the public images          | Passed: `docker buildx imagetools inspect` returns the arm64 digest of all three images (multi-platform indexes) |
+| `mirror-images.sh` copy into ECR (`imagetools create`)                | **Not run** (no AWS session)                                 |
+| `s3-config` run locally (public `amazon/aws-cli` image)               | Passed: empty `S3_BUCKET` writes an empty read-only `config.yaml` and exits 0; a bucket it cannot read exits 1, so `app` does not start |
+| S3 changes to `cloudformation.yml` (parsed YAML)                      | Passed: the S3 read policy, outputs and boot-script substitutions resolve to declared parameters. Service-side validation and the S3 Compose install at boot **not run** |
 | `deploy-stack.sh` and `alb-security-group.sh` against a stub AWS CLI  | Passed: attach keeps existing groups, detach removes only the POC group, limits and missing parameters are refused; `stack.env` values load, command-line options override them, unfilled placeholders are refused |
-| `docker compose config` with `.env.example`                           | Passed; three services, all host ports on `127.0.0.1`       |
+| `docker compose config` with `.env.example`                           | Passed; four services, all images from `ECR_REPOSITORY_URI`, all host ports on `127.0.0.1` |
 | Resources, outputs and IAM actions as described                       | Checked by reading the parsed YAML                          |
 | Lifecycle policy text is valid JSON with the two intended rules       | Passed                                                      |
 | Prettier on `cloudformation.yml` and `docker-compose.yml`             | Passed                                                      |

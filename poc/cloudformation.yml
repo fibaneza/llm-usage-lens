@@ -28,6 +28,8 @@ Metadata:
           - AlbCertificateArn
       - Label: { default: ECR }
         Parameters: [EcrRepositoryName, UntaggedImageRetentionDays]
+      - Label: { default: S3 artifact bucket (optional) }
+        Parameters: [ArtifactBucketName, ArtifactKeyPrefix]
 
 Parameters:
   VpcId:
@@ -72,8 +74,9 @@ Parameters:
     AllowedPattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
     ConstraintDescription: must be a Docker Compose release tag such as v2.32.4.
     Description: >-
-      Docker Compose release downloaded from GitHub when the Amazon Linux
-      repositories do not provide the Compose plugin package.
+      Docker Compose release installed when the Amazon Linux repositories do
+      not provide the Compose plugin package: first from the artifact bucket
+      (<ArtifactKeyPrefix>/compose/<version>/), then from GitHub.
   AppPort:
     Type: Number
     Default: 3000
@@ -145,6 +148,23 @@ Parameters:
     MinValue: 1
     MaxValue: 365
     Description: Days after which untagged images (superseded "latest" pushes) expire.
+  ArtifactBucketName:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    ConstraintDescription: must be empty or an S3 bucket name.
+    Description: >-
+      Optional existing S3 bucket the instance may read from (config.yaml,
+      the Docker Compose binary). The stack never creates, changes or deletes
+      it. Empty: no S3 access.
+  ArtifactKeyPrefix:
+    Type: String
+    Default: llm-usage-lens-poc
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9._/-]*[A-Za-z0-9]$"
+    ConstraintDescription: must be a key prefix without leading or trailing slash.
+    Description: >-
+      Key prefix inside the artifact bucket. The instance may read only
+      objects under <prefix>/.
 
 Rules:
   NoOpenInboundCidr:
@@ -157,6 +177,7 @@ Conditions:
   IsArm64: !Equals [!Ref InstanceArchitecture, arm64]
   HasAlb: !Not [!Equals [!Ref ExistingAlbArn, ""]]
   HasAlbCertificate: !Not [!Equals [!Ref AlbCertificateArn, ""]]
+  HasArtifactBucket: !Not [!Equals [!Ref ArtifactBucketName, ""]]
   HasAlbInboundCidr: !And
     - !Condition HasAlb
     - !Not [!Equals [!Ref AlbAllowedInboundCidr, ""]]
@@ -206,7 +227,7 @@ Resources:
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: LLM Usage Lens POC instance - Session Manager and ECR pull only.
+      Description: LLM Usage Lens POC instance - Session Manager, ECR pull and optional S3 artifact read.
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -232,6 +253,27 @@ Resources:
                   - ecr:GetDownloadUrlForLayer
                   - ecr:BatchGetImage
                 Resource: !GetAtt EcrRepository.Arn
+        # Read-only, and only under the prefix: config.yaml and the Compose
+        # binary (poc/README.md - S3 artifact bucket).
+        - !If
+          - HasArtifactBucket
+          - PolicyName: s3-artifacts-read
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Sid: ReadArtifacts
+                  Effect: Allow
+                  Action: s3:GetObject
+                  Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucketName}/${ArtifactKeyPrefix}/*
+                - Sid: ListArtifactPrefix
+                  Effect: Allow
+                  Action: s3:ListBucket
+                  Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucketName}
+                  Condition:
+                    StringLike:
+                      s3:prefix:
+                        - !Sub ${ArtifactKeyPrefix}/*
+          - !Ref AWS::NoValue
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -406,18 +448,33 @@ Resources:
           dnf install -y amazon-ssm-agent
           systemctl enable --now amazon-ssm-agent
 
-          if ! dnf install -y docker-compose-plugin; then
-            plugin_dir=/usr/libexec/docker/cli-plugins
-            asset="docker-compose-linux-$(uname -m)"
-            base="https://github.com/docker/compose/releases/download/${ComposeVersion}"
+          # Compose plugin: the Amazon Linux package, else the release binary
+          # from the artifact bucket (poc/README.md - Install Docker Compose
+          # from S3), else from GitHub. Each source is checked against its
+          # .sha256 file. A host without any of them still finishes booting;
+          # install Compose by hand as the README describes.
+          install_compose() {
+            local plugin_dir=/usr/libexec/docker/cli-plugins
+            local asset="docker-compose-linux-$(uname -m)"
+            local bucket="${ArtifactBucketName}"
+            local s3_base="s3://$bucket/${ArtifactKeyPrefix}/compose/${ComposeVersion}"
+            local gh_base="https://github.com/docker/compose/releases/download/${ComposeVersion}"
+            dnf install -y docker-compose-plugin && return 0
             mkdir -p "$plugin_dir"
             cd "$(mktemp -d)"
-            curl -fsSL --retry 5 -o "$asset" "$base/$asset"
-            curl -fsSL --retry 5 -o "$asset.sha256" "$base/$asset.sha256"
-            sha256sum -c "$asset.sha256"
+            if [[ -n "$bucket" ]] &&
+              aws s3 cp --only-show-errors "$s3_base/$asset" . &&
+              aws s3 cp --only-show-errors "$s3_base/$asset.sha256" .; then
+              :
+            else
+              curl -fsSL --retry 5 -o "$asset" "$gh_base/$asset" || return 1
+              curl -fsSL --retry 5 -o "$asset.sha256" "$gh_base/$asset.sha256" || return 1
+            fi
+            sha256sum -c "$asset.sha256" || return 1
             install -m 0755 "$asset" "$plugin_dir/docker-compose"
-          fi
-          docker compose version
+          }
+          install_compose || echo "Docker Compose not installed: see poc/README.md - Install Docker Compose from S3"
+          docker compose version || true
 
           install -d -m 0750 /opt/llm-usage-lens-poc
 
@@ -461,6 +518,14 @@ Outputs:
     Condition: HasAlb
     Description: Target group that forwards to the instance on AppPort.
     Value: !Ref AlbTargetGroup
+  ArtifactBucketName:
+    Condition: HasArtifactBucket
+    Description: S3 bucket the instance may read (under ArtifactKeyPrefix).
+    Value: !Ref ArtifactBucketName
+  ArtifactKeyPrefix:
+    Condition: HasArtifactBucket
+    Description: Key prefix the instance may read in the artifact bucket.
+    Value: !Ref ArtifactKeyPrefix
   Region:
     Description: AWS region of the stack.
     Value: !Ref AWS::Region

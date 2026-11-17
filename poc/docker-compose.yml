@@ -3,6 +3,11 @@
 # its .env (Compose reads .env for the ${...} values below, and the app reads
 # it through env_file).
 #
+# Every image comes from the POC's own ECR repository: the app as
+# ${ECR_REPOSITORY_URI}:${IMAGE_TAG}, and the third-party images mirrored into
+# the same repository under a "<name>-<tag>" tag by poc/scripts/mirror-images.sh.
+# So the host needs ECR and S3 only, never Docker Hub.
+#
 # LiteLLM is an external service and is deliberately not defined here.
 
 name: llm-usage-lens-poc
@@ -18,10 +23,17 @@ services:
       # The service name is one of the hostnames the app treats as DynamoDB
       # Local (apps/dashboard/lib/dynamodb.ts), so no AWS credentials are used.
       DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      # Written by s3-config: the bucket's config.yaml, or an empty file (the
+      # same as the image's built-in, all-commented config.yaml).
+      APP_CONFIG_FILE: /config/config.yaml
+    volumes:
+      - app-config:/config:ro
     ports:
       # The container always listens on 3000 (apps/dashboard/Dockerfile).
       - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-3000}:3000"
     depends_on:
+      s3-config:
+        condition: service_completed_successfully
       dynamodb-local:
         condition: service_healthy
     healthcheck:
@@ -41,8 +53,39 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # One-shot: copies config.yaml from s3://${S3_BUCKET}/${S3_KEY_PREFIX}/config/
+  # into the app-config volume, then exits. With S3_BUCKET empty it writes an
+  # empty config.yaml instead, so S3 stays optional. A bucket that is set but
+  # unreadable (no object, no permission) stops the app from starting.
+  s3-config:
+    image: ${ECR_REPOSITORY_URI:?Set ECR_REPOSITORY_URI in .env}:aws-cli-${AWS_CLI_TAG:-latest}
+    restart: "no"
+    # Host network: the instance metadata hop limit is 1, so only a container
+    # on the host network can use the instance role (S3 read on the prefix).
+    network_mode: host
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        if [ -z "$${S3_BUCKET}" ]; then
+          echo "S3_BUCKET is empty: using an empty config.yaml"
+          printf '' > /config/config.yaml
+        else
+          aws s3 cp --only-show-errors --region "$${AWS_REGION}" \
+            "s3://$${S3_BUCKET}/$${S3_KEY_PREFIX}/config/config.yaml" /config/config.yaml
+          echo "config.yaml copied from s3://$${S3_BUCKET}/$${S3_KEY_PREFIX}/config/"
+        fi
+        chmod 0444 /config/config.yaml
+    environment:
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_KEY_PREFIX: ${S3_KEY_PREFIX:-llm-usage-lens-poc}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-2}
+    volumes:
+      - app-config:/config
+    logging: *logging
+
   dynamodb-local:
-    image: amazon/dynamodb-local:${DYNAMODB_LOCAL_TAG:-latest}
+    image: ${ECR_REPOSITORY_URI:?Set ECR_REPOSITORY_URI in .env}:dynamodb-local-${DYNAMODB_LOCAL_TAG:-latest}
     restart: unless-stopped
     # root so the process can write the named volume; same flags as the
     # devcontainer (.devcontainer/docker-compose.yml).
@@ -66,7 +109,7 @@ services:
     logging: *logging
 
   dynamodb-admin:
-    image: aaronshaf/dynamodb-admin:${DYNAMODB_ADMIN_TAG:-latest}
+    image: ${ECR_REPOSITORY_URI:?Set ECR_REPOSITORY_URI in .env}:dynamodb-admin-${DYNAMODB_ADMIN_TAG:-latest}
     restart: unless-stopped
     environment:
       DYNAMO_ENDPOINT: http://dynamodb-local:8000
@@ -94,3 +137,5 @@ volumes:
   # DynamoDB Local table data. Survives `docker compose down`; removed by
   # `docker compose down -v`.
   dynamodb-data:
+  # config.yaml written by s3-config and read (read-only) by the app.
+  app-config:

@@ -1,0 +1,42 @@
+# POC configuration file, served from S3 (poc/README.md - S3 artifact bucket).
+#
+# Upload to s3://<S3_BUCKET>/<S3_KEY_PREFIX>/config/config.yaml. The
+# s3-config service copies it into the app at every `docker compose up`, and
+# the app reads it once at start (APP_CONFIG_FILE). After a change: upload it
+# again, then `docker compose up -d --force-recreate s3-config app`.
+#
+# Without S3_BUCKET the POC uses an empty file, which behaves exactly like the
+# image's built-in, all-commented one. Same keys and rules as
+# apps/dashboard/config/config.yaml: unknown, secret-shaped and authorization
+# keys stop the start, and the reason is in `docker compose logs app`. Never
+# put secrets, AWS account IDs, roles or grants here; secrets stay in .env.
+#
+# Spec: docs/specs/2026-05-15-system-architecture.md - Configuration file.
+
+# LiteLLM operation defaults. An operation can only be switched OFF here
+# (`enabled: false`); the Settings -> LiteLLM toggle for it is then locked
+# ("Set in config.yaml"). <operation> is a name from the gateway allowlist.
+#
+# litellm:
+#   operations:
+#     deleteKey:
+#       enabled: false
+#     resetMemberSpend:
+#       enabled: false
+
+# Display options.
+#
+# display:
+#   # Date range preset used when the URL carries no range: 7d | 30d | 90d.
+#   # Default: 30d.
+#   defaultDateRange: 30d
+#   # Organisation name in the top bar. Default: Organization. Takes priority
+#   # over the deprecated NEXT_PUBLIC_ORG_NAME variable.
+#   orgName: Acme Corp
+
+# Data options.
+#
+# data:
+#   retention:
+#     # Days a DailyRollup is kept (30-3650). Default: 365.
+#     dailyRollupDays: 365
