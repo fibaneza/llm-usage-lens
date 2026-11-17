@@ -6,8 +6,9 @@ import type { LiteLLMOperationName } from "@llm-usage-lens/shared";
 import { LITELLM_OPERATIONS } from "./allowlist";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Guardrail configuration"
-// (precedence: a saved OperationToggles item (UI) wins over the config file;
-// with no item the file applies; with no file entry LD10 applies), decision
+// (precedence, amended 2026-11-17 by unit CFG, decision D1: an operation the
+// config file sets takes the file's value and is locked, whatever is saved;
+// otherwise a saved OperationToggles value (UI) wins, then LD10), decision
 // LD10. Pure: a name outside the allowlist is ignored, so configuration can
 // never add an operation.
 
@@ -22,17 +23,17 @@ export function resolveOperationSettings(input: {
 }): Record<LiteLLMOperationName, OperationSetting> {
   const { file, saved } = input;
   const entries = LITELLM_OPERATION_NAMES.map((name) => {
-    const fromUi =
-      saved && Object.hasOwn(saved, name) ? saved[name] : undefined;
-    if (typeof fromUi === "boolean") {
-      return [name, { enabled: fromUi, source: "ui" }] as const;
-    }
     const fromFile =
       file && Object.hasOwn(file.operations, name)
         ? file.operations[name]
         : undefined;
     if (fromFile) {
       return [name, { enabled: fromFile.enabled, source: "file" }] as const;
+    }
+    const fromUi =
+      saved && Object.hasOwn(saved, name) ? saved[name] : undefined;
+    if (typeof fromUi === "boolean") {
+      return [name, { enabled: fromUi, source: "ui" }] as const;
     }
     return [
       name,

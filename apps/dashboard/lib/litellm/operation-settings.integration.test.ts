@@ -4,17 +4,22 @@ import { describe, expect, it } from "vitest";
 import { resolveOperationSettings } from "./operation-settings";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Guardrail configuration"
-// (precedence: a saved OperationToggles item (UI) wins over the config file;
-// with no item the file applies; with no file entry LD10 applies; the panel
-// shows each operation's effective value and its source `ui | file | spec`;
-// reads gain a toggle, default on), decision LD10 (destructive off: only
-// resetMemberSpend and deleteKey among L2 operations), implementation-phases
-// L2 Verify ("precedence UI > file > LD10").
+// (precedence, amended 2026-11-17 by unit CFG, user decision D1: for an
+// operation the config file sets, the file wins over a saved OperationToggles
+// item; for an operation it does not set, a saved value wins, then LD10; the
+// panel shows each operation's effective value and its source
+// `ui | file | spec`, `file` meaning locked; reads gain a toggle, default on),
+// System Architecture — "Configuration file" (Locked settings; Q1 narrow-only),
+// decision LD10 (destructive off: only resetMemberSpend and deleteKey among L2
+// operations), implementation-phases CFG Verify ("file only, database only,
+// both (file wins), neither (default)").
 //
-// Contract: resolveOperationSettings({ file, saved }) is pure.
+// Contract: resolveOperationSettings({ file, saved }) is pure (same signature;
+// the precedence flips for file-set operations).
 //   file:  the parsed config { operations: { [op]: { enabled: false } } } | null
 //   saved: the stored toggles { [op]: boolean } (OperationToggles.toggles) | null
 //   returns Record<operation, { enabled: boolean; source: "ui" | "file" | "spec" }>
+//   (an operation the file sets is `file` whatever `saved` holds)
 // for every operation in LITELLM_OPERATION_NAMES.
 const file = (operations: Record<string, { enabled: false }>) => ({
   operations,
@@ -69,26 +74,35 @@ describe("resolveOperationSettings", () => {
     expect(r.blockKey).toEqual({ enabled: true, source: "spec" });
   });
 
-  it("a saved value wins over the file (and over LD10), source 'ui'", () => {
+  it("the file wins over a saved value for an operation it sets (D1), source 'file'", () => {
     const r = resolveOperationSettings({
       file: file({ createTeam: { enabled: false } }),
-      saved: { createTeam: true, deleteKey: true, blockKey: false },
+      saved: { createTeam: true },
     });
-    expect(r.createTeam).toEqual({ enabled: true, source: "ui" });
+    expect(r.createTeam).toEqual({ enabled: false, source: "file" });
+  });
+
+  it("a saved value wins over LD10 for an operation the file does not set, source 'ui'", () => {
+    const r = resolveOperationSettings({
+      file: file({ createTeam: { enabled: false } }),
+      saved: { deleteKey: true, blockKey: false },
+    });
     expect(r.deleteKey).toEqual({ enabled: true, source: "ui" });
     expect(r.blockKey).toEqual({ enabled: false, source: "ui" });
   });
 
-  it("a saved value wins over LD10 when there is no file entry", () => {
-    const r = resolveOperationSettings({
-      file: null,
-      saved: { resetMemberSpend: true, getTeam: false },
+  it("removing the key from the file restores the stored value (the item was never changed)", () => {
+    const saved = { createTeam: true };
+    const locked = resolveOperationSettings({
+      file: file({ createTeam: { enabled: false } }),
+      saved,
     });
-    expect(r.resetMemberSpend).toEqual({ enabled: true, source: "ui" });
-    expect(r.getTeam).toEqual({ enabled: false, source: "ui" });
+    const unlocked = resolveOperationSettings({ file: file({}), saved });
+    expect(locked.createTeam).toEqual({ enabled: false, source: "file" });
+    expect(unlocked.createTeam).toEqual({ enabled: true, source: "ui" });
   });
 
-  it("only operations present in the saved item report 'ui'; the rest keep their file/spec source", () => {
+  it("only unlocked operations present in the saved item report 'ui'; the rest keep their file/spec source", () => {
     const r = resolveOperationSettings({
       file: file({ listKeys: { enabled: false } }),
       saved: { getTeam: false },

@@ -11,6 +11,7 @@ import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/hooks/useMe";
 import { useMeUsage } from "@/hooks/useMeUsage";
+import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
 import { resolveUrlRange, type DateRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 import { sectionData } from "@/lib/query/section-data";
@@ -22,9 +23,10 @@ const countFormatter = new Intl.NumberFormat("en-US");
 // never a zero); Access Control spec - Roles (My usage: any signed-in role).
 export function MeContent() {
   const [{ dateFrom, dateTo }] = useQueryStates(dateRangeSearchParams);
+  const defaultPreset = useDefaultPreset();
   const range = useMemo(
-    () => resolveUrlRange(dateFrom, dateTo),
-    [dateFrom, dateTo],
+    () => resolveUrlRange(dateFrom, dateTo, undefined, defaultPreset),
+    [dateFrom, dateTo, defaultPreset],
   );
 
   return (

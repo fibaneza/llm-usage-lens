@@ -1,0 +1,14 @@
+# Playwright fixture (unit CFG, A9): the checked-in gateway defaults plus one
+# extra locked operation (rotateKey) and display.orgName, which the e2e spec
+# looks for.
+display:
+  orgName: E2E Config Org
+
+litellm:
+  operations:
+    resetMemberSpend:
+      enabled: false
+    deleteKey:
+      enabled: false
+    rotateKey:
+      enabled: false

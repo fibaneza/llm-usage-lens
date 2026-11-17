@@ -1,0 +1,6 @@
+# Test fixture (unit CFG): the file sets createTeam only; every other
+# operation is unset, so its saved value or default applies.
+litellm:
+  operations:
+    createTeam:
+      enabled: false

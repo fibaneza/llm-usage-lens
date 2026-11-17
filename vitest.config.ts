@@ -135,6 +135,16 @@ export default defineConfig({
             // fallback (Access Control spec, user decision 2026-11-15); a
             // test-only value, never a real secret.
             AUTH_SECRET: "integration-test-auth-secret",
+            // Unit CFG (System Architecture — Configuration file, A9): the
+            // file beats saved toggles, so integration tests that save a
+            // toggle (deleteKey: true) read an empty configuration by default;
+            // a test names another fixture with vi.stubEnv("APP_CONFIG_FILE").
+            APP_CONFIG_FILE: fileURLToPath(
+              new URL(
+                "./apps/dashboard/test/fixtures/config/empty.yaml",
+                import.meta.url,
+              ),
+            ),
           },
         },
       },

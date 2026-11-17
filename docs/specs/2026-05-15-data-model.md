@@ -393,7 +393,11 @@ Department totals are computed on-the-fly from account DailyRollups grouped by d
 
 ### TTL and Data Retention
 
-DailyRollup items expire 365 days after they were last updated (`ttl = lastUpdatedAt + 365 days`; decided 2026-11-10) via DynamoDB TTL. This is configurable per deployment. For longer retention, items can be archived to S3 before expiry.
+DailyRollup items expire 365 days after they were last updated (`ttl = lastUpdatedAt + 365 days`; decided 2026-11-10) via DynamoDB TTL. This is configurable per deployment. For longer retention, items can be archived to S3 before expiry. *Amended 2026-11-17 (unit CFG):* the per-deployment value is `data.retention.dailyRollupDays` in `config.yaml` (default 365; [System Architecture](2026-05-15-system-architecture.md) — *Configuration file*); the collector applies it from Phase 6. The seed scripts ignore the key and keep the 365-day default.
+
+### Settings shadowed by the configuration file
+
+*Added 2026-11-17 (unit CFG; System Architecture — *Configuration file*, user decision D1).* A value set in `apps/dashboard/config/config.yaml` **shadows** the stored item for the same setting: reads return the file's value as the effective value with source `file`, and the stored item is neither read for that setting's effect nor changed. A write to a shadowed setting returns `409` `CONFIG_FILE_LOCKED` and writes nothing, so the stored value survives and applies again once the key is removed from the file. In v1 the only shadowed item is `LITELLM#CONFIG` / `TOGGLES` (`OperationToggles`), per operation: only the operations the file sets are shadowed, and the item's `version` still advances only on an accepted write. No new entity or key is added; the precedence lives in one resolver per setting, so data-access functions keep trusting typed inputs (Rule 50.8).
 
 ### Service Attribution (`byService`)
 

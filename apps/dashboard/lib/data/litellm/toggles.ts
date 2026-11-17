@@ -15,9 +15,9 @@ import { LITELLM_CONFIG_PK, LITELLM_TOGGLES_SK } from "./keys";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Data model additions"
 // (OperationToggles at LITELLM#CONFIG / TOGGLES, versioned), "Toggles narrow
-// only" and "Guardrail configuration" (a saved value wins over the config
-// file; "reset to file defaults" clears the saved values, Admin, audited and
-// versioned like any toggle write).
+// only" and "Guardrail configuration" (a config.yaml value wins over a saved
+// one; "reset to defaults" clears the saved values except those of operations
+// the file sets, Admin, audited and versioned like any toggle write).
 
 export async function getOperationToggles(): Promise<OperationToggles | null> {
   const item = await getItem(LITELLM_CONFIG_PK, LITELLM_TOGGLES_SK);
@@ -101,12 +101,20 @@ export async function putOperationToggles(
 }
 
 export async function resetOperationToggles(
-  input: { version: number },
+  // `keep` names operations whose saved value survives the reset: the ones
+  // config.yaml sets, so removing the key from the file restores the value
+  // (System Architecture — Configuration file, A7).
+  input: { version: number; keep?: readonly string[] },
   ctx: AuditContext,
 ): Promise<AccessResult<OperationToggles>> {
   const current = await getOperationToggles();
   if (!current || current.version !== input.version) {
     return { ok: false, code: "CONFLICT" };
   }
-  return commit("litellm.toggles.reset", current, {}, ctx);
+  const kept = Object.fromEntries(
+    Object.entries(current.toggles).filter(([name]) =>
+      input.keep?.includes(name),
+    ),
+  );
+  return commit("litellm.toggles.reset", current, kept, ctx);
 }

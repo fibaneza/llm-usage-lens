@@ -9,6 +9,8 @@ Source: `docs/specs/2026-05-15-design-system.md`.
 - Recharts (charts), TanStack Table (tables), TanStack Query (server state)
 - nuqs (URL state), date-fns (dates), Zod v4 (validation)
 - Auth.js v5 (Microsoft Entra ID), `@t3-oss/env-nextjs`, `next-safe-action`
+- `yaml` (server-only parser for `config/config.yaml`, validated by Zod;
+  System Architecture — *Configuration file*, 2026-11-17)
 - OpenTelemetry (`@vercel/otel`)
 - AWS CDK (TypeScript) for the dashboard platform in `infra/` (Platform spec);
   AWS SAM stays for the collector until its Phase 6 amendment

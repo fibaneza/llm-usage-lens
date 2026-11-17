@@ -307,7 +307,9 @@ const AuditRecordBaseSchema = z.object({
   before: AuditSnapshotSchema.optional(),
   after: AuditSnapshotSchema.optional(),
   result: z.enum(["success", "failed", "denied"]),
-  code: z.enum(["FORBIDDEN", "NOT_FOUND", "PRIVILEGED_TARGET"]).optional(),
+  code: z
+    .enum(["FORBIDDEN", "NOT_FOUND", "PRIVILEGED_TARGET", "CONFIG_FILE_LOCKED"])
+    .optional(),
   route: z.object({ method: z.string(), pattern: z.string() }).optional(),
   timestamp: Iso8601Schema,
   requestId: IdSchema,

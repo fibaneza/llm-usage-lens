@@ -1,0 +1,13 @@
+# Test fixture (unit CFG): every v1 key set to a valid value.
+litellm:
+  operations:
+    createTeam:
+      enabled: false
+    resetMemberSpend:
+      enabled: false
+display:
+  defaultDateRange: 7d
+  orgName: Acme Corp
+data:
+  retention:
+    dailyRollupDays: 730

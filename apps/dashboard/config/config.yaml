@@ -1,0 +1,43 @@
+# Organisation configuration for the dashboard (unit CFG).
+#
+# Loaded once when the server starts, validated by AppConfigSchema
+# (packages/shared) and baked into the Docker image. A key set here wins over
+# the same setting saved in the database (Settings UI); a key not set here
+# behaves as before. Editing this file needs a rebuild or a restart.
+#
+# Never put secrets, AWS account IDs, roles, grants or other authorization
+# assignments here: unknown, secret-shaped and authorization keys stop the
+# start. Secrets and deployment wiring stay environment variables (env.ts).
+#
+# Spec: docs/specs/2026-05-15-system-architecture.md - Configuration file.
+
+# LiteLLM operation defaults. An operation can only be switched OFF here
+# (`enabled: false`); the Settings -> LiteLLM toggle for it is then locked
+# ("Set in config.yaml"). An operation not listed stays a live toggle with its
+# built-in default. <operation> is a name from the gateway allowlist. The file
+# ships with none set (no behaviour change); uncomment to opt in.
+#
+# litellm:
+#   operations:
+#     deleteKey:
+#       enabled: false
+#     resetMemberSpend:
+#       enabled: false
+
+# Display options.
+#
+# display:
+#   # Date range preset used when the URL carries no range: 7d | 30d | 90d.
+#   # Default: 30d. The 90-day cap on custom ranges is unchanged.
+#   defaultDateRange: 30d
+#   # Organisation name in the top bar. Default: Organization. Takes priority
+#   # over the deprecated NEXT_PUBLIC_ORG_NAME variable.
+#   orgName: Acme Corp
+
+# Data options.
+#
+# data:
+#   retention:
+#     # Days a DailyRollup is kept (30-3650). Default: 365. Shown on
+#     # Settings -> Sync and data; the collector applies it (Phase 6).
+#     dailyRollupDays: 365

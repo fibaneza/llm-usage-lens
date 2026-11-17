@@ -27,8 +27,9 @@ import {
 // disabled operation returns 403 OPERATION_DISABLED before any LiteLLM call,
 // writes and, since LD19, reads), "Edition" (Enterprise-only operations return
 // 403 OPERATION_UNAVAILABLE on OSS with no call; edition from APP_ENV),
-// "Guardrail configuration" precedence (saved OperationToggles > config file >
-// LD10), decision LD10 (resetMemberSpend and deleteKey default off), threat
+// "Guardrail configuration" precedence (amended 2026-11-17, unit CFG, user
+// decision D1: config file > saved OperationToggles > LD10 for an operation the
+// file sets; saved > LD10 otherwise), decision LD10 (resetMemberSpend and deleteKey default off), threat
 // LT15; implementation-phases L2 Verify.
 //
 // Contract: operations throw an error with `{ code, status: 403 }` where code
@@ -230,7 +231,7 @@ describe("saved OperationToggles (UI layer)", () => {
   });
 });
 
-describe("config file layer and precedence UI > file > LD10", () => {
+describe("config file layer and precedence file > UI > LD10 (D1, unit CFG)", () => {
   it("a file entry enabled:false disables an operation that LD10 enables", async () => {
     const ops = await load({}, { createTeam: { enabled: false } });
     await expect(
@@ -239,16 +240,19 @@ describe("config file layer and precedence UI > file > LD10", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
-  it("a saved UI value overrides the file and LD10 (the only way to switch a default-off operation on)", async () => {
+  it("a saved value cannot re-enable an operation the file switched off (D1, Q1); it still overrides LD10 elsewhere", async () => {
     await storeToggles({ createTeam: true, deleteKey: true, blockKey: false });
     const ops = await load({}, { createTeam: { enabled: false } });
-    await ops.createTeam!({ teamAlias: "A", dashboardTeamId: "team-a" }, CTX);
+    await expect(
+      ops.createTeam!({ teamAlias: "A", dashboardTeamId: "team-a" }, CTX),
+    ).rejects.toMatchObject(DISABLED);
+    expect(fake.calls).toHaveLength(0);
     await ops.deleteKey!({ tokenId: TOKEN_A }, CTX);
-    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls).toHaveLength(1);
     await expect(
       ops.blockKey!({ tokenId: TOKEN_A }, CTX),
     ).rejects.toMatchObject(DISABLED);
-    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls).toHaveLength(1);
   });
 });
 

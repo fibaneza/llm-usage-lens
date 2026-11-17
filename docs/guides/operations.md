@@ -30,6 +30,25 @@ the existing SNS topic supplied as `alarmTopicArn`.
 - **Restart without a change:** `aws ecs update-service --cluster <cluster>
   --service <service> --force-new-deployment`.
 
+## Change the configuration file
+
+Organisation settings (LiteLLM operation defaults, display options, data
+retention) live in `apps/dashboard/config/config.yaml`, which ships inside
+the image ([System Architecture — *Configuration file*](../specs/2026-05-15-system-architecture.md)).
+A key set there wins over the value saved in Settings, and its control shows
+"Set in config.yaml" and is locked.
+
+1. Edit `apps/dashboard/config/config.yaml` on a branch; never add secrets,
+   account IDs, roles or grants (the server refuses to start).
+2. Run the gates locally (`pnpm check`); an invalid file fails the start and
+   names the key path, never the value.
+3. Land on `main` and redeploy (see *Redeploy*). The file is read once at
+   start, so every change needs a new deployment or restart.
+
+Removing a key unlocks the setting and restores the value saved in Settings.
+`APP_CONFIG_FILE` points the server at a different file (for a mounted
+file); unset or empty means the baked-in one.
+
 ## Secret rotation
 
 Tasks read secrets only at start, so rotate then force a new deployment.

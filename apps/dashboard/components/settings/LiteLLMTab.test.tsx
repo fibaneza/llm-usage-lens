@@ -79,7 +79,7 @@ describe("LiteLLMTab", () => {
       await screen.findByRole("switch", { name: "createTeam" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /reset to file defaults/i }),
+      screen.getByRole("button", { name: /reset to defaults/i }),
     ).toBeInTheDocument();
   });
 
@@ -99,7 +99,7 @@ describe("LiteLLMTab", () => {
     await screen.findByTestId("litellm-op-createTeam");
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /reset to file defaults/i }),
+      screen.queryByRole("button", { name: /reset to defaults/i }),
     ).not.toBeInTheDocument();
   });
 

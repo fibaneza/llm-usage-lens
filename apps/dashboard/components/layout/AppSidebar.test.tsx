@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SidebarProvider } from "@/components/ui/sidebar";
 import type { NavScope } from "@/lib/nav";
-import { AppSidebar } from "./AppSidebar";
+import { AppSidebar, AppSidebarFallback } from "./AppSidebar";
 
 const mockUsePathname = vi.fn<() => string>();
 const mockUseSearchParams = vi.fn<() => URLSearchParams>();
@@ -47,6 +47,31 @@ const NAV_TITLES = [
   "LiteLLM",
   "Settings",
 ];
+
+// System Architecture - "Configuration file" (Moved environment values: the
+// server resolves display.orgName > deprecated NEXT_PUBLIC_ORG_NAME > default
+// and passes it to the top bar as a prop), A10.
+describe("AppSidebar organisation name (unit CFG)", () => {
+  it("shows the orgName prop", () => {
+    mockUsePathname.mockReturnValue("/dashboard");
+    mockUseSearchParams.mockReturnValue(new URLSearchParams());
+    render(
+      <SidebarProvider>
+        <AppSidebar orgName="Acme Corp" />
+      </SidebarProvider>,
+    );
+    expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+  });
+
+  it("the pre-hydration fallback shows the same name", () => {
+    render(
+      <SidebarProvider>
+        <AppSidebarFallback orgName="Acme Corp" />
+      </SidebarProvider>,
+    );
+    expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+  });
+});
 
 describe("AppSidebar", () => {
   it("renders all nine navigation links when no scope is given", () => {

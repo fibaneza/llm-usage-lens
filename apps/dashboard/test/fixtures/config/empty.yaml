@@ -1,0 +1,3 @@
+# Test fixture (unit CFG, A9): an empty configuration. Every setting falls
+# back to the database / environment / built-in default, so tests that save
+# toggles (for example deleteKey: true) keep their pre-CFG meaning.

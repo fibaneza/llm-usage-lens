@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 
@@ -19,9 +20,10 @@ export function TeamsContent() {
     "department",
     parseAsString,
   );
+  const defaultPreset = useDefaultPreset();
   const range = useMemo(
-    () => resolveUrlRange(dateFrom, dateTo),
-    [dateFrom, dateTo],
+    () => resolveUrlRange(dateFrom, dateTo, undefined, defaultPreset),
+    [dateFrom, dateTo, defaultPreset],
   );
 
   return (

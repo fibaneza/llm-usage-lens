@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { LiteLLMMeResponseSchema } from "@llm-usage-lens/shared";
 
+import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 
@@ -14,9 +15,10 @@ import { useLiteLLMQuery, useLiteLLMQueryState } from "./use-litellm-query";
 // the cache key, so My usage, the Team area and the tab gate share an entry.
 function useMeRequest() {
   const [{ dateFrom, dateTo }] = useQueryStates(dateRangeSearchParams);
+  const defaultPreset = useDefaultPreset();
   const range = useMemo(
-    () => resolveUrlRange(dateFrom, dateTo),
-    [dateFrom, dateTo],
+    () => resolveUrlRange(dateFrom, dateTo, undefined, defaultPreset),
+    [dateFrom, dateTo, defaultPreset],
   );
   return {
     key: ["me", range.dateFrom, range.dateTo] as const,

@@ -55,6 +55,22 @@ This replaces the Netlify runbook (retired 2026-11-10, Phase 4R.P).
   advanced event selector for DynamoDB data events on the table ARN, so
   break-glass reads and writes can be reviewed (small per-event cost).
 
+## Configuration file
+
+The image carries `apps/dashboard/config/config.yaml` (owned by `root:root`,
+mode `0444`, so the runtime `app` user cannot change it), which the server loads once at start
+([System Architecture — *Configuration file*](../specs/2026-05-15-system-architecture.md)).
+It holds non-secret organisation settings only; secrets stay in SSM and the
+task environment. Changing it means a rebuild and redeploy
+([operations runbook — *Change the configuration file*](operations.md#change-the-configuration-file)).
+No CDK input is needed: the task definition does not set `APP_CONFIG_FILE`.
+
+**Image smoke check (after a deploy).** In the first trace after the task
+starts, the `config.loaded` span's `config.file_set_key_paths` attribute
+lists the keys the file sets (names only, never values). An empty list means
+the shipped file sets nothing; a task that fails to start with a
+configuration error names the key path in its log.
+
 ## 3. Inputs (CDK context)
 
 Pass with `-c key=value`; lists are comma-separated. Never commit real values

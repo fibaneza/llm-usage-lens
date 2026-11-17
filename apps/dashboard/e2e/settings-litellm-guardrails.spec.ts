@@ -8,7 +8,9 @@ import { signInAsTestUser } from "./support/session";
 // "reset to file defaults"; the code-only guardrails shown read-only),
 // "Gateway guardrails" item 6 (wildcard warning on the panel),
 // implementation-phases L2. The API is a stateful in-test fake served through
-// page.route, so nothing reaches the internet (Rule 60.24).
+// page.route, so nothing reaches the internet (Rule 60.24). Unit CFG
+// (2026-11-17): source `file` now means locked by config.yaml (see
+// config-file.spec.ts), so this fake's neutral source is `spec`.
 type Source = "ui" | "file" | "spec";
 
 // Mirrors the real route's PUT contract (app/api/litellm/toggles): `version`
@@ -32,7 +34,7 @@ function createFakeToggles(startVersion = 4) {
         op,
         op in saved
           ? { enabled: saved[op], source: "ui" satisfies Source }
-          : { enabled: def, source: "file" satisfies Source },
+          : { enabled: def, source: "spec" satisfies Source },
       ]),
     ),
   });
@@ -148,7 +150,7 @@ test.describe("settings LiteLLM guardrail configuration", () => {
     ).not.toBeChecked();
     await expect(page.getByRole("switch", { name: "listKeys" })).toBeChecked();
     await expect(page.getByTestId("litellm-op-source-listKeys")).toHaveText(
-      /^file$/i,
+      /^spec$/i,
     );
     await expect(
       page.getByRole("region", { name: /enforced in code/i }),
@@ -172,11 +174,11 @@ test.describe("settings LiteLLM guardrail configuration", () => {
     );
     expect(fake.puts[0]).toEqual({ version: 4, toggles: { listKeys: false } });
 
-    await page.getByRole("button", { name: /reset to file defaults/i }).click();
+    await page.getByRole("button", { name: /reset to defaults/i }).click();
     await page.getByRole("button", { name: /^confirm reset$/i }).click();
     await expect(page.getByRole("switch", { name: "listKeys" })).toBeChecked();
     await expect(page.getByTestId("litellm-op-source-listKeys")).toHaveText(
-      /^file$/i,
+      /^spec$/i,
     );
     expect(fake.puts[1]).toEqual({ version: 5, reset: true });
   });
@@ -201,7 +203,7 @@ test.describe("settings LiteLLM guardrail configuration", () => {
     await openPanel(page);
     await openGuardrails(page);
 
-    const reset = page.getByRole("button", { name: /reset to file defaults/i });
+    const reset = page.getByRole("button", { name: /reset to defaults/i });
     if ((await reset.count()) > 0) await expect(reset).toBeDisabled();
 
     await page.getByRole("switch", { name: "listKeys" }).click();

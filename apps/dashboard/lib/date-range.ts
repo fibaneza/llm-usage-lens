@@ -100,6 +100,7 @@ export function resolveUrlRange(
   dateFrom: string | null | undefined,
   dateTo: string | null | undefined,
   now: Date = new Date(),
+  preset: Exclude<DateRangePreset, "custom"> = DEFAULT_PRESET,
 ): DateRange {
   if (
     !dateFrom ||
@@ -107,7 +108,7 @@ export function resolveUrlRange(
     parseDay(dateFrom) === undefined ||
     parseDay(dateTo) === undefined
   ) {
-    return defaultDateRange(now);
+    return defaultDateRange(now, preset);
   }
   return clampCustomRange({ dateFrom, dateTo });
 }
@@ -126,8 +127,13 @@ export function resolvePreset(
   return { dateFrom: formatDay(from), dateTo: formatDay(today) };
 }
 
-export function defaultDateRange(now: Date = new Date()): DateRange {
-  return resolvePreset(DEFAULT_PRESET, now);
+// `preset` is the configured default (display.defaultDateRange), resolved on
+// the server and passed in so this module stays client-safe (A11).
+export function defaultDateRange(
+  now: Date = new Date(),
+  preset: Exclude<DateRangePreset, "custom"> = DEFAULT_PRESET,
+): DateRange {
+  return resolvePreset(preset, now);
 }
 
 // Derive which preset a concrete range matches. A range matches a preset when its

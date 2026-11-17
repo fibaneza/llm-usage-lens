@@ -37,7 +37,7 @@ const TOGGLES = {
   edition: "oss",
   operations: {
     createTeam: { enabled: false, source: "ui" },
-    getTeam: { enabled: true, source: "file" },
+    getTeam: { enabled: true, source: "spec" },
   },
 };
 const link = (teamId: string, litellmTeamId: string, version = 1) => ({
@@ -157,7 +157,7 @@ describe("LiteLLMPanel role x section matrix (LD24)", () => {
         screen.getByTestId("litellm-op-source-createTeam"),
       ).toHaveTextContent(/^ui$/);
       expect(screen.getByTestId("litellm-op-source-getTeam")).toHaveTextContent(
-        /^file$/,
+        /^spec$/,
       );
       expect(
         screen.getByRole("region", { name: /enforced in code/i }),
@@ -165,12 +165,12 @@ describe("LiteLLMPanel role x section matrix (LD24)", () => {
       if (editGuardrails) {
         expect(screen.getAllByRole("switch")).toHaveLength(2);
         expect(
-          screen.getByRole("button", { name: /reset to file defaults/i }),
+          screen.getByRole("button", { name: /reset to defaults/i }),
         ).toBeInTheDocument();
       } else {
         expect(screen.queryAllByRole("switch")).toHaveLength(0);
         expect(
-          screen.queryByRole("button", { name: /reset to file defaults/i }),
+          screen.queryByRole("button", { name: /reset to defaults/i }),
         ).toBeNull();
         expect(row).toHaveTextContent(/off/i);
         expect(screen.getByTestId("litellm-op-getTeam")).toHaveTextContent(

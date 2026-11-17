@@ -22,4 +22,22 @@ describe("DataRetention", () => {
     expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
+
+  // System Architecture - "Configuration file" (v1 keys: data.retention
+  // .dailyRollupDays, default 365, shown on Settings -> Sync and data with its
+  // source); Design System - Settings Page ("Data retention: TTL configuration
+  // display ... the value and its source"). Props are optional so the
+  // pre-CFG call `<DataRetention />` keeps meaning 365 days, source default.
+  it("shows the configured value and says it is set in config.yaml", () => {
+    render(<DataRetention days={730} source="file" />);
+    expect(screen.getByText(/730 days/)).toBeInTheDocument();
+    expect(screen.queryByText(/365 days/)).not.toBeInTheDocument();
+    expect(screen.getByText(/set in config\.yaml/i)).toBeInTheDocument();
+  });
+
+  it("with the default source shows 365 days and no config.yaml note", () => {
+    render(<DataRetention days={365} source="default" />);
+    expect(screen.getByText(/365 days/)).toBeInTheDocument();
+    expect(screen.queryByText(/set in config\.yaml/i)).not.toBeInTheDocument();
+  });
 });

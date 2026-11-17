@@ -51,11 +51,15 @@ export const env = createEnv({
     DYNAMODB_ENDPOINT: z.url().optional(),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
     OTEL_SERVICE_NAME: z.string().default("llm-usage-lens"),
+    // Path to a mounted config.yaml; unset (or empty) means the baked-in
+    // config/config.yaml (System Architecture — Configuration file, A3, A13).
+    APP_CONFIG_FILE: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.url(),
-    // Organization name shown in the top bar (design-system spec — Layout).
-    NEXT_PUBLIC_ORG_NAME: z.string().min(1).default("Organization"),
+    // Deprecated fallback (unit CFG, A10): set display.orgName in config.yaml.
+    // The top bar's name resolves file > this variable > "Organization".
+    NEXT_PUBLIC_ORG_NAME: z.string().min(1).optional(),
   },
   experimental__runtimeEnv: {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,

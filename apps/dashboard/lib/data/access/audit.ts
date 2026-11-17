@@ -91,7 +91,7 @@ export type DeniedAuditInput = {
   actor: string;
   action: AuditAction;
   requestId: string;
-  code: "FORBIDDEN" | "NOT_FOUND" | "PRIVILEGED_TARGET";
+  code: "FORBIDDEN" | "NOT_FOUND" | "PRIVILEGED_TARGET" | "CONFIG_FILE_LOCKED";
   route?: { method: string; pattern: string };
   target?: { type: string; id: string };
   teamId?: string;

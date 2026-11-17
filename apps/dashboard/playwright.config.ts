@@ -101,7 +101,15 @@ export default defineConfig({
         E2E_LITELLM_SERVICE_KEY,
       },
     },
-    devServer({ port: E2E_PORT, baseUrl: E2E_BASE_URL, table: E2E_TABLE }),
+    // Unit CFG (A9): the main server reads a fixture config.yaml through
+    // APP_CONFIG_FILE (e2e/config-file.spec.ts); the probe server keeps the
+    // checked-in file, so the app also starts with it.
+    devServer({
+      port: E2E_PORT,
+      baseUrl: E2E_BASE_URL,
+      table: E2E_TABLE,
+      configFile: "test/fixtures/config/e2e.yaml",
+    }),
     devServer({
       port: E2E_PROBE_PORT,
       baseUrl: E2E_PROBE_BASE_URL,
@@ -116,11 +124,13 @@ function devServer({
   baseUrl,
   table,
   distDir,
+  configFile,
 }: {
   port: number;
   baseUrl: string;
   table: string;
   distDir?: string;
+  configFile?: string;
 }) {
   return {
     command: E2E_PRODUCTION_SERVERS
@@ -166,6 +176,9 @@ function devServer({
       LITELLM_SERVICE_KEY: E2E_LITELLM_SERVICE_KEY,
       LITELLM_ALLOWED_HOSTS: E2E_LITELLM_HOST,
       ...(distDir === undefined ? {} : { NEXT_DIST_DIR: distDir }),
+      // Named only for the server that needs a fixture; otherwise the loader
+      // uses the checked-in config/config.yaml.
+      ...(configFile === undefined ? {} : { APP_CONFIG_FILE: configFile }),
     },
   };
 }

@@ -3,9 +3,16 @@ import { type CSSProperties, type ReactNode, Suspense } from "react";
 
 import { auth } from "@/auth";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { DefaultPresetProvider } from "@/components/providers/DefaultPresetProvider";
 import { AppSidebar, AppSidebarFallback } from "@/components/layout/AppSidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { env } from "@/env";
 import { scopeFor } from "@/lib/api/scoped-rollups";
+import { getAppConfig } from "@/lib/config/app-config";
+import {
+  resolveDefaultDateRange,
+  resolveOrgName,
+} from "@/lib/config/resolvers";
 
 // Shell: a collapsible sidebar (brand + grouped nav) beside the content inset.
 // The inset opens with its own top bar (page title + sync status, account
@@ -53,20 +60,29 @@ export default async function DashboardLayout({
   // still enforces access itself, and the error is recorded on the active
   // span (Rule 60.17).
   const scope = await navScopeOrUndefined();
+  // Resolved from config.yaml on the server and passed down (System
+  // Architecture — Configuration file, A10, A11).
+  const config = getAppConfig();
+  const orgName = resolveOrgName(config, env.NEXT_PUBLIC_ORG_NAME).value;
+  const defaultPreset = resolveDefaultDateRange(config).value;
   return (
-    <SidebarProvider style={{ "--header-height": "3.5rem" } as CSSProperties}>
-      {/* AppSidebar reads the URL via useSearchParams (issue #75 — carries the
+    <DefaultPresetProvider preset={defaultPreset}>
+      <SidebarProvider style={{ "--header-height": "3.5rem" } as CSSProperties}>
+        {/* AppSidebar reads the URL via useSearchParams (issue #75 — carries the
           date range onto nav links), so it sits under Suspense for static
           prerender (Rule 60.12); the fallback is the same rail with bare hrefs. */}
-      <Suspense fallback={<AppSidebarFallback scope={scope} />}>
-        <AppSidebar scope={scope} />
-      </Suspense>
-      <SidebarInset className="min-w-0">
-        <AppHeader scope={scope} />
-        <div className="w-full flex-1 p-4 md:p-6 min-[90rem]:p-8">
-          {children}
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+        <Suspense
+          fallback={<AppSidebarFallback scope={scope} orgName={orgName} />}
+        >
+          <AppSidebar scope={scope} orgName={orgName} />
+        </Suspense>
+        <SidebarInset className="min-w-0">
+          <AppHeader scope={scope} />
+          <div className="w-full flex-1 p-4 md:p-6 min-[90rem]:p-8">
+            {children}
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </DefaultPresetProvider>
   );
 }

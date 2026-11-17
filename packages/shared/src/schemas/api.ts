@@ -19,6 +19,7 @@ export const API_ERROR_CODES = [
   "REAUTH_REQUIRED",
   "SSO_BOUND",
   "WEAK_PASSWORD",
+  "CONFIG_FILE_LOCKED",
 ] as const;
 
 export const ApiErrorCodeSchema = z.enum(API_ERROR_CODES);

@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 
@@ -17,9 +18,10 @@ export function DepartmentsContent() {
   const [{ dateFrom, dateTo }] = useQueryStates(dateRangeSearchParams);
   // URL values are untrusted: a missing or malformed range falls back to the
   // last 30 days and a valid one is capped at 90 days (Rule 20.8).
+  const defaultPreset = useDefaultPreset();
   const range = useMemo(
-    () => resolveUrlRange(dateFrom, dateTo),
-    [dateFrom, dateTo],
+    () => resolveUrlRange(dateFrom, dateTo, undefined, defaultPreset),
+    [dateFrom, dateTo, defaultPreset],
   );
 
   return (

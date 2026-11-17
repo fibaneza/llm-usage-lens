@@ -127,7 +127,7 @@ Phase 1 (Foundation).
   - Tablet: sidebar overlay
   - Desktop: persistent sidebar + content
 - [x] Build top bar
-  - User menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`)
+  - User menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`; from unit CFG `display.orgName` in `config.yaml`, the variable a deprecated fallback — System Architecture — *Configuration file*, 2026-11-17)
   - `SyncStatusBadge` placeholder (no real data yet — neutral "no sync" state, never an error)
   - `SyncCountdown` placeholder
   - Compact forms per breakpoint (badge/countdown icon-only below `lg`, search icon-only `md`–1439) per Design System *Layout* (follow-up, 2026-10-29)
@@ -692,8 +692,8 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [x] Fake LiteLLM for both editions; contract test of every call against the snapshot
 - [x] `litellm-changed-by` on every write call, built from the session (LiteLLM spec — *Audit*, LD14)
 - [ ] Gateway guardrails (LiteLLM spec — *Gateway guardrails*, LD4, LD18; decided 2026-11-15): one outbound choke point, path-parameter validation and encoding, hard-limit denylist test, exact bodies, wildcard warning on the panel; the runbook records the key setting that refuses inference (LD18)
-- [x] Guardrail configuration (LiteLLM spec — *Guardrail configuration*, LD19; decided 2026-11-15): `apps/dashboard/config/litellm-gateway.json` + `LiteLLMGatewayConfigSchema` (startup validation, narrow only); read toggles; effective value + source per operation and the read-only guardrail summary on the Settings → LiteLLM panel; reset to file defaults (audited)
-- [x] Verify: structural allowlist test; `allowed_routes` list = runbook = gateway paths; LT3, LT4, LT7, LT14, LT15, LT17, LT19; disabled operation (write or read) → `403 OPERATION_DISABLED` with no call; precedence UI > file > LD10; the config schema rejects an unknown operation, route or field and any `enabled: true`; connection-test probes ignore read toggles
+- [x] Guardrail configuration (LiteLLM spec — *Guardrail configuration*, LD19; decided 2026-11-15): `apps/dashboard/config/litellm-gateway.json` + `LiteLLMGatewayConfigSchema` (startup validation, narrow only); read toggles; effective value + source per operation and the read-only guardrail summary on the Settings → LiteLLM panel; reset to file defaults (audited). *Amended 2026-11-17 (unit CFG, user decision D1): the file moves to `config/config.yaml` and wins over the UI for the operations it sets; the reset keeps file-set operations (LiteLLM spec — LD19).*
+- [x] Verify: structural allowlist test; `allowed_routes` list = runbook = gateway paths; LT3, LT4, LT7, LT14, LT15, LT17, LT19; disabled operation (write or read) → `403 OPERATION_DISABLED` with no call; precedence UI > file > LD10 (superseded 2026-11-17 by unit CFG: file > UI > LD10 for file-set operations, user decision D1; LiteLLM spec — LD19); the config schema rejects an unknown operation, route or field and any `enabled: true`; connection-test probes ignore read toggles
 
 ### L3 — Read views (`feature/phase-l3-litellm-views`)
 
@@ -777,6 +777,23 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [x] Pure visibility function in `lib/settings-tabs.ts` driven by `accessCapabilities`; tab row and Access sub-tab row on the existing `Tabs`, active by route, horizontal scroll at 375
 - [x] Hash resolver: old `/dashboard/settings#<section-slug>` links (including `#role-grants`, `#password-users`) land on the right tab and sub-tab; the step-up itself returns to the final tab URL (Access Control D33a)
 - [x] Verify: per-role tabs and sub-tabs exactly as the matrix (admin, org-admin, auditor, team admin, viewer without scope, master user); a forbidden tab URL is `404`; hash redirects; Back works across tabs; every tab axe clean and without horizontal page scroll at 375/768/1024/1440; no tab taller than about two screens at 1440×900; every old per-role section assertion still holds on its new tab
+
+## App config file (unit CFG; decided 2026-11-17)
+
+### CFG — app config file (`feature/app-config-yaml`)
+
+*Added 2026-11-17 at the user's request (2026-11-16: configure the app from a `config.yaml` that wins over database configuration, is loaded at startup and ships in the Docker image; clarified the same day that it does not replace `.env`); [System Architecture — *Configuration file*](2026-05-15-system-architecture.md) is authoritative, with decisions D1–D3, Q1–Q3 and A1–A16 recorded there. Runs at the coordinator's direction (prompt: `prompts/app_config_yaml_prompt.md`); its locked-state UI sits on the Settings tabs of unit D and the toggle routes of L3d. One branch, one squash commit (Rule 30.4).*
+
+- [x] Spec amendment: System Architecture *Configuration file*; LiteLLM spec LD19 and *Guardrail configuration* (file > UI > LD10 for file-set operations); Data Model *Settings shadowed by the configuration file* and the retention key; Platform *Runtime* image contents; Design System stack and Rule 40 (`yaml`); Access Control T35–T39 and the `CONFIG_FILE_LOCKED` error code; this block
+- [x] `AppConfigSchema` and its inferred type in `packages/shared` (strict; `litellm.operations` is the former `LiteLLMGatewayConfigSchema`; `display.defaultDateRange`, `display.orgName`, `data.retention.dailyRollupDays`; secret-shaped and authorization keys rejected)
+- [x] `apps/dashboard/lib/config/app-config.ts` (`server-only`): reads `config/config.yaml` or `APP_CONFIG_FILE` once, `yaml` with safe options and a 64 KiB cap, validates, freezes; typed accessors and `isFileSet(keyPath)`; startup emits file-set key paths (names only) through OpenTelemetry
+- [x] `config/litellm-gateway.json` converted into `config/config.yaml`: its two `litellm.operations` entries kept as commented examples, not set (A16), every other key documented as a comment; the JSON file and its import deleted; `loadGatewayConfig()` unchanged for callers
+- [x] One resolver per v1 setting (operation toggles; default date range; organisation name with the deprecated `NEXT_PUBLIC_ORG_NAME` fallback; rollup retention shown on Settings → *Sync and data*)
+- [x] `PUT /api/litellm/toggles`: `409 CONFIG_FILE_LOCKED` for a file-set operation after `401`/`403`/`400`, before any write, one `denied` audit; `reset` keeps the saved values of file-set operations; registered in the shared route-contract suite (Rule 60.23)
+- [x] Settings → LiteLLM *Guardrails*: "Set in config.yaml" badge and disabled toggle for file-set operations (source `file`)
+- [x] `apps/dashboard/Dockerfile` copies the file into the runner stage at the loader's path, owned by `root:root`, mode `0444` (the runtime `app` user can read it but not change or chmod it); `outputFileTracingIncludes` added if the `standalone` output needs it; `infra/` changes only if the task definition must set `APP_CONFIG_FILE` *(Built 2026-11-17: the COPY is required, since the standalone trace does not include the file; `outputFileTracingIncludes` is not needed and `infra/` is unchanged. `docker build` not run, because Docker is not installed on the build machine.)*
+- [x] `APP_CONFIG_FILE` in `env.ts` and `.env.example`; `NEXT_PUBLIC_ORG_NAME` marked deprecated; docs: `docs/guides/operations.md` (edit the file, rebuild, redeploy; restart needed), `docs/guides/dashboard-deployment.md`, `README.md` *(Built 2026-11-17: `.env.example`, `env.ts` and the three guides; `NEXT_PUBLIC_ORG_NAME` is optional with no default so the variable step of the order is reachable.)*
+- [ ] Verify: schema rejects an unknown key, a wrong type, a duplicate key, a secret-shaped key, each authorization key and `enabled: true` (T35, T36, T38); loader: missing default file → empty config, missing `APP_CONFIG_FILE` file → throws, invalid or oversize file → throws naming the key path with no value, the file is read once (T38); the converted file yields exactly the former gateway config; precedence per v1 setting against DynamoDB Local — file only, database only, both (file wins), neither (default), and removing the key restores the stored value; `409 CONFIG_FILE_LOCKED` with no write and one `denied` audit, `401` and `403` first, a write to an unset operation still succeeds (T39); badge and disabled control on a file-set operation, an unset one editable (T37); one headless e2e spec with a fixture file shows the locked setting and the app starts with the checked-in file; gitleaks green on the file (T36); `pnpm build:ci` green; `docker build` puts the file at the expected path (or Docker's absence is reported); `cdk synth` clean if `infra/` changed
 
 ---
 
@@ -1101,6 +1118,8 @@ OTEL_SERVICE_NAME=llm-usage-lens
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_ORG_NAME=                 # deprecated from unit CFG: set display.orgName in config.yaml; kept as a fallback for one release
+APP_CONFIG_FILE=                      # optional (unit CFG): path to a mounted config.yaml; unset → the baked-in apps/dashboard/config/config.yaml
 
 # Framework-set, never set manually; read through env.ts for the sign-in provider checks
 # NODE_ENV, NEXT_PHASE

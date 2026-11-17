@@ -14,6 +14,7 @@ import {
 } from "@/components/charts/LazyCharts";
 import { Panel } from "@/components/display/Panel";
 import { SectionBoundary } from "@/components/display/SectionBoundary";
+import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 
@@ -31,9 +32,10 @@ export function OverviewContent() {
   const [{ dateFrom, dateTo }] = useQueryStates(dateRangeSearchParams);
   // URL values are untrusted: a missing or malformed range falls back to the
   // last 30 days and a valid one is capped at 90 days (Rule 20.8).
+  const defaultPreset = useDefaultPreset();
   const range = useMemo(
-    () => resolveUrlRange(dateFrom, dateTo),
-    [dateFrom, dateTo],
+    () => resolveUrlRange(dateFrom, dateTo, undefined, defaultPreset),
+    [dateFrom, dateTo, defaultPreset],
   );
   const [attempt, setAttempt] = useState(0);
   const onRetry = useCallback(() => setAttempt((n) => n + 1), []);

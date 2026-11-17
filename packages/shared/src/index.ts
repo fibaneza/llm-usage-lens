@@ -260,6 +260,9 @@ export type {
   TeamLink,
 } from "./schemas/litellm-gateway";
 
+export { AppConfigSchema } from "./schemas/app-config";
+export type { AppConfig } from "./schemas/app-config";
+
 export {
   LiteLLMAuditResponseSchema,
   LiteLLMKeysResponseSchema,

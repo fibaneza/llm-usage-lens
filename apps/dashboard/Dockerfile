@@ -35,6 +35,10 @@ RUN addgroup -S -g 1001 app && adduser -S -u 1001 -G app app
 COPY --from=build --chown=app:app /repo/apps/dashboard/.next/standalone ./
 COPY --from=build --chown=app:app /repo/apps/dashboard/.next/static apps/dashboard/.next/static
 COPY --from=build --chown=app:app /repo/apps/dashboard/public apps/dashboard/public
+# The baked-in app config (System Architecture — Configuration file): the loader
+# reads apps/dashboard/config/config.yaml relative to its own module, and the
+# standalone trace does not carry a file that is only read at runtime.
+COPY --from=build --chown=root:root --chmod=0444 /repo/apps/dashboard/config/config.yaml apps/dashboard/config/config.yaml
 USER app
 EXPOSE 3000
 CMD ["node", "apps/dashboard/server.js"]

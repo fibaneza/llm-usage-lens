@@ -122,6 +122,8 @@ Dashboard environment variables live in `apps/dashboard/` and follow this preced
 6. **`.env`:** Base shared local defaults.
 7. **Schema Defaults:** Fallbacks validated by `@t3-oss/env-nextjs` in `apps/dashboard/env.ts`.
 
+Organisation settings that are not secrets or deployment wiring (LiteLLM operation defaults, display options, data retention) live in [`apps/dashboard/config/config.yaml`](apps/dashboard/config/config.yaml), loaded once at start and shipped in the image. A key set there wins over the value saved in Settings; `NEXT_PUBLIC_ORG_NAME` is deprecated in favour of `display.orgName`. See [System Architecture — *Configuration file*](docs/specs/2026-05-15-system-architecture.md) and the [operations runbook](docs/guides/operations.md#change-the-configuration-file).
+
 ---
 
 ## Development Scripts & Testing

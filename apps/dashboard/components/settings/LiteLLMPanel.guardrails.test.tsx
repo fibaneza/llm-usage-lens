@@ -18,6 +18,12 @@ import type { LiteLLMPanelCapabilities } from "./LiteLLMPanel";
 // (/api/litellm/toggles GET Admin+Auditor, PUT Admin), implementation-phases
 // L2, Rules 40 (UI) and 60.24 (no real network).
 //
+// Unit CFG (System Architecture — "Configuration file", Locked settings, A6;
+// LiteLLM spec LD19, amended 2026-11-17): source `file` now means locked by
+// config.yaml: the badge reads "Set in config.yaml" and the switch is disabled;
+// every other fixture below uses `spec` where it needs a neutral source. Access
+// Control T37 (the UI shows the lock; the server refuses regardless, T39).
+//
 // Contract for the developer (component):
 //   <LiteLLMPanel capabilities={...} /> (unit A1, LD24): editGuardrails false
 //   renders values read-only (the role x section matrix is in
@@ -105,7 +111,7 @@ function toggles(
 ): Toggles {
   const operations: Ops = {};
   for (const n of [...WRITES, ...READS]) {
-    operations[n] = { enabled: !OFF_BY_DEFAULT.has(n), source: "file" };
+    operations[n] = { enabled: !OFF_BY_DEFAULT.has(n), source: "spec" };
   }
   Object.assign(operations, over.ops);
   return {
@@ -223,7 +229,7 @@ describe("LiteLLMPanel operation toggles", () => {
       /^spec$/i,
     );
     expect(screen.getByTestId("litellm-op-source-deleteKey")).toHaveTextContent(
-      /^file$/i,
+      /^spec$/i,
     );
     expect(screen.getByTestId("litellm-op-createTeam")).toContainElement(
       screen.getByTestId("litellm-op-source-createTeam"),
@@ -390,7 +396,7 @@ describe("LiteLLMPanel Guardrails grouped by operation family (G6)", () => {
   const extra = Object.fromEntries(
     [...L7_OPS, UNKNOWN_OP].map((n) => [
       n,
-      { enabled: true, source: "file" as Source },
+      { enabled: true, source: "spec" as Source },
     ]),
   );
 
@@ -439,8 +445,8 @@ describe("LiteLLMPanel Guardrails grouped by operation family (G6)", () => {
         version: 1,
         edition: "oss",
         operations: {
-          getTeam: { enabled: true, source: "file" },
-          createTeam: { enabled: true, source: "file" },
+          getTeam: { enabled: true, source: "spec" },
+          createTeam: { enabled: true, source: "spec" },
         },
       },
     });
@@ -566,7 +572,7 @@ describe("LiteLLMPanel on a fresh deployment (nothing saved, GET reports version
     renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     const reset = screen.queryByRole("button", {
-      name: /reset to file defaults/i,
+      name: /reset to defaults/i,
     });
     if (reset !== null) expect(reset).toBeDisabled();
   });
@@ -580,7 +586,7 @@ describe("LiteLLMPanel reset to file defaults", () => {
     renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     await userEvent.click(
-      screen.getByRole("button", { name: /reset to file defaults/i }),
+      screen.getByRole("button", { name: /reset to defaults/i }),
     );
     const confirm = screen.getByRole("group", { name: /confirm reset/i });
     expect(
@@ -611,7 +617,7 @@ describe("LiteLLMPanel reset to file defaults", () => {
       screen.getByTestId("litellm-op-source-createTeam"),
     ).toHaveTextContent(/^ui$/i);
     await userEvent.click(
-      screen.getByRole("button", { name: /reset to file defaults/i }),
+      screen.getByRole("button", { name: /reset to defaults/i }),
     );
     await userEvent.click(
       screen.getByRole("button", { name: /^confirm reset$/i }),
@@ -619,7 +625,7 @@ describe("LiteLLMPanel reset to file defaults", () => {
     await waitFor(() =>
       expect(
         screen.getByTestId("litellm-op-source-createTeam"),
-      ).toHaveTextContent(/^file$/i),
+      ).toHaveTextContent(/^spec$/i),
     );
     expect(screen.getByRole("switch", { name: "createTeam" })).toBeChecked();
     expect(putsOf(calls).map((c) => c.body)).toEqual([
@@ -637,7 +643,7 @@ describe("LiteLLMPanel reset to file defaults", () => {
     renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
     await ready();
     await userEvent.click(
-      screen.getByRole("button", { name: /reset to file defaults/i }),
+      screen.getByRole("button", { name: /reset to defaults/i }),
     );
     await userEvent.click(
       screen.getByRole("button", { name: /^confirm reset$/i }),
@@ -761,7 +767,7 @@ describe("LiteLLMPanel without edit rights", () => {
     ).toHaveTextContent(/^ui$/i);
     expect(screen.queryAllByRole("switch")).toHaveLength(0);
     expect(
-      screen.queryByRole("button", { name: /reset to file defaults/i }),
+      screen.queryByRole("button", { name: /reset to defaults/i }),
     ).toBeNull();
     expect(
       screen.getByRole("region", { name: /enforced in code/i }),
@@ -805,5 +811,101 @@ describe("LiteLLMPanel toggles loading and error states", () => {
       "Toggles unavailable",
     );
     expect(screen.queryAllByRole("switch")).toHaveLength(0);
+  });
+});
+
+// A6 / T37: a file-set operation shows its effective value, the badge
+// "Set in config.yaml" and a disabled switch; an unset one is editable.
+describe("LiteLLMPanel operations set in config.yaml (unit CFG, A6)", () => {
+  const LOCKED = {
+    deleteKey: { enabled: false, source: "file" as Source },
+    getTeam: { enabled: false, source: "file" as Source },
+  };
+
+  it.each(["deleteKey", "getTeam"])(
+    "%s: badge 'Set in config.yaml', value shown, switch disabled",
+    async (name) => {
+      stub({ toggles: toggles({ ops: LOCKED }) });
+      renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
+      await ready();
+      expect(screen.getByTestId(`litellm-op-source-${name}`)).toHaveTextContent(
+        "Set in config.yaml",
+      );
+      const sw = screen.getByRole("switch", { name });
+      expect(sw).not.toBeChecked();
+      expect(sw).toBeDisabled();
+    },
+  );
+
+  // Review W1 (review-blockers.md; WCAG 1.3.1/4.1.2): the disabled switch
+  // names why it is disabled by pointing at the badge element.
+  it.each(["deleteKey", "getTeam"])(
+    "%s: the disabled switch's aria-describedby is the id of its 'Set in config.yaml' badge",
+    async (name) => {
+      stub({ toggles: toggles({ ops: LOCKED }) });
+      renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
+      await ready();
+      const sw = screen.getByRole("switch", { name });
+      const badge = screen.getByTestId(`litellm-op-source-${name}`);
+      expect(badge.id).not.toBe("");
+      expect(sw.getAttribute("aria-describedby")).toBe(badge.id);
+      expect(sw).toHaveAccessibleDescription("Set in config.yaml");
+    },
+  );
+
+  it("an unlocked switch has no aria-describedby to a config.yaml badge", async () => {
+    stub({ toggles: toggles({ ops: LOCKED }) });
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
+    await ready();
+    expect(
+      screen.getByRole("switch", { name: "createTeam" }),
+    ).not.toHaveAttribute("aria-describedby", expect.stringMatching(/\S/));
+  });
+
+  it("an operation with source ui or spec is editable and has no config.yaml badge", async () => {
+    stub({
+      toggles: toggles({
+        ops: { ...LOCKED, listKeys: { enabled: true, source: "ui" } },
+      }),
+    });
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
+    await ready();
+    for (const name of ["createTeam", "listKeys"]) {
+      expect(screen.getByRole("switch", { name })).toBeEnabled();
+      expect(
+        screen.getByTestId(`litellm-op-source-${name}`),
+      ).not.toHaveTextContent(/config\.yaml/i);
+    }
+  });
+
+  it("clicking a locked switch sends no PUT; an unset one still does", async () => {
+    const calls = stub({
+      toggles: toggles({ ops: LOCKED }),
+      putResponse: apiResponse({
+        data: toggles({
+          version: 6,
+          ops: { ...LOCKED, createTeam: { enabled: false, source: "ui" } },
+        }),
+      }),
+    });
+    renderWithProviders(<LiteLLMPanel capabilities={ADMIN} />);
+    await ready();
+    await userEvent.click(screen.getByRole("switch", { name: "deleteKey" }));
+    expect(putsOf(calls)).toHaveLength(0);
+    await userEvent.click(screen.getByRole("switch", { name: "createTeam" }));
+    await waitFor(() => expect(putsOf(calls)).toHaveLength(1));
+    expect(putsOf(calls)[0]?.body).toEqual({
+      version: 5,
+      toggles: { createTeam: false },
+    });
+  });
+
+  it("a read-only viewer sees the badge too", async () => {
+    stub({ toggles: toggles({ ops: LOCKED }) });
+    renderWithProviders(<LiteLLMPanel capabilities={READ_ONLY} />);
+    await openGuardrails();
+    expect(
+      await screen.findByTestId("litellm-op-source-deleteKey"),
+    ).toHaveTextContent("Set in config.yaml");
   });
 });

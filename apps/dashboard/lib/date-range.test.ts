@@ -11,6 +11,7 @@ import {
   presetForRange,
   previousRange,
   resolvePreset,
+  resolveUrlRange,
   toLocalDay,
 } from "./date-range";
 
@@ -41,6 +42,34 @@ describe("resolvePreset", () => {
 describe("defaultDateRange", () => {
   it("is the 30-day preset", () => {
     expect(defaultDateRange(NOW)).toEqual(resolvePreset("30d", NOW));
+  });
+
+  // System Architecture - "Configuration file" (v1 keys: display.defaultDateRange
+  // applies when the URL carries no range; the code default stays 30d). The
+  // server passes the resolved preset in; this module stays client-safe.
+  it.each(["7d", "30d", "90d"] as const)(
+    "takes the configured preset %s as an optional second argument",
+    (preset) => {
+      expect(defaultDateRange(NOW, preset)).toEqual(resolvePreset(preset, NOW));
+    },
+  );
+
+  it("resolveUrlRange without usable URL endpoints uses the configured preset", () => {
+    expect(resolveUrlRange(null, null, NOW, "7d")).toEqual(
+      resolvePreset("7d", NOW),
+    );
+    expect(resolveUrlRange("nope", "2026-06-01", NOW, "90d")).toEqual(
+      resolvePreset("90d", NOW),
+    );
+  });
+
+  it("resolveUrlRange keeps URL endpoints over the configured preset, and the 90-day cap", () => {
+    expect(resolveUrlRange("2026-06-01", "2026-06-05", NOW, "7d")).toEqual({
+      dateFrom: "2026-06-01",
+      dateTo: "2026-06-05",
+    });
+    const capped = resolveUrlRange("2025-01-01", "2026-06-05", NOW, "7d");
+    expect(inclusiveSpanDays(capped)).toBeLessThanOrEqual(MAX_RANGE_DAYS);
   });
 });
 

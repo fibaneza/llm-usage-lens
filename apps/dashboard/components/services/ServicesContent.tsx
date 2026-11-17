@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 
@@ -14,9 +15,10 @@ import { ServicesBody } from "./ServicesBody";
 // boundary, cleared when the range changes (Rule 40.4, 60.12).
 export function ServicesContent() {
   const [{ dateFrom, dateTo }] = useQueryStates(dateRangeSearchParams);
+  const defaultPreset = useDefaultPreset();
   const range = useMemo(
-    () => resolveUrlRange(dateFrom, dateTo),
-    [dateFrom, dateTo],
+    () => resolveUrlRange(dateFrom, dateTo, undefined, defaultPreset),
+    [dateFrom, dateTo, defaultPreset],
   );
 
   return (

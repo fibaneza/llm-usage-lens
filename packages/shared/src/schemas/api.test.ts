@@ -45,6 +45,16 @@ describe("API_ERROR_CODES / ApiErrorCodeSchema", () => {
     }
   });
 
+  // Access Control spec - "Error-code registry" (CONFIG_FILE_LOCKED, 409, the
+  // setting is set in config.yaml; added 2026-11-17, unit CFG; "A new code is
+  // added here first"); System Architecture - "Configuration file", A7.
+  it("registers CONFIG_FILE_LOCKED (unit CFG)", () => {
+    expect(API_ERROR_CODES).toContain("CONFIG_FILE_LOCKED");
+    expect(ApiErrorCodeSchema.safeParse("CONFIG_FILE_LOCKED").success).toBe(
+      true,
+    );
+  });
+
   // Access Control spec - "Error-code registry": REAUTH_REQUIRED (403, a
   // re-auth write without a sign-in in the last 15 minutes; D28). Appended
   // after the established codes so their order above is unchanged.

@@ -4,7 +4,13 @@ import { SyncStatusPanel } from "@/components/settings/SyncStatusPanel";
 
 // Sync and data tab (Design System "Settings Page", unit D). The sync panel
 // carries its own boundary.
-export function SyncTab() {
+export function SyncTab({
+  retentionDays,
+  retentionSource,
+}: {
+  retentionDays?: number;
+  retentionSource?: "file" | "default";
+}) {
   return (
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-3">
@@ -15,7 +21,7 @@ export function SyncTab() {
         heading="Data retention"
         title="the data retention policy"
       >
-        <DataRetention />
+        <DataRetention days={retentionDays} source={retentionSource} />
       </SettingsSection>
     </div>
   );

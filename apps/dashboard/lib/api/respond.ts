@@ -198,7 +198,7 @@ export async function recordDeniedWrite(
   request: Request,
   actor: string,
   denied: NonNullable<RouteOptions["denied"]>,
-  code: "FORBIDDEN" | "NOT_FOUND" = "FORBIDDEN",
+  code: "FORBIDDEN" | "NOT_FOUND" | "CONFIG_FILE_LOCKED" = "FORBIDDEN",
 ): Promise<void> {
   try {
     const record =

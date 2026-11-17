@@ -15,8 +15,10 @@ import {
   jsonData,
   jsonError,
   parseJsonBody,
+  recordDeniedWrite,
   withRoute,
 } from "@/lib/api/respond";
+import { getFileSetKeyPaths, isFileSet } from "@/lib/config/app-config";
 import {
   getOperationToggles,
   putOperationToggles,
@@ -35,7 +37,10 @@ import {
 // names outside the allowlist are refused), "Guardrail configuration" (each
 // operation's effective value and its source ui | file | spec; "reset to file
 // defaults" is Admin, audited and versioned like any toggle write). A toggle
-// write is dashboard-only: no LiteLLM call.
+// write is dashboard-only: no LiteLLM call. An operation config.yaml sets is
+// locked (System Architecture — Configuration file, A7, A14): a write naming
+// one is refused whole with 409 CONFIG_FILE_LOCKED after 401/403/400, before
+// any DynamoDB write, and a reset keeps the saved values of such operations.
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +56,18 @@ const PutBodySchema = z.union([
     reset: z.literal(true),
   }),
 ]);
+
+const TOGGLES_PATTERN = "/api/litellm/toggles";
+
+const isLocked = (name: string): boolean =>
+  isFileSet(`litellm.operations.${name}`);
+
+function lockedOperations(): string[] {
+  const prefix = "litellm.operations.";
+  return getFileSetKeyPaths()
+    .filter((path) => path.startsWith(prefix))
+    .map((path) => path.slice(prefix.length).split(".")[0] ?? "");
+}
 
 function view(saved: OperationToggles | null): OperationTogglesView {
   const file = loadGatewayConfig();
@@ -113,7 +130,7 @@ async function deniedRecord(request: Request) {
     action: reset
       ? ("litellm.toggles.reset" as const)
       : ("litellm.toggles.update" as const),
-    pattern: "/api/litellm/toggles",
+    pattern: TOGGLES_PATTERN,
   };
 }
 
@@ -122,6 +139,19 @@ export const PUT = withRoute(
     const refused = openModeRefusal();
     if (refused) return refused;
     const input = await parseJsonBody(request, PutBodySchema);
+    if (!("reset" in input) && Object.keys(input.toggles).some(isLocked)) {
+      await recordDeniedWrite(
+        request,
+        session.user.oid,
+        { action: "litellm.toggles.update", pattern: TOGGLES_PATTERN },
+        "CONFIG_FILE_LOCKED",
+      );
+      return jsonError(
+        409,
+        "CONFIG_FILE_LOCKED",
+        "An operation is set in config.yaml and cannot be changed here",
+      );
+    }
     const ctx = {
       actor: session.user.oid,
       requestId: randomUUID(),
@@ -130,7 +160,10 @@ export const PUT = withRoute(
     };
     const saved =
       "reset" in input
-        ? await resetOperationToggles({ version: input.version }, ctx)
+        ? await resetOperationToggles(
+            { version: input.version, keep: lockedOperations() },
+            ctx,
+          )
         : await putOperationToggles(input, ctx);
     if (!saved.ok) {
       return jsonError(409, "CONFLICT", "The toggles were changed; reload");

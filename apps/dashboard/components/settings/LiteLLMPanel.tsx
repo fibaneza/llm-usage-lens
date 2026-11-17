@@ -190,7 +190,8 @@ function TogglesSection({ canEdit }: { canEdit: boolean }) {
             className="flex flex-wrap items-center gap-3"
           >
             <span className="text-sm">
-              Delete the saved values and use the file defaults?
+              Delete the saved values and use the defaults? Operations set in
+              config.yaml keep their file value.
             </span>
             <Button
               type="button"
@@ -218,7 +219,7 @@ function TogglesSection({ canEdit }: { canEdit: boolean }) {
               disabled={data.version === 0}
               onClick={() => setConfirming(true)}
             >
-              Reset to file defaults
+              Reset to defaults
             </Button>
           </div>
         )

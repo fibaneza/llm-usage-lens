@@ -10,11 +10,12 @@ export async function register() {
     serviceName: env.OTEL_SERVICE_NAME,
   });
 
-  // Validate config/litellm-gateway.json at server start so an invalid file
-  // fails startup (spec litellm "Guardrail configuration", LD19; Rule 60.19).
-  // Node runtime only; dynamic import keeps the edge runtime unaffected.
+  // Validate config/config.yaml at server start so an invalid file fails
+  // startup (System Architecture — Configuration file; Rule 60.19). Node
+  // runtime only; dynamic import keeps the edge runtime unaffected.
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    await import("@/lib/litellm/gateway-config");
+    const { reportConfigLoaded } = await import("@/lib/config/app-config");
+    reportConfigLoaded();
   }
 }
 

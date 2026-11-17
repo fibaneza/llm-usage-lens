@@ -1,7 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -18,10 +14,8 @@ import {
 // a route or body field or widen), "Allowlist (the
 // gateway)" (operation names), implementation-phases L2 Verify ("the config
 // schema rejects an unknown operation, route or field and a widening value");
-// Rule 60.19.
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
-const CONFIG_PATH = join(ROOT, "apps/dashboard/config/litellm-gateway.json");
-
+// Rule 60.19. The checked-in file moved to config/config.yaml (unit CFG, A8);
+// its conversion test lives in apps/dashboard/lib/config/app-config.test.ts.
 const parse = (v: unknown) => LiteLLMGatewayConfigSchema.safeParse(v);
 const ok = {
   operations: { resetMemberSpend: { enabled: false } },
@@ -174,22 +168,5 @@ describe("ConnectionTestResultSchema — warnings (Gateway guardrails item 6)", 
         warnings: [1],
       }).success,
     ).toBe(false);
-  });
-});
-
-describe("apps/dashboard/config/litellm-gateway.json", () => {
-  it("exists, is valid JSON and parses with LiteLLMGatewayConfigSchema", () => {
-    const json: unknown = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
-    expect(parse(json).success).toBe(true);
-  });
-
-  it("holds no secrets, no wildcardWarning, and only `enabled: false` entries", () => {
-    const json = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as Record<
-      string,
-      unknown
-    >;
-    expect(Object.keys(json)).toEqual(["operations"]);
-    const ops = json.operations as Record<string, { enabled: unknown }>;
-    for (const v of Object.values(ops)) expect(v).toEqual({ enabled: false });
   });
 });

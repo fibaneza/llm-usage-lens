@@ -318,7 +318,7 @@ test.describe("settings LiteLLM by role (LD24)", () => {
     await expect(page.getByTestId("litellm-op-createTeam")).toBeVisible();
     await expect(page.getByRole("switch")).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: /reset to file defaults/i }),
+      page.getByRole("button", { name: /reset to defaults/i }),
     ).toHaveCount(0);
 
     await page.getByRole("tab", { name: "Team links" }).click();

@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { jsonData, parseSearchParams, withRoute } from "@/lib/api/respond";
 import { getIdentityLink } from "@/lib/data/access/identity-links";
+import { getAppConfig } from "@/lib/config/app-config";
+import { resolveDefaultDateRange } from "@/lib/config/resolvers";
 import { defaultDateRange } from "@/lib/date-range";
 import { LiteLLMError } from "@/lib/litellm/client";
 import {
@@ -35,13 +37,17 @@ export const dynamic = "force-dynamic";
 export const GET = withRoute(async (request, _ctx, session) => {
   const refused = openModeRefusal();
   if (refused) return refused;
-  // No range at all means the default 30-day UTC preset; a lone param is
+  // No range at all means the configured default preset (30d unless
+  // config.yaml sets display.defaultDateRange), in UTC; a lone param is
   // still a 400 and the 90-day cap applies.
   const params = new URL(request.url).searchParams;
   const { dateFrom, dateTo } =
     params.has("dateFrom") || params.has("dateTo")
       ? parseSearchParams(request, DateRangeQuerySchema)
-      : defaultDateRange();
+      : defaultDateRange(
+          undefined,
+          resolveDefaultDateRange(getAppConfig()).value,
+        );
   const [link, enabled, { teams, linkedLiteLLMTeamIds }] = await Promise.all([
     getIdentityLink(session.user.oid),
     enabledOperations(),

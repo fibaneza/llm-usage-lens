@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import {
   ApiErrorBodySchema,
@@ -45,6 +47,14 @@ vi.mock("next/cache", async () => {
   const mod = await import("@/test/fakes/next-cache-fake");
   return mod.passThroughNextCache;
 });
+
+const fixture = (name: string) =>
+  fileURLToPath(
+    new URL(`../../../../test/fixtures/config/${name}`, import.meta.url),
+  );
+const CHECKED_IN_CONFIG = fileURLToPath(
+  new URL("../../../../config/config.yaml", import.meta.url),
+);
 
 const HOST = "localhost:3000";
 const URL_ = `http://${HOST}/api/litellm/toggles`;
@@ -177,14 +187,14 @@ describe("GET /api/litellm/toggles", () => {
     },
   );
 
-  it("the shipped config file keeps the LD10 defaults (destructive off, removeTeamMember on, reads on)", async () => {
-    const { GET } = await load();
+  it("the shipped config.yaml locks nothing: LD10 defaults with source 'spec' (A5, A16, B1/B2)", async () => {
+    const { GET } = await load({ APP_CONFIG_FILE: CHECKED_IN_CONFIG });
     const o = await ops(await GET(get(), ctx));
-    expect(o.resetMemberSpend?.enabled).toBe(false);
-    expect(o.deleteKey?.enabled).toBe(false);
-    expect(o.removeTeamMember?.enabled).toBe(true);
-    expect(o.getTeam?.enabled).toBe(true);
-    expect(o.createTeam?.enabled).toBe(true);
+    expect(o.resetMemberSpend).toEqual({ enabled: false, source: "spec" });
+    expect(o.deleteKey).toEqual({ enabled: false, source: "spec" });
+    expect(o.removeTeamMember).toEqual({ enabled: true, source: "spec" });
+    expect(o.getTeam).toEqual({ enabled: true, source: "spec" });
+    for (const v of Object.values(o)) expect(v.source).not.toBe("file");
   });
 
   it("reports edition 'enterprise' for APP_ENV=prod", async () => {
@@ -549,5 +559,192 @@ describe("internal-org-admin on /api/litellm/toggles (LD24, LT22)", () => {
       actor: "oid-granted",
       result: "success",
     });
+  });
+});
+
+async function seedToggles(toggles: Record<string, boolean>, version = 1) {
+  await testDoc().send(
+    new PutCommand({
+      TableName: TEST_TABLE_NAME,
+      Item: {
+        PK: "LITELLM#CONFIG",
+        SK: "TOGGLES",
+        version,
+        toggles,
+        updatedAt: "2026-11-14T09:00:00.000Z",
+      },
+    }),
+  );
+}
+
+// Precedence per setting against DynamoDB Local (CFG Verify: file only,
+// database only, both (file wins), neither (default), key removed -> stored
+// value restored).
+describe("config.yaml precedence for the operation toggles (D1, A1, A6)", () => {
+  const LOCKS = { APP_CONFIG_FILE: fixture("locks-create-team.yaml") };
+  const EMPTY = { APP_CONFIG_FILE: fixture("empty.yaml") };
+
+  it("file only: the file's value, source 'file'", async () => {
+    const { GET } = await load(LOCKS);
+    const o = await ops(await GET(get(), ctx));
+    expect(o.createTeam).toEqual({ enabled: false, source: "file" });
+    expect(o.getTeam).toEqual({ enabled: true, source: "spec" });
+  });
+
+  it("database only: the stored value, source 'ui'", async () => {
+    await seedToggles({ createTeam: false });
+    const { GET } = await load(EMPTY);
+    const o = await ops(await GET(get(), ctx));
+    expect(o.createTeam).toEqual({ enabled: false, source: "ui" });
+  });
+
+  it("both: the file wins over the stored value, source 'file'", async () => {
+    await seedToggles({ createTeam: true });
+    const { GET } = await load(LOCKS);
+    const o = await ops(await GET(get(), ctx));
+    expect(o.createTeam).toEqual({ enabled: false, source: "file" });
+  });
+
+  it("neither: the built-in default (LD10), source 'spec'", async () => {
+    const { GET } = await load(EMPTY);
+    const o = await ops(await GET(get(), ctx));
+    expect(o.createTeam).toEqual({ enabled: true, source: "spec" });
+    expect(o.deleteKey).toEqual({ enabled: false, source: "spec" });
+  });
+
+  it("removing the key from the file restores the stored value, which was never changed", async () => {
+    await seedToggles({ createTeam: true });
+    const locked = await load(LOCKS);
+    expect((await ops(await locked.GET(get(), ctx))).createTeam).toEqual({
+      enabled: false,
+      source: "file",
+    });
+    expect((await stored())?.toggles).toEqual({ createTeam: true });
+
+    const unlocked = await load(EMPTY);
+    expect((await ops(await unlocked.GET(get(), ctx))).createTeam).toEqual({
+      enabled: true,
+      source: "ui",
+    });
+  });
+});
+
+describe("PUT /api/litellm/toggles on an operation the file sets (A7, T39)", () => {
+  const LOCKS = { APP_CONFIG_FILE: fixture("locks-create-team.yaml") };
+
+  it.each([
+    ["the file's own value (false)", { createTeam: false }],
+    ["the opposite value (true)", { createTeam: true }],
+    [
+      "a locked operation next to an unset one",
+      { createTeam: false, getTeam: false },
+    ],
+  ])(
+    "%s: 409 CONFIG_FILE_LOCKED, nothing stored, one denied audit record, no LiteLLM call",
+    async (_n, toggles) => {
+      const { PUT } = await load(LOCKS);
+      const res = await PUT(put({ version: null, toggles }), ctx);
+      await expectError(res, 409, "CONFIG_FILE_LOCKED");
+      expect(JSON.stringify(await res.clone().json())).not.toMatch(/stack/i);
+      expect(await stored()).toBeUndefined();
+      const records = await auditActions();
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        action: "litellm.toggles.update",
+        actor: "oid-test",
+        result: "denied",
+        code: "CONFIG_FILE_LOCKED",
+        route: { method: "PUT", pattern: "/api/litellm/toggles" },
+      });
+      expect(fake.calls).toHaveLength(0);
+    },
+  );
+
+  it("leaves an already stored item untouched (version and values)", async () => {
+    await seedToggles({ createTeam: true, getTeam: false }, 4);
+    const { PUT } = await load(LOCKS);
+    await expectError(
+      await PUT(put({ version: 4, toggles: { createTeam: false } }), ctx),
+      409,
+      "CONFIG_FILE_LOCKED",
+    );
+    const item = await stored();
+    expect(item?.version).toBe(4);
+    expect(item?.toggles).toEqual({ createTeam: true, getTeam: false });
+  });
+
+  it("a write to an operation the file does not set still saves, and the locked one keeps source 'file'", async () => {
+    const { PUT } = await load(LOCKS);
+    const res = await PUT(
+      put({ version: null, toggles: { getTeam: false } }),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const o = await ops(res);
+    expect(o.getTeam).toEqual({ enabled: false, source: "ui" });
+    expect(o.createTeam).toEqual({ enabled: false, source: "file" });
+    expect((await stored())?.toggles).toEqual({ getTeam: false });
+    const records = await auditActions();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ result: "success" });
+  });
+
+  // Ordering: 403 and 400 come before the lock check (A7).
+  it("an Auditor gets 403 FORBIDDEN, not 409, for a locked operation (one denied record, code FORBIDDEN)", async () => {
+    authMock.mockResolvedValue(AUDITOR);
+    const { PUT } = await load(LOCKS);
+    await expectError(
+      await PUT(put({ version: null, toggles: { createTeam: false } }), ctx),
+      403,
+      "FORBIDDEN",
+    );
+    const records = await auditActions();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ result: "denied", code: "FORBIDDEN" });
+  });
+
+  it("an invalid body that names a locked operation is 400, not 409, and is not audited", async () => {
+    const { PUT } = await load(LOCKS);
+    await expectError(
+      await PUT(put({ version: null, toggles: { createTeam: "no" } }), ctx),
+      400,
+      "BAD_REQUEST",
+    );
+    expect(await auditActions()).toHaveLength(0);
+  });
+});
+
+describe("reset keeps the saved values of file-set operations (A7, LD19)", () => {
+  const LOCKS = { APP_CONFIG_FILE: fixture("locks-create-team.yaml") };
+
+  it("clears the saved values of unset operations only, bumps the version and audits a reset", async () => {
+    await seedToggles({ createTeam: true, getTeam: false, listKeys: false });
+    const { PUT } = await load(LOCKS);
+    const res = await PUT(put({ version: 1, reset: true }), ctx);
+    expect(res.status).toBe(200);
+    const data = (await res.clone().json()).data;
+    expect(data.version).toBe(2);
+    expect(data.operations.createTeam).toEqual({
+      enabled: false,
+      source: "file",
+    });
+    expect(data.operations.getTeam).toEqual({ enabled: true, source: "spec" });
+    expect((await stored())?.toggles).toEqual({ createTeam: true });
+    const records = await auditActions();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      action: "litellm.toggles.reset",
+      result: "success",
+    });
+  });
+
+  it("after the key leaves the file, the kept value applies again", async () => {
+    await seedToggles({ createTeam: true, getTeam: false });
+    const locked = await load(LOCKS);
+    await locked.PUT(put({ version: 1, reset: true }), ctx);
+    const unlocked = await load({ APP_CONFIG_FILE: fixture("empty.yaml") });
+    const o = await ops(await unlocked.GET(get(), ctx));
+    expect(o.createTeam).toEqual({ enabled: true, source: "ui" });
+    expect(o.getTeam?.source).toBe("spec");
   });
 });

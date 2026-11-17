@@ -18,7 +18,7 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { env } from "@/env";
+import { DEFAULT_ORG_NAME } from "@/lib/config/resolvers";
 import { withDateRange } from "@/lib/date-range-search-params";
 import {
   isNavItemActive,
@@ -41,12 +41,19 @@ type ToHref = (href: string) => string;
 // filter survives navigation between menus (issue #75). `useSearchParams` opts
 // the subtree into client rendering, so the dashboard layout renders this inside
 // a Suspense boundary with `AppSidebarFallback` (Rule 60.12).
-export function AppSidebar({ scope }: { scope?: NavScope }) {
+export function AppSidebar({
+  scope,
+  orgName,
+}: {
+  scope?: NavScope;
+  orgName?: string;
+}) {
   const searchParams = useSearchParams();
   return (
     <SidebarNav
       toHref={(href) => withDateRange(href, searchParams)}
       scope={scope}
+      orgName={orgName}
     />
   );
 }
@@ -54,11 +61,28 @@ export function AppSidebar({ scope }: { scope?: NavScope }) {
 // Suspense fallback: the same rail with bare hrefs, shown only until the search
 // params resolve on the client. Carries no params (none are known yet), so there
 // is no layout shift versus the resolved sidebar.
-export function AppSidebarFallback({ scope }: { scope?: NavScope }) {
-  return <SidebarNav toHref={(href) => href} scope={scope} />;
+export function AppSidebarFallback({
+  scope,
+  orgName,
+}: {
+  scope?: NavScope;
+  orgName?: string;
+}) {
+  return <SidebarNav toHref={(href) => href} scope={scope} orgName={orgName} />;
 }
 
-function SidebarNav({ toHref, scope }: { toHref: ToHref; scope?: NavScope }) {
+// `orgName` is resolved on the server (config.yaml display.orgName > the
+// deprecated NEXT_PUBLIC_ORG_NAME > "Organization"; System Architecture —
+// Configuration file, A10) and passed down, never read from the client env.
+function SidebarNav({
+  toHref,
+  scope,
+  orgName = DEFAULT_ORG_NAME,
+}: {
+  toHref: ToHref;
+  scope?: NavScope;
+  orgName?: string;
+}) {
   const pathname = usePathname();
   // No scope (signed out, or a bare render) shows the full set; the pages
   // enforce access regardless.
@@ -95,7 +119,7 @@ function SidebarNav({ toHref, scope }: { toHref: ToHref; scope?: NavScope }) {
           <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
             <span className="font-semibold">LLM Usage Lens</span>
             <span className="text-primary text-xs font-medium tracking-wide uppercase">
-              {env.NEXT_PUBLIC_ORG_NAME}
+              {orgName}
             </span>
           </div>
         </Link>

@@ -8,6 +8,7 @@ import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { ModelFilter } from "@/components/filters/ModelFilter";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageTabs } from "@/components/layout/PageTabs";
+import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 import { rankingSearchParams } from "@/lib/ranking-search-params";
@@ -38,9 +39,10 @@ export function RankingContent() {
   const [{ tab, model }, setParams] = useQueryStates(rankingSearchParams);
   // URL values are untrusted: a missing or malformed range falls back to the
   // last 30 days and a valid one is capped at 90 days (Rule 20.8).
+  const defaultPreset = useDefaultPreset();
   const range = useMemo(
-    () => resolveUrlRange(dateFrom, dateTo),
-    [dateFrom, dateTo],
+    () => resolveUrlRange(dateFrom, dateTo, undefined, defaultPreset),
+    [dateFrom, dateTo, defaultPreset],
   );
 
   const modelFilter = (

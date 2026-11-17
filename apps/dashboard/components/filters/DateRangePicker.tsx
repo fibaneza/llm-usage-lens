@@ -12,6 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
 import {
   clampCustomRange,
   type DateRange,
@@ -58,9 +59,11 @@ export function DateRangePicker() {
 
   // URL values are untrusted: a missing or malformed range falls back to the
   // last 30 days; a valid one is order-normalised and capped at 90 days (Rule 20.8).
+  const defaultPreset = useDefaultPreset();
   const range: DateRange = useMemo(
-    () => resolveUrlRange(params.dateFrom, params.dateTo),
-    [params.dateFrom, params.dateTo],
+    () =>
+      resolveUrlRange(params.dateFrom, params.dateTo, undefined, defaultPreset),
+    [params.dateFrom, params.dateTo, defaultPreset],
   );
 
   const activePreset = presetForRange(range);
