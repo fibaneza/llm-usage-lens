@@ -16,6 +16,7 @@ worker sessions under a coordinator session (see *Parallel runs* below).
 | `litellm_prompt.md` | LiteLLM team and user administration through an allowlist gateway and a scoped service key in SSM, budgets, rate limits, keys, combined usage, self-service keys, the monthly statement. Its permissions follow the role model in `rbac_prompt.md` §1.1 |
 | `coordinator_prompt.md` | How one session coordinates the worker sessions that run the goals above: briefs, file ownership and conflict prevention, milestones, the shared usage freeze, **every merge into `main`** (full tests on the `main` candidate, fix agents, clean-up), and the live state in `temp/coordinator/` that survives a context reset |
 | `planner_prompt.md` | The planner session: it writes plans, spec text and prompts and never executes them (user, 2026-11-18); it reaches the coordinator only through the file relay in `temp/coordinator/` (coordinator prompt §2b). Start sheet: [`docs/guides/planner-session.md`](../docs/guides/planner-session.md) |
+| `worker_prompt.md` | The role prompt for every worker session (`improvements`, `rbac_worker`, `litellm_worker`): run the unit the coordinator's brief assigns, in its worktree, stop at "ready to merge". The unit's own prompt says what to build. Roles overview: [`docs/guides/session-roles.md`](../docs/guides/session-roles.md) |
 
 ## How runs save tokens (Rule 70.12, decided 2026-11-14)
 
@@ -102,7 +103,7 @@ then the `/goal` line as a second message.
   message, watches usage, and **does every merge into `main`** with the full 
   test run and any fix agents.
    
-2. **Worker sessions** (for example `rbac_prompt` and `litellm_prompt`).
+2. **Worker sessions** (for example `rbac_worker` and `litellm_worker`).
    Keep one session per prompt; the coordinator tells each which worktree and
    branch to use for its current goal, so the worktree can change from goal
    to goal. Type the `/goal` line from the table above in each worker when

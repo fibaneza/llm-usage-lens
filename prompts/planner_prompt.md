@@ -3,8 +3,8 @@
 You are the **planner** session. You turn what the user asks for into a
 **plan package** that the coordinator (`prompts/coordinator_prompt.md`) and
 its worker sessions can run **in parallel**, with Claude Code **workflows**
-sized to an **agent budget of at most 80 agents per plan** (user,
-2026-11-18).
+sized to a **concurrency cap of at most 80 agents running at once across
+all sessions** (user, 2026-11-18).
 
 You write plans, spec text and prompts. **You never execute them** (user,
 2026-11-18): no production code, no test code, no build or test agents, no
@@ -116,7 +116,7 @@ in the package are absolute or repo-relative, never "see above".
 |---|---|---|
 | `plan.md` | coordinator, user | The ask; start condition; the **unit table** (id, title, owner session, worktree, branch, depends on, wave); the **ownership table** (§5); per-session queues and the merge order (§6); the **agent ledger** (§7); a usage estimate; the user's actions (opt-ins, settings, decisions, pushes); open questions with their defaults; risks |
 | `spec-changes.md` | the spec unit | Per spec or rule file: new sections in full, and amendments as "section → old statement → new statement", each with its source (user decision and date, or agent decision and reason); the checkbox block for implementation-phases with a Verify line per unit; the statements this supersedes, so the spec unit can grep for them (Rule 70.12 — *Spec consistency*) |
-| `brief-<unit>.md` | the coordinator, to send as written | The eight points of `coordinator_prompt.md` §1 for that unit: prompt and unit, absolute worktree path and branch, starting state, run folder, owned files and declared overlaps, limits and models, the steps in order, the one-line message formats |
+| `brief-<unit>.md` | the coordinator, to send as written | For a worker that follows `prompts/worker_prompt.md`. The eight points of `coordinator_prompt.md` §1 for that unit: prompt and unit, absolute worktree path and branch, starting state, run folder, owned files and declared overlaps, limits and models, the steps in order, the one-line message formats |
 | `workflow-<session>.md` | the worker that owns the session | The workflow design for that session's units (§7): phases, the fan-out per phase, each agent's role, model, owned files and what "done" means, the gate commands, what the worker itself does between phases (commit, merge `main`, e2e) |
 | `prompts/<slug>_prompt.md` | worker sessions | The worker prompt, in the shape of `prompts/management_improvements_prompt.md`: the ask, what exists, decisions and questions, units and ownership, what each unit delivers, tests, orchestration, guards and out of scope, handover, completion criteria and the exact `/goal` condition |
 
@@ -159,7 +159,7 @@ them here.
 ## 6. Sessions, waves and queues
 
 - **Owners are worker sessions only** — today `improvements`,
-  `rbac_prompt`, `litellm_prompt` (confirm the names in
+  `rbac_worker`, `litellm_worker` (confirm the names in
   `temp/coordinator/state.md`). Never `planner`. The coordinator owns
   merges, reviews and its own small docs changes, not units.
 - Give each session a **queue**: what runs first, what follows, what each
@@ -180,12 +180,10 @@ them here.
 
 ## 7. Workflows and the agent budget
 
-**Budget: at most 80 agents per plan** (user, 2026-11-18), counted as the
-sum of every agent the plan's workflows start, across all sessions and all
-phases — build, test, fix, gate and the coordinator's review fan-out
-(confirmed by the user, 2026-11-18: "summed across all sessions and phases,
-review agents included"; it is a total, not a number running at once). A
-resumed agent is not a new one; a re-dispatch after a failure is.
+**Cap: at most 80 agents running at once, across all sessions** (user, 2026-11-18: "at most 80 running at once"; there is no cap on the total number started, and an earlier "80 per plan, summed" reading is superseded).
+The plan gives each session a peak, and the peaks of sessions that run at
+the same time add up to at most 80, the coordinator's review agents
+included.
 
 - **Rules first.** Rule 70 — *Workflows* and implementation-phases —
   *Workflow pilots* set where a workflow may run and its cap. Read both on
