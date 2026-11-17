@@ -274,6 +274,9 @@ export {
   LiteLLMTeamDetailResponseSchema,
   LiteLLMUserDetailResponseSchema,
   LiteLLMUserSearchResponseSchema,
+  MemberSumCoverageSchema,
+  MemberSumSchema,
+  SpendSourceSchema,
 } from "./schemas/litellm-views";
 
 export {

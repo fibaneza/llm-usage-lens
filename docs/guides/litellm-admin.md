@@ -197,6 +197,74 @@ Every link write is audited with the actor.
   only) exists as an API but has no page. If its link loses a race, the
   LiteLLM team it created stays in LiteLLM; remove it there by hand.
 
+## 9a. App teams and LiteLLM teams
+
+An **app team** is a dashboard team; a **LiteLLM team** is a team on the
+proxy. UI copy says "team" only for the first (App Teams spec —
+*Vocabulary*).
+
+- **Linked** app teams have a team link (§9) to their own LiteLLM team. Their
+  headline spend is the LiteLLM team's spend (LD29).
+- **Unlinked** app teams have no link. Their headline spend is the member sum
+  (below), badged "Sum of members". Their members may sit in any LiteLLM
+  team, or none.
+- **Linking.** An `internal-admin` or `internal-org-admin` links a team in
+  Settings → LiteLLM → Team links, which has a "Spend source" column for
+  every app team. A Lead cannot link: it would gain read and write over a
+  LiteLLM team it may not own (LD30).
+- **No LiteLLM controls on an unlinked team's page** (LD32): only app
+  membership add and remove. Budgets, limits and keys are managed in LiteLLM
+  or after linking.
+
+### The two figures
+
+- **LiteLLM team** figure: everything spent through that LiteLLM team's keys,
+  including keys owned by people outside the app team.
+- **Sum of members**: everything each app member spent through the gateway,
+  in any LiteLLM team and on personal keys. Admin, org-admin and Auditor also
+  see it on a linked team, beside the LiteLLM team figure; a Lead does not
+  (LT28).
+- The two differ for those reasons, and because membership is read as it is
+  now: a person who moved app team carries earlier spend to the new team.
+- Both are LiteLLM-reported, not billed cost; USD, UTC days. Billed cost
+  stays in the AWS views.
+
+### Coverage and unmatched members
+
+Every member sum shows coverage: members, matched, unmatched and pending.
+Pending affiliations are counted, not summed. An unmatched member shows "not
+in LiteLLM", never $0. To fix one, either:
+
+- link the identity's `litellmUserId` (§7), or
+- make the LiteLLM user's email match the identity's verified email. A
+  lookup result with a different email is dropped (LT24).
+
+### Organisation page
+
+Two tables, because the cuts do not add up to each other:
+
+- **LiteLLM teams:** every proxy team, with spend, budget, members and its
+  linked app team. **The headline total comes from this table** (LD33):
+  summing app teams would count twice a member of an unlinked team who spends
+  through a LiteLLM team linked to another app team.
+- **App teams:** per app team, labelled as overlapping rows that do not add
+  up to the total.
+- One request makes at most 200 member reads. Unlinked teams are summed
+  smallest first; one that does not fit shows no spend with `open-team` and a
+  link to its Team page.
+
+### Limits and errors
+
+- More than 200 members: `422 TOO_MANY_MEMBERS`, with no LiteLLM call. At
+  most 5 reads run at once (LD34).
+- One failing member read fails the whole view with the LiteLLM error; there
+  is no partial sum (LD35).
+- `getUserDailySpend` switched off (§10): `403 OPERATION_DISABLED`.
+- Under the Organisation cap (§14) per-member spend is hidden, but the team
+  total is always shown (LD31). On a team of one or two members that nearly
+  equals one person's cost; the user accepted this (LiteLLM spec — *Residual
+  risks*).
+
 ## 10. Operation toggles and guardrails
 
 The toggles in Settings → LiteLLM and the gateway config file (LiteLLM spec —
@@ -272,6 +340,7 @@ Accepted residual risks (LiteLLM spec — *Residual risks*):
 |---|---|---|
 | `LITELLM_UNAVAILABLE` (`503`) | LiteLLM did not answer, or answered outside the contract | Check that LiteLLM is up and the security group rule (§5); after an upgrade, check the contract snapshot |
 | `OPERATION_DISABLED` (`403`) | The operation's toggle is off | Switch it on in Settings → LiteLLM (§10) if it should be allowed |
+| `TOO_MANY_MEMBERS` (`422`) | An app team has more than 200 members, so its member sum is refused | Link the team to its LiteLLM team (§9) to use the LiteLLM team figure (§9a) |
 | `OPERATION_UNAVAILABLE` (`403`) | The operation needs LiteLLM Enterprise and this deployment is OSS | None on OSS; for rotation, OSS uses generate then block (§12) |
 | `PRIVILEGED_TARGET` (`409`) | The member or key belongs to a privileged LiteLLM user | Manage that user in LiteLLM with an operator key |
 | "The team is not connected to LiteLLM" (`409`) | The dashboard team has no team link | Link it (§9) |

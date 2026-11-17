@@ -25,6 +25,7 @@ The `docs/specs/` directory is the source of truth:
 - `docs/specs/2026-11-10-access-control.md` — roles from Entra ID, scopes, membership, visibility, audit log, threat model (Phase 4R)
 - `docs/specs/2026-11-10-platform.md` — AWS ECS Fargate hosting and the CDK stacks (Phase 4R.P)
 - `docs/specs/2026-11-10-litellm.md` — LiteLLM team/user administration, the gateway allowlist, service key, LiteLLM-reported cost (LiteLLM units L0–L8); contract snapshot in `docs/litellm/`
+- `docs/specs/2026-11-17-app-teams.md` — app teams vs LiteLLM teams: member-sum spend for unlinked teams, the Organisation view's two tables (LiteLLM unit L4b)
 - `docs/guides/auth-setup.md` — Auth.js + Microsoft Entra ID and AWS credential setup
 - `docs/guides/aws-infrastructure.md` — operational runbook: collector design, SAM deploy/undeploy CLI
 - `docs/guides/dashboard-deployment.md` — operational runbook: building and deploying the dashboard on ECS Fargate (CDK inputs, `cdk synth`, user-run deploy, DNS)

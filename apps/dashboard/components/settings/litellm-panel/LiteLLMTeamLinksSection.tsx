@@ -8,6 +8,7 @@ import {
   TeamLinksSchema,
 } from "@/components/settings/litellm-panel/keys";
 import { PanelSkeleton } from "@/components/settings/litellm-panel/PanelSkeleton";
+import { SpendSourceTable } from "@/components/settings/litellm-panel/SpendSourceTable";
 import { TeamLinkForm } from "@/components/settings/litellm-panel/TeamLinkForm";
 import { TeamLinkRow } from "@/components/settings/litellm-panel/TeamLinkRow";
 import { Input } from "@/components/ui/input";
@@ -68,6 +69,7 @@ export function LiteLLMTeamLinksSection({ canEdit }: { canEdit: boolean }) {
           ))}
         </ul>
       )}
+      <SpendSourceTable appTeams={query.data.appTeams} />
       {canEdit ? <TeamLinkForm links={query.data.items} /> : null}
     </div>
   );

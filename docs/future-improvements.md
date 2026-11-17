@@ -254,6 +254,46 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ---
 
+## LiteLLM
+
+### Shared LiteLLM team mode (LiteLLM writes for unlinked app teams)
+
+- **Status:** Deferred (decided 2026-11-17, agent under the user's delegation;
+  LiteLLM spec LD32, App Teams spec AT4).
+- **What:** Let a Lead manage budgets, limits and keys in LiteLLM for an app
+  team that has no LiteLLM team of its own, where its members sit in a
+  LiteLLM team shared with other app teams.
+- **Why deferred:** The members' keys and budgets live in a LiteLLM team that
+  includes people outside the Lead's scope, and the key ownership check
+  (`/key/info` `team_id` equals the linked team) has no equivalent there. An
+  unlinked team gets read-only member-sum spend in L4b.
+- **Adopt when:** Leads of unlinked teams need to set member budgets or manage
+  keys themselves, **and** a scoping rule (for example per-member ownership
+  checks or a LiteLLM-side team split) keeps every write inside the Lead's
+  scope.
+- **References:** [App Teams spec](specs/2026-11-17-app-teams.md) — *Decisions*
+  (AT4); [LiteLLM spec](specs/2026-11-10-litellm.md) — *Writes*, LD32, LT5.
+
+### Membership history (daily membership snapshot)
+
+- **Status:** Deferred (decided 2026-11-17, App Teams spec — *Residual
+  risks*).
+- **What:** A daily snapshot of app-team membership, so the member sum for a
+  past date range uses the members at the time and a mover's earlier spend
+  stays with the old team.
+- **Why deferred:** Needs a scheduler and a new stored entity; membership is
+  read as it is now, and the difference shows only when people change team.
+- **Adopt when:** moves between teams are frequent enough that historical team
+  spend is visibly wrong, **or** a finance review needs spend attributed to
+  the team a person belonged to at the time, **or** the Phase 6 scheduler can
+  host the snapshot at no extra cost.
+- **References:** [App Teams spec](specs/2026-11-17-app-teams.md) — *Residual
+  risks*; [LiteLLM spec](specs/2026-11-10-litellm.md) — *Residual risks*;
+  [Access Control spec](specs/2026-11-10-access-control.md) — *Membership,
+  admin scopes and lifecycle*.
+
+---
+
 ## Security & CI
 
 ### Script and style Content Security Policy

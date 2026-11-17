@@ -502,6 +502,28 @@ describe("GET /api/litellm/team-links and /[teamId]", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
+  // App Teams spec - UI ("Settings -> LiteLLM -> Team links: a 'Spend source'
+  // column for every app team"). No new route: the list answer gains
+  // `appTeams: [{ teamId, teamName, spendSource }]` for EVERY app team, ordered
+  // by team name; "litellm-team" when linked, else "member-sum". `items` is
+  // unchanged. Test-engineer reading of an unspecified data source (see report).
+  it("also lists every app team with its spend source: litellm-team when linked, member-sum when not (App Teams - UI)", async () => {
+    const h = await load();
+    await link(h, "team-a", TEAM_ID);
+    fake.calls.length = 0;
+    const res = await h.LIST(get(LIST_URL), ctxFor());
+    const data = (await res.json()).data as {
+      items: Array<{ teamId: string }>;
+      appTeams: Array<Record<string, unknown>>;
+    };
+    expect(data.items.map((i) => i.teamId)).toEqual(["team-a"]);
+    expect(data.appTeams).toEqual([
+      { teamId: "team-a", teamName: "Team A", spendSource: "litellm-team" },
+      { teamId: "team-b", teamName: "Team B", spendSource: "member-sum" },
+    ]);
+    expect(fake.calls).toHaveLength(0);
+  });
+
   it("an empty list is an empty array, not an error", async () => {
     const h = await load();
     const res = await h.LIST(get(LIST_URL), ctxFor());

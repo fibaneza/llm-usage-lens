@@ -55,6 +55,14 @@ describe("API_ERROR_CODES / ApiErrorCodeSchema", () => {
     );
   });
 
+  // App Teams spec - "Member sum" step 5 and Unit L4b task 4: a team above 200
+  // members answers 422 TOO_MANY_MEMBERS ("TOO_MANY_MEMBERS joins the error
+  // codes"); "A new code is added here first".
+  it("registers TOO_MANY_MEMBERS (unit L4b)", () => {
+    expect(API_ERROR_CODES).toContain("TOO_MANY_MEMBERS");
+    expect(ApiErrorCodeSchema.safeParse("TOO_MANY_MEMBERS").success).toBe(true);
+  });
+
   // Access Control spec - "Error-code registry": REAUTH_REQUIRED (403, a
   // re-auth write without a sign-in in the last 15 minutes; D28). Appended
   // after the established codes so their order above is unchanged.

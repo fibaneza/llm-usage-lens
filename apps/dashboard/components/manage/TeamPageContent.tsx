@@ -6,7 +6,6 @@ import { useId, type ReactNode } from "react";
 import { Panel } from "@/components/display/Panel";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { LiteLLMReportedBadge } from "@/components/litellm/LiteLLMReportedBadge";
-import { NotConnected } from "@/components/litellm/LiteLLMSection";
 import { BudgetLimitsPanel } from "@/components/litellm/team/BudgetLimitsPanel";
 import { KeysPanel } from "@/components/litellm/team/KeysPanel";
 import { MembersPanel } from "@/components/litellm/team/MembersPanel";
@@ -127,8 +126,8 @@ export function TeamPageContent({
           </Panel>
         </>
       ) : (
-        <Panel {...panel("Team spend & budgets")}>
-          <NotConnected />
+        <Panel {...panel("Team spend", true)}>
+          <TeamSpendPanel teamId={team.teamId} />
         </Panel>
       )}
       {access}

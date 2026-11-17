@@ -1,6 +1,7 @@
 import {
   DateRangeQuerySchema,
   LiteLLMOrgResponseSchema,
+  runBounded,
 } from "@llm-usage-lens/shared";
 
 import {
@@ -9,7 +10,19 @@ import {
   parseSearchParams,
   withRoute,
 } from "@/lib/api/respond";
-import { getTeam, getTeamDailySpend } from "@/lib/litellm/operations";
+import { getAllAccounts } from "@/lib/data/account-meta";
+import { listAllTeamMemberOids } from "@/lib/data/access/team-member-lookup";
+import { listTeamLinks } from "@/lib/data/litellm/team-links";
+import {
+  MAX_MEMBERS,
+  computeMemberSum,
+  worstCaseCalls,
+} from "@/lib/litellm/member-sum";
+import {
+  getTeam,
+  getTeamDailySpend,
+  listProxyTeams,
+} from "@/lib/litellm/operations";
 import {
   enabledOperations,
   liteLLMResponse,
@@ -19,13 +32,18 @@ import {
 } from "@/lib/litellm/read-views";
 import { openModeRefusal } from "@/lib/litellm/route-guard";
 
-// Source: docs/specs/2026-11-10-litellm.md - "Views by role (L3b)"
-// (Organisation: totals across every linked team via one getTeamDailySpend
-// with all linked team_ids, per-team spend, budget and members), "API routes"
+// Source: docs/specs/2026-11-17-app-teams.md — "Organisation view" (two
+// tables; the total comes from the LiteLLM teams, AT5; 200 member reads per
+// request, smallest unlinked team first, AT6; any failed read fails the
+// request, AT7), "Allowlist changes" (listProxyTeams for org-admin and
+// Auditor); docs/specs/2026-11-10-litellm.md — "API routes"
 // (/api/litellm/org GET: org-admin, Admin, Auditor), "Reads" (timezone=0,
 // LD20), LD19, Rule 10.3 (403 before input parsing).
 
 export const dynamic = "force-dynamic";
+
+const READ_CONCURRENCY = 5;
+const MEMBER_READ_BUDGET = 200;
 
 export const GET = withRoute(async (request, _ctx, session) => {
   const refused = openModeRefusal();
@@ -35,45 +53,159 @@ export const GET = withRoute(async (request, _ctx, session) => {
     return jsonError(403, "FORBIDDEN", "Insufficient permission");
   }
   const { dateFrom, dateTo } = parseSearchParams(request, DateRangeQuerySchema);
+  const range = { startDate: dateFrom, endDate: dateTo };
   return liteLLMResponse(async () => {
-    const enabled = await enabledOperations();
-    requireEnabled(enabled, ["getTeam", "getTeamDailySpend"]);
-    const { linked } = access;
-    if (linked.length === 0) {
-      return jsonData(
-        LiteLLMOrgResponseSchema.parse({
-          totals: { spend: 0 },
-          daily: [],
-          teams: [],
-          enabledOperations: enabled,
+    const [enabled, accounts, links] = await Promise.all([
+      enabledOperations(),
+      getAllAccounts(),
+      listTeamLinks(),
+    ]);
+    const linkOf = new Map(links.map((l) => [l.teamId, l.litellmTeamId]));
+    const appTeams = new Map<string, string>();
+    for (const a of accounts) {
+      if (!appTeams.has(a.teamId)) appTeams.set(a.teamId, a.teamName);
+    }
+    const unlinked = [...appTeams.keys()].filter((id) => !linkOf.has(id));
+    requireEnabled(enabled, [
+      "listProxyTeams",
+      "getTeam",
+      "getTeamDailySpend",
+      ...(unlinked.length > 0 ? (["getUserDailySpend"] as const) : []),
+    ]);
+
+    // LD34/LD36: the 200-call budget counts every LiteLLM call of the request.
+    // The list, a getTeam and a one-team range read per proxy team come first.
+    const proxyTeams = await listProxyTeams();
+    const proxyIds = proxyTeams.map((t) => t.team_id);
+    const infos = new Map<string, Awaited<ReturnType<typeof getTeam>>>();
+    const rangeOf = new Map<string, ReturnType<typeof reduceDaily>>();
+    const reads: Array<() => Promise<void>> = proxyIds.flatMap(
+      (litellmTeamId) => [
+        async () => {
+          infos.set(litellmTeamId, await getTeam({ litellmTeamId }));
+        },
+        async () => {
+          const daily = await getTeamDailySpend({ litellmTeamId, ...range });
+          rangeOf.set(litellmTeamId, reduceDaily(daily.results));
+        },
+      ],
+    );
+    await runBounded(reads, READ_CONCURRENCY, (read) => read());
+    const byDate = new Map<string, number>();
+    const rangeSpend = new Map<string, number>();
+    for (const [litellmTeamId, days] of rangeOf) {
+      let spend = 0;
+      for (const d of days) {
+        spend += d.spend;
+        byDate.set(d.date, (byDate.get(d.date) ?? 0) + d.spend);
+      }
+      rangeSpend.set(litellmTeamId, spend);
+    }
+    const rows = [...byDate]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, spend]) => ({ date, spend }));
+
+    const appOfLiteLLM = new Map(
+      links.map((l) => [
+        l.litellmTeamId,
+        { teamId: l.teamId, teamName: appTeams.get(l.teamId) ?? l.teamId },
+      ]),
+    );
+    const litellmTeams = proxyTeams.map((t) => {
+      const info = infos.get(t.team_id);
+      return {
+        litellmTeamId: t.team_id,
+        alias: t.team_alias ?? null,
+        spend: rangeSpend.get(t.team_id) ?? 0,
+        maxBudget: info?.team_info.max_budget ?? null,
+        memberCount: info?.team_memberships.length ?? 0,
+        linkedAppTeam: appOfLiteLLM.get(t.team_id) ?? null,
+      };
+    });
+    const spendOfLiteLLM = new Map(
+      litellmTeams.map((t) => [t.litellmTeamId, t.spend]),
+    );
+
+    // Unlinked teams, smallest first. Membership is read once per team and the
+    // same list sizes the team and feeds the sum (LD34). A team's worst case is
+    // reserved before it is summed; the fixed reads above are never skipped, so
+    // past the budget every unlinked team is an open-team row.
+    let budget = Math.max(0, MEMBER_READ_BUDGET - (1 + reads.length));
+    const sized = await Promise.all(
+      unlinked.map(async (teamId) => {
+        const oids = await listAllTeamMemberOids(teamId);
+        return { teamId, oids };
+      }),
+    );
+    sized.sort(
+      (a, b) =>
+        a.oids.length - b.oids.length ||
+        (appTeams.get(a.teamId) ?? "").localeCompare(
+          appTeams.get(b.teamId) ?? "",
+        ),
+    );
+    const sums = new Map<
+      string,
+      Awaited<ReturnType<typeof computeMemberSum>> | null
+    >();
+    for (const { teamId, oids } of sized) {
+      if (oids.length > MAX_MEMBERS) {
+        sums.set(teamId, null);
+        continue;
+      }
+      const worstCase = await worstCaseCalls(oids);
+      if (worstCase > budget) {
+        sums.set(teamId, null);
+        continue;
+      }
+      budget -= worstCase;
+      sums.set(
+        teamId,
+        await computeMemberSum({
+          teamId,
+          memberOids: oids,
+          ...range,
+          perUserCostHidden: access.perUserCostHidden,
         }),
       );
     }
-    const [daily, infos] = await Promise.all([
-      getTeamDailySpend({
-        litellmTeamIds: linked.map((t) => t.litellmTeamId),
-        startDate: dateFrom,
-        endDate: dateTo,
-      }),
-      Promise.all(
-        linked.map((t) => getTeam({ litellmTeamId: t.litellmTeamId })),
-      ),
-    ]);
-    const rows = reduceDaily(daily.results);
+
+    const appRows = [...appTeams]
+      .sort(([, a], [, b]) => a.localeCompare(b))
+      .map(([teamId, teamName]) => {
+        const litellmTeamId = linkOf.get(teamId);
+        if (litellmTeamId !== undefined) {
+          return {
+            teamId,
+            teamName,
+            spendSource: "litellm-team" as const,
+            spend: spendOfLiteLLM.get(litellmTeamId) ?? null,
+          };
+        }
+        const sum = sums.get(teamId);
+        return sum
+          ? {
+              teamId,
+              teamName,
+              spendSource: "member-sum" as const,
+              spend: sum.total,
+              coverage: sum.coverage,
+            }
+          : {
+              teamId,
+              teamName,
+              spendSource: "member-sum" as const,
+              spend: null,
+              reason: "open-team" as const,
+            };
+      });
+
     return jsonData(
       LiteLLMOrgResponseSchema.parse({
         totals: { spend: rows.reduce((sum, r) => sum + r.spend, 0) },
         daily: rows,
-        teams: linked.map((t, i) => {
-          const info = infos[i];
-          return {
-            teamId: t.teamId,
-            teamName: t.teamName,
-            spend: info?.team_info.spend ?? 0,
-            maxBudget: info?.team_info.max_budget ?? null,
-            memberCount: info?.team_memberships.length ?? 0,
-          };
-        }),
+        litellmTeams,
+        appTeams: appRows,
         enabledOperations: enabled,
       }),
     );

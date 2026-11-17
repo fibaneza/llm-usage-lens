@@ -73,7 +73,7 @@ export function jsonData<T>(data: T, init?: ResponseInit): Response {
 }
 
 export function jsonError(
-  status: 400 | 401 | 403 | 404 | 409 | 500 | 503,
+  status: 400 | 401 | 403 | 404 | 409 | 422 | 500 | 503,
   code: ApiErrorCode,
   message: string,
 ): Response {

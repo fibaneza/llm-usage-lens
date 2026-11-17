@@ -17,6 +17,7 @@ cite it in your response.
 | Roles, scopes, membership, visibility, audit, threat model | `docs/specs/2026-11-10-access-control.md` | Anything touching sign-in, roles, authorization, Settings access sections or the audit log |
 | AWS hosting, CDK stacks, task-role policy | `docs/specs/2026-11-10-platform.md` | Anything under `infra/`, deployment or AWS permissions for the dashboard |
 | LiteLLM administration, gateway allowlist, service key, LiteLLM-reported cost | `docs/specs/2026-11-10-litellm.md`, `docs/guides/litellm-admin.md`, `docs/litellm/openapi.json` | Anything under `lib/litellm/`, `/api/litellm/**` or the LiteLLM page and Settings panel |
+| App teams vs LiteLLM teams, member-sum spend, Organisation tables | `docs/specs/2026-11-17-app-teams.md` | Anything touching team spend, the Team or Organisation page, or team links |
 | Dashboard deployment runbook (Netlify; superseded by the Platform spec) | `docs/guides/dashboard-deployment.md` | Deployment work until Phase 4R.P rewrites it |
 | Bedrock simulator (standalone test harness) | `docs/specs/2026-05-24-bedrock-simulator.md`, `docs/guides/bedrock-simulator.md` | Anything under `tools/bedrock-simulator/` |
 | Dynamic workflows (piloted per implementation-phases — *Workflow pilots*) | `docs/guides/dynamic-workflows.md` | Proposing multi-agent workflow orchestration |

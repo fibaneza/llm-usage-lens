@@ -1,9 +1,11 @@
 "use client";
 
 import { CircleDollarSign } from "lucide-react";
+import Link from "next/link";
 
 import { formatUsd } from "@/components/charts/chart-data";
 import { MetricCard } from "@/components/display/MetricCard";
+import { coverageText } from "@/components/manage/MemberSumDetail";
 import {
   Table,
   TableBody,
@@ -19,8 +21,16 @@ import { DailySpend } from "./DailySpend";
 import { Empty, Unavailable } from "./LiteLLMSection";
 import { useLiteLLMQuery, useUrlRange } from "./use-litellm-query";
 
-// Organisation tab (LiteLLM spec -- Views by role): totals across every
-// linked team and a per-team table. LiteLLM-reported figures (LT8).
+const NUMERIC = "text-right font-mono tabular-nums";
+const SOURCE_LABEL = {
+  "litellm-team": "LiteLLM team",
+  "member-sum": "Sum of members",
+} as const;
+
+// Organisation tab (LiteLLM spec -- Views by role; App Teams spec --
+// Organisation view): the headline total is the LiteLLM teams' total (AT5),
+// then two tables whose rows do not add up to each other. LiteLLM-reported
+// figures (LT8).
 export function OrganisationSection() {
   const { keyParts, query } = useUrlRange();
   const result = useLiteLLMQuery(
@@ -29,8 +39,10 @@ export function OrganisationSection() {
     LiteLLMOrgResponseSchema,
   );
   if (result.status === "unavailable") return <Unavailable />;
-  const { totals, daily, teams } = result.data;
-  if (teams.length === 0) return <Empty>No linked teams</Empty>;
+  const { totals, daily, litellmTeams, appTeams } = result.data;
+  if (litellmTeams.length === 0 && appTeams.length === 0) {
+    return <Empty>No teams</Empty>;
+  }
   return (
     <div className="flex flex-col gap-4">
       <MetricCard
@@ -41,35 +53,75 @@ export function OrganisationSection() {
       <DailySpend daily={daily} />
       <Table>
         <TableCaption className="mt-0 mb-2 text-left">
-          Spend by linked team
+          LiteLLM teams
         </TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead>Team</TableHead>
+            <TableHead>Alias</TableHead>
             <TableHead className="text-right">Spend</TableHead>
             <TableHead className="text-right">Budget</TableHead>
             <TableHead className="text-right">Members</TableHead>
+            <TableHead>App team</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {teams.map((team) => (
-            <TableRow key={team.teamId}>
-              <TableCell>{team.teamName}</TableCell>
-              <TableCell className="text-right font-mono tabular-nums">
-                {formatUsd(team.spend)}
-              </TableCell>
-              <TableCell className="text-right font-mono tabular-nums">
+          {litellmTeams.map((team) => (
+            <TableRow key={team.litellmTeamId}>
+              <TableCell>{team.alias ?? team.litellmTeamId}</TableCell>
+              <TableCell className={NUMERIC}>{formatUsd(team.spend)}</TableCell>
+              <TableCell className={NUMERIC}>
                 {team.maxBudget === null
                   ? "No limit"
                   : formatUsd(team.maxBudget)}
               </TableCell>
-              <TableCell className="text-right font-mono tabular-nums">
-                {team.memberCount}
+              <TableCell className={NUMERIC}>{team.memberCount}</TableCell>
+              <TableCell>
+                {team.linkedAppTeam ? team.linkedAppTeam.teamName : "unlinked"}
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+      <div className="flex flex-col gap-1">
+        <p className="text-cell text-muted-foreground">
+          Per app team. Rows overlap with each other and do not add up to the
+          total.
+        </p>
+        <Table>
+          <TableCaption className="mt-0 mb-2 text-left">App teams</TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Team</TableHead>
+              <TableHead>Spend source</TableHead>
+              <TableHead className="text-right">Spend</TableHead>
+              <TableHead>Coverage</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {appTeams.map((team) => (
+              <TableRow key={team.teamId}>
+                <TableCell>{team.teamName}</TableCell>
+                <TableCell>{SOURCE_LABEL[team.spendSource]}</TableCell>
+                <TableCell className={NUMERIC}>
+                  {team.spend === null ? (
+                    <Link
+                      className="text-link underline-offset-4 hover:underline"
+                      href={`/dashboard/manage/team?team=${encodeURIComponent(team.teamId)}`}
+                    >
+                      Open the team page
+                    </Link>
+                  ) : (
+                    formatUsd(team.spend)
+                  )}
+                </TableCell>
+                <TableCell>
+                  {team.coverage ? coverageText(team.coverage) : "-"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

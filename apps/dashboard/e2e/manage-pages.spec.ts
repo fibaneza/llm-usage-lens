@@ -50,16 +50,26 @@ async function mockApi(page: Page, me: unknown = ME) {
     const body: Record<string, unknown> = {
       "/api/litellm/me": me,
       "/api/litellm/org": {
-        totals: { spend: 1234.5 },
+        // LD36: the total is the sum of the LiteLLM teams rows for the range.
+        totals: { spend: 321.75 },
         enabledOperations: [],
         daily: [{ date: "2026-11-14", spend: 100 }],
-        teams: [
+        litellmTeams: [
           {
-            teamId: "t1",
-            teamName: "Payments",
+            litellmTeamId: "ll-1",
+            alias: "Payments LLM",
             spend: 321.75,
             maxBudget: 500,
             memberCount: 7,
+            linkedAppTeam: { teamId: "t1", teamName: "Payments" },
+          },
+        ],
+        appTeams: [
+          {
+            teamId: "t1",
+            teamName: "Payments",
+            spendSource: "litellm-team",
+            spend: 321.75,
           },
         ],
       },
@@ -144,6 +154,18 @@ test.describe("Management -> Organisation and Users", () => {
     const region = page.getByRole("region", { name: "Organisation" });
     await expect(region).toContainText("Payments");
     await expect(region).toContainText("LiteLLM-reported");
+    // App Teams spec - Organisation view: two tables, the second labelled.
+    await expect(
+      region.getByRole("table", { name: "LiteLLM teams" }),
+    ).toBeVisible();
+    await expect(
+      region.getByRole("table", { name: "App teams" }),
+    ).toBeVisible();
+    await expect(region).toContainText(
+      "Per app team. Rows overlap with each other and do not add up to the total.",
+    );
+    // L4b review round 1: axe on the populated state, both tables rendered.
+    await expectNoBlockingViolations(page);
   });
 
   test("an org admin searches users and opens one user's spend", async ({

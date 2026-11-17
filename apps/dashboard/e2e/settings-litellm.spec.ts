@@ -90,6 +90,8 @@ test.describe("settings LiteLLM tabs accessibility (L3b)", () => {
     );
     await page.getByRole("tab", { name: tab }).click();
     await ready();
+    // Next streams metadata after first paint; axe document-title needs it.
+    await expect(page).toHaveTitle(/\S/);
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa"])
       .analyze();
@@ -510,5 +512,77 @@ test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
     await expect(
       page.getByRole("searchbox", { name: /search users/i }),
     ).toBeVisible();
+  });
+});
+
+// L4b review round 1 (playwright-ui-reviewer BLOCKER). docs/specs/2026-11-17-app-teams.md
+// - UI (Settings -> LiteLLM -> Team links: a "Spend source" column for every
+// app team); no earlier fixture carried `appTeams`, so the table never
+// rendered in a browser. Fixtures only (Rule 60.24).
+test.describe("settings LiteLLM Team links - spend source table (L4b)", () => {
+  test("lists a linked and an unlinked app team with their spend source and is axe-clean", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.route(/\/api\/litellm\/team-links(\?|$)/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            items: [
+              {
+                teamId: "payments",
+                litellmTeamId: "ll-111",
+                version: 1,
+                updatedAt: "2026-11-01T00:00:00Z",
+              },
+            ],
+            appTeams: [
+              {
+                teamId: "payments",
+                teamName: "Payments",
+                spendSource: "litellm-team",
+              },
+              {
+                teamId: "growth",
+                teamName: "Growth",
+                spendSource: "member-sum",
+              },
+            ],
+          },
+        },
+      }),
+    );
+    await page.route(/\/api\/litellm\/toggles$/, (route) =>
+      route.fulfill({
+        json: { data: { version: 0, edition: "oss", operations: {} } },
+      }),
+    );
+    await page.goto("/dashboard/settings/litellm/team-links");
+    await waitForHydration(page);
+
+    const table = page.getByRole("table", { name: "Spend source by app team" });
+    await expect(table).toBeVisible();
+    await expect(
+      table
+        .getByRole("row", { name: /Payments/ })
+        .getByRole("cell", { name: "LiteLLM team" }),
+    ).toBeVisible();
+    await expect(
+      table
+        .getByRole("row", { name: /Growth/ })
+        .getByRole("cell", { name: "Sum of members" }),
+    ).toBeVisible();
+
+    await expect(page).toHaveTitle(/\S/);
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => v.id),
+    ).toEqual([]);
   });
 });

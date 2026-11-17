@@ -740,6 +740,27 @@ the `auth.signin.error` record; `withRoute` treats a session without
 > operation is enabled the control is absent, not dead (`resetMemberSpend`
 > default **off**, LD10). The page adds no LiteLLM call of its own (Rule 10).
 
+### L4b — App-team spend (`feature/phase-l4b-app-team-spend`)
+
+*Added 2026-11-17 at the user's direction ([App Teams spec](2026-11-17-app-teams.md); LiteLLM spec LD29–LD35); after L4, before L5. Depends on L3b, L4 and the Management → Team page (ui-compact Slice B2) being on `main`.*
+
+- [x] Fold the App Teams spec into the LiteLLM spec (roles, reads, identity mapping, cost, routes, views, decisions LD29–LD35, threat model LT23–LT28, residual risks), this unit, Rule 00's index, CLAUDE.md's spec list and `docs/future-improvements.md`
+- [x] Schemas in `packages/shared`: `spendSource`, `memberSum`, coverage, the Organisation response (valid and invalid cases, Rule 60.22)
+- [x] `lib/litellm/member-sum.ts` (`server-only`): bound of 5 concurrent reads (`runBounded`), 200 members per team (`422 TOO_MANY_MEMBERS`), no partial sum on a failed read
+- [x] Routes `GET /api/litellm/teams/[teamId]` (`spendSource`, `memberSum`, `?include=memberSum` for Admin, org-admin, Auditor) and `GET /api/litellm/org` (`litellmTeams[]`, `appTeams[]`, 200-read budget, `open-team`); `TOO_MANY_MEMBERS` joins the error codes; no new route
+- [x] UI: Team page (source badge, coverage line, member table and app membership add and remove on an unlinked team, second figure for Admin, org-admin and Auditor on a linked team), Organisation page (two tables), Settings → LiteLLM → Team links "Spend source" column
+- [x] Runbook `docs/guides/litellm-admin.md`: linked and unlinked teams, what each figure means
+- [x] Verify: an unlinked team gives a Lead `spendSource: "member-sum"` with daily rows, a total equal to the member rows and coverage counting matched, unmatched and pending members
+- [x] Verify: a linked team gives a Lead the LiteLLM team figures and no `memberSum`, with or without `include=memberSum`; Admin, org-admin and Auditor get both with it
+- [x] Verify: out-of-scope and missing teams return the same `404`; a Viewer gets no team view
+- [x] Verify: under the Organisation cap member rows carry no `spend` and the total is present
+- [x] Verify: 201 members gives `422 TOO_MANY_MEMBERS` and no LiteLLM call; one failing member read fails the request; `getUserDailySpend` off gives `403 OPERATION_DISABLED`
+- [x] Verify: Organisation total equals the sum of the LiteLLM teams rows for the selected range (LD36); an unlinked LiteLLM team appears; an app team beyond the read budget (200 LiteLLM calls, LD34) shows `open-team`
+- [x] Verify: no LiteLLM control renders on an unlinked team's page and every L4 write route still refuses an unlinked team
+- [x] Verify: `lib/litellm/structure.test.ts` passes with the same operation set; no new route in `test/route-registry.ts`
+- [x] Verify: LT23–LT28 (ATT1–ATT6) each have a test; an e2e smoke covers the Team page for one linked and one unlinked team
+- [x] Verify: branch gate green (Rule 70.12)
+
 ### L5 — Polish and verification (`feature/phase-l5-litellm-polish`)
 
 - [x] Spec: LiteLLM spec — *Polish and verification (L5)* (scope, accessibility floor, responsive, the role × operation matrix, the probe, the runbook outline; agent decisions, 2026-11-17)

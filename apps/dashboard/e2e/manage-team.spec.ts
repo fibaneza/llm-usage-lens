@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, type Route, test } from "@playwright/test";
 
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
@@ -59,6 +59,7 @@ async function mockApi(page: Page) {
       case "GET /api/litellm/teams/t1":
         return ok({
           connected: true,
+          spendSource: "litellm-team",
           team: {
             alias: "Payments",
             spend: 321.75,
@@ -327,5 +328,148 @@ test.describe("Management -> Team page", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Team usage & management" }),
     ).toBeVisible();
+  });
+});
+
+// App Teams spec (docs/specs/2026-11-17-app-teams.md) - Spend source, UI. One
+// linked team (t1: the LiteLLM team figure, plus the member sum an org-admin
+// gets on request) and one unlinked team (t2: the member sum, no LiteLLM
+// control). Component cases live in TeamPageContent.test.tsx (Rule 60.24a);
+// this reads both in the real shell. The LiteLLM API is fulfilled from
+// fixtures (Rule 60.24).
+const MEMBER_SUM = {
+  total: 4,
+  daily: [{ date: "2026-11-02", spend: 4 }],
+  coverage: { members: 4, matched: 3, unmatched: 1, pending: 1 },
+  members: [
+    { oid: "oid-u1", name: "Una One", matched: true, spend: 3.5 },
+    { oid: "oid-u2", name: "Dos Two", matched: true, spend: 0.5 },
+    { oid: "oid-u3", name: "Tres Three", matched: false },
+    // Matched, spend withheld by the Organisation cap (AT3): "Not shown".
+    { oid: "oid-u4", name: "Cuatro Four", matched: true },
+  ],
+};
+
+async function mockSpendSources(page: Page) {
+  await mockApi(page);
+  const respond = (data: unknown) => (route: Route) =>
+    route.fulfill({ status: 200, json: { data } });
+  await page.route(
+    /\/api\/litellm\/me(\?|$)/,
+    respond({
+      linked: false,
+      enabledOperations: OPS,
+      teams: [
+        {
+          teamId: "t1",
+          teamName: "Payments",
+          linked: true,
+          configurable: true,
+        },
+        { teamId: "t2", teamName: "Risk", linked: false, configurable: true },
+      ],
+    }),
+  );
+  await page.route(
+    /\/api\/litellm\/teams\/t1(\?|$)/,
+    respond({
+      connected: true,
+      spendSource: "litellm-team",
+      team: {
+        alias: "Payments",
+        spend: 321.75,
+        maxBudget: 500,
+        softBudget: null,
+        budgetDuration: "30d",
+        models: ["claude-sonnet"],
+        rpmLimit: null,
+        tpmLimit: null,
+      },
+      daily: [],
+      memberSum: { ...MEMBER_SUM, total: 250, daily: [] },
+      enabledOperations: OPS,
+    }),
+  );
+  await page.route(
+    /\/api\/litellm\/teams\/t2(\?|$)/,
+    respond({
+      connected: false,
+      spendSource: "member-sum",
+      daily: MEMBER_SUM.daily,
+      memberSum: MEMBER_SUM,
+    }),
+  );
+}
+
+test.describe("Management -> Team: spend source (App Teams)", () => {
+  test("a linked team shows the LiteLLM team figure, and an org-admin also the member sum with why they differ", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await mockSpendSources(page);
+    const asked = page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname === "/api/litellm/teams/t1" &&
+        new URL(request.url()).searchParams.get("include") === "memberSum",
+    );
+    await page.goto("/dashboard/manage/team?team=t1");
+    await waitForHydration(page);
+    await asked;
+    const spend = page.getByRole("region", { name: "Team spend & budgets" });
+    await expect(spend).toContainText("$321.75");
+    await expect(spend).toContainText("LiteLLM team");
+    await expect(spend).toContainText("Sum of members");
+    await expect(spend).toContainText("$250.00");
+    await expect(spend).toContainText(
+      "each app member spent through the gateway",
+    );
+    await expect(page.getByRole("region", { name: "Keys" })).toBeVisible();
+  });
+
+  test("an unlinked team shows the member sum with coverage and 'not in LiteLLM', and no LiteLLM control", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await mockSpendSources(page);
+    await page.goto("/dashboard/manage/team?team=t2");
+    await waitForHydration(page);
+    const spend = page.getByRole("region", { name: "Team spend", exact: true });
+    await expect(spend).toContainText("$4.00");
+    await expect(spend).toContainText("Sum of members");
+    await expect(spend).toContainText("3 matched");
+    await expect(spend.getByRole("row", { name: /Tres Three/ })).toContainText(
+      "not in LiteLLM",
+    );
+    await expect(
+      page.getByText(
+        "This team has no LiteLLM team of its own. Budgets, limits and keys are managed in LiteLLM.",
+      ),
+    ).toBeVisible();
+    await expect(spend.getByRole("row", { name: /Cuatro Four/ })).toContainText(
+      "Not shown",
+    );
+    // AT4: no LiteLLM panel renders for an unlinked team.
+    for (const name of [
+      "LiteLLM members",
+      "Keys",
+      "Budget and limits",
+      "Models",
+    ]) {
+      await expect(page.getByRole("region", { name }), name).toHaveCount(0);
+    }
+    await expect(
+      page.getByRole("button", { name: "Generate key" }),
+    ).toHaveCount(0);
+    // L4b review round 1: axe on the populated Team spend panel.
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => v.id),
+    ).toEqual([]);
   });
 });

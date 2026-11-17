@@ -16,6 +16,7 @@ import { loadAuthorization } from "@/lib/data/access/authorization";
 
 import { LiteLLMError } from "./client";
 import { LiteLLMOperationRefused } from "./gateway";
+import { MemberSumTooManyMembers } from "./member-sum-error";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Security architecture" item 11
 // (threat LT11): with AUTH_ACCESS_MODE=open there is no real identity to
@@ -37,6 +38,9 @@ export function openModeRefusal(): Response | null {
 export function liteLLMErrorResponse(error: unknown): Response | null {
   if (error instanceof LiteLLMOperationRefused) {
     return jsonError(403, error.code, error.message);
+  }
+  if (error instanceof MemberSumTooManyMembers) {
+    return jsonError(422, error.code, error.message);
   }
   if (error instanceof LiteLLMError) {
     return jsonError(503, error.code, error.message);

@@ -989,7 +989,8 @@ and no one else's, without `/api/identities`.
 toggle off), `OPERATION_UNAVAILABLE` (403, Enterprise-only on OSS, or any
 LiteLLM route in `open` mode), `LITELLM_UNAVAILABLE` (503, not configured,
 unreachable or rejected upstream), `PRIVILEGED_TARGET` (409, target LiteLLM
-user holds a proxy role), and from the [System Architecture spec](2026-05-15-system-architecture.md) — *Configuration file*: `CONFIG_FILE_LOCKED` (409, the setting is set in `config.yaml`; added 2026-11-17, unit CFG). A new code is added here first. A bad or foreign list cursor returns `400` `BAD_REQUEST`; `BAD_CURSOR` is internal to `lib/data/access` and never reaches a response (decided 2026-11-14).
+user holds a proxy role), `TOO_MANY_MEMBERS` (422, an app team above 200 members
+on the member-sum view; LiteLLM spec, L4b, LD34), and from the [System Architecture spec](2026-05-15-system-architecture.md) — *Configuration file*: `CONFIG_FILE_LOCKED` (409, the setting is set in `config.yaml`; added 2026-11-17, unit CFG). A new code is added here first. A bad or foreign list cursor returns `400` `BAD_REQUEST`; `BAD_CURSOR` is internal to `lib/data/access` and never reaches a response (decided 2026-11-14).
 
 ## Decisions
 

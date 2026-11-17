@@ -51,6 +51,8 @@ export const LTEAM = {
   "team-m": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
 } as const;
 export const UNLINKED_LTEAM = "99999999-9999-4999-8999-999999999999";
+// Alias of the proxy team no dashboard team links (app-teams spec - Organisation).
+export const SHARED_ALIAS = "Shared platform";
 export const LUSER = {
   memberA: "a1@company.com",
   memberB: "b1@company.com",
@@ -138,7 +140,7 @@ export function viewsHandler(opts: ViewsFakeOptions = {}): FakeHandler {
             team_id: teamId,
             team_info: {
               team_id: teamId,
-              team_alias: "Alpha",
+              team_alias: teamId === UNLINKED_LTEAM ? SHARED_ALIAS : "Alpha",
               max_budget: 100,
               soft_budget: 80,
               budget_duration: "30d",
@@ -173,6 +175,19 @@ export function viewsHandler(opts: ViewsFakeOptions = {}): FakeHandler {
           },
         };
       }
+      // L4b (app-teams spec - Organisation view): every team on the proxy,
+      // the four linked ones and one no dashboard team links.
+      case "GET /team/list":
+        return {
+          status: 200,
+          body: [
+            ...Object.values(LTEAM).map((id) => ({
+              team_id: id,
+              team_alias: "Alpha",
+            })),
+            { team_id: UNLINKED_LTEAM, team_alias: SHARED_ALIAS },
+          ],
+        };
       case "GET /team/daily/activity/aggregated":
       case "GET /user/daily/activity":
         return {

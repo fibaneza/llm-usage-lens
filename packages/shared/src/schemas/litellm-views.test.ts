@@ -6,8 +6,12 @@ import {
   LiteLLMMeResponseSchema,
   LiteLLMMembersResponseSchema,
   LiteLLMModelsResponseSchema,
+  LiteLLMOrgResponseSchema,
   LiteLLMSpendLogsResponseSchema,
   LiteLLMTeamDetailResponseSchema,
+  MemberSumCoverageSchema,
+  MemberSumSchema,
+  SpendSourceSchema,
 } from "./litellm-views";
 
 // Source: docs/specs/2026-11-10-litellm.md - "API routes" (read routes and
@@ -83,33 +87,285 @@ describe("LiteLLMMeResponseSchema", () => {
   });
 });
 
-describe("LiteLLMTeamDetailResponseSchema", () => {
-  it("accepts connected:false and a full team (teams/[teamId] route)", () => {
+// L4b - docs/specs/2026-11-17-app-teams.md: "Spend source", "Member sum",
+// "API changes" (GET /api/litellm/teams/[teamId] always returns spendSource;
+// unlinked: connected false + daily + memberSum; linked: as before plus an
+// optional memberSum), Rule 60.22 (valid and invalid cases).
+const coverage = { members: 3, matched: 2, unmatched: 1, pending: 1 };
+const memberSum = {
+  total: 4,
+  daily: [{ date: "2026-11-02", spend: 4 }],
+  coverage,
+  members: [
+    { oid: "oid-1", name: "Una One", matched: true, spend: 3.5 },
+    { oid: "oid-2", matched: true, spend: 0.5 },
+    { oid: "oid-3", name: "Tres Three", matched: false },
+  ],
+};
+const linkedTeam = {
+  alias: null,
+  spend: 1,
+  maxBudget: null,
+  softBudget: null,
+  budgetDuration: null,
+  models: [],
+  rpmLimit: null,
+  tpmLimit: null,
+};
+const linkedDetail = {
+  connected: true,
+  spendSource: "litellm-team",
+  team: linkedTeam,
+  daily,
+  enabledOperations,
+};
+const unlinkedDetail = {
+  connected: false,
+  spendSource: "member-sum",
+  daily: memberSum.daily,
+  memberSum,
+};
+
+describe("SpendSourceSchema", () => {
+  it("accepts litellm-team and member-sum only", () => {
+    for (const v of ["litellm-team", "member-sum"]) {
+      expect(SpendSourceSchema.safeParse(v).success).toBe(true);
+    }
+    for (const v of ["team", "LiteLLM team", "", null, 1]) {
+      expect(SpendSourceSchema.safeParse(v).success).toBe(false);
+    }
+  });
+});
+
+describe("MemberSumCoverageSchema", () => {
+  it("accepts four non-negative integers", () => {
+    expect(MemberSumCoverageSchema.safeParse(coverage).success).toBe(true);
     expect(
-      LiteLLMTeamDetailResponseSchema.safeParse({ connected: false }).success,
-    ).toBe(true);
-    expect(
-      LiteLLMTeamDetailResponseSchema.safeParse({
-        connected: true,
-        team: {
-          alias: null,
-          spend: 1,
-          maxBudget: null,
-          softBudget: null,
-          budgetDuration: null,
-          models: [],
-          rpmLimit: null,
-          tpmLimit: null,
-        },
-        daily,
-        enabledOperations,
+      MemberSumCoverageSchema.safeParse({
+        members: 0,
+        matched: 0,
+        unmatched: 0,
+        pending: 0,
       }).success,
     ).toBe(true);
   });
-  it("rejects a non-boolean connected (teams/[teamId] route)", () => {
+  it.each([
+    ["a missing count", { members: 1, matched: 1, unmatched: 0 }],
+    ["a negative count", { ...coverage, pending: -1 }],
+    ["a fractional count", { ...coverage, matched: 1.5 }],
+    ["a string count", { ...coverage, unmatched: "1" }],
+  ])("rejects %s", (_n, value) => {
+    expect(MemberSumCoverageSchema.safeParse(value).success).toBe(false);
+  });
+});
+
+describe("MemberSumSchema", () => {
+  it("accepts a sum with matched members (spend), unmatched ones (none) and no members at all", () => {
+    expect(MemberSumSchema.safeParse(memberSum).success).toBe(true);
     expect(
-      LiteLLMTeamDetailResponseSchema.safeParse({ connected: "yes" }).success,
-    ).toBe(false);
+      MemberSumSchema.safeParse({
+        total: 0,
+        daily: [],
+        coverage: { members: 0, matched: 0, unmatched: 0, pending: 0 },
+        members: [],
+      }).success,
+    ).toBe(true);
+  });
+  it("accepts member rows without spend when the Organisation cap hides it (AT3)", () => {
+    expect(
+      MemberSumSchema.safeParse({
+        ...memberSum,
+        members: memberSum.members.map(({ oid, matched }) => ({
+          oid,
+          matched,
+        })),
+      }).success,
+    ).toBe(true);
+  });
+  it.each([
+    ["no total", { ...memberSum, total: undefined }],
+    ["a string total", { ...memberSum, total: "4" }],
+    ["no coverage", { ...memberSum, coverage: undefined }],
+    ["a day without spend", { ...memberSum, daily: [{ date: "2026-11-02" }] }],
+    ["a member without an oid", { ...memberSum, members: [{ matched: true }] }],
+    [
+      "a member without matched",
+      { ...memberSum, members: [{ oid: "oid-1", spend: 1 }] },
+    ],
+    [
+      "a non-numeric member spend",
+      { ...memberSum, members: [{ oid: "oid-1", matched: true, spend: "1" }] },
+    ],
+  ])("rejects %s", (_n, value) => {
+    expect(MemberSumSchema.safeParse(value).success).toBe(false);
+  });
+  it("does not let an email or a LiteLLM user id through a member row (ATT1; identities only by oid and name)", () => {
+    const parsed = MemberSumSchema.parse({
+      ...memberSum,
+      members: [
+        {
+          oid: "oid-1",
+          matched: true,
+          spend: 1,
+          email: "u1@company.com",
+          litellmUserId: "luser-u1",
+        },
+      ],
+    });
+    expect(JSON.stringify(parsed)).not.toContain("u1@company.com");
+    expect(JSON.stringify(parsed)).not.toContain("luser-u1");
+  });
+});
+
+describe("LiteLLMTeamDetailResponseSchema", () => {
+  it("accepts a linked team and an unlinked one with its member sum (teams/[teamId] route)", () => {
+    expect(
+      LiteLLMTeamDetailResponseSchema.safeParse(linkedDetail).success,
+    ).toBe(true);
+    expect(
+      LiteLLMTeamDetailResponseSchema.safeParse(unlinkedDetail).success,
+    ).toBe(true);
+  });
+  it("accepts a linked team with a member sum, for Admin, org-admin and Auditor on request", () => {
+    expect(
+      LiteLLMTeamDetailResponseSchema.safeParse({ ...linkedDetail, memberSum })
+        .success,
+    ).toBe(true);
+  });
+  it.each([
+    ["connected only (spendSource is always returned)", { connected: false }],
+    [
+      "a linked team without spendSource",
+      { ...linkedDetail, spendSource: undefined },
+    ],
+    [
+      "a linked team claiming the member-sum source",
+      { ...linkedDetail, spendSource: "member-sum" },
+    ],
+    [
+      "an unlinked team claiming the litellm-team source",
+      { ...unlinkedDetail, spendSource: "litellm-team" },
+    ],
+    [
+      "an unlinked team without its member sum",
+      { ...unlinkedDetail, memberSum: undefined },
+    ],
+    ["a non-boolean connected", { connected: "yes" }],
+  ])("rejects %s", (_n, value) => {
+    expect(LiteLLMTeamDetailResponseSchema.safeParse(value).success).toBe(
+      false,
+    );
+  });
+});
+
+// Organisation view: two tables, LiteLLM teams and app teams (spec -
+// "Organisation view", AT5, AT6); `teams[]` is removed.
+describe("LiteLLMOrgResponseSchema", () => {
+  const litellmTeam = {
+    litellmTeamId: "ll-1",
+    alias: "Alpha",
+    spend: 12.5,
+    maxBudget: 100,
+    memberCount: 3,
+    linkedAppTeam: { teamId: "t1", teamName: "Payments" },
+  };
+  const org = {
+    totals: { spend: 1.5 },
+    daily,
+    enabledOperations,
+    litellmTeams: [
+      litellmTeam,
+      {
+        ...litellmTeam,
+        litellmTeamId: "ll-2",
+        alias: null,
+        maxBudget: null,
+        linkedAppTeam: null,
+      },
+    ],
+    appTeams: [
+      {
+        teamId: "t1",
+        teamName: "Payments",
+        spendSource: "litellm-team",
+        spend: 12.5,
+      },
+      {
+        teamId: "t2",
+        teamName: "Risk",
+        spendSource: "member-sum",
+        spend: 4,
+        coverage,
+      },
+      {
+        teamId: "t3",
+        teamName: "Ops",
+        spendSource: "member-sum",
+        spend: null,
+        reason: "open-team",
+      },
+    ],
+  };
+
+  it("accepts linked and unlinked LiteLLM teams, member-sum app teams with coverage and an open-team row", () => {
+    expect(LiteLLMOrgResponseSchema.safeParse(org).success).toBe(true);
+    expect(
+      LiteLLMOrgResponseSchema.safeParse({
+        ...org,
+        litellmTeams: [],
+        appTeams: [],
+      }).success,
+    ).toBe(true);
+  });
+  it("has no teams[] any more: a leftover one is stripped from the output", () => {
+    const parsed = LiteLLMOrgResponseSchema.parse({
+      ...org,
+      teams: [{ teamId: "t1" }],
+    });
+    expect(parsed).not.toHaveProperty("teams");
+  });
+  it.each([
+    [
+      "the old shape (teams[] only)",
+      { totals: { spend: 1 }, daily, teams: [] },
+    ],
+    ["no litellmTeams", { ...org, litellmTeams: undefined }],
+    ["no appTeams", { ...org, appTeams: undefined }],
+    [
+      "an app team with an unknown spendSource",
+      {
+        ...org,
+        appTeams: [{ teamId: "t", teamName: "T", spendSource: "x", spend: 1 }],
+      },
+    ],
+    [
+      "an app team with an unknown reason",
+      {
+        ...org,
+        appTeams: [
+          {
+            teamId: "t",
+            teamName: "T",
+            spendSource: "member-sum",
+            spend: null,
+            reason: "later",
+          },
+        ],
+      },
+    ],
+    [
+      "an app team with no spend field",
+      {
+        ...org,
+        appTeams: [{ teamId: "t", teamName: "T", spendSource: "member-sum" }],
+      },
+    ],
+    [
+      "a LiteLLM team without its member count",
+      { ...org, litellmTeams: [{ ...litellmTeam, memberCount: undefined }] },
+    ],
+  ])("rejects %s", (_n, value) => {
+    expect(LiteLLMOrgResponseSchema.safeParse(value).success).toBe(false);
   });
 });
 

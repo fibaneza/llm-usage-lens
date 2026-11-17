@@ -194,6 +194,13 @@ const ORG_WIDE_ROLES: readonly string[] = [
   INTERNAL_AUDITOR_ROLE,
 ];
 
+// org-admin, Admin or Auditor: the roles that may ask for the second figure
+// (App Teams spec - Spend source, ATT6). Stored grants count.
+export async function isOrgWideReader(session: Session): Promise<boolean> {
+  const roles = await globalRolesFor(session);
+  return !!roles?.some((r) => ORG_WIDE_ROLES.includes(r));
+}
+
 // Roles come from globalRolesFor (stored grants count); the team list from
 // the same scope the other L3 views use. Read per request, never cached.
 export async function teamAccess(session: Session): Promise<TeamAccess> {

@@ -73,6 +73,7 @@ const MEMBERS = {
 
 const detail = (ops: string[]) => ({
   connected: true,
+  spendSource: "litellm-team",
   team: {
     alias: "Payments",
     spend: 321.75,

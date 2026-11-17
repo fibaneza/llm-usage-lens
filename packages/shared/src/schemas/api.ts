@@ -20,6 +20,7 @@ export const API_ERROR_CODES = [
   "SSO_BOUND",
   "WEAK_PASSWORD",
   "CONFIG_FILE_LOCKED",
+  "TOO_MANY_MEMBERS",
 ] as const;
 
 export const ApiErrorCodeSchema = z.enum(API_ERROR_CODES);

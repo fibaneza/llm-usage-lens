@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   DATES,
   LTEAM,
+  SHARED_ALIAS,
+  UNLINKED_LTEAM,
   call,
   expectError,
   expectNoSentinels,
@@ -15,6 +17,17 @@ import {
 } from "@/test/fakes/fake-litellm-views";
 import { signInAs } from "@/test/fixtures/scope-fixtures";
 import type { CallerName } from "@/test/fixtures/scope-fixtures";
+import {
+  SCENARIO,
+  SCENARIO_FAKE,
+  TEAM_DAILY_SPEND,
+  TEAM_DAILY_TOTAL,
+  installMemberSumFake,
+  seedBoundMember,
+  seedLinkedMembers,
+  seedScenario,
+  seedUnlinkedTeam,
+} from "@/test/support/member-sum-support";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Views by role (L3b)" (Organisation
 // tab: totals across every linked team via getTeamDailySpend with all linked
@@ -24,16 +37,36 @@ import type { CallerName } from "@/test/fixtures/scope-fixtures";
 //
 // Contract for the developer (.../org/route.ts, GET):
 //   query: dateFrom, dateTo (DateRangeQuerySchema, 90-day cap -> 400).
-//   200 data = { totals: { spend: number },
-//                daily: [{ date, spend, ... }],
-//                teams: [{ teamId, teamName, spend, maxBudget, memberCount }],
-//                enabledOperations: string[] }
-//   `teams` lists only teams linked to LiteLLM, by DASHBOARD teamId (never a
-//   LiteLLM id). Calls: ONE getTeamDailySpend (team_ids = every linked LiteLLM
-//   team id, comma separated, timezone=0) + one getTeam per linked team.
+//   The 200 shape is the L4b one (docs/specs/2026-11-17-app-teams.md -
+//   Organisation view), described above the first L4b case below; it replaced
+//   the L3b `teams[]` table.
 //   org-admin, Admin, Auditor only; every other caller 403 FORBIDDEN, before
 //   query parsing and before any LiteLLM call.
 const authMock = vi.hoisted(() => vi.fn());
+// Counts membership reads per team and lets a test change what a later read
+// returns (Q2: membership is read once per team, LD34). Plain functions, so
+// vi.restoreAllMocks cannot unset the pass-through.
+const membership = vi.hoisted(() => ({
+  reads: [] as string[],
+  override: null as null | ((teamId: string, nth: number) => string[] | null),
+}));
+vi.mock("@/lib/data/access/team-member-lookup", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("@/lib/data/access/team-member-lookup")
+    >();
+  return {
+    ...actual,
+    listAllTeamMemberOids: async (teamId: string) => {
+      membership.reads.push(teamId);
+      const nth = membership.reads.filter((t) => t === teamId).length;
+      return (
+        membership.override?.(teamId, nth) ??
+        actual.listAllTeamMemberOids(teamId)
+      );
+    },
+  };
+});
 vi.mock("@/auth", () => ({ auth: authMock }));
 vi.mock("next/cache", async () => {
   const mod = await import("@/test/fakes/next-cache-fake");
@@ -41,6 +74,13 @@ vi.mock("next/cache", async () => {
 });
 
 const state = setupViewsSuite();
+beforeEach(() => {
+  membership.reads.length = 0;
+  membership.override = null;
+});
+// The views fake plus range spend that differs per team (LD36).
+const withRangeSpend = () =>
+  installMemberSumFake(state, { teamDaily: TEAM_DAILY_SPEND });
 const get = async (query = `?${DATES}`) => {
   stubLiteLLMEnv();
   const { GET } = await import("./route");
@@ -87,44 +127,309 @@ describe("GET /api/litellm/org", () => {
     await expectError(res, 403, "FORBIDDEN");
   });
 
-  it("totals come from ONE getTeamDailySpend call carrying every linked team id, in UTC (Views: Organisation; LD20)", async () => {
+  // L4b (docs/specs/2026-11-17-app-teams.md - Organisation view, AT5):
+  //   200 data = { totals: { spend }, daily, enabledOperations,
+  //     litellmTeams: [{ litellmTeamId, alias, spend, maxBudget, memberCount,
+  //                      linkedAppTeam: { teamId, teamName } | null }],
+  //     appTeams: [{ teamId, teamName, spendSource, spend: number | null,
+  //                  reason?: "open-team", coverage? }] }          (no `teams`)
+  //   Calls: one listProxyTeams, ONE getTeamDailySpend with every proxy team id
+  //   (linked or not), one getTeam per proxy team. The total is the LiteLLM
+  //   teams' total, never a sum of app teams. A linked app team's spend is its
+  //   LiteLLM team row; an unlinked team's is its member sum (coverage given);
+  //   unlinked teams are summed smallest first within 200 member reads in all,
+  //   and a team that does not fit is `spend: null, reason: "open-team"`.
+  // Amended 2026-11-17 (LD36, L4b round 1): the rows are range spend from one
+  // getTeamDailySpend read per proxy team, so the old single all-teams call
+  // is no longer the contract. Reads stay UTC and in the selected range (LD20).
+  it("range spend is read per proxy team, linked or not, in UTC for the range, one listProxyTeams (AT5; LD20; LD36)", async () => {
+    withRangeSpend();
     signInAs("orgAdmin");
-    const { body } = await get();
+    await get();
+    const lists = state.fake.calls.filter((c) => c.path === "/team/list");
+    expect(lists).toHaveLength(1);
     const daily = state.fake.calls.filter(
       (c) => c.path === "/team/daily/activity/aggregated",
     );
-    expect(daily).toHaveLength(1);
-    const q = new URL(daily[0]!.url).searchParams;
-    expect(q.get("timezone")).toBe("0");
-    expect(q.get("start_date")).toBe("2026-11-01");
-    expect(q.get("end_date")).toBe("2026-11-14");
-    const ids = (q.get("team_ids") ?? "").split(",").sort();
-    expect(ids).toEqual(Object.values(LTEAM).sort());
-    expect(body.data.totals.spend).toBe(1.5);
-    expect(body.data.daily[0]).toMatchObject({
-      date: "2026-11-02",
-      spend: 1.5,
-    });
+    const covered = new Set<string>();
+    for (const c of daily) {
+      const q = new URL(c.url).searchParams;
+      expect(q.get("timezone")).toBe("0");
+      expect(q.get("start_date")).toBe("2026-11-01");
+      expect(q.get("end_date")).toBe("2026-11-14");
+      const ids = (q.get("team_ids") ?? "").split(",");
+      if (ids.length === 1) covered.add(ids[0] ?? "");
+    }
+    expect([...covered].sort()).toEqual(
+      [...Object.values(LTEAM), UNLINKED_LTEAM].sort(),
+    );
   });
 
-  it("the per-team table lists each linked team by dashboard id with spend, budget and members; the unlinked team and LiteLLM ids are absent (Views: Organisation; identity mapping)", async () => {
+  // Q1 (LD36; app-teams - Organisation view; LT27): every Spend figure is the
+  // selected range. The views fake's team_info.spend is 12.5 for every team, so
+  // the budget-period figure cannot pass for a range figure.
+  it("Q1: totals.spend equals the sum of the LiteLLM teams rows for the range, and each row is that team's range spend, not team_info.spend (LD36; LT27)", async () => {
+    withRangeSpend();
+    signInAs("orgAdmin");
+    const { body } = await get();
+    const rows = body.data.litellmTeams as Array<{
+      litellmTeamId: string;
+      spend: number;
+    }>;
+    for (const r of rows) {
+      expect(r.spend, r.litellmTeamId).toBe(
+        TEAM_DAILY_SPEND[r.litellmTeamId as keyof typeof TEAM_DAILY_SPEND],
+      );
+    }
+    const rowSum = rows.reduce((sum, r) => sum + r.spend, 0);
+    expect(rowSum).toBe(TEAM_DAILY_TOTAL);
+    expect(body.data.totals.spend).toBe(rowSum);
+    expect(body.data.daily[0]).toMatchObject({
+      date: "2026-11-02",
+      spend: TEAM_DAILY_TOTAL,
+    });
+    expect(body.data).not.toHaveProperty("teams");
+  });
+
+  it("Q1: a linked app team row carries its LiteLLM team's range spend from getTeamDailySpend, not team_info.spend (LD36; Organisation view)", async () => {
+    withRangeSpend();
     signInAs("auditor");
-    const { body, text } = await get();
-    const rows = body.data.teams as Array<Record<string, unknown>>;
+    const { body } = await get();
+    const rows = body.data.appTeams as Array<Record<string, unknown>>;
+    const spendOf = (id: string) => rows.find((r) => r.teamId === id)?.spend;
+    expect(spendOf("team-a")).toBe(2);
+    expect(spendOf("team-b")).toBe(3);
+    expect(spendOf("team-c")).toBe(0.5);
+    expect(spendOf("team-m")).toBe(0.25);
+  });
+
+  it("the LiteLLM teams table lists every proxy team with alias, range spend, budget and members; an unlinked LiteLLM team appears with no app team (Organisation view; LD36)", async () => {
+    withRangeSpend();
+    signInAs("auditor");
+    const { body } = await get();
+    const rows = body.data.litellmTeams as Array<{
+      litellmTeamId: string;
+      alias: string | null;
+      spend: number;
+      maxBudget: number | null;
+      memberCount: number;
+      linkedAppTeam: { teamId: string; teamName: string } | null;
+    }>;
+    expect(rows.map((r) => r.litellmTeamId).sort()).toEqual(
+      [...Object.values(LTEAM), UNLINKED_LTEAM].sort(),
+    );
+    const linked = rows.find((r) => r.litellmTeamId === LTEAM["team-a"])!;
+    expect(linked).toMatchObject({
+      alias: "Alpha",
+      spend: 2,
+      maxBudget: 100,
+      memberCount: 1,
+      linkedAppTeam: { teamId: "team-a", teamName: "A" },
+    });
+    const shared = rows.find((r) => r.litellmTeamId === UNLINKED_LTEAM)!;
+    expect(shared).toMatchObject({ alias: SHARED_ALIAS, linkedAppTeam: null });
+    expectNoSentinels(body);
+  });
+
+  it("the app teams table lists every app team: a linked team carries its LiteLLM team row's spend, an unlinked team its member sum with coverage (Organisation view)", async () => {
+    await seedScenario();
+    installMemberSumFake(state, {
+      ...SCENARIO_FAKE,
+      teamDaily: TEAM_DAILY_SPEND,
+    });
+    signInAs("admin");
+    const { body } = await get();
+    const rows = body.data.appTeams as Array<Record<string, unknown>>;
     expect(rows.map((r) => r.teamId).sort()).toEqual([
       "team-a",
       "team-b",
       "team-c",
       "team-m",
+      "team-u",
     ]);
-    expect(rows[0]).toMatchObject({
-      spend: 12.5,
-      maxBudget: 100,
-      memberCount: 1,
+    const a = rows.find((r) => r.teamId === "team-a")!;
+    expect(a).toMatchObject({
+      teamName: "A",
+      spendSource: "litellm-team",
+      spend: 2,
     });
-    expect(rows.every((r) => typeof r.teamName === "string")).toBe(true);
-    for (const id of Object.values(LTEAM)) expect(text).not.toContain(id);
-    expectNoSentinels(body);
+    const u = rows.find((r) => r.teamId === "team-u")!;
+    expect(u).toMatchObject({
+      spendSource: "member-sum",
+      spend: SCENARIO.total,
+      coverage: SCENARIO.coverage,
+    });
+    expect(u).not.toHaveProperty("reason");
+  });
+
+  it("the headline total never includes the app teams' member sums: an unlinked team with spend leaves it unchanged (AT5, ATT5)", async () => {
+    await seedScenario();
+    installMemberSumFake(state, {
+      ...SCENARIO_FAKE,
+      teamDaily: TEAM_DAILY_SPEND,
+    });
+    signInAs("admin");
+    const { body } = await get();
+    expect(body.data.totals.spend).toBe(TEAM_DAILY_TOTAL);
+    const appSum = (body.data.appTeams as Array<{ spend: number | null }>)
+      .map((r) => r.spend ?? 0)
+      .reduce((a, b) => a + b, 0);
+    expect(appSum).not.toBe(body.data.totals.spend);
+  });
+
+  describe("read budget: 200 member reads per request (AT6)", () => {
+    it("sums unlinked teams smallest first; a team that does not fit is spend null with reason open-team", async () => {
+      await seedScenario();
+      await seedUnlinkedTeam("team-y", 6);
+      await seedUnlinkedTeam("team-x", 7);
+      await seedUnlinkedTeam("team-z", 8);
+      await seedLinkedMembers("team-y", 60);
+      await seedLinkedMembers("team-x", 150);
+      for (let n = 1; n <= 201; n += 1) {
+        await seedBoundMember("team-z", {
+          oid: `oid-z-${n}`,
+          litellmUserId: `lu-z-${n}`,
+        });
+      }
+      const tracker = installMemberSumFake(state, SCENARIO_FAKE);
+      signInAs("admin");
+      const { res, body } = await get();
+      expect(res.status).toBe(200);
+      const rows = body.data.appTeams as Array<Record<string, unknown>>;
+      const byId = (id: string) => rows.find((r) => r.teamId === id)!;
+      expect(byId("team-u").spend).toBe(SCENARIO.total);
+      expect(byId("team-y")).toMatchObject({ spendSource: "member-sum" });
+      expect(typeof byId("team-y").spend).toBe("number");
+      for (const id of ["team-x", "team-z"]) {
+        expect(byId(id)).toMatchObject({
+          spendSource: "member-sum",
+          spend: null,
+          reason: "open-team",
+        });
+      }
+      const reads = state.fake.calls.filter(
+        (c) => c.path === "/user/daily/activity",
+      );
+      expect(reads.length).toBeLessThanOrEqual(200);
+      expect(reads).toHaveLength(2 + 60);
+      expect(tracker.max).toBeLessThanOrEqual(5);
+    });
+
+    it("a team over the 200-member cap is an open-team row here, not a 422 (Organisation view; the 422 is the Team page's)", async () => {
+      await seedUnlinkedTeam("team-z", 8);
+      for (let n = 1; n <= 201; n += 1) {
+        await seedBoundMember("team-z", {
+          oid: `oid-z-${n}`,
+          litellmUserId: `lu-z-${n}`,
+        });
+      }
+      installMemberSumFake(state);
+      signInAs("admin");
+      const { res, body } = await get();
+      expect(res.status).toBe(200);
+      const z = (body.data.appTeams as Array<Record<string, unknown>>).find(
+        (r) => r.teamId === "team-z",
+      );
+      expect(z).toMatchObject({ spend: null, reason: "open-team" });
+    });
+  });
+
+  // Q2 (LD34 amended 2026-11-17): membership is read once per team and the
+  // list is passed to the sum, so a team that crosses 200 between two reads is
+  // judged on the one read. The override makes any second read return 201
+  // members; the old code's second read threw TOO_MANY_MEMBERS (a 422 for the
+  // whole Organisation view).
+  it("Q2: membership is read once per team; a second read that would show 201 members changes nothing, no 422 (LD34; Organisation view)", async () => {
+    await seedUnlinkedTeam("team-w", 7);
+    await seedLinkedMembers("team-w", 150);
+    membership.override = (teamId, nth) =>
+      teamId === "team-w" && nth >= 2
+        ? Array.from({ length: 201 }, (_, n) => `oid-late-${n}`)
+        : null;
+    installMemberSumFake(state);
+    signInAs("admin");
+    const { res, body } = await get();
+    expect(res.status).toBe(200);
+    expect(membership.reads.filter((t) => t === "team-w")).toHaveLength(1);
+    const w = (body.data.appTeams as Array<Record<string, unknown>>).find(
+      (r) => r.teamId === "team-w",
+    );
+    expect(w).toMatchObject({ spendSource: "member-sum", spend: 0 });
+    expect(w).not.toHaveProperty("reason");
+  });
+
+  it("Q2: a team seen at 201 members by its one read is an open-team row, never a 422 (LD34)", async () => {
+    await seedUnlinkedTeam("team-w", 7);
+    membership.override = (teamId, nth) =>
+      teamId === "team-w" && nth === 1
+        ? Array.from({ length: 201 }, (_, n) => `oid-late-${n}`)
+        : null;
+    installMemberSumFake(state);
+    signInAs("admin");
+    const { res, body } = await get();
+    expect(res.status).toBe(200);
+    expect(membership.reads.filter((t) => t === "team-w")).toHaveLength(1);
+    const w = (body.data.appTeams as Array<Record<string, unknown>>).find(
+      (r) => r.teamId === "team-w",
+    );
+    expect(w).toMatchObject({ spend: null, reason: "open-team" });
+  });
+
+  // Q3 (LD34 amended): the 200 counts every LiteLLM call. Each member below has
+  // no stored LiteLLM user id, so reading one costs a findUserByEmail and a
+  // spend read. 50 + 60 members is 110 spend reads (fits a spend-only count)
+  // but 220 calls with the lookups (does not).
+  it("Q3: email lookups and per-team daily reads count toward the 200-call budget; the team that does not fit is open-team and the request stays within 200 calls (LD34)", async () => {
+    const emailLookup: Record<string, { user_id: string; user_email: string }> =
+      {};
+    const seedLookupTeam = async (
+      teamId: string,
+      account: number,
+      n: number,
+    ) => {
+      await seedUnlinkedTeam(teamId, account);
+      for (let i = 1; i <= n; i += 1) {
+        const email = `${teamId}-${i}@company.com`;
+        await seedBoundMember(teamId, { oid: `oid-${teamId}-${i}`, email });
+        emailLookup[email] = {
+          user_id: `lu-${teamId}-${i}`,
+          user_email: email,
+        };
+      }
+    };
+    await seedLookupTeam("team-x", 7, 50);
+    await seedLookupTeam("team-y", 8, 60);
+    installMemberSumFake(state, { emailLookup, teamDaily: TEAM_DAILY_SPEND });
+    signInAs("admin");
+    const { res, body } = await get();
+    expect(res.status).toBe(200);
+    const rows = body.data.appTeams as Array<Record<string, unknown>>;
+    const byId = (id: string) => rows.find((r) => r.teamId === id);
+    expect(typeof byId("team-x")?.spend).toBe("number");
+    expect(byId("team-y")).toMatchObject({ spend: null, reason: "open-team" });
+    expect(
+      state.fake.calls.filter((c) => c.path === "/user/list").length,
+    ).toBeGreaterThan(0);
+    expect(state.fake.calls.length).toBeLessThanOrEqual(200);
+  });
+
+  it("a failing member read fails the request: 503, no partial table (AT7)", async () => {
+    await seedScenario();
+    installMemberSumFake(state, {
+      ...SCENARIO_FAKE,
+      failUsers: [SCENARIO.luserU1],
+    });
+    signInAs("admin");
+    const { res } = await get();
+    await expectError(res, 503, "LITELLM_UNAVAILABLE");
+  });
+
+  it("a disabled listProxyTeams is 403 OPERATION_DISABLED before any LiteLLM call (Allowlist changes; LD19)", async () => {
+    await setToggles({ listProxyTeams: false });
+    signInAs("orgAdmin");
+    const { res } = await get();
+    await expectError(res, 403, "OPERATION_DISABLED");
+    expect(state.fake.calls).toHaveLength(0);
   });
 
   it("reports enabledOperations (Toggles narrow only)", async () => {

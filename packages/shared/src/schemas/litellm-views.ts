@@ -47,11 +47,40 @@ export const LiteLLMMeResponseSchema = z.discriminatedUnion("linked", [
   }),
 ]);
 
+// App Teams spec - "Spend source", "Member sum", "API changes".
+export const SpendSourceSchema = z.enum(["litellm-team", "member-sum"]);
+
+const Count = z.number().int().min(0);
+
+export const MemberSumCoverageSchema = z.object({
+  members: Count,
+  matched: Count,
+  unmatched: Count,
+  pending: Count,
+});
+
+export const MemberSumSchema = z.object({
+  total: z.number(),
+  daily: DailySchema,
+  coverage: MemberSumCoverageSchema,
+  members: z.array(
+    z.object({
+      oid: z.string(),
+      name: z.string().optional(),
+      matched: z.boolean(),
+      // Absent for an unmatched member and while the Organisation cap hides
+      // per-user cost (LD23, AT3).
+      spend: z.number().optional(),
+    }),
+  ),
+});
+
 export const LiteLLMTeamDetailResponseSchema = z.discriminatedUnion(
   "connected",
   [
     z.object({
       connected: z.literal(true),
+      spendSource: z.literal("litellm-team"),
       team: z.object({
         alias: z.string().nullable(),
         spend: z.number(),
@@ -64,8 +93,14 @@ export const LiteLLMTeamDetailResponseSchema = z.discriminatedUnion(
       }),
       daily: DailySchema,
       enabledOperations: EnabledOperations,
+      memberSum: MemberSumSchema.optional(),
     }),
-    z.object({ connected: z.literal(false) }),
+    z.object({
+      connected: z.literal(false),
+      spendSource: z.literal("member-sum"),
+      daily: DailySchema,
+      memberSum: MemberSumSchema,
+    }),
   ],
 );
 
@@ -154,13 +189,26 @@ export const LiteLLMAuditResponseSchema = z.object({
 export const LiteLLMOrgResponseSchema = z.object({
   totals: z.object({ spend: z.number() }),
   daily: DailySchema,
-  teams: z.array(
+  litellmTeams: z.array(
     z.object({
-      teamId: z.string(),
-      teamName: z.string(),
+      litellmTeamId: z.string(),
+      alias: z.string().nullable(),
       spend: z.number(),
       maxBudget: z.number().nullable(),
       memberCount: z.number(),
+      linkedAppTeam: z
+        .object({ teamId: z.string(), teamName: z.string() })
+        .nullable(),
+    }),
+  ),
+  appTeams: z.array(
+    z.object({
+      teamId: z.string(),
+      teamName: z.string(),
+      spendSource: SpendSourceSchema,
+      spend: z.number().nullable(),
+      reason: z.literal("open-team").optional(),
+      coverage: MemberSumCoverageSchema.optional(),
     }),
   ),
   enabledOperations: EnabledOperations,
