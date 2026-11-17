@@ -7,7 +7,7 @@ role, and one prompt in this folder defines it:
 |---|---|---|
 | Planner | `planner` | [`planner_prompt.md`](planner_prompt.md) |
 | Coordinator | `Coordinator` | [`coordinator_prompt.md`](coordinator_prompt.md) |
-| Worker | `improvements`, `rbac_worker`, `litellm_worker` | [`worker_prompt.md`](worker_prompt.md), plus the unit's own prompt |
+| Worker | `improvements_worker`, `bedrock_worker`, `litellm_worker` | [`worker_prompt.md`](worker_prompt.md), plus the unit's own prompt |
 
 This file says **how to run them** and, briefly, **how they work**. The
 reference (what each role may and may not do, where every state file is,

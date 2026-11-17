@@ -54,6 +54,21 @@ Project-specific Claude Code customization lives under `.claude/`:
 - **Agents** — `.claude/agents/` — see Rule 70
 - **Hooks** — `.claude/hooks/`, wired in `.claude/settings.json`: `session-start.sh` (installs dependencies), `server-only-guard.sh` (blocks a Rule 10 violation when a `"use client"` file is written), `prettier-on-edit.sh` (formats after an edit)
 
+## Session roles (parallel runs)
+
+The build can run in several Claude sessions, each with one role and
+addressed by its **session name**. If the user starts you with a role line,
+or your session carries one of these names, read the role prompt and resume
+from its state file **before anything else**; take state from files and git.
+
+| Role | Session name | Read first | Resume from |
+|---|---|---|---|
+| Coordinator | `Coordinator` | `prompts/coordinator_prompt.md` | `temp/coordinator/state.md` |
+| Worker | `improvements_worker`, `bedrock_worker`, `litellm_worker` | `prompts/worker_prompt.md` | your row in `temp/coordinator/state.md` → the brief → `temp/run-<slug>/state.md` |
+| Planner | `planner` | `prompts/planner_prompt.md` | `temp/planner/state.md` |
+
+A session with no role is an ordinary session. **A subagent has no role; ignore this section.** Runbook: [`prompts/README-sessions.md`](prompts/README-sessions.md); reference: [`docs/guides/session-roles.md`](docs/guides/session-roles.md).
+
 ## What This Project Is
 
 Two deliverables (plus the platform IaC) in a **pnpm monorepo** (`apps/*`, `packages/*`, `infra`), sharing `packages/shared` (Zod schemas, model normalization, price table):

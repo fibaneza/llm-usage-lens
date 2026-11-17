@@ -35,7 +35,7 @@ in it, not in a worktree's `temp/`.
 2. `ListAgents`. Your own session must be named `Coordinator` (workers send
    to that name); if it is not, ask the user to rename it. Match each
    worker by **session name** (for example
-   `rbac_worker`, `litellm_worker`, or their old names, §0a). A worker keeps its name across goals; its
+   `bedrock_worker`, `litellm_worker`, or their old names, §0a). A worker keeps its name across goals; its
    **worktree and branch can change per goal**, so take them from `state.md`,
    never from the worker's start directory. Check the list against the
    roster (§0a): note a roster session that is missing, and ignore every
@@ -65,9 +65,9 @@ branch, queue) for each one; this table says what each session **is**.
 | Session name | Kind | Role | Runs | Channel | Agents |
 |---|---|---|---|---|---|
 | `Coordinator` | this session | Assigns goals, prevents conflicts, reviews and lands every unit, keeps state | this file | — | review and fix agents only (§4) |
-| `improvements` | worker (Claude Desktop session) | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `master_prompt.md`, `ui_refresh_prompt.md`, `management_improvements_prompt.md`, a plan's `<slug>_prompt.md` | live message; relay if held | per the brief (§3a) |
-| `rbac_worker` (until renamed: `rbac_prompt`) | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `rbac_prompt.md` (4R units), chores and plan units assigned to it | live message; relay if held | per the brief (§3a) |
-| `litellm_worker` (until renamed: `litellm_prompt`) | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `litellm_prompt.md` (L units), plan units assigned to it | live message; relay if held | per the brief (§3a) |
+| `improvements_worker` | worker (Claude Desktop session) | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `master_prompt.md`, `ui_refresh_prompt.md`, `management_improvements_prompt.md`, a plan's `<slug>_prompt.md` | live message; relay if held | per the brief (§3a) |
+| `bedrock_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `rbac_prompt.md` (4R units), chores and plan units assigned to it | live message; relay if held | per the brief (§3a) |
+| `litellm_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `litellm_prompt.md` (L units), plan units assigned to it | live message; relay if held | per the brief (§3a) |
 | `planner` | planner | Writes plans, spec text and prompts; **never** builds, tests, commits or takes a unit | `planner_prompt.md` | **file relay only** (§2b) | read-only research agents, at most 3 |
 
 **Renaming in progress (user, 2026-11-18).** Worker sessions go from
@@ -469,7 +469,7 @@ checkout. A plan is a proposal until you have taken it in:
 - **Every worker runs its plan units as a workflow (user, 2026-11-18: "all
   workers should run workflows based on the plan").** Each worker session
   that owns a unit of a plan has a `workflow-<session>.md` in the package,
-  and builds its units through it — `improvements`, `rbac_worker` and
+  and builds its units through it — `improvements_worker`, `bedrock_worker` and
   `litellm_worker` alike. A workflow can be small: a unit with nothing to
   fan out is still one *build → test → fix → gate* pipeline.
 - **The opt-in each run needs is still the user's own words in that worker

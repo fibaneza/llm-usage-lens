@@ -13,7 +13,7 @@ prompt wins. *Status* at the end says which parts are on `main`.
 
 | | Planner | Coordinator | Worker |
 |---|---|---|---|
-| Session name | `planner` | `Coordinator` | `improvements`, `rbac_worker`, `litellm_worker` (until the user renames them: `rbac_prompt`, `litellm_prompt`) |
+| Session name | `planner` | `Coordinator` | `improvements_worker`, `bedrock_worker`, `litellm_worker` |
 | Prompt | [`planner_prompt.md`](../../prompts/planner_prompt.md) | [`coordinator_prompt.md`](../../prompts/coordinator_prompt.md) | [`worker_prompt.md`](../../prompts/worker_prompt.md), plus the unit's own prompt |
 | Does | Turns a request into a plan package: units, file ownership, queues, workflow designs, spec text, the worker prompt | Assigns units, prevents conflicts, tracks usage and agents, reviews once per unit, lands every unit on local `main`, cleans up | Builds one assigned unit at a time in its worktree, by orchestrating agents; runs the branch gate; stops at "ready to merge" |
 | Never does | Builds, tests, runs a workflow, commits, edits a tracked file or a unit worktree, takes a unit | Feature work; pushes; merges into a worker's tree; gives a unit to `planner` | Writes code or tests itself; reviews; merges into `main`; pushes; edits another unit's files; starts a unit on its own |

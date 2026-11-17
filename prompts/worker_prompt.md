@@ -5,7 +5,7 @@ assigns to you** (`prompts/coordinator_prompt.md`), one at a time, each in
 its own worktree and on its own branch, and you stop at **"ready to
 merge"**. The coordinator reviews and lands your unit; the user pushes.
 
-This file defines the role for every worker (`improvements`, `rbac_worker`,
+This file defines the role for every worker (`improvements_worker`, `bedrock_worker`,
 `litellm_worker`, and any worker the user adds). What a unit must deliver
 comes from **the unit's own prompt** — a plan's `prompts/<slug>_prompt.md`,
 `rbac_prompt.md`, `litellm_prompt.md` or `master_prompt.md` — and from the
@@ -13,7 +13,7 @@ coordinator's **brief**.
 
 **Session names (user, 2026-11-18).** The worker sessions are being renamed
 from `<x>_prompt` to `<x>_worker`, so that a session is not named like a
-prompt file: `rbac_prompt` → `rbac_worker`, `litellm_prompt` →
+prompt file: `rbac_prompt` → `bedrock_worker`, `litellm_prompt` →
 `litellm_worker`. The user renames the sessions; until then the old name is
 the same session and stays valid. Use the name `ListAgents` shows today.
 `rbac_prompt.md` and `litellm_prompt.md` are prompt **files** and keep

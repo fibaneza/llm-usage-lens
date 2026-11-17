@@ -166,8 +166,8 @@ them here.
 
 ## 6. Sessions, waves and queues
 
-- **Owners are worker sessions only** — today `improvements`,
-  `rbac_worker`, `litellm_worker` (confirm the names in
+- **Owners are worker sessions only** — today `improvements_worker`,
+  `bedrock_worker`, `litellm_worker` (confirm the names in
   `temp/coordinator/state.md`). Never `planner`. The coordinator owns
   merges, reviews and its own small docs changes, not units.
 - Give each session a **queue**: what runs first, what follows, what each
