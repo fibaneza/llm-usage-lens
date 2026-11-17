@@ -10,11 +10,13 @@ import {
 
 import { formatUsd } from "@/components/charts/chart-data";
 import { MetricCard } from "@/components/display/MetricCard";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
+  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
@@ -112,6 +114,7 @@ function Results({
   selected: string | null;
   onSelect: (userId: string) => void;
 }) {
+  const isMobile = useIsMobile();
   const query = useLiteLLMQueryState(
     ["users", term],
     `/api/litellm/users?q=${encodeURIComponent(term)}`,
@@ -125,43 +128,86 @@ function Results({
   return (
     <div className="flex flex-col gap-3">
       <LiteLLMReportedBadge />
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Email</TableHead>
-            <TableHead>Teams</TableHead>
-            <TableHead className="text-right">Spend</TableHead>
-            <TableHead className="text-right">Budget</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
+      {isMobile ? (
+        <ul role="list" aria-label="User results" className="space-y-3">
           {users.map((user) => (
-            <TableRow
+            <li
               key={user.userId}
               data-state={user.userId === selected ? "selected" : undefined}
+              className="bg-card text-card-foreground rounded-card data-[state=selected]:border-ring space-y-3 border p-4"
             >
-              <TableCell>
-                <button
-                  type="button"
-                  className="focus-visible:ring-ring rounded-sm font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
-                  onClick={() => onSelect(user.userId)}
-                >
-                  {user.email}
-                </button>
-              </TableCell>
-              <TableCell>
-                {user.teams.map((team) => team.teamName).join(", ")}
-              </TableCell>
-              <TableCell className="text-right font-mono tabular-nums">
-                {spend(user.spend)}
-              </TableCell>
-              <TableCell className="text-right font-mono tabular-nums">
-                {budget(user.maxBudget)}
-              </TableCell>
-            </TableRow>
+              <button
+                type="button"
+                className="focus-visible:ring-ring min-h-touch w-full rounded-sm text-left font-medium break-words underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                onClick={() => onSelect(user.userId)}
+              >
+                {user.email}
+              </button>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div className="col-span-2 min-w-0">
+                  <dt className="text-muted-foreground text-xs">Teams</dt>
+                  <dd className="break-words">
+                    {user.teams.map((team) => team.teamName).join(", ")}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-muted-foreground text-xs">Spend</dt>
+                  <dd className="font-mono break-words tabular-nums">
+                    {spend(user.spend)}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-muted-foreground text-xs">Budget</dt>
+                  <dd className="font-mono break-words tabular-nums">
+                    {budget(user.maxBudget)}
+                  </dd>
+                </div>
+              </dl>
+            </li>
           ))}
-        </TableBody>
-      </Table>
+        </ul>
+      ) : (
+        <div>
+          <Table>
+            <TableCaption className="sr-only">User results</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Email</TableHead>
+                <TableHead>Teams</TableHead>
+                <TableHead className="text-right">Spend</TableHead>
+                <TableHead className="text-right">Budget</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => (
+                <TableRow
+                  key={user.userId}
+                  data-state={user.userId === selected ? "selected" : undefined}
+                >
+                  <TableCell>
+                    <button
+                      type="button"
+                      className="focus-visible:ring-ring rounded-sm font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                      onClick={() => onSelect(user.userId)}
+                    >
+                      {user.email}
+                    </button>
+                  </TableCell>
+                  <TableCell>
+                    {user.teams.map((team) => team.teamName).join(", ")}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {spend(user.spend)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {budget(user.maxBudget)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

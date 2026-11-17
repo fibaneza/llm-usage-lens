@@ -764,12 +764,13 @@ the `auth.signin.error` record; `withRoute` treats a session without
 ### L5 — Polish and verification (`feature/phase-l5-litellm-polish`)
 
 - [x] Spec: LiteLLM spec — *Polish and verification (L5)* (scope, accessibility floor, responsive, the role × operation matrix, the probe, the runbook outline; agent decisions, 2026-11-17)
-- [ ] **L5b** (after ui-compact B2 lands; split 2026-11-17, coordinator): accessibility floor and responsive checks on the LiteLLM pages at their `/dashboard/manage/*` routes (axe per role, keyboard walk of tabs, picker and every dialog, cards below `md`)
+- [x] **L5b** (after ui-compact B2 lands; split 2026-11-17, coordinator): accessibility floor and responsive checks on the LiteLLM pages at their `/dashboard/manage/*` routes and My usage (axe per role, keyboard walk of the team selector, the Audit source filter and every dialog, text for every state, cards below `md` for every LiteLLM table with a UI; `e2e/litellm-a11y.spec.ts`). Not built here: the Team page view tabs and member search (moved to B2b, below); spend logs have no UI; the Lead is exercised as org-admin in the main e2e project (the real team-scope Lead runs in role-probe)
 - [x] Role × operation matrix test from the spec table, against the fake (workflow pilot candidate — *Workflow pilots*; built without a workflow; the page row moves to L5b)
 - [x] Runbook `docs/guides/litellm-admin.md` completed per the spec outline (§11's page path is updated in L5b after B2)
 - [x] Probe: `pnpm probe:litellm` (opt-in `LITELLM_PROBE=1`, local `localhost:4000` only, never `prod`; outside `pnpm test:e2e`, `pnpm check` and CI) on the `llmul-probe` fixture team, with the fake mode `pnpm probe:litellm:fake` (LiteLLM spec LD28)
 - [x] Verify (L5): matrix green; the probe run in the named fake mode (`pnpm probe:litellm:fake`, 9/9, 2026-11-17) with its keys and member cleaned up and toggles restored; a real local LiteLLM run is a user action
-- [ ] Verify (L5b): axe clean at 375 / 768 / 1024 / 1440 / 1920
+- [x] Verify (L5b): axe clean per role and dialog state; no horizontal scroll at 375 / 768 / 1024 / 1440 / 1920 (1920 in `litellm-a11y.spec.ts`, the rest in the B2 specs); cards below `md`
+- Moved to **B2b** (coordinator, 2026-11-17): the keyboard walk of the Team page's view tabs and member search, with the features themselves (Design System — *Management pages*)
 
 ### L6 — Combined usage and *My usage* (`feature/phase-l6-litellm-combined`)
 

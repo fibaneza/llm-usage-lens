@@ -345,7 +345,8 @@ const MEMBER_SUM = {
     { oid: "oid-u1", name: "Una One", matched: true, spend: 3.5 },
     { oid: "oid-u2", name: "Dos Two", matched: true, spend: 0.5 },
     { oid: "oid-u3", name: "Tres Three", matched: false },
-    // Matched, spend withheld by the Organisation cap (AT3): "Not shown".
+    // Matched, spend withheld by the Organisation cap (AT3): "Hidden until per-user
+    // reporting is approved" (coordinator ruling 2026-11-17, the Users page wording).
     { oid: "oid-u4", name: "Cuatro Four", matched: true },
   ],
 };
@@ -448,7 +449,7 @@ test.describe("Management -> Team: spend source (App Teams)", () => {
       ),
     ).toBeVisible();
     await expect(spend.getByRole("row", { name: /Cuatro Four/ })).toContainText(
-      "Not shown",
+      "Hidden until per-user reporting is approved",
     );
     // AT4: no LiteLLM panel renders for an unlinked team.
     for (const name of [

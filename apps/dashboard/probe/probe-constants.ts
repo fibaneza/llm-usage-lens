@@ -3,8 +3,9 @@
 // the probe uses 3311 and 3312 so it never reuses a server with the wrong env.
 export const PROBE_PORT = 3311;
 export const PROBE_BASE_URL = `http://127.0.0.1:${PROBE_PORT}`;
-// The role-probe project's dist dir, already ignored by git, ESLint, Prettier
-// and Vitest; the shared e2e lock keeps the two from running at once.
+// The LiteLLM probe's own dist dir, not the e2e role-probe server's `.next-probe-r5`:
+// unstable_cache entries live on disk per distDir (LiteLLM spec LD28, probe section).
+// Ignored by git, ESLint, Prettier and Vitest; the shared e2e lock keeps the probe and e2e from running at once.
 export const PROBE_DIST_DIR = ".next-probe-litellm";
 // The shared e2e table: the identity seed (test/fixtures/e2e-identity-seed.ts)
 // writes there, so the probe's server reads it too.

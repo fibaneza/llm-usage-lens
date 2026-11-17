@@ -6,6 +6,7 @@ import { useState } from "react";
 import { formatUsd } from "@/components/charts/chart-data";
 import { BudgetBar, budgetPercent } from "@/components/manage/BudgetBar";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -31,6 +32,7 @@ import { useTeamDetail } from "../use-team-detail";
 import { memberPath, teamPath, useTeamWrite } from "./use-team-write";
 
 const NEAR_BUDGET_PERCENT = 80;
+const HIDDEN = "Hidden until per-user reporting is approved";
 
 const parsed = (value: string) =>
   value.trim() === "" ? undefined : Number(value);
@@ -198,6 +200,7 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
   );
   const { write, refresh, pending, error } = useTeamWrite(teamId);
   const [nearOnly, setNearOnly] = useState(false);
+  const isMobile = useIsMobile();
   if (detail.status === "unavailable" || members.status === "unavailable") {
     return <Unavailable />;
   }
@@ -276,6 +279,114 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
       <WriteError message={error} />
       {items.length === 0 ? (
         <Empty>No members in this team.</Empty>
+      ) : isMobile ? (
+        <ul role="list" aria-label="Team members" className="space-y-3">
+          {shown.map((member) => {
+            const name = member.name ?? member.email;
+            const oid = member.oid;
+            const act = (action: string, method: "POST" | "DELETE" = "POST") =>
+              oid
+                ? write(memberPath(teamId, oid, action), method, undefined, [
+                    "members",
+                  ])
+                : Promise.resolve();
+            const actions = oid ? (
+              <span className="flex flex-wrap gap-2">
+                {ops.has("removeTeamMember") ? (
+                  <ConfirmAction
+                    label={`Remove ${name}`}
+                    text="Remove"
+                    title={`Remove ${name}?`}
+                    description={`Removes ${name} from ${teamName}. Recorded in the audit log.`}
+                    disabled={pending}
+                    onConfirm={() => void act("", "DELETE")}
+                  />
+                ) : null}
+                {ops.has("resetMemberSpend") ? (
+                  <ConfirmAction
+                    label={`Reset spend for ${name}`}
+                    text="Reset spend"
+                    title={`Reset spend for ${name}?`}
+                    description={`Sets ${name}'s spend to $0.00. Recorded in the audit log.`}
+                    disabled={pending}
+                    onConfirm={() => void act("/reset-spend")}
+                  />
+                ) : null}
+                {ops.has("resetMemberBudget") ? (
+                  <ConfirmAction
+                    label={`Reset budget for ${name}`}
+                    text="Reset budget"
+                    title={`Reset budget for ${name}?`}
+                    description="The member's budget period restarts."
+                    disabled={pending}
+                    onConfirm={() => void act("/reset-budget")}
+                  />
+                ) : null}
+                {ops.has("disableMember") ? (
+                  <ActionButton
+                    label={`Disable ${name}`}
+                    text="Disable"
+                    disabled={pending}
+                    onClick={() => void act("/disable")}
+                  />
+                ) : null}
+                {ops.has("enableMember") ? (
+                  <ActionButton
+                    label={`Enable ${name}`}
+                    text="Enable"
+                    disabled={pending}
+                    onClick={() => void act("/enable")}
+                  />
+                ) : null}
+                {ops.has("setMemberBudget") || ops.has("setMemberLimits") ? (
+                  <EditMemberLimits
+                    teamId={teamId}
+                    oid={oid}
+                    name={name}
+                    budgetEnabled={ops.has("setMemberBudget")}
+                    limitsEnabled={ops.has("setMemberLimits")}
+                  />
+                ) : null}
+              </span>
+            ) : null;
+            const budget = (
+              <span className="flex flex-col items-start gap-1 font-mono tabular-nums">
+                {member.maxBudget == null || member.maxBudget <= 0 ? null : (
+                  <span>{formatUsd(member.maxBudget)}</span>
+                )}
+                {member.spend === undefined ? null : (
+                  <BudgetBar spend={member.spend} budget={member.maxBudget} />
+                )}
+              </span>
+            );
+            return (
+              <li
+                key={member.userId}
+                className="bg-card text-card-foreground rounded-card space-y-3 border p-4"
+              >
+                <div className="min-w-0 font-medium break-words">{name}</div>
+                <div className="text-muted-foreground text-xs break-words">
+                  {member.email}
+                </div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground text-xs">Spend</dt>
+                    <dd className="font-mono tabular-nums">
+                      {member.spend === undefined
+                        ? HIDDEN
+                        : formatUsd(member.spend)}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground text-xs">Budget</dt>
+                    <dd>{budget}</dd>
+                  </div>
+                </dl>
+                {actions}
+              </li>
+            );
+          })}
+        </ul>
       ) : (
         <Table>
           <TableCaption className="sr-only">Team members</TableCaption>
@@ -300,6 +411,75 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
                       "members",
                     ])
                   : Promise.resolve();
+              const actions = oid ? (
+                <span className="flex flex-wrap gap-2">
+                  {ops.has("removeTeamMember") ? (
+                    <ConfirmAction
+                      label={`Remove ${name}`}
+                      text="Remove"
+                      title={`Remove ${name}?`}
+                      description={`Removes ${name} from ${teamName}. Recorded in the audit log.`}
+                      disabled={pending}
+                      onConfirm={() => void act("", "DELETE")}
+                    />
+                  ) : null}
+                  {ops.has("resetMemberSpend") ? (
+                    <ConfirmAction
+                      label={`Reset spend for ${name}`}
+                      text="Reset spend"
+                      title={`Reset spend for ${name}?`}
+                      description={`Sets ${name}'s spend to $0.00. Recorded in the audit log.`}
+                      disabled={pending}
+                      onConfirm={() => void act("/reset-spend")}
+                    />
+                  ) : null}
+                  {ops.has("resetMemberBudget") ? (
+                    <ConfirmAction
+                      label={`Reset budget for ${name}`}
+                      text="Reset budget"
+                      title={`Reset budget for ${name}?`}
+                      description="The member's budget period restarts."
+                      disabled={pending}
+                      onConfirm={() => void act("/reset-budget")}
+                    />
+                  ) : null}
+                  {ops.has("disableMember") ? (
+                    <ActionButton
+                      label={`Disable ${name}`}
+                      text="Disable"
+                      disabled={pending}
+                      onClick={() => void act("/disable")}
+                    />
+                  ) : null}
+                  {ops.has("enableMember") ? (
+                    <ActionButton
+                      label={`Enable ${name}`}
+                      text="Enable"
+                      disabled={pending}
+                      onClick={() => void act("/enable")}
+                    />
+                  ) : null}
+                  {ops.has("setMemberBudget") || ops.has("setMemberLimits") ? (
+                    <EditMemberLimits
+                      teamId={teamId}
+                      oid={oid}
+                      name={name}
+                      budgetEnabled={ops.has("setMemberBudget")}
+                      limitsEnabled={ops.has("setMemberLimits")}
+                    />
+                  ) : null}
+                </span>
+              ) : null;
+              const budget = (
+                <span className="flex flex-col items-end gap-1 font-mono tabular-nums">
+                  {member.maxBudget == null || member.maxBudget <= 0 ? null : (
+                    <span>{formatUsd(member.maxBudget)}</span>
+                  )}
+                  {member.spend === undefined ? null : (
+                    <BudgetBar spend={member.spend} budget={member.maxBudget} />
+                  )}
+                </span>
+              );
               return (
                 <TableRow key={member.userId}>
                   <TableCell>
@@ -311,84 +491,12 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
                     </span>
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
-                    {member.spend === undefined ? "-" : formatUsd(member.spend)}
+                    {member.spend === undefined
+                      ? HIDDEN
+                      : formatUsd(member.spend)}
                   </TableCell>
-                  <TableCell>
-                    <span className="flex flex-col items-end gap-1 font-mono tabular-nums">
-                      {member.maxBudget == null ||
-                      member.maxBudget <= 0 ? null : (
-                        <span>{formatUsd(member.maxBudget)}</span>
-                      )}
-                      {member.spend === undefined ? null : (
-                        <BudgetBar
-                          spend={member.spend}
-                          budget={member.maxBudget}
-                        />
-                      )}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {oid ? (
-                      <span className="flex flex-wrap gap-2">
-                        {ops.has("removeTeamMember") ? (
-                          <ConfirmAction
-                            label={`Remove ${name}`}
-                            text="Remove"
-                            title={`Remove ${name}?`}
-                            description={`Removes ${name} from ${teamName}. Recorded in the audit log.`}
-                            disabled={pending}
-                            onConfirm={() => void act("", "DELETE")}
-                          />
-                        ) : null}
-                        {ops.has("resetMemberSpend") ? (
-                          <ConfirmAction
-                            label={`Reset spend for ${name}`}
-                            text="Reset spend"
-                            title={`Reset spend for ${name}?`}
-                            description={`Sets ${name}'s spend to $0.00. Recorded in the audit log.`}
-                            disabled={pending}
-                            onConfirm={() => void act("/reset-spend")}
-                          />
-                        ) : null}
-                        {ops.has("resetMemberBudget") ? (
-                          <ConfirmAction
-                            label={`Reset budget for ${name}`}
-                            text="Reset budget"
-                            title={`Reset budget for ${name}?`}
-                            description="The member's budget period restarts."
-                            disabled={pending}
-                            onConfirm={() => void act("/reset-budget")}
-                          />
-                        ) : null}
-                        {ops.has("disableMember") ? (
-                          <ActionButton
-                            label={`Disable ${name}`}
-                            text="Disable"
-                            disabled={pending}
-                            onClick={() => void act("/disable")}
-                          />
-                        ) : null}
-                        {ops.has("enableMember") ? (
-                          <ActionButton
-                            label={`Enable ${name}`}
-                            text="Enable"
-                            disabled={pending}
-                            onClick={() => void act("/enable")}
-                          />
-                        ) : null}
-                        {ops.has("setMemberBudget") ||
-                        ops.has("setMemberLimits") ? (
-                          <EditMemberLimits
-                            teamId={teamId}
-                            oid={oid}
-                            name={name}
-                            budgetEnabled={ops.has("setMemberBudget")}
-                            limitsEnabled={ops.has("setMemberLimits")}
-                          />
-                        ) : null}
-                      </span>
-                    ) : null}
-                  </TableCell>
+                  <TableCell>{budget}</TableCell>
+                  <TableCell>{actions}</TableCell>
                 </TableRow>
               );
             })}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type RefObject } from "react";
 
 import {
   AlertDialog,
@@ -116,6 +116,7 @@ export function FormDialog({
   error,
   onOpen,
   onSubmit,
+  triggerRef,
   children,
 }: {
   label: string;
@@ -129,6 +130,7 @@ export function FormDialog({
   error: string | null;
   onOpen?: () => void;
   onSubmit: () => Promise<boolean>;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -141,7 +143,7 @@ export function FormDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" aria-label={label}>
+        <Button ref={triggerRef} variant="outline" size="sm" aria-label={label}>
           {text}
         </Button>
       </DialogTrigger>

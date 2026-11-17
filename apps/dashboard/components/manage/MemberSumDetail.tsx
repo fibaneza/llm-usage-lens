@@ -63,7 +63,7 @@ export function MemberSpendTable({ members }: Pick<MemberSum, "members">) {
               {!m.matched
                 ? "not in LiteLLM"
                 : m.spend === undefined
-                  ? "Not shown"
+                  ? "Hidden until per-user reporting is approved"
                   : formatUsd(m.spend)}
             </TableCell>
           </TableRow>

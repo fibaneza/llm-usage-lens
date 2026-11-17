@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,15 +17,23 @@ import {
 // spec -- Writes, generateMemberKey).
 export function ShownOnceKeyDialog({
   value,
+  returnFocusRef,
   onClose,
 }: {
   value: string;
+  returnFocusRef: RefObject<HTMLElement | null>;
   onClose: () => void;
 }) {
   const [copyFailed, setCopyFailed] = useState(false);
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent showCloseButton={false}>
+      <DialogContent
+        showCloseButton={false}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          returnFocusRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Key generated</DialogTitle>
           <DialogDescription>

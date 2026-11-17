@@ -280,10 +280,11 @@ never widen it. An operation the allowlist lacks cannot be switched on.
 ## 11. The team configuration page (Leads)
 
 A Lead configures their own team's LiteLLM settings on the team
-configuration page, reached from the **Configure team** link. Today it is
-`/dashboard/litellm/team-config?team=<teamId>`; ui-compact Slice B moves it
-to Management → Team (LD25). Viewers, plain members and the Auditor get a
-`404`; a Lead sees only teams in their scope.
+configuration page, **Management → Team**
+(`/dashboard/manage/team?team=<teamId>`; the old
+`/dashboard/litellm/team-config` URL redirects there). The Auditor sees it
+read-only; Viewers and plain members get a `404`; a Lead sees only teams in
+their scope.
 
 - **Members:** add (from the dashboard team's members), remove, budget,
   limits, reset spend, reset budget, disable and enable.
@@ -399,8 +400,8 @@ previous run left for its fixed identities.
 
 1. In Settings → LiteLLM, set `deleteKey` and `resetMemberSpend` back to
    their previous values (off by default).
-2. Block, then delete, any `llmul-probe-*` key left on the fixture team
-   (team configuration page, or LiteLLM with an operator key).
+2. Nothing for leftover `llmul-probe-*` keys: the next run deletes them on
+   the fixture team before it starts.
 3. The next run clears the leftover Lead scope and memberships itself.
 
 **Left behind by design:** the audit records, LiteLLM's spend logs and, on
