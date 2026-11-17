@@ -47,7 +47,7 @@ const VALID_DATED = {
     },
   },
   lastUpdatedAt: "2026-10-27T23:59:59.000Z",
-  ttl: 1_900_000_000,
+  expiresAt: 1_900_000_000,
 };
 
 describe("DatedDailyRollupSchema", () => {
@@ -85,5 +85,20 @@ describe("DatedDailyRollupSchema", () => {
     expect(
       DatedDailyRollupSchema.safeParse({ ...VALID_DATED, cost: 10 }).success,
     ).toBe(false);
+  });
+});
+
+// Source: data-model spec — "TTL attribute `expiresAt`" (2026-11-17).
+describe("DatedDailyRollupSchema legacy ttl (data-model — TTL attribute expiresAt)", () => {
+  const base = { ...VALID_DATED };
+  delete (base as Partial<typeof base>).expiresAt;
+
+  it("accepts a legacy item with ttl and no expiresAt, stripping ttl", () => {
+    const result = DatedDailyRollupSchema.safeParse({
+      ...base,
+      expiresAt: 1_900_000_000,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect("ttl" in result.data).toBe(false);
   });
 });

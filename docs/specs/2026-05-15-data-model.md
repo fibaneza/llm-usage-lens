@@ -142,8 +142,10 @@ Attributes:
 
   -- Metadata --
   lastUpdatedAt    string           ISO8601
-  ttl              number           epoch seconds = lastUpdatedAt + 365 days (decided 2026-11-10)
+  expiresAt        number           epoch seconds = lastUpdatedAt + 365 days (decided 2026-11-10; renamed from `ttl` 2026-11-17, see below)
 ```
+
+> **TTL attribute `expiresAt` (agent decision, 2026-11-17, fix/rollup-ttl-attribute).** DynamoDB allows one TTL attribute per table, and the FoundationStack table's is `expiresAt` (Platform spec; the audit records use it). The rollup attribute was `ttl`, so rollups would never have expired in AWS. Rollups now write `expiresAt` (epoch seconds) instead. It is **required** in the write-side `DailyRollupItemSchema` (collector and seeds) and **optional** in `DailyRollupSchema`, so items seeded before the rename (which carry `ttl`) still parse on read, the same backward-compatibility rule as `date`; reseed local tables to drop `ttl`. A CDK test asserts the table's TTL attribute equals the attribute the rollup schema writes, so the two cannot drift again. The table and the audit records are unchanged.
 
 > **`date` attribute (audit A2; adopted 2026-10-28).** Without it, the day exists only in `SK` (`DAILY#…`) and `gsi1pk` (`DATE#…`). Those key attributes are not in `DailyRollupSchema`, so a Zod parse strips them, and range or trend consumers lose the day. Add `date` (`YYYY-MM-DD`, UTC, Rule 20.1) as a plain attribute that the collector and seed scripts write. It is **optional** in `DailyRollupSchema`, so items written before it existed still parse. The check that `date` matches `SK` (`DAILY#…`) and `gsi1pk` (`DATE#…`) belongs in a **write-side item schema**, `DailyRollupItemSchema` in `packages/shared/src/schemas/` (the full DynamoDB item including key attributes, used by the collector and seed scripts), not in `DailyRollupSchema`, which never sees the key attributes. Data-access functions return `date` on every rollup, deriving it from `SK` for items written without it, so no backfill is needed. When an item has a stored `date` that disagrees with the day in its `SK`, the read **fails** (Rule 60.17): the item is corrupt, because every writer validates with `DailyRollupItemSchema`. The read never silently picks one of the two days (decided 2026-10-28). Lands in Phase 3.1a.
 
@@ -393,7 +395,7 @@ Department totals are computed on-the-fly from account DailyRollups grouped by d
 
 ### TTL and Data Retention
 
-DailyRollup items expire 365 days after they were last updated (`ttl = lastUpdatedAt + 365 days`; decided 2026-11-10) via DynamoDB TTL. This is configurable per deployment. For longer retention, items can be archived to S3 before expiry. *Amended 2026-11-17 (unit CFG):* the per-deployment value is `data.retention.dailyRollupDays` in `config.yaml` (default 365; [System Architecture](2026-05-15-system-architecture.md) — *Configuration file*); the collector applies it from Phase 6. The seed scripts ignore the key and keep the 365-day default.
+DailyRollup items expire 365 days after they were last updated (`expiresAt = lastUpdatedAt + 365 days`, the table's TTL attribute; decided 2026-11-10, attribute renamed 2026-11-17) via DynamoDB TTL. This is configurable per deployment. For longer retention, items can be archived to S3 before expiry. *Amended 2026-11-17 (unit CFG):* the per-deployment value is `data.retention.dailyRollupDays` in `config.yaml` (default 365; [System Architecture](2026-05-15-system-architecture.md) — *Configuration file*); the collector applies it from Phase 6. The seed scripts ignore the key and keep the 365-day default.
 
 ### Settings shadowed by the configuration file
 

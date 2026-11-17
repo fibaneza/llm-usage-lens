@@ -1,6 +1,10 @@
 // Source: docs/specs/2026-11-10-platform.md — "Created resources" (FoundationStack:
 // table, CMK, cluster, ECR, SSM name parameters); contract rp-contract.md.
-import { GSI1_NAME } from "@llm-usage-lens/shared";
+import {
+  AuditItemSchema,
+  DailyRollupItemSchema,
+  GSI1_NAME,
+} from "@llm-usage-lens/shared";
 import { App } from "aws-cdk-lib";
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
@@ -58,6 +62,17 @@ describe.each(["dev", "prod"] as const)("FoundationStack (%s)", (env) => {
       UpdateReplacePolicy: "Retain",
       Properties: { EnableKeyRotation: true },
     });
+  });
+
+  // data-model spec — "TTL attribute `expiresAt`" (2026-11-17): the table's one
+  // TTL attribute must be the one the rollup and audit items write.
+  it("table TTL attribute is the attribute the rollup and audit items write", () => {
+    const tables = Object.values(t.findResources("AWS::DynamoDB::Table"));
+    const ttlAttribute = tables[0]?.Properties.TimeToLiveSpecification
+      .AttributeName as string;
+    expect(Object.keys(DailyRollupItemSchema.shape)).toContain(ttlAttribute);
+    expect(Object.keys(AuditItemSchema.shape)).toContain(ttlAttribute);
+    expect(Object.keys(DailyRollupItemSchema.shape)).not.toContain("ttl");
   });
 
   it("creates one ECS cluster with Container Insights", () => {

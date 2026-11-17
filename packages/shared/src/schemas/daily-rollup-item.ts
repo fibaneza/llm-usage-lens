@@ -19,6 +19,8 @@ export const DailyRollupItemSchema = DailyRollupBaseSchema.extend({
   gsi1pk: z.string().min(1),
   gsi1sk: z.string().min(1),
   date: UtcDaySchema,
+  // Required on write: the table TTL attribute (data-model spec — "TTL attribute `expiresAt`").
+  expiresAt: z.number().int().positive(),
 })
   .refine(hasConsistentCost, COST_INVARIANT_REFINEMENT)
   .refine((item) => item.SK === dailySk(item.date), {

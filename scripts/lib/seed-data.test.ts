@@ -152,10 +152,18 @@ describe("buildSeedData — default profile", () => {
     expect(hasUntagged).toBe(true);
   });
 
-  it("sets ttl (epoch seconds) after lastUpdatedAt", () => {
+  // data-model spec — "TTL attribute `expiresAt`" (2026-11-17): expiresAt =
+  // lastUpdatedAt + 365 days (epoch seconds); no legacy `ttl`.
+  it("sets expiresAt to lastUpdatedAt + 365 days (epoch seconds)", () => {
     for (const r of rollups) {
-      expect(r.ttl).toBeGreaterThan(Date.parse(r.lastUpdatedAt) / 1000);
+      const updated = Date.parse(r.lastUpdatedAt) / 1000;
+      expect(r.expiresAt).toBeGreaterThan(updated);
+      expect(r.expiresAt).toBe(Math.floor(updated) + 365 * 86_400);
     }
+  });
+
+  it("writes no legacy ttl attribute on rollups", () => {
+    for (const r of rollups) expect("ttl" in r).toBe(false);
   });
 
   it("includes a valid SyncStatus", () => {

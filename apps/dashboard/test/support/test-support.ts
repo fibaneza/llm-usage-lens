@@ -24,6 +24,10 @@ export const TEST_TABLE_NAME =
 
 export type DatedRollup = z.infer<typeof DatedDailyRollupSchema>;
 
+// Write-side fixture: expiresAt is required, as SeedRollup (the seed writer's
+// input) requires it (data-model spec — "TTL attribute `expiresAt`").
+export type FixtureRollup = DatedRollup & { expiresAt: number };
+
 let rawCached: DynamoDBClient | undefined;
 let cached: DynamoDBDocumentClient | undefined;
 
@@ -83,7 +87,7 @@ export async function clearTable(): Promise<void> {
 
 export async function loadFixtures(data: {
   accounts?: AccountMeta[];
-  rollups?: DatedRollup[];
+  rollups?: FixtureRollup[];
 }): Promise<void> {
   await writeSeed(testDoc(), TEST_TABLE_NAME, {
     accounts: data.accounts ?? [],
@@ -129,7 +133,7 @@ export function makeRollup(
   account: AccountMeta,
   date: string,
   options: { cost?: number; userCount?: number } = {},
-): DatedRollup {
+): FixtureRollup {
   const cost = options.cost ?? 10;
   const byUser: Record<string, typeof ENTRY> = {};
   for (let i = 0; i < (options.userCount ?? 1); i += 1) {
@@ -159,7 +163,7 @@ export function makeRollup(
       },
     },
     lastUpdatedAt: `${date}T13:00:00.000Z`,
-    ttl: 1_900_000_000,
+    expiresAt: 1_900_000_000,
   };
 }
 

@@ -55,7 +55,7 @@ const VALID_ITEM = {
     },
   },
   lastUpdatedAt: `${DAY}T23:59:59.000Z`,
-  ttl: 1_900_000_000,
+  expiresAt: 1_900_000_000,
 };
 
 function without(field: string): Record<string, unknown> {
@@ -129,5 +129,40 @@ describe("DailyRollupItemSchema", () => {
     expect(
       DailyRollupItemSchema.safeParse({ ...VALID_ITEM, cost: 10 }).success,
     ).toBe(false);
+  });
+});
+
+// Source: data-model spec — "TTL attribute `expiresAt`" (2026-11-17): REQUIRED,
+// positive integer epoch seconds on the write side; the legacy `ttl` is not written.
+describe("DailyRollupItemSchema expiresAt (data-model — TTL attribute expiresAt)", () => {
+  it("rejects an item without expiresAt", () => {
+    expect(DailyRollupItemSchema.safeParse(without("expiresAt")).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects a legacy item that has ttl but no expiresAt", () => {
+    expect(
+      DailyRollupItemSchema.safeParse({
+        ...without("expiresAt"),
+        ttl: 1_900_000_000,
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each([0, -1, 1.5, "1900000000"])("rejects expiresAt %j", (value) => {
+    expect(
+      DailyRollupItemSchema.safeParse({ ...VALID_ITEM, expiresAt: value })
+        .success,
+    ).toBe(false);
+  });
+
+  it("keeps expiresAt and drops ttl in the parsed item", () => {
+    const result = DailyRollupItemSchema.safeParse({ ...VALID_ITEM, ttl: 5 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.expiresAt).toBe(1_900_000_000);
+      expect("ttl" in result.data).toBe(false);
+    }
   });
 });

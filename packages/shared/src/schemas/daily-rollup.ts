@@ -94,7 +94,9 @@ export const DailyRollupBaseSchema = z.object({
     .optional(),
 
   lastUpdatedAt: Iso8601Schema,
-  ttl: z.number().int().positive(),
+  // Table TTL attribute (data-model spec — "TTL attribute `expiresAt`"). Optional
+  // on read so legacy `ttl` items still parse; the write side requires it.
+  expiresAt: z.number().int().positive().optional(),
 });
 
 export const DailyRollupSchema = DailyRollupBaseSchema.refine(

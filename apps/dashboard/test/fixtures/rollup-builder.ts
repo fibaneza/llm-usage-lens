@@ -39,7 +39,11 @@ const entry = (cost: number): AttributionEntry => ({
   invocations: 1,
 });
 
-export function buildRollup(spec: RollupSpec): DatedDailyRollup {
+// expiresAt is always written (data-model spec — "TTL attribute `expiresAt`"),
+// so the fixture type requires it; loadFixtures writes these via SeedRollup.
+export function buildRollup(
+  spec: RollupSpec,
+): DatedDailyRollup & { expiresAt: number } {
   const models: DatedDailyRollup["models"] = {};
   let inputTokens = 0;
   let outputTokens = 0;
@@ -101,6 +105,6 @@ export function buildRollup(spec: RollupSpec): DatedDailyRollup {
     models,
     ...(nonModel ? { nonModel } : {}),
     lastUpdatedAt: `${spec.date}T13:00:00.000Z`,
-    ttl: 1_900_000_000,
+    expiresAt: 1_900_000_000,
   };
 }

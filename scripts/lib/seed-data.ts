@@ -447,7 +447,7 @@ function buildRollup(
     models,
     ...(Object.keys(nonModel).length > 0 ? { nonModel } : {}),
     lastUpdatedAt,
-    ttl: Math.floor(Date.parse(lastUpdatedAt) / 1000) + TTL_SECONDS,
+    expiresAt: Math.floor(Date.parse(lastUpdatedAt) / 1000) + TTL_SECONDS,
   };
 }
 

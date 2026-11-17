@@ -51,7 +51,7 @@ const VALID_ROLLUP = {
     },
   },
   lastUpdatedAt: "2026-05-15T13:00:00.000Z",
-  ttl: 1810000000,
+  expiresAt: 1810000000,
 };
 
 describe("AttributionEntrySchema", () => {
@@ -178,7 +178,8 @@ describe("DailyRollupSchema", () => {
     ["costFinalized", "false"],
     ["accountId", "abc"],
     ["lastUpdatedAt", "2026-05-15"],
-    ["ttl", 0],
+    ["expiresAt", 0],
+    ["expiresAt", 1.5],
   ])("rejects invalid %s %j", (field, value) => {
     expect(
       DailyRollupSchema.safeParse({ ...VALID_ROLLUP, [field]: value }).success,
@@ -410,5 +411,37 @@ describe.each([
     ["null", null],
   ])("rejects a malformed date (%s)", (_label, date) => {
     expect(schema.safeParse({ ...VALID_ROLLUP, date }).success).toBe(false);
+  });
+});
+
+// Source: docs/specs/2026-05-15-data-model.md — "TTL attribute `expiresAt`"
+// (2026-11-17): optional on read so items seeded before the rename (carrying
+// `ttl`) still parse; the legacy `ttl` is stripped from the output.
+describe("DailyRollupSchema legacy ttl (data-model — TTL attribute expiresAt)", () => {
+  const base = { ...VALID_ROLLUP };
+  delete (base as Partial<typeof base>).expiresAt;
+  const legacy = { ...base, ttl: 1810000000 };
+
+  it("accepts a legacy item with ttl and no expiresAt", () => {
+    expect(DailyRollupSchema.safeParse(legacy).success).toBe(true);
+  });
+
+  it("accepts an item with neither ttl nor expiresAt", () => {
+    expect(DailyRollupSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("strips ttl from the parsed output", () => {
+    const result = DailyRollupSchema.safeParse(legacy);
+    expect(result.success).toBe(true);
+    if (result.success) expect("ttl" in result.data).toBe(false);
+  });
+
+  it("keeps expiresAt when present and strips a co-present ttl", () => {
+    const result = DailyRollupSchema.safeParse({ ...VALID_ROLLUP, ttl: 5 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.expiresAt).toBe(1810000000);
+      expect("ttl" in result.data).toBe(false);
+    }
   });
 });
