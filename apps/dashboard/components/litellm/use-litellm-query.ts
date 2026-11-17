@@ -1,9 +1,27 @@
 "use client";
 
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useQueryStates } from "nuqs";
+import { useMemo } from "react";
 import type { z } from "zod";
 
+import { resolveUrlRange } from "@/lib/date-range";
+import { dateRangeSearchParams } from "@/lib/date-range-search-params";
 import { ApiRequestError, fetchApi } from "@/lib/query/fetch-api";
+
+// The global date range from the URL (Design System -- Management pages,
+// Date Filtering; Rules 20.1, 20.8), as the key suffix and the query string.
+export function useUrlRange() {
+  const [{ dateFrom, dateTo }] = useQueryStates(dateRangeSearchParams);
+  const range = useMemo(
+    () => resolveUrlRange(dateFrom, dateTo),
+    [dateFrom, dateTo],
+  );
+  return {
+    keyParts: [range.dateFrom, range.dateTo] as const,
+    query: `dateFrom=${range.dateFrom}&dateTo=${range.dateTo}`,
+  };
+}
 
 export type LiteLLMResult<T> =
   | { status: "ok"; data: T }

@@ -178,33 +178,71 @@ describe("CommandMenu", () => {
     // Design System - Layout (fail closed); Rule 10.3: no scope is the
     // non-global view, never the full set.
     it("lists only the non-global destinations when no scope is given", async () => {
-      expect(await optionNames()).toEqual(["My usage", "LiteLLM", "Settings"]);
+      expect(await optionNames()).toEqual(["My usage"]);
     });
 
-    it("lists the same destinations as the sidebar for a global caller", async () => {
-      expect(await optionNames(scope({ global: true }))).toEqual([
+    const ADMIN_FLAGS = {
+      team: true,
+      organisation: true,
+      users: true,
+      audit: true,
+      settings: true,
+    };
+
+    it("lists the same destinations as the sidebar for an admin (B2-2)", async () => {
+      expect(
+        await optionNames(scope({ global: true, management: ADMIN_FLAGS })),
+      ).toEqual([
         ...USAGE,
         "My usage",
-        "LiteLLM",
+        "Team",
+        "Organisation",
+        "Users",
+        "Audit",
         "Settings",
       ]);
     });
 
-    it.each([
-      ["a viewer with no team", scope()],
-      ["a member", scope({ memberTeamId: "team-a" })],
-      ["a team lead", scope({ teamScopes: new Set(["team-a"]) })],
-      ["a department lead", scope({ departmentScopes: new Set(["dept-eng"]) })],
-    ])(
-      "lists only My usage, LiteLLM and Settings for %s, and no organisation-level Usage destination (B1-14)",
-      async (_n, s) => {
-        expect(await optionNames(s)).toEqual([
-          "My usage",
-          "LiteLLM",
-          "Settings",
-        ]);
-      },
-    );
+    it("omits Audit for an org admin (B2-2)", async () => {
+      expect(
+        await optionNames(
+          scope({
+            global: true,
+            management: { ...ADMIN_FLAGS, audit: false },
+          }),
+        ),
+      ).toEqual([
+        ...USAGE,
+        "My usage",
+        "Team",
+        "Organisation",
+        "Users",
+        "Settings",
+      ]);
+    });
+
+    it("lists only My usage for a user (B1-14, B2-2)", async () => {
+      expect(await optionNames(scope({ memberTeamId: "team-a" }))).toEqual([
+        "My usage",
+      ]);
+    });
+
+    it("lists My usage and Team for a lead (B2-2)", async () => {
+      expect(
+        await optionNames(
+          scope({
+            teamScopes: new Set(["team-a"]),
+            management: {
+              team: true,
+              organisation: false,
+              users: false,
+              audit: false,
+              settings: false,
+            },
+          }),
+        ),
+      ).toEqual(["My usage", "Team"]);
+    });
 
     it("opens a destination from the filtered list with the date range carried", async () => {
       mockUseSearchParams.mockReturnValue(

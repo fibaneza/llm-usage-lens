@@ -1,12 +1,13 @@
 "use client";
 
 import { LiteLLMTeamDetailResponseSchema } from "@llm-usage-lens/shared";
-import { useLiteLLMQuery } from "./use-litellm-query";
+import { useLiteLLMQuery, useUrlRange } from "./use-litellm-query";
 
 export function useTeamDetail(teamId: string) {
+  const { keyParts, query } = useUrlRange();
   return useLiteLLMQuery(
-    ["team", teamId],
-    `/api/litellm/teams/${encodeURIComponent(teamId)}`,
+    ["team", teamId, ...keyParts],
+    `/api/litellm/teams/${encodeURIComponent(teamId)}?${query}`,
     LiteLLMTeamDetailResponseSchema,
   );
 }

@@ -1,10 +1,14 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { apiError, apiResponse, NEVER } from "@/test/fakes/api-stubs";
+import {
+  srOnlyMatches,
+  stubSizedResizeObserver,
+} from "@/test/support/chart-test-utils";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import MePage from "./page";
@@ -43,13 +47,61 @@ const USAGE = {
       invocations: 42,
     },
   ],
+  // Slice B2 B2-11: the spend-by-model breakdown (see lib/api/me.test.ts).
+  byModel: [
+    {
+      model: "claude-sonnet",
+      cost: 9.25,
+      inputTokens: 900,
+      outputTokens: 200,
+      invocations: 30,
+    },
+    {
+      model: "claude-haiku",
+      cost: 3.25,
+      inputTokens: 300,
+      outputTokens: 100,
+      invocations: 12,
+    },
+  ],
 };
 const EMPTY_USAGE = {
   totals: { cost: 0, inputTokens: 0, outputTokens: 0, invocations: 0 },
   daily: [],
+  byModel: [],
+};
+// The LiteLLM My usage view now lives on this page (Design System - Management
+// pages, My usage: "the 4R.5 own Bedrock usage and the LiteLLM My usage view,
+// each labelled with its source"); an unlinked caller by default.
+const LITELLM_UNLINKED = { linked: false, teams: [], enabledOperations: [] };
+const SENTINEL_KEY_VALUE = "sk-SENTINEL-KEY-VALUE";
+const LITELLM_LINKED = {
+  linked: true,
+  spend: 33.25,
+  maxBudget: 100,
+  daily: [{ date: "2026-01-12", spend: 4.5 }],
+  keys: [
+    {
+      tokenId: "tok-me",
+      keyAlias: "my-key",
+      models: ["claude-sonnet"],
+      maxBudget: 20,
+      spend: 3.25,
+      expires: "2026-12-31T00:00:00Z",
+      blocked: false,
+      key: SENTINEL_KEY_VALUE,
+    },
+  ],
+  teams: [],
+  enabledOperations: [],
 };
 
-function stub(me: () => Promise<Response>, usage: () => Promise<Response>) {
+function stub(
+  me: () => Promise<Response>,
+  usage: () => Promise<Response>,
+  litellm: () => Promise<Response> = () =>
+    Promise.resolve(apiResponse({ data: LITELLM_UNLINKED })),
+) {
   const urls: string[] = [];
   vi.stubGlobal(
     "fetch",
@@ -58,6 +110,7 @@ function stub(me: () => Promise<Response>, usage: () => Promise<Response>) {
       urls.push(url.pathname + url.search);
       if (url.pathname === "/api/me/usage") return usage();
       if (url.pathname === "/api/me") return me();
+      if (url.pathname === "/api/litellm/me") return litellm();
       return Promise.resolve(apiError(404, "NOT_FOUND", "unexpected"));
     }),
   );
@@ -172,5 +225,196 @@ describe("MePage (/dashboard/me)", () => {
     const description = view.container.querySelector("p");
     expect(description?.textContent?.trim().length ?? 0).toBeGreaterThan(0);
     expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+  });
+});
+
+// Slice B2, B2-11. Sources: Design System - Management pages, My usage ("a
+// spend-by-day chart and a spend-by-model breakdown of the caller's own data -
+// lazy-loaded Recharts in ResponsiveContainer, series coloured by the model
+// token from packages/shared (Rule 40.2, 40.3)"); the charts keep the
+// screen-reader copy of their data (Rule 60.30, the sr-only table convention
+// of components/charts). Contract (app/dashboard/me/MeContent.tsx): when the
+// usage has days, a heading "Spend by day" with a daily cost chart and a
+// heading "Spend by model" with a per-model breakdown from `byModel`; each
+// carries an sr-only table copy of its values (model rows use the display
+// name from packages/shared, "Claude Sonnet"). With no usage: the existing
+// empty state, no chart headings.
+describe("MePage charts (B2-11)", () => {
+  it("draws a spend-by-day chart and a spend-by-model breakdown from the caller's own usage", async () => {
+    stubSizedResizeObserver();
+    stub(ok(ME), ok(USAGE));
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Spend by day" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Spend by model" }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(srOnlyMatches("2026-01-11").length).toBeGreaterThan(0);
+      expect(srOnlyMatches("Claude Sonnet").length).toBeGreaterThan(0);
+      expect(srOnlyMatches("Claude Haiku").length).toBeGreaterThan(0);
+      expect(srOnlyMatches(/9\.25/).length).toBeGreaterThan(0);
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it("shows neither chart for an empty range", async () => {
+    stub(ok(ME), ok(EMPTY_USAGE));
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+    await screen.findByText(/no bedrock usage/i, { exact: false });
+
+    expect(
+      screen.queryByRole("heading", { name: "Spend by day" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Spend by model" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+// "A 'Request a budget increase' link addresses the caller's team lead as a
+// mailto: link ... no outbound-message feature is added, and the link is absent
+// when no lead is known" (Design System - My usage; B2-11: "no new route if the
+// data is not available - then absent"). Contract: GET /api/me may carry an
+// optional `leadEmail` (string | null); MeResponseSchema accepts it. The link
+// renders only for a non-empty value, as a link named "Request a budget
+// increase" whose href starts with mailto:<leadEmail>.
+describe("MePage budget-increase link (B2-11)", () => {
+  it("links to the team lead's address when one is known", async () => {
+    stub(ok({ ...ME, leadEmail: "lead@company.com" }), ok(USAGE));
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+
+    const link = await screen.findByRole("link", {
+      name: "Request a budget increase",
+    });
+    expect(link.getAttribute("href")).toMatch(
+      new RegExp(`^mailto:${encodeURIComponent("lead@company.com")}(\\?|$)`),
+    );
+  });
+
+  // B2 review: the address is encoded, so "+" and "&" cannot add recipients or
+  // header fields to the mailto: URL.
+  it("encodes the lead's address: '+' and '&' stay inside one recipient", async () => {
+    const lead = "a+b&cc=x@company.com";
+    stub(ok({ ...ME, leadEmail: lead }), ok(USAGE));
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+
+    const link = await screen.findByRole("link", {
+      name: "Request a budget increase",
+    });
+    const href = link.getAttribute("href") ?? "";
+    expect(href.startsWith(`mailto:${encodeURIComponent(lead)}?`)).toBe(true);
+    const query = new URLSearchParams(href.split("?")[1]);
+    expect([...query.keys()]).toEqual(["subject"]);
+  });
+
+  it.each([
+    ["no lead field", ME],
+    ["a null lead", { ...ME, leadEmail: null }],
+    ["an empty lead", { ...ME, leadEmail: "" }],
+  ])("is absent with %s", async (_n, me) => {
+    stub(ok(me), ok(USAGE));
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+    await screen.findByText("$12.50");
+
+    expect(
+      screen.queryByRole("link", { name: "Request a budget increase" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+// Moved from LiteLLMContent.test.tsx (the My usage tab): the LiteLLM My usage
+// view stays on this page now that the tab row is gone (LiteLLM spec - Views
+// by role: My usage for every role; LT8 "LiteLLM-reported" labels; LD20 UTC
+// day buckets; keys' metadata, never a key value). Contract: a region whose
+// accessible name contains "LiteLLM" holds MyUsageSection, labelled
+// LiteLLM-reported, next to the Bedrock "Your Bedrock usage" section.
+describe("MePage LiteLLM My usage view (moved from the LiteLLM tab)", () => {
+  const liteLLMRegion = () => screen.findByRole("region", { name: /litellm/i });
+
+  it("shows the caller's LiteLLM spend and budget in USD, labelled LiteLLM-reported, with UTC-day buckets", async () => {
+    stub(ok(ME), ok(USAGE), () =>
+      Promise.resolve(apiResponse({ data: LITELLM_LINKED })),
+    );
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+
+    const region = await liteLLMRegion();
+    expect(await within(region).findByText("$33.25")).toBeInTheDocument();
+    expect(within(region).getByText("$100.00")).toBeInTheDocument();
+    expect(
+      within(region).getAllByText("LiteLLM-reported").length,
+    ).toBeGreaterThan(0);
+    expect(within(region).getByText(/UTC days?/i)).toBeInTheDocument();
+  });
+
+  it("lists the caller's own keys' metadata and never a key value", async () => {
+    stub(ok(ME), ok(USAGE), () =>
+      Promise.resolve(apiResponse({ data: LITELLM_LINKED })),
+    );
+    const { container } = renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+
+    expect(
+      await within(await liteLLMRegion()).findByText("my-key"),
+    ).toBeInTheDocument();
+    expect(container.textContent).not.toContain(SENTINEL_KEY_VALUE);
+  });
+
+  it("sends the URL date range with the me request (Rule 20.8)", async () => {
+    const urls = stub(ok(ME), ok(USAGE));
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+    await liteLLMRegion();
+
+    const mine = urls.filter((u) => u.startsWith("/api/litellm/me"));
+    expect(mine.length).toBeGreaterThan(0);
+    for (const u of mine) {
+      const q = new URL(u, "http://localhost").searchParams;
+      expect(q.get("dateFrom")).toBe("2026-01-11");
+      expect(q.get("dateTo")).toBe("2026-01-20");
+    }
+  });
+
+  it("shows an unlinked caller an explanation, and an outage as 'LiteLLM unavailable' without breaking the Bedrock section", async () => {
+    stub(ok(ME), ok(USAGE), () =>
+      Promise.resolve(
+        apiError(503, "LITELLM_UNAVAILABLE", "LiteLLM is unavailable"),
+      ),
+    );
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+
+    expect(
+      await within(await liteLLMRegion()).findByText(/LiteLLM unavailable/i),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("$12.50")).toBeInTheDocument();
+  });
+
+  it("an unlinked caller sees the not-linked state", async () => {
+    stub(ok(ME), ok(USAGE));
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+
+    expect(
+      await within(await liteLLMRegion()).findByText(/not linked to LiteLLM/i),
+    ).toBeInTheDocument();
   });
 });

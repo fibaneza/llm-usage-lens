@@ -3,8 +3,8 @@ import { type CSSProperties, type ReactNode, Suspense } from "react";
 
 import { auth } from "@/auth";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { DefaultPresetProvider } from "@/components/providers/DefaultPresetProvider";
 import { AppSidebar, AppSidebarFallback } from "@/components/layout/AppSidebar";
+import { DefaultPresetProvider } from "@/components/providers/DefaultPresetProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { env } from "@/env";
 import { scopeFor } from "@/lib/api/scoped-rollups";
@@ -13,6 +13,8 @@ import {
   resolveDefaultDateRange,
   resolveOrgName,
 } from "@/lib/config/resolvers";
+import { managementAccessFor } from "@/lib/manage-access";
+import type { NavScope } from "@/lib/nav";
 
 // Shell: a collapsible sidebar (brand + grouped nav) beside the content inset.
 // The inset opens with its own top bar (page title + sync status, account
@@ -22,18 +24,27 @@ import {
 // rem-based lg: utilities in the compiled CSS. --header-height aligns the
 // sidebar's brand header with the inset's top bar. Every dashboard page renders
 // here.
-async function navScopeOrUndefined() {
+async function navScopeOrUndefined(): Promise<NavScope | undefined> {
   try {
     const session = await auth();
     if (!session) return undefined;
     const full = await scopeFor(session, []);
+    const access = await managementAccessFor(session);
     // Only the nav fields cross to the client: usage keys and visibility stay
-    // on the server.
+    // on the server. Management and Settings follow the one capability
+    // function (slice B2, B2-1); Audit shows when either source is readable.
     return {
       global: full.global,
       memberTeamId: full.memberTeamId,
       teamScopes: full.teamScopes,
       departmentScopes: full.departmentScopes,
+      management: {
+        team: access.team,
+        organisation: access.organisation,
+        users: access.users,
+        audit: access.audit.app || access.audit.gateway,
+        settings: access.settings,
+      },
     };
   } catch (error) {
     trace
@@ -46,6 +57,13 @@ async function navScopeOrUndefined() {
       memberTeamId: null,
       teamScopes: new Set<string>(),
       departmentScopes: new Set<string>(),
+      management: {
+        team: false,
+        organisation: false,
+        users: false,
+        audit: false,
+        settings: false,
+      },
     };
   }
 }

@@ -33,6 +33,12 @@ vi.mock("@/components/settings/LiteLLMTab", () => ({
 
 import { litellmPanelCapabilities } from "@/lib/auth/litellm-panel";
 
+// Slice B2 B2-10: the gate matrix lives in the manage-routes integration test.
+vi.mock("@/lib/manage-access", async () => {
+  const mod = await import("@/test/fakes/manage-access-fake");
+  return mod.fakeManageAccess;
+});
+
 import LiteLLMSettingsPage from "./page";
 
 afterEach(() => {

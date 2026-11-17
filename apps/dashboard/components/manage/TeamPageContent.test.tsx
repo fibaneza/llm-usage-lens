@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiError, apiResponse } from "@/test/fakes/api-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
-import { TeamConfigContent } from "./TeamConfigContent";
+import { TeamPageContent } from "./TeamPageContent";
 
 // Sources: docs/specs/2026-11-10-litellm.md -- "Team configuration page (L4)"
 // (team picker + ?team= deep link via nuqs; members, keys, team budget and
@@ -18,11 +18,21 @@ import { TeamConfigContent } from "./TeamConfigContent";
 // Component tests assert rendering and the request made; the routes' own
 // scoping, toggles, audit and validation are tested with the routes.
 //
-// Contract for the developer (components/litellm/TeamConfigContent.tsx):
-//   props { canRaiseLimits: boolean } (server-computed: Admin / org-admin).
-//   Teams come from GET /api/litellm/me; only `teams[].configurable === true`
-//   are listed (a new optional boolean on the me team ref; absent = false).
-//   Selected team: ?team= (nuqs) when configurable, else the first one.
+// Moved from components/litellm/TeamConfigContent.test.tsx (slice B2, B2-4:
+// the interim team-config page is gone; the Team page mounts the same L4
+// panels, so every case below still covers live behaviour). Changes: the
+// picker now lists every team in /api/litellm/me `teams` (a lead's list holds
+// only teams it leads, server-scoped; the read-only auditor and a non-
+// configurable team are listed too), and the read-only cases at the end are
+// new. The tab-row cases of LiteLLMContent.test.tsx were dropped with the tab
+// row; the read sections it covered moved to the second half of this file.
+//
+// Contract for the developer (components/manage/TeamPageContent.tsx, "use client"):
+//   props { canRaiseLimits: boolean; scopeLabel: string | null;
+//   access?: ReactNode } (server-computed: Admin only raises; the scope label
+//   from scopeLabelFor; the server-rendered team-level access sections).
+//   Teams come from GET /api/litellm/me `teams` (all of them).
+//   Selected team: ?team= (nuqs) when listed, else the first one.
 //   Per team it reads /teams/[id] (enabledOperations, team limits),
 //   /teams/[id]/members, /teams/[id]/keys and /api/litellm/models, and writes
 //   through the routes in the LiteLLM spec -- API routes table. Accessible
@@ -154,7 +164,7 @@ function stub(overrides: Record<string, Handler> = {}, ops = ALL_OPS) {
 
 function renderConfig(canRaiseLimits = false, searchParams = {}) {
   return renderWithProviders(
-    <TeamConfigContent canRaiseLimits={canRaiseLimits} />,
+    <TeamPageContent canRaiseLimits={canRaiseLimits} scopeLabel={null} />,
     { searchParams },
   );
 }
@@ -171,15 +181,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("TeamConfigContent team picker (Team configuration page)", () => {
-  it("lists only the caller's configurable teams (Who: teams in scope)", async () => {
+describe("TeamPageContent team picker (Team configuration page)", () => {
+  it("lists the caller's teams as the me route returns them (B2-4: server-scoped, a read-only caller included)", async () => {
     stub();
     renderConfig();
     const picker = await screen.findByRole("combobox", { name: "Team" });
     const names = within(picker)
       .getAllByRole("option")
       .map((o) => o.textContent);
-    expect(names).toEqual(["Payments", "Risk"]);
+    expect(names).toEqual(["Payments", "Risk", "Ops"]);
   });
 
   it("?team= deep links to that team and its sections read that team (Route: nuqs deep link)", async () => {
@@ -195,11 +205,63 @@ describe("TeamConfigContent team picker (Team configuration page)", () => {
   });
 });
 
-describe("TeamConfigContent sections (Design System -- LiteLLM Page)", () => {
-  it("renders Members, Keys, Budget and limits and Models, each its own region", async () => {
+// Moved from the retired LiteLLMContent.test.tsx (LD20, LT8; Keys metadata
+// only): the live behaviour of the deleted Keys / Team spend sections.
+describe("TeamPageContent time rendering and key metadata (LD20, Keys metadata only)", () => {
+  it("labels the team's daily buckets as UTC days (LD20)", async () => {
+    stub({
+      "GET /api/litellm/teams/t1": () =>
+        apiResponse({
+          data: {
+            ...detailWith(ALL_OPS),
+            daily: [{ date: "2026-11-14", spend: 40 }],
+          },
+        }),
+    });
+    renderConfig();
+    expect(
+      within(await region("Team spend & budgets")).getByText(/UTC days?/i),
+    ).toBeInTheDocument();
+  });
+
+  it("renders key expiry in Australia/Sydney with the zone label (LD20)", async () => {
     stub();
     renderConfig();
-    for (const name of ["Members", "Keys", "Budget and limits", "Models"]) {
+    // 2026-12-01T13:00:00Z is 2026-12-02 00:00 in AEDT.
+    expect(
+      await within(await region("Keys")).findByText(/2 Dec 2026,? 00:00 AEDT/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows alias, spend and blocked state, never a key value", async () => {
+    stub({
+      "GET /api/litellm/teams/t1/keys": () =>
+        apiResponse({
+          data: {
+            connected: true,
+            items: [{ ...KEYS.items[0], blocked: true }],
+          },
+        }),
+    });
+    const { container } = renderConfig();
+    const keys = await region("Keys");
+    expect(await within(keys).findByText("ci-key")).toBeInTheDocument();
+    expect(within(keys).getByText("$8.40")).toBeInTheDocument();
+    expect(within(keys).getByText(/blocked/i)).toBeInTheDocument();
+    expect(container.textContent).not.toContain("sk-");
+  });
+});
+
+describe("TeamPageContent sections (Design System -- LiteLLM Page)", () => {
+  it("renders LiteLLM members, Keys, Budget and limits and Models, each its own region (the L4 panel is titled LiteLLM members; the mounted Access sections keep Members)", async () => {
+    stub();
+    renderConfig();
+    for (const name of [
+      "LiteLLM members",
+      "Keys",
+      "Budget and limits",
+      "Models",
+    ]) {
       expect(await region(name)).toBeInTheDocument();
     }
   });
@@ -213,7 +275,7 @@ describe("TeamConfigContent sections (Design System -- LiteLLM Page)", () => {
   });
 });
 
-describe("TeamConfigContent operation gating (Team configuration page: each control only when its operation is enabled)", () => {
+describe("TeamPageContent operation gating (Team configuration page: each control only when its operation is enabled)", () => {
   const controls: Array<[string, () => HTMLElement | null]> = [
     ["Add member", () => screen.queryByRole("button", { name: "Add member" })],
     [
@@ -299,7 +361,7 @@ describe("TeamConfigContent operation gating (Team configuration page: each cont
   });
 });
 
-describe("TeamConfigContent destructive actions (Design System: AlertDialog confirms)", () => {
+describe("TeamPageContent destructive actions (Design System: AlertDialog confirms)", () => {
   it.each([
     [
       "Remove Ada Lovelace",
@@ -375,7 +437,7 @@ describe("TeamConfigContent destructive actions (Design System: AlertDialog conf
   });
 });
 
-describe("TeamConfigContent generate key (Writes: the key value is shown once)", () => {
+describe("TeamPageContent generate key (Writes: the key value is shown once)", () => {
   const generated = () =>
     apiResponse(
       {
@@ -424,7 +486,7 @@ describe("TeamConfigContent generate key (Writes: the key value is shown once)",
   });
 });
 
-describe("TeamConfigContent budget, limits and models", () => {
+describe("TeamPageContent budget, limits and models", () => {
   it("a Lead's budget and limit inputs are bounded to the current value; Admin and org-admin's are not (Budgets and limits: client-side hint only)", async () => {
     stub();
     const { unmount } = renderConfig(false);
@@ -504,7 +566,7 @@ describe("TeamConfigContent budget, limits and models", () => {
   });
 });
 
-describe("TeamConfigContent errors (API routes: error codes)", () => {
+describe("TeamPageContent errors (API routes: error codes)", () => {
   it.each([
     [400, "BAD_REQUEST", "Budget cannot be raised by a Lead"],
     [409, "PRIVILEGED_TARGET", "The target holds a privileged proxy role"],
@@ -538,7 +600,7 @@ describe("TeamConfigContent errors (API routes: error codes)", () => {
 // resetMemberBudget), "Budgets and limits" (only changed fields are sent);
 // Design System -- LiteLLM Page (AlertDialog confirms for destructive actions
 // -- rotate and reset budget replace or clear state).
-describe("TeamConfigContent member and key edits", () => {
+describe("TeamPageContent member and key edits", () => {
   const okEmpty = () => apiResponse({ data: { ok: true } });
 
   it("Edit limits sends only the filled fields: budget to /budget, requests per minute to /limits, no tokens per minute (Writes: setMemberBudget, setMemberLimits)", async () => {
@@ -692,7 +754,7 @@ describe("TeamConfigContent member and key edits", () => {
 // (members: add); coordinator decision 2026-11-16: the Add member dialog
 // picks from `candidates` returned by GET .../members (dashboard members not
 // yet in the LiteLLM team) instead of asking for an object id.
-describe("TeamConfigContent add-member picker", () => {
+describe("TeamPageContent add-member picker", () => {
   it("Add member opens a dialog with a Member select of the candidates by name and email, and posts { oid }", async () => {
     const api = stub({
       "POST /api/litellm/teams/t1/members": () =>
@@ -733,5 +795,279 @@ describe("TeamConfigContent add-member picker", () => {
       "Everyone in this team is already in LiteLLM",
     );
     expect(within(dialog).queryByRole("button", { name: "Add" })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// New for the Team page (slice B2, B2-4). Sources: Design System - Management
+// pages (Team: PageHeader with the team selector, the ScopeLine for a lead,
+// "Usage: team spend ('LiteLLM-reported'), team budget, members, keys'
+// metadata, model access"; Budget as a bar; lead team-scoped access sections;
+// an unlinked team shows 'not connected'; `internal-auditor` read-only: "a
+// control for a disabled operation is absent, not dead"); LiteLLM spec - Cost
+// visualisation and provenance (LT8 labels), LD20 (UTC day buckets labelled,
+// timestamps in Australia/Sydney), /api/litellm/me date range (Rule 20.8);
+// Rules 40.4, 60.12. These also carry the live cases moved from
+// LiteLLMContent.test.tsx (Team tab).
+const SENTINEL_KEY_VALUE = "sk-SENTINEL-KEY-VALUE";
+const okData = (data: unknown) => () => apiResponse({ data });
+const unavailable = () =>
+  apiError(503, "LITELLM_UNAVAILABLE", "LiteLLM is unavailable");
+
+describe("TeamPageContent page frame (Management pages - Team)", () => {
+  it("opens with a one-line description, no page-level h1, and the team selector", async () => {
+    stub();
+    const view = renderConfig();
+    await screen.findByRole("combobox", { name: "Team" });
+
+    expect(
+      view.container.querySelector("p")?.textContent?.trim().length ?? 0,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+  });
+
+  it("states a lead's scope with the label and the team names; a global reader gets no scope line (ScopeLine)", async () => {
+    stub();
+    renderWithProviders(
+      <TeamPageContent
+        canRaiseLimits={false}
+        scopeLabel="Showing teams you lead"
+      />,
+    );
+    expect(
+      await screen.findByText(/Showing teams you lead: Payments, Risk/),
+    ).toBeInTheDocument();
+  });
+
+  it("renders no scope line without a label", async () => {
+    stub();
+    renderConfig();
+    await screen.findByRole("combobox", { name: "Team" });
+
+    expect(screen.queryByText(/Showing /)).not.toBeInTheDocument();
+  });
+
+  it("mounts the server-rendered access sections when given", async () => {
+    stub();
+    renderWithProviders(
+      <TeamPageContent
+        canRaiseLimits={false}
+        scopeLabel={null}
+        access={<div data-testid="access-slot" />}
+      />,
+    );
+    expect(await screen.findByTestId("access-slot")).toBeInTheDocument();
+  });
+
+  it("without access sections renders no access slot", async () => {
+    stub();
+    renderConfig();
+    await region("LiteLLM members");
+
+    expect(screen.queryByTestId("access-slot")).not.toBeInTheDocument();
+  });
+});
+
+describe("TeamPageContent team spend and budget (Management pages - Team usage)", () => {
+  it("has a 'Team spend & budgets' region with the LiteLLM-reported label, USD, UTC-day label and a BudgetBar", async () => {
+    stub();
+    renderConfig();
+    const spend = await region("Team spend & budgets");
+
+    expect(
+      within(spend).getAllByText("LiteLLM-reported").length,
+    ).toBeGreaterThan(0);
+    expect(await within(spend).findByText("$321.75")).toBeInTheDocument();
+    expect(within(spend).getByText("$500.00")).toBeInTheDocument();
+    expect(within(spend).getByText("$400.00")).toBeInTheDocument();
+    expect(within(spend).getByText(/UTC days?/i)).toBeInTheDocument();
+    expect(within(spend).getByRole("progressbar")).toHaveAttribute(
+      "data-state",
+      "neutral",
+    );
+    expect(within(spend).getByText("64%")).toBeInTheDocument();
+  });
+
+  it("labels LiteLLM members and Keys spend as LiteLLM-reported too (LT8)", async () => {
+    stub();
+    renderConfig();
+    for (const name of ["LiteLLM members", "Keys"]) {
+      expect(
+        within(await region(name)).getAllByText("LiteLLM-reported").length,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("switching the team selector re-reads the team spend for the picked team", async () => {
+    stub({
+      "GET /api/litellm/teams/t2": okData({
+        ...detailWith(ALL_OPS),
+        team: { ...detailWith(ALL_OPS).team, alias: "Risk", spend: 9.99 },
+      }),
+    });
+    renderConfig();
+    await userEvent.selectOptions(
+      await screen.findByRole("combobox", { name: "Team" }),
+      "Risk",
+    );
+
+    expect(
+      await within(await region("Team spend & budgets")).findByText("$9.99"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("TeamPageContent keys and time (LD20, LT8)", () => {
+  it("renders key expiry in Australia/Sydney with the zone label, and never a key value", async () => {
+    stub({
+      "GET /api/litellm/teams/t1/keys": okData({
+        connected: true,
+        items: [{ ...KEYS.items[0], key: SENTINEL_KEY_VALUE }],
+      }),
+    });
+    const { container } = renderConfig();
+    const keys = await region("Keys");
+
+    // 2026-12-01T13:00:00Z is 2026-12-02 00:00 in AEDT.
+    expect(
+      await within(keys).findByText(/2 Dec 2026,? 00:00 AEDT/),
+    ).toBeInTheDocument();
+    expect(container.textContent).not.toContain(SENTINEL_KEY_VALUE);
+  });
+});
+
+describe("TeamPageContent states (Design System - LiteLLM Page: States)", () => {
+  it("shows 'not connected to LiteLLM' for an unlinked team without calling its routes", async () => {
+    const api = stub({
+      "GET /api/litellm/me": okData({
+        linked: false,
+        enabledOperations: [],
+        teams: [{ teamId: "t1", teamName: "Payments", linked: false }],
+      }),
+    });
+    renderConfig();
+
+    expect(
+      await screen.findByText(/not connected to LiteLLM/i),
+    ).toBeInTheDocument();
+    expect(
+      api.calls.some((c) => c.path.startsWith("/api/litellm/teams/")),
+    ).toBe(false);
+  });
+
+  it("shows 'LiteLLM unavailable' in each team section when the team routes return 503, keeping the page up", async () => {
+    stub({
+      "GET /api/litellm/teams/t1": unavailable,
+      "GET /api/litellm/teams/t1/members": unavailable,
+      "GET /api/litellm/teams/t1/keys": unavailable,
+    });
+    renderConfig();
+
+    for (const name of ["Team spend & budgets", "LiteLLM members", "Keys"]) {
+      expect(
+        await within(await region(name)).findByText(/LiteLLM unavailable/i),
+      ).toBeInTheDocument();
+    }
+    expect(screen.getByRole("combobox", { name: "Team" })).toBeInTheDocument();
+  });
+
+  it("a caller with no teams sees an empty state, not an error", async () => {
+    stub({
+      "GET /api/litellm/me": okData({
+        linked: false,
+        enabledOperations: [],
+        teams: [],
+      }),
+    });
+    renderConfig();
+
+    expect(await screen.findByText(/no teams/i)).toBeInTheDocument();
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
+  });
+});
+
+describe("TeamPageContent read-only caller (auditor: write controls absent, read sections shown)", () => {
+  const WRITE_CONTROLS = [
+    "Add member",
+    "Remove Ada Lovelace",
+    "Reset spend for Ada Lovelace",
+    "Reset budget for Ada Lovelace",
+    "Edit limits for Ada Lovelace",
+    "Disable Ada Lovelace",
+    "Enable Ada Lovelace",
+    "Reset spend for all members",
+    "Generate key",
+    "Edit key ci-key",
+    "Rotate key ci-key",
+    "Block key ci-key",
+    "Unblock key ci-key",
+    "Delete key ci-key",
+    "Save budget",
+    "Save limits",
+    "Save models",
+  ];
+
+  it("shows members and keys with no write control when no operation is enabled", async () => {
+    stub({}, []);
+    renderConfig();
+
+    expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument();
+    expect(await screen.findByText("ci-key")).toBeInTheDocument();
+    for (const name of WRITE_CONTROLS) {
+      expect(
+        screen.queryByRole("button", { name }),
+        name,
+      ).not.toBeInTheDocument();
+    }
+  });
+});
+
+// B4 (LiteLLM spec / Rule 20.8): /api/litellm/me parses DateRangeQuerySchema,
+// so the Team page sends the URL range; the global date range applies to every
+// Management page (Design System - Management pages).
+describe("TeamPageContent /api/litellm/me date range (Rule 20.8, Rule 20.1)", () => {
+  function captureMeQueries() {
+    const queries: URLSearchParams[] = [];
+    stub();
+    const base = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), "http://localhost");
+        if (url.pathname === "/api/litellm/me") queries.push(url.searchParams);
+        return base(input, init);
+      }),
+    );
+    return queries;
+  }
+
+  it("sends the URL date range with every me request", async () => {
+    const queries = captureMeQueries();
+    renderConfig(false, { dateFrom: "2026-11-01", dateTo: "2026-11-14" });
+    await region("LiteLLM members");
+
+    expect(queries.length).toBeGreaterThan(0);
+    for (const q of queries) {
+      expect(q.get("dateFrom")).toBe("2026-11-01");
+      expect(q.get("dateTo")).toBe("2026-11-14");
+    }
+  });
+
+  it("falls back to the default 30-day UTC range when the URL has none", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-14T10:00:00.000Z"));
+    try {
+      const queries = captureMeQueries();
+      renderConfig();
+      await region("LiteLLM members");
+
+      expect(queries.length).toBeGreaterThan(0);
+      for (const q of queries) {
+        expect(q.get("dateFrom")).toBe("2026-10-16");
+        expect(q.get("dateTo")).toBe("2026-11-14");
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

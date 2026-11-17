@@ -470,6 +470,30 @@ and members, **auditor** = `internal-auditor`.
     and their routes; `/dashboard/me` is never gated. Position (agent
     decision): last, so Overview stays first for a global reader, whose
     landing it is.
+- **Slice B2 decisions (agent decisions, 2026-11-17; implementation-phases
+  — *Phase 5*, Slice B2).**
+  - **B2-1 One server capability function.** `managementAccessFor(session)`
+    (`lib/manage-access.ts`, server-only, never cached) decides every
+    Management and Settings item from the stored roles and the live scope:
+    Team for a global reader or a live lead (team or department scope);
+    Organisation and Users for a global reader; Audit for a caller who may
+    read the app audit log (the Access capability `auditLog`) or the
+    LiteLLM audit (admin, auditor); Settings for a global reader. Each page
+    calls it and returns the missing-page `404` when its flag is false; the
+    navigation renders the same flags. A read error fails closed (every
+    flag false). Reason: one decision for page and nav, as B1-8.
+  - **B2-2** Settings is hidden for a lead and a user and every Settings
+    route returns `404` to them (the B1-7 deferral, now applied). The
+    lead's team-scoped access actions (members, team admins, pending
+    access, visibility) are mounted on Management → Team, through the same
+    Access sections and routes.
+  - **B2-3 Redirects.** `/dashboard/litellm` follows `?tab=` (`team`,
+    `organisation`, `users`, `audit` → the matching `/dashboard/manage/`
+    route; anything else → `/dashboard/me`); `/dashboard/litellm/team-config`
+    → `/dashboard/manage/team`, keeping `?team=`; `/dashboard/settings/audit`
+    → `/dashboard/manage/audit`. A temporary redirect (reversible); a
+    target the caller may not see returns `404` there.
+  - **LiteLLM item removed** from Management once its views have routes.
 
 ## Membership, admin scopes and lifecycle
 
@@ -926,6 +950,28 @@ authorization data and is read per request on the server; the client hook
 caches it for at most 60 seconds, so a role or scope change shows in the
 navigation and notices within that bound, while every page and route
 enforces the current scope regardless.
+
+**`/api/me` `leadEmail` and own usage `byModel` (agent decisions, Slice B2,
+2026-11-17; coordinator approved the overlap).** Both fields are additive
+and optional.
+- `leadEmail` (string or `null`): at most one email, of a lead of the
+  caller's **own member team** — a team-scope admin of that team from the
+  stored admin scopes, read per request and never cached (Rule 60.10).
+  `null` when the caller has no member team or no such lead is known.
+  Never a list, never another team's lead, never a global admin. A
+  **global admin** here is any holder of a global role — `internal-admin`,
+  `internal-org-admin`, `internal-auditor`, or the legacy `Admin` alias
+  outside `APP_ENV=prod` — by stored grant or last-seen roles. An SSO
+  admin scope suspended during a groups overage (*Group overage* item 6)
+  does not count; a failed lookup returns `null` and is recorded, never
+  failing the whole response (B2 review, 2026-11-17). Reason:
+  My usage's "Request a budget increase" link addresses the caller's lead
+  (Design System — *Management pages*) and no other route exposes it; one
+  address limits what a member learns about other people.
+- `byModel` on `GET /api/me/usage`: the caller's own usage per canonical
+  model, under the same scope and Organisation-cap rules as the existing
+  fields (LD23, LD27 apply to anything per-user); its costs sum to the own
+  total. Reason: My usage's spend-by-model breakdown, without a new route.
 
 **Names in management lists (D37).** The `GET` rows of
 `/api/teams/[id]/members`, `/api/teams/[id]/admins` and

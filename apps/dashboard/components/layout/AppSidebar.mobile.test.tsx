@@ -8,6 +8,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import type { NavScope } from "@/lib/nav";
 import { AppSidebar } from "./AppSidebar";
 
 // A minimal client router: <Link> clicks change the pathname and notify
@@ -89,13 +90,28 @@ function RailStateProbe() {
   return <output data-testid="rail-state">{state}</output>;
 }
 
+// A global admin (Access Control - Navigation and landing by role, matrix).
+const FULL_SCOPE: NavScope = {
+  global: true,
+  memberTeamId: null,
+  teamScopes: new Set<string>(),
+  departmentScopes: new Set<string>(),
+  management: {
+    team: true,
+    organisation: true,
+    users: true,
+    audit: true,
+    settings: true,
+  },
+};
+
 function renderMobileShell({ defaultOpen = true } = {}) {
   return render(
     <SidebarProvider defaultOpen={defaultOpen}>
       <SidebarTrigger />
       <PathnameProbe />
       <RailStateProbe />
-      <AppSidebar />
+      <AppSidebar scope={FULL_SCOPE} />
     </SidebarProvider>,
   );
 }

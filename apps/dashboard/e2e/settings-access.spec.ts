@@ -28,7 +28,10 @@ const VISIBILITY = `${BASE}/access/visibility`;
 const ROLES = `${BASE}/access/roles`;
 const IDENTITIES = `${BASE}/access/identities`;
 const SIGN_IN = `${BASE}/access/sign-in`;
-const AUDIT = `${BASE}/audit`;
+// B2-3: the Audit log and Access review left Settings; the App source of
+// Management -> Audit renders the same sections (Design System - Management
+// pages, Audit).
+const AUDIT = "/dashboard/manage/audit";
 
 async function open(page: Page, path: string) {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -326,16 +329,19 @@ test.describe("settings access tabs - other roles", () => {
     await expect(page.getByRole("tab", { name: "Audit" })).toHaveCount(0);
   });
 
-  test("internal-viewer without a scope sees no access section or Access tab", async ({
+  // B2-10: Settings is closed to a user; the access sections never render.
+  test("internal-viewer without a scope gets the 404 on every Settings route and sees no access section", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-viewer"] });
     await mockApi(page);
-    await open(page, `${BASE}/accounts`);
-    for (const name of ALL_HEADINGS) {
-      await expect(heading(page, name)).toHaveCount(0);
+    for (const path of [`${BASE}/accounts`, PEOPLE, SIGN_IN]) {
+      const response = await page.goto(path);
+      expect(response?.status(), path).toBe(404);
+      for (const name of ALL_HEADINGS) {
+        await expect(heading(page, name)).toHaveCount(0);
+      }
     }
-    await expect(page.getByRole("tab", { name: "Access" })).toHaveCount(0);
   });
 });

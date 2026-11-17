@@ -188,7 +188,7 @@ export function TeamAdminsSection({ viewer }: { viewer: AccessViewer }) {
             <TableRow>
               <TableHead>Person</TableHead>
               <TableHead>Source</TableHead>
-              <TableHead>
+              <TableHead className="bg-card sticky right-0 w-10">
                 <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
@@ -200,7 +200,7 @@ export function TeamAdminsSection({ viewer }: { viewer: AccessViewer }) {
               return (
                 <TableRow key={admin.oid}>
                   <TableCell>
-                    <div className="flex flex-col">
+                    <div className="flex min-w-0 flex-col break-words">
                       <span>{name}</span>
                       {mail && mail !== name ? (
                         <span className="text-muted-foreground text-xs">
@@ -216,7 +216,7 @@ export function TeamAdminsSection({ viewer }: { viewer: AccessViewer }) {
                       <Badge variant="outline">Added here</Badge>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="bg-card sticky right-0 w-10">
                     {admin.source === "ui" ? (
                       <Button
                         type="button"

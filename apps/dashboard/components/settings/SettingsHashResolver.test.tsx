@@ -40,7 +40,6 @@ describe("SettingsHashResolver", () => {
   it.each([
     ["#role-grants", "/dashboard/settings/access/roles#role-grants"],
     ["#password-users", "/dashboard/settings/access/sign-in#password-users"],
-    ["#audit-log", "/dashboard/settings/audit#audit-log"],
   ])("%s replaces the URL with its tab and sub-tab", (hash, target) => {
     openWithHash("/dashboard/settings/accounts", hash);
     render(<SettingsHashResolver tabs={settingsTabsFor(ADMIN)} />);

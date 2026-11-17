@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { AccessSections } from "@/components/settings/access/AccessSections";
 import { loadSettingsAccessViewer } from "@/lib/auth/settings-access";
+import { managementAccessFor } from "@/lib/manage-access";
 import { settingsTabsFor } from "@/lib/settings-tabs";
 
 import {
@@ -21,6 +22,7 @@ export default async function AccessGroupPage({
 }) {
   const { group } = await params;
   const session = await auth();
+  if (!(await managementAccessFor(session)).settings) notFound();
   const viewer = await loadSettingsAccessViewer(session);
   const subTab = settingsTabsFor(viewer)
     .find((t) => t.id === "access")

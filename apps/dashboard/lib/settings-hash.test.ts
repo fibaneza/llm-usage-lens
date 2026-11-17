@@ -18,7 +18,7 @@ import { settingsTabsFor } from "./settings-tabs";
 //   resolveSettingsHash(hash: string, tabs: readonly SettingsTab[]): string | null
 // maps an old section slug (with or without the leading '#') to
 // `<route>#<slug>` when the caller's visible `tabs` include that route and
-// section, else null. The slugs are the twelve `AccessSection` ids that
+// section, else null. The slugs are the ten Settings `AccessSection` ids that
 // existed before the split (components/settings/access/AccessSections.tsx).
 const BASE = "/dashboard/settings";
 
@@ -33,11 +33,18 @@ const OLD_SLUGS: [string, string][] = [
   ["identity-mapping", `${BASE}/access/identities`],
   ["password-users", `${BASE}/access/sign-in`],
   ["per-user-approval", `${BASE}/access/sign-in`],
-  ["audit-log", `${BASE}/audit`],
-  ["access-review", `${BASE}/audit`],
 ];
 
 describe("resolveSettingsHash", () => {
+  // B2-3: the audit slugs left Settings with the Audit tab (they live on
+  // Management -> Audit, a different route); a stale link resolves to nothing.
+  it.each(["#audit-log", "#access-review"])(
+    "%s no longer resolves in Settings, even for an admin",
+    (hash) => {
+      expect(resolveSettingsHash(hash, settingsTabsFor(ADMIN))).toBeNull();
+    },
+  );
+
   it.each(OLD_SLUGS)("#%s lands on its tab and sub-tab", (slug, route) => {
     expect(resolveSettingsHash(`#${slug}`, settingsTabsFor(ADMIN))).toBe(
       `${route}#${slug}`,

@@ -22,7 +22,7 @@ import { AccessSections } from "./access/AccessSections";
 import type { AccessViewer, StepUpActions } from "./access/types";
 
 // Source: Design System "Settings Page" (unit D, 2026-11-16: the access
-// sections are split over the Access sub-tabs and the Audit tab; "a section a
+// sections are split over the Access sub-tabs; the Audit tab moved to Management, B2-3; "a section a
 // caller cannot use is not rendered, and fetches nothing"); implementation-
 // phases Phase 4R.4 and Rule 10.3 / 50.3 (roles resolved on the server and
 // passed down). This file REPLACES SettingsContent.access.test.tsx: every
@@ -34,7 +34,7 @@ import type { AccessViewer, StepUpActions } from "./access/types";
 //     each admin sub-tab renders its own headings (here); Account registry /
 //     Data retention headings live in AccountsTab.test.tsx / SyncTab.test.tsx.
 //   - "auditor sees only the read-only sections, no Members, no Add account":
-//     the auditor rows below (Audit log on the Audit tab, only Pending and
+//     the auditor rows below (only Pending and
 //     stale on People); no Add account in AccountsTab.test.tsx.
 //   - "plain viewer sees no access heading": the last test below plus the empty
 //     tab set in lib/settings-tabs.test.ts.
@@ -85,22 +85,20 @@ function stubAll() {
 
 type Group = { id: string; sections: readonly AccessSectionSlug[] };
 
-// One group per Access sub-tab plus the Audit tab: what each page renders.
+// One group per Access sub-tab: what each page renders (the Audit tab left
+// Settings, B2-3; the auditor's audit access is covered by the Management
+// Audit page tests).
 function groupsOf(viewer: AccessViewer): Group[] {
   const tabs = settingsTabsFor(viewer);
   const access = tabs.find((t) => t.id === "access");
-  const audit = tabs.find((t) => t.id === "audit");
-  return [
-    ...(access?.subTabs ?? []).map((s) => ({ id: s.id, sections: s.sections })),
-    ...(audit ? [{ id: audit.id, sections: audit.sections }] : []),
-  ];
+  return (access?.subTabs ?? []).map((s) => ({
+    id: s.id,
+    sections: s.sections,
+  }));
 }
 
 describe("access sections per tab", () => {
-  it.each([
-    ["internal-admin", ADMIN, "Role grants", "roles"],
-    ["internal-auditor", AUDITOR, "Audit log", "audit"],
-  ] as const)(
+  it.each([["internal-admin", ADMIN, "Role grants", "roles"]] as const)(
     "%s: the tab that owns %s renders it",
     async (_name, viewer, heading, tabId) => {
       stubAll();

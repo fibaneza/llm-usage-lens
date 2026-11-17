@@ -4,10 +4,20 @@ import { Activity, Coins, DollarSign } from "lucide-react";
 import { useQueryStates } from "nuqs";
 import { useMemo } from "react";
 
-import { formatUsd } from "@/components/charts/chart-data";
+import {
+  formatUsd,
+  toModelBreakdownSlices,
+} from "@/components/charts/chart-data";
+import {
+  LazyDailyCostBarChart,
+  LazyModelBreakdownChart,
+} from "@/components/charts/LazyCharts";
 import { EmptyState } from "@/components/display/EmptyState";
 import { MetricCard } from "@/components/display/MetricCard";
+import { Panel } from "@/components/display/Panel";
 import { SectionBoundary } from "@/components/display/SectionBoundary";
+import { LiteLLMSection } from "@/components/litellm/LiteLLMSection";
+import { MyUsageSection } from "@/components/litellm/MyUsageSection";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/hooks/useMe";
 import { useMeUsage } from "@/hooks/useMeUsage";
@@ -33,6 +43,7 @@ export function MeContent() {
     <div className="flex flex-col gap-6">
       <SectionBoundary title="your access" resetKeys={[]}>
         <AccessNotice />
+        <BudgetIncreaseLink />
       </SectionBoundary>
       <section className="flex flex-col gap-4">
         <h2 className="text-foreground text-lg font-semibold">
@@ -45,7 +56,26 @@ export function MeContent() {
           <OwnUsage range={range} />
         </SectionBoundary>
       </section>
+      <LiteLLMSection title="LiteLLM usage" reported>
+        <MyUsageSection />
+      </LiteLLMSection>
     </div>
+  );
+}
+
+// Design System - Management pages, My usage: a mailto: link to the caller's
+// team lead, absent when none is known. No outbound-message feature.
+function BudgetIncreaseLink() {
+  const me = sectionData(useMe());
+  const lead = me?.leadEmail;
+  if (!lead) return null;
+  return (
+    <a
+      href={`mailto:${encodeURIComponent(lead)}?subject=${encodeURIComponent("Budget increase request")}`}
+      className="text-primary text-sm font-medium underline-offset-4 hover:underline"
+    >
+      Request a budget increase
+    </a>
   );
 }
 
@@ -97,23 +127,40 @@ function OwnUsage({ range }: { range: DateRange }) {
   }
   const { totals } = usage;
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <MetricCard
-        title="Total cost"
-        value={formatUsd(totals.cost)}
-        icon={DollarSign}
-      />
-      <MetricCard
-        title="Tokens"
-        value={countFormatter.format(totals.inputTokens + totals.outputTokens)}
-        icon={Coins}
-        description={`${countFormatter.format(totals.inputTokens)} in, ${countFormatter.format(totals.outputTokens)} out`}
-      />
-      <MetricCard
-        title="Invocations"
-        value={countFormatter.format(totals.invocations)}
-        icon={Activity}
-      />
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard
+          title="Total cost"
+          value={formatUsd(totals.cost)}
+          icon={DollarSign}
+        />
+        <MetricCard
+          title="Tokens"
+          value={countFormatter.format(
+            totals.inputTokens + totals.outputTokens,
+          )}
+          icon={Coins}
+          description={`${countFormatter.format(totals.inputTokens)} in, ${countFormatter.format(totals.outputTokens)} out`}
+        />
+        <MetricCard
+          title="Invocations"
+          value={countFormatter.format(totals.invocations)}
+          icon={Activity}
+        />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="Spend by day" boundaryTitle="spend by day">
+          <LazyDailyCostBarChart
+            data={usage.daily.map(({ date, cost }) => ({ date, cost }))}
+            label="Your spend by day"
+          />
+        </Panel>
+        <Panel title="Spend by model" boundaryTitle="spend by model">
+          <LazyModelBreakdownChart
+            slices={toModelBreakdownSlices(usage.byModel, 0)}
+          />
+        </Panel>
+      </div>
     </div>
   );
 }

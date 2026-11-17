@@ -66,7 +66,7 @@ describe("SettingsTabs", () => {
       "aria-selected",
       "true",
     );
-    for (const name of ["AWS accounts", "LiteLLM", "Access", "Audit"]) {
+    for (const name of ["AWS accounts", "LiteLLM", "Access"]) {
       expect(screen.getByRole("tab", { name })).toHaveAttribute(
         "aria-selected",
         "false",
@@ -129,7 +129,7 @@ describe("SettingsTabs", () => {
     expect(
       within(sub).getByRole("tab", { name: "Roles and mapping" }),
     ).toHaveAttribute("aria-current", "page");
-    for (const name of ["AWS accounts", "Sync and data", "LiteLLM", "Audit"]) {
+    for (const name of ["AWS accounts", "Sync and data", "LiteLLM"]) {
       expect(within(main).getByRole("tab", { name })).not.toHaveAttribute(
         "aria-current",
       );

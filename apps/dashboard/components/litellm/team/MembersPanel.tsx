@@ -4,6 +4,8 @@ import { LiteLLMMembersResponseSchema } from "@llm-usage-lens/shared";
 import { useState } from "react";
 
 import { formatUsd } from "@/components/charts/chart-data";
+import { BudgetBar, budgetPercent } from "@/components/manage/BudgetBar";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -27,6 +29,8 @@ import {
 import { useLiteLLMQuery } from "../use-litellm-query";
 import { useTeamDetail } from "../use-team-detail";
 import { memberPath, teamPath, useTeamWrite } from "./use-team-write";
+
+const NEAR_BUDGET_PERCENT = 80;
 
 const parsed = (value: string) =>
   value.trim() === "" ? undefined : Number(value);
@@ -192,7 +196,8 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
     teamPath(teamId, "/members"),
     LiteLLMMembersResponseSchema,
   );
-  const { write, pending, error } = useTeamWrite(teamId);
+  const { write, refresh, pending, error } = useTeamWrite(teamId);
+  const [nearOnly, setNearOnly] = useState(false);
   if (detail.status === "unavailable" || members.status === "unavailable") {
     return <Unavailable />;
   }
@@ -201,6 +206,36 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
   }
   const ops = new Set(detail.data.enabledOperations);
   const { items } = members.data;
+  const teamName = detail.data.team.alias ?? "this team";
+  const shown = nearOnly
+    ? items.filter(
+        (m) =>
+          m.spend !== undefined &&
+          m.maxBudget != null &&
+          m.maxBudget > 0 &&
+          budgetPercent(m.spend, m.maxBudget) >= NEAR_BUDGET_PERCENT,
+      )
+    : items;
+
+  const resettable = items.filter((m) => m.oid).length;
+
+  // Bulk reset: the existing per-member route once per member, each audited
+  // there (Design System - Management pages, Bulk reset). Stops at the first
+  // failure so its message stays visible.
+  async function resetAll() {
+    for (const member of items) {
+      if (!member.oid) continue;
+      const result = await write(
+        memberPath(teamId, member.oid, "/reset-spend"),
+        "POST",
+        undefined,
+        ["members"],
+        { refetch: false },
+      );
+      if (!result.ok) break;
+    }
+    await refresh(["members"]);
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -210,6 +245,28 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
             teamId={teamId}
             candidates={members.data.candidates ?? []}
           />
+        </div>
+      ) : null}
+      {items.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            aria-pressed={nearOnly}
+            onClick={() => setNearOnly((on) => !on)}
+          >
+            Near or over budget
+          </Button>
+          {ops.has("resetMemberSpend") ? (
+            <ConfirmAction
+              label="Reset spend for all members"
+              text="Reset spend for all members"
+              title="Reset spend for all members?"
+              description={`Resets spend for ${resettable} ${resettable === 1 ? "member" : "members"} to $0.00. Recorded in the audit log.`}
+              disabled={pending}
+              onConfirm={() => void resetAll()}
+            />
+          ) : null}
         </div>
       ) : null}
       <WriteError message={error} />
@@ -227,7 +284,7 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((member) => {
+            {shown.map((member) => {
               const name = member.name ?? member.email;
               const oid = member.oid;
               const act = (
@@ -252,10 +309,19 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
                   <TableCell className="text-right font-mono tabular-nums">
                     {member.spend === undefined ? "-" : formatUsd(member.spend)}
                   </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {member.maxBudget == null
-                      ? "No limit"
-                      : formatUsd(member.maxBudget)}
+                  <TableCell>
+                    <span className="flex flex-col items-end gap-1 font-mono tabular-nums">
+                      {member.maxBudget == null ||
+                      member.maxBudget <= 0 ? null : (
+                        <span>{formatUsd(member.maxBudget)}</span>
+                      )}
+                      {member.spend === undefined ? null : (
+                        <BudgetBar
+                          spend={member.spend}
+                          budget={member.maxBudget}
+                        />
+                      )}
+                    </span>
                   </TableCell>
                   <TableCell>
                     {oid ? (
@@ -265,7 +331,7 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
                             label={`Remove ${name}`}
                             text="Remove"
                             title={`Remove ${name}?`}
-                            description="The member loses access to this team's keys."
+                            description={`Removes ${name} from ${teamName}. Recorded in the audit log.`}
                             disabled={pending}
                             onConfirm={() => void act("", "DELETE")}
                           />
@@ -275,7 +341,7 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
                             label={`Reset spend for ${name}`}
                             text="Reset spend"
                             title={`Reset spend for ${name}?`}
-                            description="The member's recorded spend returns to zero."
+                            description={`Sets ${name}'s spend to $0.00. Recorded in the audit log.`}
                             disabled={pending}
                             onConfirm={() => void act("/reset-spend")}
                           />

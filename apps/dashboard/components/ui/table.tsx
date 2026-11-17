@@ -2,11 +2,20 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  ...props
+}: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto rounded-card border bg-card"
+      tabIndex={0}
+      role="region"
+      aria-label={ariaLabelledBy ? undefined : (ariaLabel ?? "Table")}
+      aria-labelledby={ariaLabelledBy}
+      className="relative w-full overflow-x-auto rounded-card border bg-card outline-hidden focus-visible:ring-2 ring-focus-ring ring-offset-2"
     >
       <table
         data-slot="table"

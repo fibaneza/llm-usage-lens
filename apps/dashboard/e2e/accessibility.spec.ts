@@ -200,11 +200,58 @@ test.describe("accessibility (axe) - slice B1 surfaces", () => {
     await expect(nav.getByText("Usage", { exact: true })).toBeVisible();
     await expect(nav.getByRole("link", { name: "My usage" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Overview" })).toHaveCount(0);
-    await expect(nav.getByText("Management", { exact: true })).toBeVisible();
-    await expect(
-      nav.getByText("Administration", { exact: true }),
-    ).toBeVisible();
+    // B2-2: a user has no Management or Administration item, so neither group
+    // is rendered.
+    await expect(nav.getByText("Management", { exact: true })).toHaveCount(0);
+    await expect(nav.getByText("Administration", { exact: true })).toHaveCount(
+      0,
+    );
 
     await expectNoBlockingViolations(page);
   });
+});
+
+// Slice B2 surfaces at the four project breakpoints (implementation-phases
+// Phase 5 Slice B tests: "axe clean and no horizontal scroll at 375 / 768 /
+// 1024 / 1440"; Design System - Management pages). NAV_ITEMS above reach each
+// Management page once, as the default auditor, at the default viewport; this
+// adds every width as an admin (write controls rendered) for the pages whose
+// layout is new, and the Settings page frame.
+const B2_PAGES: readonly [string, string][] = [
+  ["/dashboard/manage/team", "Team usage & management"],
+  ["/dashboard/manage/organisation", "Organisation usage"],
+  ["/dashboard/manage/users", "User lookup"],
+  ["/dashboard/manage/audit", "Audit log"],
+  ["/dashboard/me", "My usage"],
+  ["/dashboard/settings/accounts", "Settings"],
+];
+
+test.describe("accessibility (axe) - slice B2 surfaces", () => {
+  for (const [path, heading] of B2_PAGES) {
+    for (const width of B1_WIDTHS) {
+      test(`${path} is axe-clean with no horizontal scroll at ${width}px`, async ({
+        context,
+        page,
+      }) => {
+        await signInAsTestUser(context, { roles: ["internal-admin"] });
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(path);
+        await waitForHydration(page);
+        await expect(
+          page.getByRole("heading", { level: 1, name: heading }),
+        ).toBeVisible();
+
+        const overflow = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+        }));
+        expect(
+          overflow.scrollWidth,
+          `${path} overflows horizontally at ${width}px`,
+        ).toBeLessThanOrEqual(overflow.clientWidth);
+
+        await expectNoBlockingViolations(page);
+      });
+    }
+  }
 });

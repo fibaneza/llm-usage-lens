@@ -4,15 +4,19 @@ import { CircleDollarSign, Gauge, Wallet } from "lucide-react";
 
 import { formatUsd } from "@/components/charts/chart-data";
 import { MetricCard } from "@/components/display/MetricCard";
+import { DailySpend } from "@/components/litellm/DailySpend";
+import { NotConnected, Unavailable } from "@/components/litellm/LiteLLMSection";
+import { useTeamDetail } from "@/components/litellm/use-team-detail";
 
-import { DailySpend } from "./DailySpend";
-import { NotConnected, Unavailable } from "./LiteLLMSection";
-import { useTeamDetail } from "./use-team-detail";
+import { BudgetBar } from "./BudgetBar";
 
 const budget = (value: number | null) =>
   value === null ? "No limit" : formatUsd(value);
 
-export function TeamSpendSection({ teamId }: { teamId: string }) {
+// Body of the Team page's "Team spend & budgets" panel: LiteLLM-reported team
+// spend, budgets and the team BudgetBar (Design System - Management pages,
+// Team; Budget as a bar). Daily buckets are LiteLLM's UTC days (LD20).
+export function TeamSpendPanel({ teamId }: { teamId: string }) {
   const result = useTeamDetail(teamId);
   if (result.status === "unavailable") return <Unavailable />;
   const data = result.data;
@@ -40,6 +44,7 @@ export function TeamSpendSection({ teamId }: { teamId: string }) {
           icon={Gauge}
         />
       </div>
+      <BudgetBar spend={team.spend} budget={team.maxBudget} />
       <DailySpend daily={daily ?? []} />
     </div>
   );

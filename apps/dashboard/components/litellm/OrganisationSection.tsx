@@ -17,14 +17,15 @@ import { LiteLLMOrgResponseSchema } from "@llm-usage-lens/shared";
 
 import { DailySpend } from "./DailySpend";
 import { Empty, Unavailable } from "./LiteLLMSection";
-import { useLiteLLMQuery } from "./use-litellm-query";
+import { useLiteLLMQuery, useUrlRange } from "./use-litellm-query";
 
 // Organisation tab (LiteLLM spec -- Views by role): totals across every
 // linked team and a per-team table. LiteLLM-reported figures (LT8).
 export function OrganisationSection() {
+  const { keyParts, query } = useUrlRange();
   const result = useLiteLLMQuery(
-    ["org"],
-    "/api/litellm/org",
+    ["org", ...keyParts],
+    `/api/litellm/org?${query}`,
     LiteLLMOrgResponseSchema,
   );
   if (result.status === "unavailable") return <Unavailable />;

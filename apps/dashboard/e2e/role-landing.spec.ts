@@ -91,16 +91,53 @@ const USAGE_MY_USAGE_ONLY: Group = {
 const ORG_USAGE_TITLES = USAGE.items
   .filter((i) => i.path !== "/dashboard/me")
   .map((i) => i.title);
-const MANAGEMENT: Group = {
-  label: "Management",
-  items: [
-    {
-      title: "LiteLLM",
-      pageTitle: "LiteLLM usage & administration",
-      path: "/dashboard/litellm",
-    },
-  ],
+// Slice B2 (B2-2; Design System - Navigation (Sidebar) routes table): the
+// Management group is the four pages, each by capability.
+const TEAM_ITEM: Item = {
+  title: "Team",
+  pageTitle: "Team usage & management",
+  path: "/dashboard/manage/team",
 };
+const ORGANISATION_ITEM: Item = {
+  title: "Organisation",
+  pageTitle: "Organisation usage",
+  path: "/dashboard/manage/organisation",
+};
+const USERS_ITEM: Item = {
+  title: "Users",
+  pageTitle: "User lookup",
+  path: "/dashboard/manage/users",
+};
+const AUDIT_ITEM: Item = {
+  title: "Audit",
+  pageTitle: "Audit log",
+  path: "/dashboard/manage/audit",
+};
+const MANAGEMENT_ALL: Group = {
+  label: "Management",
+  items: [TEAM_ITEM, ORGANISATION_ITEM, USERS_ITEM, AUDIT_ITEM],
+};
+// An org admin reads neither audit source (Access Control, Audit for org admin).
+const MANAGEMENT_NO_AUDIT: Group = {
+  label: "Management",
+  items: [TEAM_ITEM, ORGANISATION_ITEM, USERS_ITEM],
+};
+const MANAGEMENT_TEAM_ONLY: Group = {
+  label: "Management",
+  items: [TEAM_ITEM],
+};
+const MANAGEMENT_PATHS = [
+  ORGANISATION_ITEM.path,
+  USERS_ITEM.path,
+  AUDIT_ITEM.path,
+];
+const SETTINGS_PATHS = [
+  "/dashboard/settings",
+  "/dashboard/settings/accounts",
+  "/dashboard/settings/sync",
+  "/dashboard/settings/litellm",
+  "/dashboard/settings/access/people",
+];
 const ADMINISTRATION: Group = {
   label: "Administration",
   items: [
@@ -129,11 +166,19 @@ const pathPattern = (path: string, tabRoutes = false) =>
 // The sidebar shows exactly these groups and items, the footer holds only the
 // collapse button, then every item opens a page whose h1 is its page title.
 async function expectSidebarAndWalk(page: Page, groups: Group[]) {
-  // Group labels are text in the nav; the link list fixes the order.
+  // Group labels are text in the nav; the link list fixes the order. A group
+  // the caller has no item for is not rendered (B2-2).
   for (const group of groups) {
     await expect(
       primaryNav(page).getByText(group.label, { exact: true }),
     ).toBeVisible();
+  }
+  for (const label of ["Usage", "Management", "Administration"]) {
+    if (!groups.some((g) => g.label === label)) {
+      await expect(
+        primaryNav(page).getByText(label, { exact: true }),
+      ).toHaveCount(0);
+    }
   }
   await expect(primaryNav(page).getByRole("link")).toHaveText(
     groups.flatMap((g) => g.items.map((i) => i.title)),
@@ -183,12 +228,48 @@ test.describe("journey: admin", () => {
     await expect(topBar(page).getByRole("status")).toBeVisible();
     await expect(topBar(page).getByRole("timer")).toBeVisible();
 
-    await expectSidebarAndWalk(page, [USAGE, MANAGEMENT, ADMINISTRATION]);
+    await expectSidebarAndWalk(page, [USAGE, MANAGEMENT_ALL, ADMINISTRATION]);
+  });
+});
+
+// B2 journeys for the two global readers the B1 specs did not walk (Access
+// Control - Navigation and landing by role: org admin, auditor; landing Cost
+// overview; the auditor reads every Management page and Settings read-only).
+test.describe("journey: org admin", () => {
+  test("lands on Cost overview, sees Management without Audit and Settings, and Audit is a 404", async ({
+    context,
+    page,
+  }) => {
+    await open(page, context, byName("internal-org-admin"), "/dashboard");
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Cost overview" }),
+    ).toBeVisible();
+    await expectSidebarAndWalk(page, [
+      USAGE,
+      MANAGEMENT_NO_AUDIT,
+      ADMINISTRATION,
+    ]);
+    await expectNotFound(page, AUDIT_ITEM.path);
+  });
+});
+
+test.describe("journey: auditor", () => {
+  test("lands on Cost overview, sees every Management page and Settings, every link opens its page", async ({
+    context,
+    page,
+  }) => {
+    await open(page, context, byName("internal-auditor"), "/dashboard");
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Cost overview" }),
+    ).toBeVisible();
+    await expectSidebarAndWalk(page, [USAGE, MANAGEMENT_ALL, ADMINISTRATION]);
   });
 });
 
 test.describe("journey: lead (team admin)", () => {
-  test("lands on My usage, sees Usage (My usage only), Management and Administration, every link opens its page, no sync badge", async ({
+  test("lands on My usage, sees Usage (My usage only) and Management (Team only), no Administration, every link opens its page, no sync badge", async ({
     context,
     page,
   }) => {
@@ -207,17 +288,75 @@ test.describe("journey: lead (team admin)", () => {
 
     await expectSidebarAndWalk(page, [
       USAGE_MY_USAGE_ONLY,
-      MANAGEMENT,
-      ADMINISTRATION,
+      MANAGEMENT_TEAM_ONLY,
     ]);
   });
 
-  test("every Usage route is a 404 (B1-2)", async ({ context, page }) => {
+  test("every Usage route, the other Management pages and every Settings route are a 404 (B1-2, B2-1, B2-10)", async ({
+    context,
+    page,
+  }) => {
     await open(page, context, byName("team-admin"), "/dashboard/me");
 
-    for (const path of HIDDEN_USAGE_PATHS) {
+    for (const path of [
+      ...HIDDEN_USAGE_PATHS,
+      ...MANAGEMENT_PATHS,
+      ...SETTINGS_PATHS,
+    ]) {
       await expectNotFound(page, path);
     }
+  });
+
+  test("opens the Team page for the team it leads, and a team it does not lead is a 404", async ({
+    context,
+    page,
+  }) => {
+    await open(page, context, byName("team-admin"), "/dashboard/me");
+
+    const own = await page.goto(`${TEAM_ITEM.path}?team=${PROBE_TEAM}`);
+    expect(own?.status()).toBe(200);
+    await expect(
+      page.getByRole("heading", { level: 1, name: TEAM_ITEM.pageTitle }),
+    ).toBeVisible();
+    await expectNotFound(page, `${TEAM_ITEM.path}?team=not-a-team-it-leads`);
+  });
+
+  // Design System - Management pages (Team: the ScopeLine for a lead; the lead's
+  // team-scoped access actions) and the B2 review: the Team admins table has no
+  // clipped action at 375. The row action is the "Revoke admin <name>" icon button.
+  test("the Team page states the lead's scope and its Team admins actions fit at 375", async ({
+    context,
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 900 });
+    await open(page, context, byName("team-admin"), "/dashboard/me");
+    await page.goto(`${TEAM_ITEM.path}?team=${PROBE_TEAM}`);
+    await waitForHydration(page);
+
+    await expect(page.getByText("Showing teams you lead")).toBeVisible();
+
+    const revoke = page.getByRole("button", { name: /^Revoke admin / });
+    await expect(revoke.first()).toBeVisible();
+    for (const button of await revoke.all()) {
+      await button.scrollIntoViewIfNeeded();
+      const box = await button.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(375);
+      await expect(button).toBeEnabled();
+      await button.click({ trial: true });
+    }
+  });
+
+  test("the retired LiteLLM routes still work: ?tab=team lands on Team, ?tab=audit is a 404", async ({
+    context,
+    page,
+  }) => {
+    await open(page, context, byName("team-admin"), "/dashboard/me");
+
+    await page.goto("/dashboard/litellm?tab=team");
+    await expect(page).toHaveURL(pathPattern(TEAM_ITEM.path));
+    await expectNotFound(page, "/dashboard/litellm?tab=audit");
   });
 
   test("the retired ?view=overview link still lands on My usage", async ({
@@ -231,7 +370,7 @@ test.describe("journey: lead (team admin)", () => {
 });
 
 test.describe("journey: user (member)", () => {
-  test("lands on My usage, sees Usage (My usage only), Management and Administration, every link opens its page, no sync badge", async ({
+  test("lands on My usage, sees the Usage group with My usage only and no Management or Administration, no sync badge", async ({
     context,
     page,
   }) => {
@@ -247,17 +386,21 @@ test.describe("journey: user (member)", () => {
       topBar(page).getByRole("button", { name: "Last 30 days" }),
     ).toBeVisible();
 
-    await expectSidebarAndWalk(page, [
-      USAGE_MY_USAGE_ONLY,
-      MANAGEMENT,
-      ADMINISTRATION,
-    ]);
+    await expectSidebarAndWalk(page, [USAGE_MY_USAGE_ONLY]);
   });
 
-  test("every Usage route is a 404 (B1-2)", async ({ context, page }) => {
+  test("every Usage route, every Management page and every Settings route are a 404 (B1-2, B2-1, B2-10)", async ({
+    context,
+    page,
+  }) => {
     await open(page, context, byName("member"), "/dashboard/me");
 
-    for (const path of HIDDEN_USAGE_PATHS) {
+    for (const path of [
+      ...HIDDEN_USAGE_PATHS,
+      TEAM_ITEM.path,
+      ...MANAGEMENT_PATHS,
+      ...SETTINGS_PATHS,
+    ]) {
       await expectNotFound(page, path);
     }
   });
@@ -305,5 +448,23 @@ test.describe("My usage (/dashboard/me)", () => {
     await expect(page.getByText(/ask your team lead for access/i)).toHaveCount(
       0,
     );
+  });
+
+  // B2-11: the chart sections render from the caller's own usage; the probe
+  // table carries no usage for the member, so the empty state shows and the
+  // charts stay out. The request-a-budget-increase link is absent without a
+  // known lead.
+  test("a member with no usage in range sees no charts and no budget-increase link", async ({
+    context,
+    page,
+  }) => {
+    await open(page, context, byName("member"), "/dashboard/me");
+
+    await expect(
+      page.getByRole("heading", { name: "Spend by day" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Request a budget increase" }),
+    ).toHaveCount(0);
   });
 });

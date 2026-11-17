@@ -23,6 +23,12 @@ vi.mock("@/components/settings/AccountsTab", () => ({
   AccountsTab: (props: { isAdmin: boolean }) => tab(props),
 }));
 
+// Slice B2 B2-10: the gate matrix lives in the manage-routes integration test.
+vi.mock("@/lib/manage-access", async () => {
+  const mod = await import("@/test/fakes/manage-access-fake");
+  return mod.fakeManageAccess;
+});
+
 import AccountsPage from "./page";
 
 afterEach(() => {

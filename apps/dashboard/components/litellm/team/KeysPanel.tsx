@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 
 import { Empty, NotConnected, Unavailable } from "../LiteLLMSection";
+import { formatSydneyTime } from "../sydney-time";
 import type { TeamPanelProps } from "./panel-props";
 import { NativeSelect } from "./native-select";
 import { ShownOnceKeyDialog } from "./shown-once-key-dialog";
@@ -200,6 +201,7 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
               <TableHead>Key</TableHead>
               <TableHead className="text-right">Spend</TableHead>
               <TableHead className="text-right">Budget</TableHead>
+              <TableHead>Expires</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -228,6 +230,7 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
                       ? "No limit"
                       : formatUsd(key.maxBudget)}
                   </TableCell>
+                  <TableCell>{formatSydneyTime(key.expires)}</TableCell>
                   <TableCell>
                     <span className="flex flex-wrap gap-2">
                       {ops.has("updateMemberKey") ? (

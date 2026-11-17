@@ -62,7 +62,6 @@ type Row = {
   viewer: Parameters<typeof settingsTabsFor>[0];
   tabs: string[];
   subTabs: readonly (readonly [string, readonly string[]])[];
-  audit: string[];
 };
 
 // The complete role matrix: security-relevant, so no row is sampled away
@@ -71,16 +70,14 @@ const MATRIX: Row[] = [
   {
     name: "internal-admin",
     viewer: ADMIN,
-    tabs: ["accounts", "sync", "litellm", "access", "audit"],
+    tabs: ["accounts", "sync", "litellm", "access"],
     subTabs: ADMIN_SUB_TABS,
-    audit: ["audit-log", "access-review"],
   },
   {
     name: "the master user (internal-admin by master sign-in)",
     viewer: MASTER,
-    tabs: ["accounts", "sync", "litellm", "access", "audit"],
+    tabs: ["accounts", "sync", "litellm", "access"],
     subTabs: ADMIN_SUB_TABS,
-    audit: ["audit-log", "access-review"],
   },
   {
     name: "internal-org-admin",
@@ -90,21 +87,19 @@ const MATRIX: Row[] = [
       ["people", PEOPLE],
       ["visibility", ["visibility"]],
     ],
-    audit: [],
   },
   {
     // D34: the auditor reads Pending and stale access but not Members,
     // Team admins or Visibility.
     name: "internal-auditor",
     viewer: AUDITOR,
-    tabs: ["accounts", "sync", "litellm", "access", "audit"],
+    tabs: ["accounts", "sync", "litellm", "access"],
     subTabs: [
       ["people", ["pending-access"]],
       ["roles", ["group-mappings", "role-grants"]],
       ["identities", ["identity-links", "identity-mapping"]],
       ["sign-in", ["password-users", "per-user-approval"]],
     ],
-    audit: ["audit-log", "access-review"],
   },
   {
     name: "a team-scope admin",
@@ -114,7 +109,6 @@ const MATRIX: Row[] = [
       ["people", PEOPLE],
       ["visibility", ["visibility"]],
     ],
-    audit: [],
   },
   {
     name: "a department-scope admin",
@@ -124,14 +118,12 @@ const MATRIX: Row[] = [
       ["people", PEOPLE],
       ["visibility", ["visibility"]],
     ],
-    audit: [],
   },
   {
     name: "a viewer without a scope",
     viewer: PLAIN_VIEWER,
     tabs: ["accounts", "sync"],
     subTabs: [],
-    audit: [],
   },
   {
     // Fail closed: a session that builds no viewer still reads the registry
@@ -140,7 +132,6 @@ const MATRIX: Row[] = [
     viewer: null,
     tabs: ["accounts", "sync"],
     subTabs: [],
-    audit: [],
   },
 ];
 
@@ -159,9 +150,14 @@ describe("settingsTabsFor - role matrix", () => {
     },
   );
 
-  it.each(MATRIX)("$name sees the Audit sections it may read", (row) => {
-    const audit = settingsTabsFor(row.viewer).find((t) => t.id === "audit");
-    expect([...(audit?.sections ?? [])]).toEqual(row.audit);
+  // B2-3 / Design System - Settings Page: the Audit log and Access review live
+  // on Management -> Audit; the Settings tab row has no Audit tab for anyone
+  // (a stored role grant included), and no tab carries audit sections.
+  it.each(MATRIX)("$name is offered no Audit tab (B2-3)", (row) => {
+    const tabs = settingsTabsFor(row.viewer);
+    expect(tabs.map((t) => t.id)).not.toContain("audit");
+    expect(tabs.flatMap((t) => [...t.sections])).toEqual([]);
+    expect(tabs.map((t) => t.href)).not.toContain(`${BASE}/audit`);
   });
 
   it("only the Access tab has sub-tabs", () => {
@@ -178,7 +174,6 @@ describe("settingsTabsFor - labels and routes", () => {
       ["Sync and data", `${BASE}/sync`],
       ["LiteLLM", `${BASE}/litellm`],
       ["Access", `${BASE}/access`],
-      ["Audit", `${BASE}/audit`],
     ]);
   });
 
@@ -198,7 +193,7 @@ describe("settingsTabsFor - labels and routes", () => {
       roles: ["internal-viewer", "internal-auditor"],
       adminScopes: [],
     };
-    expect(settingsTabsFor(grantOnly).map((t) => t.id)).toContain("audit");
+    expect(settingsTabsFor(grantOnly).map((t) => t.id)).toContain("litellm");
   });
 });
 

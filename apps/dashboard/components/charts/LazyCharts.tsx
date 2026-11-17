@@ -15,6 +15,11 @@ export const LazyCostTrendChart = dynamic(
   { ssr: false, loading: ChartSkeleton },
 );
 
+export const LazyDailyCostBarChart = dynamic(
+  () => import("./DailyCostBarChart").then((m) => m.DailyCostBarChart),
+  { ssr: false, loading: ChartSkeleton },
+);
+
 export const LazyModelBreakdownChart = dynamic(
   () => import("./ModelBreakdownChart").then((m) => m.ModelBreakdownChart),
   { ssr: false, loading: ChartSkeleton },

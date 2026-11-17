@@ -28,10 +28,60 @@ vi.mock("@/components/settings/SettingsHashResolver", () => ({
   ),
 }));
 
+// Slice B2: B2-9 (the layout opens with a PageHeader description above the
+// route tabs; the h1 stays in the top bar - Design System - Layout, Page
+// frame) and B2-10 (settings=false is the 404, since a layout is not re-run on
+// soft navigation each page gates too; this is the layout's own gate).
+const manage = await import("@/test/fakes/manage-access-fake");
+vi.mock("@/lib/manage-access", async () => {
+  const mod = await import("@/test/fakes/manage-access-fake");
+  return mod.fakeManageAccess;
+});
+vi.mock("next/navigation", () => ({
+  notFound: () => {
+    throw new Error("NEXT_NOT_FOUND");
+  },
+}));
+
 import SettingsLayout from "./layout";
 
 afterEach(() => {
   vi.clearAllMocks();
+  manage.resetManageAccess();
+});
+
+describe("SettingsLayout page frame and gate (B2-9, B2-10)", () => {
+  it("opens with a one-line PageHeader description before the tab row, and no page-level h1", async () => {
+    auth.mockResolvedValue({ user: { oid: "oid-1" } });
+    loadViewer.mockResolvedValue({
+      roles: ["internal-admin"],
+      authMethod: "entra",
+      adminScopes: [],
+    });
+    const { container } = render(
+      await SettingsLayout({ children: <p>page body</p> }),
+    );
+
+    const description = container.querySelector("p");
+    expect(description?.textContent?.trim().length ?? 0).toBeGreaterThan(0);
+    expect(description?.textContent).not.toBe("page body");
+    expect(description).not.toBeNull();
+    const position = (description as HTMLElement).compareDocumentPosition(
+      screen.getByTestId("row"),
+    );
+    expect(Boolean(position & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+  });
+
+  it("renders the 404 when the caller may not see Settings (lead, user)", async () => {
+    manage.setManageAccess({ settings: false, global: false });
+    auth.mockResolvedValue({ user: { oid: "oid-1" } });
+    loadViewer.mockResolvedValue(undefined);
+
+    await expect(
+      SettingsLayout({ children: <p>page body</p> }),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+  });
 });
 
 describe("SettingsLayout", () => {

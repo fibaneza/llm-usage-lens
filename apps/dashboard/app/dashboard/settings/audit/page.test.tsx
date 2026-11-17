@@ -1,76 +1,31 @@
-import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-// Source: Design System "Settings Page" (unit D, 2026-11-16: the Audit tab,
-// Audit log and Access review, is visible to internal-admin and
-// internal-auditor; anyone else gets the same 404 as a missing page); Access
-// Control "Permission matrix" (auditLog / accessReview). Module under test:
-// `app/dashboard/settings/audit/page.tsx`, rendering
-// `<AccessSections viewer stepUp sections={["audit-log","access-review"]} />`.
-const auth = vi.fn();
-vi.mock("@/auth", () => ({ auth: () => auth() }));
-const loadViewer = vi.fn();
-vi.mock("@/lib/auth/settings-access", () => ({
-  loadSettingsAccessViewer: (session: unknown) => loadViewer(session),
-}));
+// Source: Design System - Navigation (Sidebar), *Routes and redirects* ("the
+// Settings audit entry (`/dashboard/settings?section=audit` and
+// `/dashboard/settings/audit`) -> `/dashboard/manage/audit`") and Settings Page
+// (the tab row has no Audit tab; Audit leaves Settings); slice B2 brief B2-3.
+// The audit sections and their per-role 404 moved to the Audit page
+// (app/dashboard/manage/audit/page.test.tsx). A redirect target the caller may
+// not see returns that page's 404 (Access Control - Hidden means absent).
+//
+// Contract (app/dashboard/settings/audit/page.tsx): default Server Component
+// (async allowed) that calls redirect("/dashboard/manage/audit") and reads no
+// data.
 vi.mock("next/navigation", () => ({
-  notFound: () => {
-    throw new Error("NEXT_NOT_FOUND");
-  },
   redirect: (url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
   },
-}));
-vi.mock("../step-up-actions", () => ({
-  stepUpWithEntra: vi.fn(),
-  stepUpWithCredentials: vi.fn(),
-  stepUpWithDevLogin: vi.fn(),
-}));
-vi.mock("@/components/settings/access/AccessSections", () => ({
-  AccessSections: (props: { sections: string[] }) => (
-    <div data-testid="sections">{props.sections.join(",")}</div>
-  ),
+  permanentRedirect: () => {
+    throw new Error("permanentRedirect must not be used");
+  },
 }));
 
 import AuditPage from "./page";
 
-afterEach(() => {
-  vi.clearAllMocks();
-});
-
-function as(roles: string[], scoped = false) {
-  auth.mockResolvedValue({ user: { oid: "oid-1", roles } });
-  loadViewer.mockResolvedValue({
-    roles,
-    authMethod: "entra",
-    adminScopes: scoped ? [{ scopeType: "team", scopeId: "team-pay" }] : [],
-  });
-}
-
-describe("AuditPage", () => {
-  it.each([
-    ["internal-admin", ["internal-admin"]],
-    ["internal-auditor", ["internal-auditor"]],
-  ])("%s sees Audit log and Access review", async (_n, roles) => {
-    as(roles);
-    render(await AuditPage());
-    expect(screen.getByTestId("sections")).toHaveTextContent(
-      "audit-log,access-review",
+describe("settings AuditPage redirect (B2-3)", () => {
+  it("redirects to Management -> Audit", async () => {
+    await expect(Promise.resolve().then(() => AuditPage())).rejects.toThrow(
+      "NEXT_REDIRECT:/dashboard/manage/audit",
     );
-  });
-
-  it.each([
-    ["internal-org-admin", ["internal-org-admin"], false],
-    ["a team-scope admin", ["internal-viewer"], true],
-    ["a viewer without a scope", ["internal-viewer"], false],
-  ])("%s gets the not-found page", async (_n, roles, scoped) => {
-    as(roles, scoped);
-    await expect(AuditPage()).rejects.toThrow("NEXT_NOT_FOUND");
-  });
-
-  it("a session that builds no viewer gets the not-found page", async () => {
-    auth.mockResolvedValue(null);
-    loadViewer.mockResolvedValue(undefined);
-    await expect(AuditPage()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });

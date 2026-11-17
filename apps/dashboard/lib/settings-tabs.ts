@@ -7,16 +7,12 @@ import { litellmPanelCapabilities } from "@/lib/auth/litellm-panel";
 // Source: Design System "Settings Page" (unit D, 2026-11-16): the tab table
 // ("Visible to"), the Access sub-tab table (segments and section slugs) and
 // "a tab the caller cannot use is not rendered"; LiteLLM spec LD24 (the
-// LiteLLM tab). The one place the tab set is decided; the write routes
+// LiteLLM tab); slice B2 (B2-3): the Audit tab left Settings for Management ->
+// Audit. The one place the tab set is decided; the write routes
 // enforce the permission matrix again (Rule 10.3).
 export const SETTINGS_BASE_PATH = "/dashboard/settings";
 
-export type SettingsTabId =
-  | "accounts"
-  | "sync"
-  | "litellm"
-  | "access"
-  | "audit";
+export type SettingsTabId = "accounts" | "sync" | "litellm" | "access";
 export type AccessSubTabId =
   | "people"
   | "visibility"
@@ -86,11 +82,6 @@ const SUB_TABS: readonly {
     label: "Sign-in",
     sections: ["password-users", "per-user-approval"],
   },
-];
-
-const AUDIT_SECTIONS: readonly AccessSectionSlug[] = [
-  "audit-log",
-  "access-review",
 ];
 
 export function isSectionVisible(
@@ -169,9 +160,6 @@ export function settingsTabsFor(
         ];
   });
   if (subTabs.length > 0) tabs.push(tab("access", "Access", { subTabs }));
-
-  const audit = AUDIT_SECTIONS.filter((s) => isSectionVisible(s, capabilities));
-  if (audit.length > 0) tabs.push(tab("audit", "Audit", { sections: audit }));
 
   return tabs;
 }

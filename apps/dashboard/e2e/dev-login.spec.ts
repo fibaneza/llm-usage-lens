@@ -119,7 +119,8 @@ test.describe("dev login identity option (L3c, L3c2)", () => {
       .click();
     await expect(page).toHaveURL(/\/dashboard/);
 
-    await page.goto("/dashboard/litellm");
+    // B2-3 / B2-11: the LiteLLM My usage view is on My usage now.
+    await page.goto("/dashboard/me");
     await expect(page.getByText("$42.50")).toBeVisible();
     await expect(
       page.getByText("Your account is not linked to LiteLLM"),
@@ -140,7 +141,8 @@ test.describe("dev login identity option (L3c, L3c2)", () => {
       .click();
     await expect(page).toHaveURL(/\/dashboard/);
 
-    await page.goto("/dashboard/litellm");
+    // B2-3 / B2-11: the LiteLLM My usage view is on My usage now.
+    await page.goto("/dashboard/me");
     await expect(
       page.getByText("Your account is not linked to LiteLLM"),
     ).toBeVisible();

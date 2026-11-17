@@ -46,13 +46,9 @@ const sessionOf = (name: string): Signer =>
     ? { oid: "master:probe", roles: ["internal-admin"], authMethod: "master" }
     : { oid: byName(name).oid, roles: byName(name).roles };
 
-const ALL_TABS = [
-  "AWS accounts",
-  "Sync and data",
-  "LiteLLM",
-  "Access",
-  "Audit",
-];
+// Slice B2 (B2-3, B2-10): the Audit tab left Settings for Management -> Audit,
+// and Settings is closed to lead and user (their routes are the 404 below).
+const ALL_TABS = ["AWS accounts", "Sync and data", "LiteLLM", "Access"];
 const ALL_SUB = [
   "People",
   "Visibility",
@@ -75,12 +71,19 @@ const MATRIX: { who: string; tabs: string[]; sub: string[] }[] = [
     tabs: ALL_TABS,
     sub: ["People", "Roles and mapping", "Identities", "Sign-in"],
   },
-  {
-    who: "team-admin",
-    tabs: ["AWS accounts", "Sync and data", "Access"],
-    sub: ["People", "Visibility"],
-  },
-  { who: "viewer-no-team", tabs: ["AWS accounts", "Sync and data"], sub: [] },
+];
+
+// Lead and user: Settings and every tab route are absent and 404 (Access
+// Control - Navigation and landing by role: Administration is hidden for lead
+// and user; B2-10).
+const SETTINGS_URLS = [
+  BASE,
+  `${BASE}/accounts`,
+  `${BASE}/sync`,
+  `${BASE}/litellm`,
+  `${BASE}/access`,
+  `${BASE}/access/people`,
+  `${BASE}/access/visibility`,
 ];
 
 // URLs each role must get the 404 page for.
@@ -90,32 +93,14 @@ const FORBIDDEN: [string, string[]][] = [
   [
     "internal-org-admin",
     [
-      `${BASE}/audit`,
       `${BASE}/access/roles`,
       `${BASE}/access/identities`,
       `${BASE}/access/sign-in`,
     ],
   ],
   ["internal-auditor", [`${BASE}/access/visibility`]],
-  [
-    "team-admin",
-    [
-      `${BASE}/litellm`,
-      `${BASE}/audit`,
-      `${BASE}/access/roles`,
-      `${BASE}/access/identities`,
-      `${BASE}/access/sign-in`,
-    ],
-  ],
-  [
-    "viewer-no-team",
-    [
-      `${BASE}/litellm`,
-      `${BASE}/access`,
-      `${BASE}/access/people`,
-      `${BASE}/audit`,
-    ],
-  ],
+  ["team-admin", SETTINGS_URLS],
+  ["viewer-no-team", SETTINGS_URLS],
 ];
 
 async function as(page: Page, who: string, path: string) {
@@ -157,13 +142,19 @@ test.describe("settings tabs - a tab the caller cannot use is a 404", () => {
     for (const url of urls) {
       test(`${who}: ${url}`, async ({ page }) => {
         const seen = await as(page, who, "/dashboard");
+        // The landing page (My usage for lead and user) reads LiteLLM itself;
+        // only requests made by the refused URL count. Wait for the landing's
+        // post-hydration fetches (TeamPageContent: /api/litellm/me) to settle
+        // so a late one is not blamed on the refused URL.
+        await page.waitForLoadState("networkidle");
+        const before = seen.length;
         const response = await page.goto(url);
         expect(response?.status()).toBe(404);
         await expect(page.getByText(/could not be found/i)).toBeVisible();
         // The refused tab fetched nothing from its own API (Rule 10.3).
-        expect(seen.filter((s) => s.path.startsWith("/api/litellm"))).toEqual(
-          [],
-        );
+        expect(
+          seen.slice(before).filter((s) => s.path.startsWith("/api/litellm")),
+        ).toEqual([]);
       });
     }
   }
@@ -194,11 +185,24 @@ test.describe("settings tabs - redirects", () => {
     ).toBeVisible();
   });
 
-  test("a viewer without a scope lands on the registry too", async ({
+  // B2-3: the Settings audit entry redirects to Management -> Audit (Design
+  // System - Routes and redirects); the target applies its own gate.
+  test("/dashboard/settings/audit redirects to Management -> Audit for an auditor", async ({
     page,
   }) => {
-    await as(page, "viewer-no-team", BASE);
-    await expect(page).toHaveURL(`${BASE}/accounts`);
+    await as(page, "internal-auditor", `${BASE}/audit`);
+    await expect(page).toHaveURL(/\/dashboard\/manage\/audit(\?|$)/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Audit log" }),
+    ).toBeVisible();
+  });
+
+  test("/dashboard/settings/audit is a 404 for an org admin (the target is hidden)", async ({
+    page,
+  }) => {
+    await as(page, "internal-org-admin", "/dashboard");
+    const response = await page.goto(`${BASE}/audit`);
+    expect(response?.status()).toBe(404);
   });
 
   test("/dashboard/settings/access redirects to the first visible sub-tab", async ({
@@ -236,9 +240,11 @@ test.describe("settings tabs - redirects", () => {
     ).toBeVisible();
   });
 
-  test("#audit-log lands on the Audit tab for an auditor", async ({ page }) => {
+  test("#audit-log no longer resolves in Settings (the Audit tab moved to Management)", async ({
+    page,
+  }) => {
     await as(page, "internal-auditor", `${BASE}#audit-log`);
-    await expect(page).toHaveURL(`${BASE}/audit#audit-log`);
+    await expect(page).toHaveURL(/\/dashboard\/settings\/accounts/);
   });
 
   test("a hash for a section the caller cannot use stays on the registry", async ({
@@ -299,7 +305,6 @@ const ROUTES: [string, string][] = [
   [`${BASE}/access/roles`, "Role grants"],
   [`${BASE}/access/identities`, "Identity links"],
   [`${BASE}/access/sign-in`, "Password users"],
-  [`${BASE}/audit`, "Audit log"],
 ];
 
 test.describe("settings tabs - layout and accessibility", () => {
@@ -348,22 +353,22 @@ test.describe("settings tabs - layout and accessibility", () => {
 // horizontally instead of the page; every tab stays reachable (review D
 // round 1 T1).
 test.describe("settings tabs - 375px tab row scrolls", () => {
-  test("the tablist scrolls and Audit can be scrolled into view and clicked", async ({
+  test("the tablist keeps every tab reachable (the last one scrolls into view and opens) and the page does not scroll", async ({
     page,
   }) => {
     await as(page, "internal-admin", `${BASE}/accounts`);
     await page.setViewportSize({ width: 375, height: 800 });
     const list = page.getByRole("tablist", { name: "Settings sections" });
-    const metrics = await list.evaluate((el) => ({
-      scrollWidth: el.scrollWidth,
-      clientWidth: el.clientWidth,
+    const last = list.getByRole("tab", { name: "Access" });
+    await last.scrollIntoViewIfNeeded();
+    await expect(last).toBeInViewport();
+    await last.click();
+    await expect(page).toHaveURL(`${BASE}/access/people`);
+    const overflow = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
     }));
-    expect(metrics.scrollWidth).toBeGreaterThan(metrics.clientWidth);
-    const audit = list.getByRole("tab", { name: "Audit" });
-    await audit.scrollIntoViewIfNeeded();
-    await expect(audit).toBeInViewport();
-    await audit.click();
-    await expect(page).toHaveURL(`${BASE}/audit`);
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
   });
 });
 

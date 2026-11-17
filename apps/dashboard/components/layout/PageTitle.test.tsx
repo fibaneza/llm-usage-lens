@@ -17,6 +17,11 @@ describe("PageTitle", () => {
     ["/dashboard/account", "Account"],
     ["/dashboard/teams/team-1", "Cost by team"],
     ["/dashboard/me", "My usage"],
+    // Slice B2 B2-2 / Design System routes table: the Management page titles.
+    ["/dashboard/manage/team", "Team usage & management"],
+    ["/dashboard/manage/organisation", "Organisation usage"],
+    ["/dashboard/manage/users", "User lookup"],
+    ["/dashboard/manage/audit", "Audit log"],
   ])("%s reads %s as the page h1", (path, title) => {
     mockUsePathname.mockReturnValue(path);
     render(<PageTitle />);

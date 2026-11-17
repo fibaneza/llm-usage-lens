@@ -4,24 +4,33 @@ import { expect, type Page, test } from "@playwright/test";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 
-// Sources: docs/specs/2026-11-10-litellm.md -- "Team configuration page (L4)"
-// (entry via a "Configure team" link in the Team tab; Lead, org-admin and
-// Admin only; a Viewer and the Auditor get the standard 404; shown-once key
-// dialog), LD25; Design System -- LiteLLM Page. Component behaviour lives in
-// TeamConfigContent.test.tsx (Rule 60.24a); this covers the real shell, the
-// server gate and axe. The harness cannot forge a team-scope Lead (Lead scope
-// lives in DynamoDB), so internal-org-admin stands in for the Lead path. The
-// LiteLLM API is fulfilled from fixtures (Rule 60.24).
+// Sources: Design System -- Management pages (Team: one page for a team's usage
+// and its management; Confirm destructive actions: the AlertDialog names the
+// person and the effect, Cancel focused first; Budget as a bar), Navigation
+// (Sidebar) (the retired `/dashboard/litellm/team-config` redirects to
+// Management -> Team); LiteLLM spec -- "Team configuration page (L4)" (Lead,
+// org-admin and Admin; shown-once key dialog), LD25; Access Control --
+// Navigation and landing by role (a Viewer gets the standard 404; the Auditor
+// reads Team); slice B2 brief B2-3, B2-4, B2-6. Component behaviour lives in
+// TeamPageContent.test.tsx and MembersPanel.test.tsx (Rule 60.24a); this
+// covers the real shell, the redirect, the server gate, axe, and the
+// AlertDialog in a real browser. The harness cannot forge a team-scope Lead
+// (Lead scope lives in DynamoDB), so internal-org-admin stands in for the Lead
+// path; the lead's rail and 404s run in role-landing.spec.ts against the probe
+// identities. The LiteLLM API is fulfilled from fixtures (Rule 60.24).
 const KEY_VALUE = "sk-E2E-SHOWN-ONCE";
 const OPS = [
   "generateMemberKey",
   "setTeamBudget",
   "setTeamModels",
   "removeTeamMember",
+  "resetMemberSpend",
 ];
+const TEAM_URL = "/dashboard/manage/team?team=t1";
 const REMOVE_PATH = "/api/litellm/teams/t1/members/oid-ada";
-// The page is not in lib/nav.ts, so the smoke, axe and responsive passes
-// (smoke.spec.ts, accessibility.spec.ts, responsive.spec.ts) never reach it.
+// Team is a rail item (NAV_ITEMS), so accessibility.spec.ts and smoke.spec.ts
+// reach it at one width as the default auditor; this spec adds the four
+// breakpoints with the write controls rendered (an admin).
 const BREAKPOINTS = [375, 768, 1024, 1440] as const;
 
 async function mockApi(page: Page) {
@@ -96,21 +105,35 @@ async function mockApi(page: Page) {
   });
 }
 
-test.describe("Team configuration page", () => {
-  test("a team manager opens it from the Team tab link and generates a key shown once", async ({
+test.describe("Management -> Team page", () => {
+  test("the old team-config URL redirects to the Team page, which holds the sections and generates a key shown once", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-org-admin"] });
     await mockApi(page);
-    await page.goto("/dashboard/litellm?tab=team");
+    await page.goto("/dashboard/litellm/team-config?team=t1");
     await waitForHydration(page);
-    await page.getByRole("link", { name: "Configure team" }).click();
-    await expect(page).toHaveURL(/\/dashboard\/litellm\/team-config\?team=t1/);
+    await expect(page).toHaveURL(/\/dashboard\/manage\/team\?team=t1/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Team usage & management" }),
+    ).toBeVisible();
 
-    for (const name of ["Members", "Keys", "Budget and limits", "Models"]) {
+    for (const name of [
+      "Team spend & budgets",
+      "LiteLLM members",
+      "Keys",
+      "Budget and limits",
+      "Models",
+    ]) {
       await expect(page.getByRole("region", { name })).toBeVisible();
     }
+    // Budget as a bar: the team budget and each member carry a bar with text.
+    await expect(
+      page
+        .getByRole("region", { name: "Team spend & budgets" })
+        .getByRole("progressbar"),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "Generate key" }).click();
     const form = page.getByRole("dialog");
@@ -137,7 +160,7 @@ test.describe("Team configuration page", () => {
       await page.setViewportSize({ width, height: 900 });
       await signInAsTestUser(context, { roles: ["internal-admin"] });
       await mockApi(page);
-      await page.goto("/dashboard/litellm/team-config?team=t1");
+      await page.goto(TEAM_URL);
       await waitForHydration(page);
       await expect(page.getByRole("region", { name: "Models" })).toBeVisible();
 
@@ -147,7 +170,7 @@ test.describe("Team configuration page", () => {
       }));
       expect(
         overflow.scrollWidth,
-        `team-config overflows horizontally at ${width}px`,
+        `Team page overflows horizontally at ${width}px`,
       ).toBeLessThanOrEqual(overflow.clientWidth);
 
       const results = await new AxeBuilder({ page })
@@ -166,8 +189,9 @@ test.describe("Team configuration page", () => {
     });
   }
 
-  // Review blocker U1: the AlertDialog confirm in a real browser (Design
-  // System: AlertDialog confirms destructive actions; Radix focus handling).
+  // Review blocker U1 + B2-6: the AlertDialog confirm in a real browser (Design
+  // System: AlertDialog confirms destructive actions, names the person and the
+  // effect, Cancel focused first; Radix focus handling).
   test.describe("remove member confirmation", () => {
     const open = async (
       page: Page,
@@ -179,7 +203,7 @@ test.describe("Team configuration page", () => {
       page.on("request", (request) => {
         if (request.method() === "DELETE") deletes.push(request.url());
       });
-      await page.goto("/dashboard/litellm/team-config?team=t1");
+      await page.goto(TEAM_URL);
       await waitForHydration(page);
       const trigger = page.getByRole("button", {
         name: "Remove Ada Lovelace",
@@ -189,6 +213,9 @@ test.describe("Team configuration page", () => {
         name: "Remove Ada Lovelace?",
       });
       await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText(
+        "Removes Ada Lovelace from Payments. Recorded in the audit log.",
+      );
       await expect(
         dialog.getByRole("button", { name: "Cancel" }),
       ).toBeFocused();
@@ -234,21 +261,71 @@ test.describe("Team configuration page", () => {
     });
   });
 
-  // Who + LD25: Viewer and Auditor get the standard 404, never the page.
-  for (const role of ["internal-viewer", "internal-auditor"]) {
-    test(`${role} gets the standard 404 on the direct URL`, async ({
-      page,
-      context,
-    }) => {
-      await signInAsTestUser(context, { roles: [role] });
-      await mockApi(page);
-      const response = await page.goto(
-        "/dashboard/litellm/team-config?team=t1",
-      );
-      expect(response?.status()).toBe(404);
-      await expect(
-        page.getByRole("button", { name: "Generate key" }),
-      ).toHaveCount(0);
+  test("Reset spend names the person and the effect, with Cancel focused first and no request before Confirm (Confirm destructive actions)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    const posts: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST") posts.push(request.url());
     });
-  }
+    await page.goto(TEAM_URL);
+    await waitForHydration(page);
+    await page
+      .getByRole("button", { name: "Reset spend for Ada Lovelace" })
+      .click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText(
+      "Sets Ada Lovelace's spend to $0.00. Recorded in the audit log.",
+    );
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    expect(posts).toEqual([]);
+  });
+
+  test("the bulk reset dialog states the member count", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.goto(TEAM_URL);
+    await waitForHydration(page);
+    await page
+      .getByRole("button", { name: "Reset spend for all members" })
+      .click();
+    const dialog = page.getByRole("alertdialog");
+    // Pluralised: one member reads "1 member" (B2 review, Group overage copy).
+    await expect(dialog).toContainText(
+      "Resets spend for 1 member to $0.00. Recorded in the audit log.",
+    );
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  });
+
+  // Access Control - Navigation and landing by role: a Viewer gets the
+  // standard 404; the Auditor now reads the page (read-only).
+  test("internal-viewer gets the standard 404 on the Team URL", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-viewer"] });
+    await mockApi(page);
+    const response = await page.goto(TEAM_URL);
+    expect(response?.status()).toBe(404);
+    await expect(
+      page.getByRole("button", { name: "Generate key" }),
+    ).toHaveCount(0);
+  });
+
+  test("internal-auditor opens the Team page", async ({ page, context }) => {
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
+    await mockApi(page);
+    const response = await page.goto(TEAM_URL);
+    expect(response?.status()).toBe(200);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Team usage & management" }),
+    ).toBeVisible();
+  });
 });

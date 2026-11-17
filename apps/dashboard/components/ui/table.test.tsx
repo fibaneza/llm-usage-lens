@@ -119,4 +119,87 @@ describe("Table", () => {
       "overflow-x-auto",
     );
   });
+
+  // axe scrollable-region-focusable; WCAG 2.1.1, 4.1.2; Design System --
+  // Control Patterns (Focus); Rule 60.30. The scroll container must take
+  // keyboard focus and be a named region.
+  describe("scroll container accessibility", () => {
+    const container = () => screen.getByRole("table").parentElement;
+
+    it("is keyboard focusable (tabIndex 0) and a region", () => {
+      renderTable();
+
+      expect(container()).toHaveAttribute("tabindex", "0");
+      expect(container()).toHaveAttribute("role", "region");
+    });
+
+    it("takes its accessible name from aria-label", () => {
+      render(
+        <Table aria-label="Audit entries">
+          <TableBody />
+        </Table>,
+      );
+
+      expect(
+        screen.getByRole("region", { name: "Audit entries" }),
+      ).toHaveAttribute("data-slot", "table-container");
+    });
+
+    it("takes its accessible name from aria-labelledby", () => {
+      render(
+        <>
+          <h2 id="audit-heading">Audit log</h2>
+          <Table aria-labelledby="audit-heading">
+            <TableBody />
+          </Table>
+        </>,
+      );
+
+      expect(
+        screen.getByRole("region", { name: "Audit log" }),
+      ).toHaveAttribute("data-slot", "table-container");
+    });
+
+    it('falls back to the name "Table" with neither label prop', () => {
+      renderTable();
+
+      expect(screen.getByRole("region", { name: "Table" })).toBe(container());
+    });
+
+    it("shows a visible focus ring from the focus-ring token", () => {
+      renderTable();
+
+      expect(container()).toHaveClass(
+        "focus-visible:ring-2",
+        "ring-focus-ring",
+        "ring-offset-2",
+        "outline-hidden",
+      );
+    });
+
+    it("does not duplicate the label on the <table> element", () => {
+      render(
+        <Table aria-label="Audit entries">
+          <TableBody />
+        </Table>,
+      );
+
+      const table = screen.getByRole("table");
+      expect(table).not.toHaveAttribute("aria-label");
+      expect(table).not.toHaveAttribute("aria-labelledby");
+    });
+
+    it("does not leak aria-labelledby onto the <table> element", () => {
+      render(
+        <>
+          <h2 id="h">Heading</h2>
+          <Table aria-labelledby="h">
+            <TableBody />
+          </Table>
+        </>,
+      );
+
+      expect(screen.getByRole("table")).not.toHaveAttribute("aria-labelledby");
+    });
+  });
 });

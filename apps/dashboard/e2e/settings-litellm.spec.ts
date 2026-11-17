@@ -151,20 +151,18 @@ test.describe("settings LiteLLM section", () => {
     await expect(page.getByText("Connection ok")).toBeVisible();
   });
 
-  // Unit D: the panel is its own tab. An internal-viewer has no LiteLLM tab and
-  // the tab URL is the 404 page (Design System "Settings Page"; LiteLLM LD24).
-  test("is absent for internal-viewer: no tab, and the tab URL is a 404", async ({
+  // Unit D: the panel is its own tab. Slice B2 (B2-10): Settings is closed to a
+  // user, so there is no tab row at all and every Settings URL, the LiteLLM
+  // one included, is the 404 page (Design System "Settings Page"; LiteLLM
+  // LD24; Access Control - Navigation and landing by role).
+  test("is absent for internal-viewer: no Settings, and the tab URLs are a 404", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-viewer"] });
     await mockApi(page);
-    await page.goto("/dashboard/settings/accounts");
-    await waitForHydration(page);
-
-    await expect(
-      page.getByRole("heading", { name: /account registry/i }),
-    ).toBeVisible();
+    const registry = await page.goto("/dashboard/settings/accounts");
+    expect(registry?.status()).toBe(404);
     await expect(page.getByRole("tab", { name: "LiteLLM" })).toHaveCount(0);
 
     const response = await page.goto("/dashboard/settings/litellm");

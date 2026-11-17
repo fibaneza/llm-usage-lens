@@ -20,17 +20,21 @@ import {
 } from "@/components/ui/sidebar";
 import { DEFAULT_ORG_NAME } from "@/lib/config/resolvers";
 import { withDateRange } from "@/lib/date-range-search-params";
-import {
-  isNavItemActive,
-  NAV_GROUPS,
-  navGroupsFor,
-  type NavScope,
-} from "@/lib/nav";
+import { isNavItemActive, navGroupsFor, type NavScope } from "@/lib/nav";
 
 // Active nav links render as a filled indigo pill (design reference). twMerge
 // lets these override the primitive's default `sidebar-accent` active styling.
 const NAV_LINK_CLASS =
   "h-9 rounded-lg font-medium data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:shadow-sm data-[active=true]:hover:bg-sidebar-primary data-[active=true]:hover:text-sidebar-primary-foreground";
+
+// No scope (signed out, or a bare render) fails closed to the non-global view
+// (goal 2.3; same default as CommandMenu); the pages enforce access regardless.
+const NON_GLOBAL_SCOPE: NavScope = {
+  global: false,
+  memberTeamId: null,
+  teamScopes: new Set<string>(),
+  departmentScopes: new Set<string>(),
+};
 
 // Maps a destination path to the href actually used in the rail — the wrapper
 // passes one that appends the active date range (issue #75); the fallback passes
@@ -84,9 +88,7 @@ function SidebarNav({
   orgName?: string;
 }) {
   const pathname = usePathname();
-  // No scope (signed out, or a bare render) shows the full set; the pages
-  // enforce access regardless.
-  const navGroups = scope ? navGroupsFor(scope) : NAV_GROUPS;
+  const navGroups = navGroupsFor(scope ?? NON_GLOBAL_SCOPE);
   const { state, isMobile, toggleSidebar, setOpenMobile } = useSidebar();
 
   // The toggle is named for the action it performs (WCAG 4.1.2, Rule 60.30). In

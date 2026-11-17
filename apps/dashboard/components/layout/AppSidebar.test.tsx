@@ -14,9 +14,39 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => mockUseSearchParams(),
 }));
 
-function renderSidebar(pathname: string, search = "") {
+// A global admin: every Usage item, every Management item and Settings
+// (Access Control - Navigation and landing by role, matrix; B2-2).
+const FULL_SCOPE: NavScope = {
+  global: true,
+  memberTeamId: null,
+  teamScopes: new Set<string>(),
+  departmentScopes: new Set<string>(),
+  management: {
+    team: true,
+    organisation: true,
+    users: true,
+    audit: true,
+    settings: true,
+  },
+};
+
+function renderSidebar(
+  pathname: string,
+  search = "",
+  scope: NavScope = FULL_SCOPE,
+) {
   mockUsePathname.mockReturnValue(pathname);
   mockUseSearchParams.mockReturnValue(new URLSearchParams(search));
+  return render(
+    <SidebarProvider>
+      <AppSidebar scope={scope} />
+    </SidebarProvider>,
+  );
+}
+
+function renderBareSidebar(pathname: string) {
+  mockUsePathname.mockReturnValue(pathname);
+  mockUseSearchParams.mockReturnValue(new URLSearchParams());
   return render(
     <SidebarProvider>
       <AppSidebar />
@@ -29,7 +59,7 @@ function renderRail(defaultOpen: boolean) {
   mockUseSearchParams.mockReturnValue(new URLSearchParams());
   return render(
     <SidebarProvider defaultOpen={defaultOpen}>
-      <AppSidebar />
+      <AppSidebar scope={FULL_SCOPE} />
     </SidebarProvider>,
   );
 }
@@ -44,7 +74,10 @@ const NAV_TITLES = [
   "Cost by service",
   "Cost by user",
   "My usage",
-  "LiteLLM",
+  "Team",
+  "Organisation",
+  "Users",
+  "Audit",
   "Settings",
 ];
 
@@ -74,12 +107,30 @@ describe("AppSidebar organisation name (unit CFG)", () => {
 });
 
 describe("AppSidebar", () => {
-  it("renders all nine navigation links when no scope is given", () => {
+  it("renders all twelve navigation links for a global admin scope", () => {
     renderSidebar("/dashboard");
 
     for (const title of NAV_TITLES) {
       expect(screen.getByRole("link", { name: title })).toBeInTheDocument();
     }
+  });
+
+  // B2-2 / goal 2.3: with no scope the rail fails closed to the non-global
+  // view (as CommandMenu does): Usage -> My usage only, no Management group,
+  // no Settings. Pages enforce access regardless.
+  it("with no scope shows only My usage: no Management items, no Settings", () => {
+    const { container } = renderBareSidebar("/dashboard");
+
+    expect(screen.getByRole("link", { name: "My usage" })).toBeInTheDocument();
+    for (const title of NAV_TITLES.filter((t) => t !== "My usage")) {
+      expect(
+        screen.queryByRole("link", { name: title }),
+      ).not.toBeInTheDocument();
+    }
+    const labels = [
+      ...container.querySelectorAll('[data-slot="sidebar-group-label"]'),
+    ].map((el) => el.textContent);
+    expect(labels).toEqual(["Usage"]);
   });
 
   // W3 (round-1 review): the primary nav landmark is named so the e2e specs and
@@ -177,7 +228,7 @@ describe("AppSidebar - groups (Usage / Management / Administration)", () => {
     }
   });
 
-  it("places the Usage items (My usage last), LiteLLM, and Settings in their groups (B1-14)", () => {
+  it("places the Usage items (My usage last), the four Management pages, and Settings in their groups (B1-14, B2-2)", () => {
     const { container } = renderSidebar("/dashboard");
 
     expect(
@@ -197,7 +248,12 @@ describe("AppSidebar - groups (Usage / Management / Administration)", () => {
       within(group(container, "Management"))
         .getAllByRole("link")
         .map((a) => [a.textContent, a.getAttribute("href")]),
-    ).toEqual([["LiteLLM", "/dashboard/litellm"]]);
+    ).toEqual([
+      ["Team", "/dashboard/manage/team"],
+      ["Organisation", "/dashboard/manage/organisation"],
+      ["Users", "/dashboard/manage/users"],
+      ["Audit", "/dashboard/manage/audit"],
+    ]);
     expect(
       within(group(container, "Administration"))
         .getAllByRole("link")
@@ -406,33 +462,43 @@ describe("AppSidebar - rail toggle accessible name (desktop, 1440px)", () => {
   });
 });
 
-// Source: Design System - Navigation (Sidebar) and docs/specs/2026-11-10-litellm.md
-// (LD9; slice B1 B1-5/B1-6): LiteLLM stays at /dashboard/litellm until B2, now
-// the only Management item, and the top-bar heading is unchanged.
-describe("AppSidebar - LiteLLM in Management", () => {
-  it("renders a LiteLLM link to /dashboard/litellm", () => {
+// Source: Design System - Navigation (Sidebar), routes table, and
+// docs/specs/2026-11-10-litellm.md (LD9; Views as Management routes; slice B2
+// B2-2): the LiteLLM rail item is retired; its views are the Management pages.
+describe("AppSidebar - no LiteLLM item", () => {
+  it("renders no LiteLLM link, whatever the scope", () => {
     renderSidebar("/dashboard");
 
-    expect(screen.getByRole("link", { name: "LiteLLM" })).toHaveAttribute(
-      "href",
-      "/dashboard/litellm",
-    );
+    expect(screen.queryByRole("link", { name: "LiteLLM" })).toBeNull();
+    expect(document.querySelector('a[href^="/dashboard/litellm"]')).toBeNull();
   });
 });
 
 // Design System - Navigation (Sidebar) ("hidden, never dead") and Access
 // Control - Navigation and landing by role; slice B1 B1-1/B1-8: the sidebar
-// renders navGroupsFor(scope); no scope means the unfiltered full set. The
+// renders navGroupsFor(scope); no scope means the non-global view (B2-2). The
 // full per-role matrix is asserted once in lib/nav.test.ts; here only that the
 // rendered rail follows the filter.
 describe("AppSidebar - scope-filtered navigation", () => {
+  const NONE = {
+    team: false,
+    organisation: false,
+    users: false,
+    audit: false,
+    settings: false,
+  };
   const scoped = (over: Partial<NavScope>): NavScope => ({
     global: false,
     memberTeamId: null,
     teamScopes: new Set<string>(),
     departmentScopes: new Set<string>(),
+    management: NONE,
     ...over,
   });
+  const labels = (container: HTMLElement) =>
+    [...container.querySelectorAll('[data-slot="sidebar-group-label"]')].map(
+      (el) => el.textContent,
+    );
 
   function renderScoped(scope: NavScope, search = "") {
     mockUsePathname.mockReturnValue("/dashboard/me");
@@ -453,48 +519,132 @@ describe("AppSidebar - scope-filtered navigation", () => {
     "Cost by user",
   ];
 
+  // B2-2: a user's rail is the Usage group with My usage only; the empty
+  // Management and Administration groups are not rendered.
   it.each([
     ["a viewer with no team", scoped({})],
     ["a member", scoped({ memberTeamId: "team-a" })],
-    ["a team lead", scoped({ teamScopes: new Set(["team-a"]) })],
-    ["a department lead", scoped({ departmentScopes: new Set(["dept-eng"]) })],
-  ])(
-    "%s sees a Usage group with only My usage, then LiteLLM and Settings (B1-14)",
-    (_n, scope) => {
-      const { container } = renderScoped(scope);
+  ])("%s sees a Usage group with only My usage (B1-14, B2-2)", (_n, scope) => {
+    const { container } = renderScoped(scope);
 
-      expect(
-        [
-          ...container.querySelectorAll('[data-slot="sidebar-group-label"]'),
-        ].map((el) => el.textContent),
-      ).toEqual(["Usage", "Management", "Administration"]);
-      for (const name of ["My usage", "LiteLLM", "Settings"]) {
-        expect(screen.getByRole("link", { name })).toBeInTheDocument();
-      }
-      for (const gone of [...USAGE_LINKS, "My teams", "Teams", "Users"]) {
-        expect(screen.queryByRole("link", { name: gone })).toBeNull();
-      }
-    },
-  );
+    expect(labels(container)).toEqual(["Usage"]);
+    expect(screen.getByRole("link", { name: "My usage" })).toBeInTheDocument();
+    for (const gone of [
+      ...USAGE_LINKS,
+      "Team",
+      "Organisation",
+      "Users",
+      "Audit",
+      "Settings",
+    ]) {
+      expect(screen.queryByRole("link", { name: gone })).toBeNull();
+    }
+  });
 
-  it("a global scope sees the three groups with the Usage links, Overview at /dashboard", () => {
-    const { container } = renderScoped(scoped({ global: true }));
+  // B2-2: a lead sees My usage and Team; Settings stays closed to it.
+  it.each([
+    [
+      "a team lead",
+      scoped({
+        teamScopes: new Set(["team-a"]),
+        management: { ...NONE, team: true },
+      }),
+    ],
+    [
+      "a department lead",
+      scoped({
+        departmentScopes: new Set(["dept-eng"]),
+        management: { ...NONE, team: true },
+      }),
+    ],
+  ])("%s sees My usage and Team only (B2-2)", (_n, scope) => {
+    const { container } = renderScoped(scope);
 
-    expect(
-      [...container.querySelectorAll('[data-slot="sidebar-group-label"]')].map(
-        (el) => el.textContent,
-      ),
-    ).toEqual(["Usage", "Management", "Administration"]);
+    expect(labels(container)).toEqual(["Usage", "Management"]);
+    expect(screen.getByRole("link", { name: "Team" })).toHaveAttribute(
+      "href",
+      "/dashboard/manage/team",
+    );
+    for (const gone of ["Organisation", "Users", "Audit", "Settings"]) {
+      expect(screen.queryByRole("link", { name: gone })).toBeNull();
+    }
+  });
+
+  it("an org admin sees Management without Audit, and Settings", () => {
+    const { container } = renderScoped(
+      scoped({
+        global: true,
+        management: {
+          team: true,
+          organisation: true,
+          users: true,
+          audit: false,
+          settings: true,
+        },
+      }),
+    );
+
+    expect(labels(container)).toEqual([
+      "Usage",
+      "Management",
+      "Administration",
+    ]);
+    expect(screen.queryByRole("link", { name: "Audit" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
+  });
+
+  it("a scope that carries no management flags gets no Management item and no Settings (fail closed)", () => {
+    const { container } = renderScoped({
+      global: false,
+      memberTeamId: null,
+      teamScopes: new Set<string>(),
+      departmentScopes: new Set<string>(),
+    });
+
+    expect(labels(container)).toEqual(["Usage"]);
+  });
+
+  it("a global admin sees the three groups with the Usage links, Overview at /dashboard", () => {
+    const { container } = renderScoped(
+      scoped({
+        global: true,
+        management: {
+          team: true,
+          organisation: true,
+          users: true,
+          audit: true,
+          settings: true,
+        },
+      }),
+    );
+
+    expect(labels(container)).toEqual([
+      "Usage",
+      "Management",
+      "Administration",
+    ]);
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
       "href",
       "/dashboard",
     );
   });
 
-  it("carries the date range onto Settings and My usage too (issue #75)", () => {
-    renderScoped(scoped({}), "dateFrom=2026-01-01&dateTo=2026-01-31");
+  it("carries the date range onto Management and Settings links too (issue #75; global date range applies to every Management page)", () => {
+    renderScoped(
+      scoped({
+        global: true,
+        management: {
+          team: true,
+          organisation: true,
+          users: true,
+          audit: true,
+          settings: true,
+        },
+      }),
+      "dateFrom=2026-01-01&dateTo=2026-01-31",
+    );
 
-    for (const name of ["My usage", "Settings"]) {
+    for (const name of ["My usage", "Team", "Audit", "Settings"]) {
       expect(screen.getByRole("link", { name })).toHaveAttribute(
         "href",
         expect.stringContaining("dateFrom=2026-01-01&dateTo=2026-01-31"),
