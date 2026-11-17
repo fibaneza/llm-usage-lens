@@ -211,10 +211,13 @@ pending user decision U1).
 
 ## 9. Team links
 
-A dashboard team reaches LiteLLM only through a team link. In **Settings →
-LiteLLM → Team links**, an `internal-admin` or `internal-org-admin` (LD24)
-links a dashboard team to an existing LiteLLM team, or removes the link.
-Every link write is audited with the actor.
+A dashboard team reaches LiteLLM only through a team link. In **Management →
+LiteLLM → LiteLLM teams** (moved from Settings → LiteLLM → Team links on
+2026-11-17, management improvements D3; the old URL redirects), an
+`internal-admin` or `internal-org-admin` (LD24) links a dashboard team to an
+existing LiteLLM team, or removes the link. Both teams are picked from lists
+(D4a); a team that already has a link cannot be picked. Every link write is
+audited with the actor.
 
 - Create the LiteLLM team in LiteLLM first (the LiteLLM UI or
   `POST /team/new` with an operator key), then link it here. The dashboard
@@ -222,8 +225,9 @@ Every link write is audited with the actor.
 - A write on an unlinked team returns `409 CONFLICT` "The team is not
   connected to LiteLLM" (LD26).
 - `POST /api/litellm/teams` (create in LiteLLM and link, `internal-admin`
-  only) exists as an API but has no page. If its link loses a race, the
-  LiteLLM team it created stays in LiteLLM; remove it there by hand.
+  only) is the **New LiteLLM team** action on the same tab (from unit M1,
+  2026-11-17). If its link loses a race, the LiteLLM team it created stays in
+  LiteLLM; remove it there by hand.
 
 ## 9a. App teams and LiteLLM teams
 
@@ -237,7 +241,8 @@ proxy. UI copy says "team" only for the first (App Teams spec —
   (below), badged "Sum of members". Their members may sit in any LiteLLM
   team, or none.
 - **Linking.** An `internal-admin` or `internal-org-admin` links a team in
-  Settings → LiteLLM → Team links, which has a "Spend source" column for
+  Management → LiteLLM → LiteLLM teams (formerly Settings → LiteLLM → Team
+  links), which has a "Spend source" column for
   every app team. A Lead cannot link: it would gain read and write over a
   LiteLLM team it may not own (LD30).
 - **No LiteLLM controls on an unlinked team's page** (LD32): only app
@@ -251,7 +256,10 @@ proxy. UI copy says "team" only for the first (App Teams spec —
 - **Sum of members**: everything each app member spent through the gateway,
   in any LiteLLM team and on personal keys. Admin, org-admin and Auditor also
   see it on a linked team, beside the LiteLLM team figure; a Lead does not
-  (LT28).
+  (LT28). From 2026-11-17 the figures are on **Usage → Team usage** (a Lead
+  for its teams; Admin, org-admin and Auditor for any team) and, for the
+  global readers, on Cost by team's LiteLLM panel; the Team page no longer
+  shows spend (management improvements D7, MI-D7).
 - The two differ for those reasons, and because membership is read as it is
   now: a person who moved app team carries earlier spend to the new team.
 - Both are LiteLLM-reported, not billed cost; USD, UTC days. Billed cost
@@ -277,9 +285,11 @@ Two tables, because the cuts do not add up to each other:
   through a LiteLLM team linked to another app team.
 - **App teams:** per app team, labelled as overlapping rows that do not add
   up to the total.
-- One request makes at most 200 member reads. Unlinked teams are summed
-  smallest first; one that does not fit shows no spend with `open-team` and a
-  link to its Team page.
+- One request makes at most 200 LiteLLM calls (LD34). Unlinked teams are
+  summed smallest first; one that does not fit shows no spend with
+  `open-team` and a link to its Team usage page
+  (`/dashboard/team-usage?team=<id>`; the Team page until 2026-11-17, MI-D7),
+  where its member sum is read on its own.
 
 ### Limits and errors
 
@@ -292,6 +302,26 @@ Two tables, because the cuts do not add up to each other:
   total is always shown (LD31). On a team of one or two members that nearly
   equals one person's cost; the user accepted this (LiteLLM spec — *Residual
   risks*).
+
+## 9b. User links (management improvements D16, 2026-11-17)
+
+In **Management → LiteLLM → LiteLLM users**, an `internal-admin` or
+`internal-org-admin` links an app user to a LiteLLM user (never their own
+identity):
+
+- **Match found:** a LiteLLM user with the same verified email. Click
+  *Link* and confirm the dialog that names both sides. Nothing is linked
+  automatically.
+- **No LiteLLM user with that email:** link to an existing LiteLLM user
+  found by search, with a written reason (the emails differ), or, on OSS
+  only, *Create and link* (`createUser`, `POST /user/new` with
+  `auto_create_key:false`; toggle `createUser`, default on). On Enterprise
+  the person signs in to LiteLLM once, then the admin retries the match.
+- A LiteLLM user already linked to someone else, or holding a proxy role
+  above `internal_user`, is refused. Usage identities and aliases stay in
+  Settings → Access → Identities (`internal-admin`).
+- The service key needs no new route: `/user/new` is already in
+  `allowed_routes` (§3).
 
 ## 10. Operation toggles and guardrails
 
@@ -345,8 +375,11 @@ their scope.
   add-member list.
 - **Orphaned members** are LiteLLM team members with no dashboard
   identity. `GET /api/litellm/orphans` lists them for an Admin or Auditor;
-  the Settings list arrives with unit A. Remove or link them in LiteLLM by
-  hand.
+  ~~the Settings list arrives with unit A~~ (superseded 2026-11-17,
+  management improvements D16a: no Settings list was built; Management →
+  LiteLLM → *LiteLLM users*, filter **Members of one team**, shows a linked
+  team's LiteLLM members, orphans included). Remove or link them in LiteLLM
+  by hand.
 
 ## 14. Privacy under the Organisation cap
 
@@ -399,7 +432,8 @@ LiteLLM base URL other than `localhost:4000`, and is never part of
 1. In the local LiteLLM, create the team `llmul-probe` with an operator
    key, allowing one cheap model (Claude Haiku class).
 2. In the dashboard, create or pick a dashboard team and link it to
-   `llmul-probe` in Settings → LiteLLM → Team links (§9). The stored
+   `llmul-probe` in Management → LiteLLM → LiteLLM teams (§9; formerly
+   Settings → LiteLLM → Team links). The stored
    connection must point at `http://localhost:4000`. The walk grants and
    removes the Lead's scope itself.
 

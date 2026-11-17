@@ -41,7 +41,12 @@ for the list-cursor signing key, and env validation fails startup without it
 
 Organization → Department → Team → User (LiteLLM's Organization → Team →
 Internal User, without keys). A **team** is one AWS member account; a
-**department** is LiteLLM's organization level. Permissions are evaluated
+**department** is LiteLLM's organization level. *Amended 2026-11-17
+(management improvements D5, agent decision): a team may also be a
+**created app team** with no AWS account (`AppTeam`, *Data model
+additions*), created by `internal-admin` or `internal-org-admin` (D6, user).
+It belongs to one department and takes members, admin scopes, visibility
+and a LiteLLM team link like any team; it has no Bedrock cost.* Permissions are evaluated
 top-down and a child level can only **narrow** its parent (*Visibility and
 inheritance*).
 
@@ -54,7 +59,7 @@ Values are lower-kebab-case, case-sensitive, and live only in
 | Role | Kind | LiteLLM analogue | Source | Reads | Writes |
 |---|---|---|---|---|---|
 | `internal-admin` | Global; a small named group (≥ 2 people) plus the master user | `proxy_admin` | Entra app role; in-app grant by an `internal-admin`; the master user | Everything | Everything: any team, any user, all configuration. **Only role that grants or revokes `internal-admin` and `internal-org-admin`** |
-| `internal-org-admin` | Global | — (between `proxy_admin` and `org_admin`) | Entra app role, or in-app grant by an `internal-admin` | Every team and department | Admin scopes, members, moves and visibility in **any** team or department. **No configuration**, except the LiteLLM operation toggles (incl. reset) and team links (LiteLLM spec LD24; user, 2026-11-16, extending D14); no global-role grants |
+| `internal-org-admin` | Global | — (between `proxy_admin` and `org_admin`) | Entra app role, or in-app grant by an `internal-admin` | Every team and department | Admin scopes, members, moves and visibility in **any** team or department. **No configuration**, except the LiteLLM operation toggles (incl. reset) and team links (LiteLLM spec LD24; user, 2026-11-16, extending D14); also creates app teams and creates, approves and removes LiteLLM user links, never on themselves (user, 2026-11-17, management improvements D6, D16); no global-role grants |
 | `internal-auditor` | Global | `proxy_admin_viewer` | **Entra app role only** | Everything, read-only, incl. the audit log and access review; never key values or secrets | Nothing — every write returns `403` |
 | `internal-viewer` | Global; **the default** | `internal_user` | Entra app role, or the default | Own usage (*My usage*); their member team as visibility allows | Nothing |
 | `internal-team-admin` | Scoped: **one or more** teams and/or departments, each a separate admin scope | `team_admin` (team scope), `org_admin` (department scope) | UI or SSO group mapping | Everything in its scopes | Members, team-scope admin grants (never on themselves) and visibility in its scopes; with a department scope also moves between that department's teams and the department cap |
@@ -65,7 +70,13 @@ Values are lower-kebab-case, case-sensitive, and live only in
 sign-in switch, the LiteLLM gateway configuration, connection and
 edition, LiteLLM team creation, audit retention, identity links. The
 LiteLLM operation toggles and team links are also writable by
-`internal-org-admin` (LiteLLM spec LD24; user, 2026-11-16).
+`internal-org-admin` (LiteLLM spec LD24; user, 2026-11-16). *Amended
+2026-11-17 (user, management improvements D16):* within identity links,
+the **LiteLLM user link** (`litellmUserId`) is also writable by
+`internal-org-admin`; the usage identities and aliases stay
+`internal-admin` only (agent decision: the user's answer was about the
+LiteLLM link of item 13). App team creation is not configuration: it is a
+team write for `internal-admin` and `internal-org-admin` (D6, user).
 
 - **Union.** Effective permission = global role grants ∪ admin-scope grants,
   then narrowed by inheritance.
@@ -216,6 +227,20 @@ provenance (`authMethod`, `tid`, `lastSeenRoles`); only `lastSignInAt` moves.
 validation when Entra is configured** (amending *Sign-in providers*, which
 allowed both outside production). Production fail-closed checks are
 unchanged; no production bypass exists (Rule 70.11).
+
+**Dev sign-in as a lead (management improvements D14, agent decision,
+2026-11-17; item 1, unit M3).** A lead is a **scope**, not a global role, so
+the role select (`GLOBAL_ROLES`) could not offer it. The form gains a
+**Team lead** option that signs in through the stored-identity path above as
+the seeded lead identity (`local:lead@localhost`, email `lead@localhost`),
+which `pnpm db:seed` stores with a team-scope `internal-team-admin` item on
+the first seeded team. The scope comes from the store per request, as for any
+stored identity; the typed text and the option never supply a role or a
+scope, the session token carries no scope, and no `Lead` app role is
+created. When the seeded identity is missing, the option fails with the one
+generic failure. The option exists only where the dev login exists (outside
+production, Entra not configured; T7). Reason: no new auth path; the lead's
+rights are tested as a real stored scope.
 
 ### Pre-SSO mode
 
@@ -389,11 +414,13 @@ and members, **auditor** = `internal-auditor`.
 | Sidebar item | admin | org admin | auditor | lead | user |
 |---|---|---|---|---|---|
 | **Usage** — Overview, Ranking, Cost by department, Cost by team, Cost by service, Cost by user | ✓ | ✓ | ✓ read-only | ✗ (no AWS cost view, decided 2026-11-17) | ✗ |
-| Usage — My usage (moved from Management 2026-11-17, user) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Usage — My usage (moved from Management 2026-11-17, user; second in the group, D1) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Usage — Team usage (D7, user, 2026-11-17; global readers: coordinator decision, 2026-11-17, MI-D7) | ✓ every team | ✓ every team | ✓ every team, read-only | ✓ teams in scope (a live admin scope) | ✗ |
 | **Management** — Team | ✓ every team | ✓ every team | ✓ read-only | ✓ teams it leads | ✗ |
-| Management — Organisation, Users | ✓ | ✓ | ✓ read-only | ✗ | ✗ |
+| Management — Users | ✓ | ✓ | ✓ read-only | ✗ | ✗ |
+| Management — LiteLLM: tabs Organisation, LiteLLM teams, LiteLLM users (D2, agent decision, 2026-11-17; replaces the Organisation item) | ✓ | ✓ | ✓ read-only | ✗ | ✗ |
 | Management — Audit | ✓ | ✗ (see below) | ✓ | ✗ | ✗ |
-| **Administration** — Settings | ✓ | ✓ (no configuration except the LiteLLM toggles and team links, LD24) | ✓ read-only tabs only | ✗ | ✗ |
+| **Administration** — Settings | ✓ | ✓ (no configuration except the LiteLLM toggles, LD24; team links moved to Management → LiteLLM, D3) | ✓ read-only tabs only | ✗ | ✗ |
 
 - **Decided 2026-11-16 (user):** the Usage group is organisation-level and
   shown to admin and org admin; My usage to every signed-in role (in
@@ -469,7 +496,13 @@ and members, **auditor** = `internal-auditor`.
     usage. B1-1 and B1-2 still hold for the six organisation-level items
     and their routes; `/dashboard/me` is never gated. Position (agent
     decision): last, so Overview stays first for a global reader, whose
-    landing it is.
+    landing it is. *Position superseded 2026-11-17 (user, management
+    improvements MI-D1): My usage is second, after Overview, and Team
+    usage third. "A lead or a user sees only My usage" superseded
+    2026-11-17 (user, MI-D7: "Team lead is also a user"): a lead with a
+    live admin scope sees My usage and Team usage; a user sees only My
+    usage; a global reader sees all eight items (Team usage included,
+    MI-D7). The rest of B1-14 holds.*
 - **Slice B2 decisions (agent decisions, 2026-11-17; implementation-phases
   — *Phase 5*, Slice B2).**
   - **B2-1 One server capability function.** `managementAccessFor(session)`
@@ -482,6 +515,8 @@ and members, **auditor** = `internal-auditor`.
     calls it and returns the missing-page `404` when its flag is false; the
     navigation renders the same flags. A read error fails closed (every
     flag false). Reason: one decision for page and nav, as B1-8.
+    *Amended 2026-11-17 (MI-D2, MI-D7): the `organisation` flag becomes
+    `litellm` (the LiteLLM area, same rule) and `teamUsage` is added.*
   - **B2-2** Settings is hidden for a lead and a user and every Settings
     route returns `404` to them (the B1-7 deferral, now applied). The
     lead's team-scoped access actions (members, team admins, pending
@@ -492,8 +527,65 @@ and members, **auditor** = `internal-auditor`.
     route; anything else → `/dashboard/me`); `/dashboard/litellm/team-config`
     → `/dashboard/manage/team`, keeping `?team=`; `/dashboard/settings/audit`
     → `/dashboard/manage/audit`. A temporary redirect (reversible); a
-    target the caller may not see returns `404` there.
+    target the caller may not see returns `404` there. *Amended 2026-11-17
+    (MI-D3): `?tab=organisation` now lands on
+    `/dashboard/manage/litellm/organisation`, and
+    `/dashboard/manage/organisation` redirects there.*
   - **LiteLLM item removed** from Management once its views have routes.
+
+- **Management improvements decisions (2026-11-17; units M1–M3; Design
+  System — *Management improvements*).** User decisions are marked; the
+  others are agent decisions (Rule 00.3).
+  - **MI-D1 Order (user, Q1).** Usage: Overview, My usage, Team usage,
+    Ranking, Cost by department, Cost by team, Cost by service, Cost by
+    user. Management: Users, Team, LiteLLM, Audit. Supersedes B1-14's
+    position ("last"); who sees each existing item is unchanged. A lead's
+    Usage group is My usage, Team usage; its landing stays My usage (B1-4).
+  - **MI-D2 LiteLLM area (agent decision, 2026-11-17, items 2 and 10).**
+    `/dashboard/manage/litellm/{organisation,teams,users}`, for admin,
+    org-admin and auditor (read-only); absent and `404` for a lead and a
+    user. The capability is the `litellm` flag of `managementAccessFor`,
+    which replaces its `organisation` flag (same rule: a global reader).
+    Reason: it follows the user's Management order (MI-D1: LiteLLM holds
+    Organisation); the callers are those who see Organisation today.
+  - **MI-D3 Settings → LiteLLM keeps configuration only (agent
+    decision, 2026-11-17).** Team links and
+    Users move to MI-D2; the old URLs redirect on the server (Design System
+    — *Routes and redirects*). Reason: management views belong under
+    Management, configuration under Administration (the 2026-11-16 split).
+  - **MI-D4 No permission change with the move (agent decision,
+    2026-11-17).** Team-link writes stay
+    `internal-admin` and `internal-org-admin` (LD24), which is what item 4
+    asks for; LiteLLM team creation stays `internal-admin`. Reason: the move
+    changes where a control is, never who may use it.
+  - **MI-D7 Team usage and the `teamUsage` flag (user, Q3: "Team lead is
+    also a user").** `managementAccessFor` gains `teamUsage: boolean`, true
+    when the caller is a global reader (admin, org-admin, auditor) or holds
+    at least one live admin scope (team or department; a suspended SSO
+    scope does not count); a read failure closes it with every other flag.
+    The sidebar item and `/dashboard/team-usage` both follow it. The page's
+    team list is every team for a global reader, and otherwise only the
+    teams of the caller's scopes (a department scope covers its teams,
+    created teams included by their stored department); a team outside it,
+    or a caller without the flag, gets the missing-page `404`.
+    - **Global readers (coordinator decision, 2026-11-17, under the user's
+      delegation; supersedes the agent decision of the same day that gave
+      them the item only through a scope they hold).** Admin, org-admin
+      and auditor may open Team usage for **any** team, since they already
+      read every team (`GET /api/litellm/teams/[teamId]`). The Organisation
+      tab's `open-team` row links to Team usage (`?team=<id>`), and Cost by
+      team's LiteLLM panel offers "Sum of members" on request, both through
+      the same `GET /api/litellm/teams/[teamId]?include=memberSum` (App
+      Teams spec — AT6). Reason: one reader per figure, so no new route —
+      the member sum has one route, and the place it moved to from the Team
+      page must be reachable by the callers who read it there.
+    - **The sidebar item for a global reader (coordinator decision,
+      2026-11-17, under the user's delegation): shown.** A global reader
+      without a scope sees the Team usage item too. Reason: the page and
+      the nav follow one flag (B2-1); an item whose route the caller may
+      open is never hidden, and a hidden item's route is always `404`
+      (Design System — *Navigation (Sidebar)*).
+    - M1 adds the flag and the item; M2 builds the page and reads the flag.
 
 ## Membership, admin scopes and lifecycle
 
@@ -553,6 +645,8 @@ the user 2026-11-15; Design System — *Settings Page*).
 | Edit visibility | ✓ | ✓ | ✓ dept, its cap and its teams | ✓ teams in scope | ✗ |
 | Grant or revoke `internal-org-admin` / `internal-admin` | ✓ **only** | ✗ | ✗ | ✗ | ✗ |
 | LiteLLM operation toggles (incl. reset) and team links (LiteLLM LD24; user, 2026-11-16, extending D14) | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Create an app team (`POST /api/teams`; management improvements D6, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Create, approve or remove a person's LiteLLM user link (`litellmUserId`; never on their own identity; D16, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Configuration (everything else in *Configuration* above) | ✓ | ✗ | ✗ | ✗ | ✗ |
 
 **Identity links** (shared contract): `usageIdentities[]`, `aliases[]`,
@@ -566,6 +660,63 @@ person-kind alias, the own email included; non-person keys are accepted
 (agent decision, 2026-11-16: a stored unowned email would show its
 holder that person's usage once they sign in, T16; confirmed D27). Links show a
 person their own usage and **never grant access**.
+
+**LiteLLM user links (management improvements D16, 2026-11-17; unit M3).**
+*Amends "per `oid`, `internal-admin` only" for `litellmUserId`.* The
+LiteLLM user link is written by `internal-admin` or `internal-org-admin`
+(user, Q4) through `PUT`/`DELETE /api/identities/[oid]/litellm-link`; the
+usage identities and aliases stay `internal-admin` through
+`PUT /api/identities/[oid]/links`. Both routes write `litellmUserId`
+through one domain function, so the same rules hold:
+
+- **One-to-one.** A `LiteLLMUserClaim` item (*Data model additions*) is
+  written in the same transaction as the link and its audit record; a
+  LiteLLM user already claimed by another identity returns `409 CONFLICT`.
+- **Never on oneself** (agent decision: the precedent "never on themselves",
+  *Roles*): a caller linking or unlinking their own `oid` gets `403
+  FORBIDDEN` before parsing, with one `denied` record.
+- **Match** (`mode: "match"`): the LiteLLM user's `user_email`, read by
+  the server with `getUser`, equals the identity's verified canonical email,
+  else `409`. It is shown as a suggestion and written only after an
+  approval click in a dialog that names both sides; nothing is linked
+  automatically (D27).
+- **Manual** (`mode: "manual"`, emails differ): a written reason of 1–280
+  characters is required (`400` without it) and stored in the audit record.
+- **Privileged targets refused:** a LiteLLM user whose `user_role` is not
+  `internal_user` or `internal_user_viewer`, or the service user, returns
+  `409 PRIVILEGED_TARGET` (LiteLLM spec LT18), because the link shows that
+  user's spend and key metadata to the person.
+- **Recent authentication:** the link routes keep the rule
+  `PUT /api/identities/[oid]/links` has today — none (D33 excludes links).
+- Each write is audited (`identity.litellm-link.set` /
+  `identity.litellm-link.remove`, with mode, both ids and the reason); the
+  auditor reads.
+
+**Created app teams (management improvements D5, D6, 2026-11-17; unit M2).**
+`POST /api/teams` creates an `AppTeam` (*Data model additions*):
+`internal-admin` and `internal-org-admin` only (user, Q2), everyone else
+`403 FORBIDDEN` before parsing (one `denied` record); body `{ name,
+departmentId }`, the name 1–80 characters after trimming, unique
+case-insensitively among created teams (an `AppTeamNameClaim` in the same
+transaction) and among the registry's team names (`409 CONFLICT`); the
+department must exist in the account registry (`400`). **The clash is
+refused both ways (agent decision, 2026-11-17, M0 review round 1):**
+`POST /api/accounts` and `PATCH /api/accounts/[id]` also refuse a
+`teamName` that equals a created team's name case-insensitively after
+trimming (`409 CONFLICT`, no write; the account routes read the
+`AppTeamNameClaim`). A registry account that keeps its `teamId` and its
+current `teamName` is not refused. Reason: otherwise a later account could
+take a created team's name and two teams would show the same name in
+every picker (T-MI3). The id is generated
+on the server, `appteam-<uuid v4>`, never taken from the body, and the
+registry refuses a `teamId` with the reserved `appteam-` prefix (Data Model
+— *AccountMeta*), so it can never equal a registry team. The create and its
+`appteam.create` audit record are one transaction; the route revalidates
+the team-list tags. A created team appears in `GET /api/access/org-units`,
+can take members, admin scopes, visibility and a LiteLLM team link, and is
+covered by a department scope through its stored `departmentId` (live, not
+per day: it has no rollups). Create only: rename and delete are in
+`docs/future-improvements.md`.
 
 **Usage-identity mapping rules (D27, amended 2026-11-14, user).** Some
 Bedrock callers sign in with a session name that is not an email — for
@@ -866,6 +1017,9 @@ Same table `bedrock-usage`; no new GSI (new GSI1 prefixes never collide with
 | SetupLink (amended 2026-11-14, R2b-2) | `SETUPLINK#{sha256(token)}` | `OWNER` | — | — |
 | PerUserApproval | `GOVERNANCE` | `PER_USER` | — | — |
 | AuditRecord | `AUDIT#{YYYY-MM-DD}` | `{timestamp}#{requestId}#{nn}` | — | — |
+| AppTeam (management improvements D5, 2026-11-17) | `APPTEAM#{teamId}` | `META` | `APPTEAMS` | `APPTEAM#{teamId}` |
+| AppTeamNameClaim (uniqueness of the name) | `APPTEAMNAME#{lower(trim(name))}` | `OWNER` | — | — |
+| LiteLLMUserClaim (uniqueness of `litellmUserId`, D16) | `LITELLMUSER#{litellmUserId}` | `OWNER` | — | — |
 
 `{nn}` is the record's two-digit index within its **request** (amended R2,
 2026-11-12; "request" rather than "transaction" amended 2026-11-13, R2a):
@@ -885,7 +1039,12 @@ TOTP reset, a disable and a delete) and, after an own change,
 Rule 20.6); bind `Query PK=PENDING#{upn}`; visibility
 `BatchGetItem`; audit by day `Query PK=AUDIT#{day}`; access review `Query
 GSI1=IDENTS`. Password sign-in `GetItem PK=LOCALUSER#{email}`; setup `GetItem PK=SETUPLINK#{sha256(token)}` (holds the email and a TTL at the link expiry; only the token hash is ever stored); bind
-`GetItem` on `SSOEXPECT#OID#{oid}` and `SSOEXPECT#UPN#{upn}`. Unique usage keys use `UsageKeyClaim` in the same
+`GetItem` on `SSOEXPECT#OID#{oid}` and `SSOEXPECT#UPN#{upn}`. Created
+teams `Query GSI1=APPTEAMS` (paginated, Rule 20.6); one team `GetItem
+PK=APPTEAM#{teamId}`. An `AppTeam` holds `teamId`, `name`, `departmentId`,
+`departmentName` (the registry's name at creation), `createdBy` (`oid`),
+`createdAt` and `version`; it goes through the storage boundary below
+(`lib/data/access/app-teams.ts`). Unique usage keys use `UsageKeyClaim` in the same
 `TransactWriteItems` with `attribute_not_exists(PK)`.
 
 **Storage boundary (D26, amended 2026-11-14).** The access-control store is
@@ -931,11 +1090,14 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/teams/[id]/admins`, `/api/departments/[id]/admins` | GET, POST | Per matrix |
 | `/api/teams/[id]/admins/[oid]`, `/api/departments/[id]/admins/[oid]` | DELETE | Per matrix |
 | `/api/affiliations/[oid]/move` | POST `{ fromTeamId, toTeamId, version }` | Per matrix |
-| `/api/access/org-units` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor` (all), a department-scope admin (its departments and their teams), a team-scope admin (its teams, `departments: []`); everyone else `403` (D37; names sorted ascending): `{ data: { teams: [{ id, name, departmentId }], departments: [{ id, name }] } }` from the account registry (every `AccountMeta` item, active or not, deduplicated by id; sorted by name — teams and departments alike), not from rollups; scope read per request. Feeds the Settings access pickers |
+| `/api/access/org-units` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor` (all), a department-scope admin (its departments and their teams), a team-scope admin (its teams, `departments: []`); everyone else `403` (D37; names sorted ascending): `{ data: { teams: [{ id, name, departmentId }], departments: [{ id, name }] } }` from the account registry (every `AccountMeta` item, active or not, deduplicated by id; sorted by name — teams and departments alike), not from rollups; scope read per request. Feeds the Settings access pickers. *Amended 2026-11-17 (management improvements D5):* `teams[]` also lists the created app teams (`AppTeam`), each row gaining `hasAwsAccount` (`false` for a created team); a scoped admin sees a created team when its scope covers it |
 | `/api/role-grants` | GET, POST | `internal-admin` (GET also `internal-auditor`); POST **re-auth** |
 | `/api/role-grants/[oid]/[role]` | DELETE | `internal-admin`; **re-auth**; revoking a grant that does not exist → `404` (not `409`; amended 2026-11-15) |
 | `/api/group-mappings`, `/api/group-mappings/[groupId]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`) |
 | `/api/identities`, `/api/identities/[oid]/links` | GET, PUT | `internal-admin` (GET also `internal-auditor`); never opened to scoped admins (D37) |
+| `/api/identities/directory` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor`; everyone else `403`. The people list of Management → Users and the LiteLLM users tab (management improvements D15, D16, 2026-11-17): per identity `oid`, `displayName`, `email`, `authMethod`, `memberTeamId`, and the LiteLLM link state (`linked` with `litellmUserId`, or `none`); with `?include=litellmMatch` each unlinked row on the page also carries `match` from `findUserByEmail` on its verified email (read only, nothing written). 25 rows a page, opaque cursor; no usage identities or aliases. Agent decision: org-admin approves LiteLLM user links (user, Q4) and needs to see whom it links; it already manages every team, and D37's restriction is about scoped admins |
+| `/api/identities/[oid]/litellm-link` | PUT `{ litellmUserId, mode: "match" \| "manual", reason?, version }`, DELETE `{ version }` | `internal-admin`, `internal-org-admin`; own `oid` `403`; rules in *LiteLLM user links* (D16) |
+| `/api/teams` | POST `{ name, departmentId }` | `internal-admin`, `internal-org-admin`; `201` with the `AppTeam`; rules in *Created app teams* (D5, D6). `GET /api/teams` stays the Bedrock team list (Data Model — *API Routes*) |
 | `/api/governance/identity-map-rules` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` (versioned, audited; D27) |
 | `/api/governance/identity-map-rules/suggestions` | GET | `internal-admin`/`internal-auditor`; read-only, not audited; confirming a suggestion is `PUT /api/identities/[oid]/links` (D27) |
 | `/api/password-users`, `/api/password-users/[email]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`); POST returns the setup link once; POST and DELETE **re-auth**; DELETE takes the user's `version` (optimistic concurrency, *Enforcement* item 6; amended 2026-11-15); PATCH (enable or disable) not |
@@ -1104,6 +1266,10 @@ organisation administrators and auditors. Usage rollups are kept for
 | T41 | Redirect: an open redirect out of the prefix or the host through `redirectTo`, `callbackUrl` or the step-up return path (added 2026-11-17, unit BP) | The custom `redirect` callback accepts only same-origin URLs inside the prefix, else `<prefix>/dashboard` (BP-D11); `pages.*` carry the prefix | BP T7 (sign-in lands on `<prefix>/dashboard`, sign-out on `<prefix>/sign-in`, step-up and callback stay inside the prefix; an outside path, another origin and `/llm-lens-other` are refused) |
 | T42 | Spoofing / disclosure: a password setup link leaves the prefix or trusts a forged host (added 2026-11-17, unit BP) | `setupLink()` builds `https://<request Host><prefix>/account/setup#<token>`; the token stays in the fragment (T24) | BP T4 (prefix present, request `Host` still used) |
 | T43 | Bypass: an unauthenticated API call under the prefix is redirected to an unprefixed page instead of the JSON `401` (added 2026-11-17, unit BP) | `authorized` strips the prefix itself and returns an explicit prefixed sign-in redirect for pages; API paths keep the `401` JSON shape (BP-D10) | BP T6 (API route `401` JSON; page redirect to `<prefix>/sign-in`; with and without `AUTH_URL`) |
+| T-MI1 | Disclosure: a wrong LiteLLM user link shows one person another person's LiteLLM spend and key metadata (management improvements D16, 2026-11-17) — more likely now that org-admin may link | Verified canonical email for a match; approval click in a dialog naming both sides; a required reason for a manual link; one-to-one `LiteLLMUserClaim`; no self-link; privileged targets refused; admin and org-admin only; audited with the reason | M3: org-admin and admin may link, auditor and lead `403`; own `oid` `403` with one `denied`; no automatic link; match with another email `409`; manual without reason `400`; duplicate `409`; a `proxy_admin`, `proxy_admin_viewer` or service-user target `409 PRIVILEGED_TARGET` with no link written; the audit record carries the mode, both ids and the reason (manual) for set and remove; usage aliases stay admin-only |
+| T-MI2 | Elevation: the dev lead sign-in (D14) exists outside dev, or a typed value supplies a scope or role | The option is part of the dev login: env-rejected in `prod` and with Entra configured (T7); the scope comes only from the stored identity's admin-scope item, per request | M3: the option signs in with the stored scope and none from typed text; refused in `prod` and with Entra configured |
+| T-MI3 | Tampering: a created app team takes a registry team's id or name, inheriting its members, scopes or spend (D5) | Server-generated `appteam-<uuid>` id; the registry refuses the reserved prefix; name claim and registry name check (`409`), both ways: the account routes refuse a created team's name (`409`) | M2: id never equals a registry team; duplicate name `409` (against created and registry teams); body id ignored; `POST /api/accounts` and `PATCH /api/accounts/[id]` with a created team's name `409`, no write |
+| T-MI4 | Disclosure: Team usage shows a lead another team's spend (D7) | `teamUsage` and the team list come from `resolveScope` per request; a team outside the scope is the missing-page `404`; only a global reader gets every team (MI-D7, coordinator decision) | M2: leak test (a lead sees only teams in scope; another team's id `404`); a global reader without a scope sees every team; a user with no scope `404` |
 
 ## Residual risks
 
@@ -1138,3 +1304,9 @@ organisation administrators and auditors. Usage rollups are kept for
   change is therefore adopted too and survives the change; every other
   session ends. Mitigations: the 8 h cap, VPN-only reach, and an admin reset
   or disable, which clears the marker.
+- **LiteLLM user links written before the claim item (management
+  improvements D16, 2026-11-17).** Links stored before unit M3 have no
+  `LiteLLMUserClaim`; the first write after M3 that touches such a link adds
+  its claim, and until then a duplicate written before M3 is not refused.
+  Mitigation: the access review lists each identity's LiteLLM link, so a
+  duplicate is visible; v1 has few links (local and pre-SSO).

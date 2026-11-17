@@ -252,6 +252,22 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
   *Membership, admin scopes and lifecycle* (*Leaver*), *Access review*, D2,
   D34; [Design System](specs/2026-05-15-design-system.md) — *Settings Page*.
 
+### App team rename and delete
+
+- **Status:** Deferred (decided 2026-11-17, management improvements D5,
+  agent decision).
+- **What:** Rename a created app team (`AppTeam`), and delete one that has no
+  members, admin scopes or LiteLLM link.
+- **Why deferred:** The user asked only for creating a team (item 3). A
+  rename moves the name claim and a delete must clear or refuse memberships,
+  scopes, visibility and the team link, each with its own audit and
+  permission rules.
+- **Adopt when:** an organisation needs to correct or retire a created team.
+- **References:** [Data Model](specs/2026-05-15-data-model.md) — *Entity:
+  AppTeam*; [Access Control](specs/2026-11-10-access-control.md) — *Created
+  app teams*; [App Teams spec](specs/2026-11-17-app-teams.md) — *Teams
+  without an AWS account*.
+
 ---
 
 ## LiteLLM
@@ -285,6 +301,24 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
   scope.
 - **References:** [App Teams spec](specs/2026-11-17-app-teams.md) — *Decisions*
   (AT4); [LiteLLM spec](specs/2026-11-10-litellm.md) — *Writes*, LD32, LT5.
+
+### LiteLLM "service" dimension on Cost by service
+
+- **Status:** Deferred (asked 2026-11-17 as Q7 of the management
+  improvements; open; default in force: no LiteLLM service dimension, D19).
+- **What:** Let a LiteLLM dimension (a key alias or a request tag) stand for
+  "service", so Cost by service's LiteLLM panel can split LiteLLM-reported
+  spend by service.
+- **Why deferred:** A service comes from CloudTrail inference profiles
+  (Rule 20.10); a LiteLLM alias or tag is chosen freely by its owner, so a
+  mapping would be a guess presented as attribution. The panel says
+  "LiteLLM does not report cost by service" instead.
+- **Adopt when:** the user answers Q7 with a naming rule for keys or tags
+  that teams follow, and an allowlisted read returns spend by that
+  dimension within the LD34 call budget.
+- **References:** [Design System](specs/2026-05-15-design-system.md) —
+  *Source panels on Cost by team, Cost by user and Cost by service*;
+  [LiteLLM spec](specs/2026-11-10-litellm.md) — MI-D17–D19.
 
 ### Member daily spend on unlinked app teams
 

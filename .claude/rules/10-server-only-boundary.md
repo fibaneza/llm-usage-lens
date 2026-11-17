@@ -47,7 +47,15 @@ credentials must never reach the browser.
      Writes*, LD26; amended 2026-11-16). `PUT /api/litellm/toggles` and the
      team-links writes accept `internal-admin` or `internal-org-admin`
      (user, 2026-11-16; LD24). The LiteLLM connection writes and LiteLLM
-     team creation stay `internal-admin` only.
+     team creation stay `internal-admin` only. App team creation
+     (`POST /api/teams`) and the LiteLLM user link writes
+     (`PUT`/`DELETE /api/identities/[oid]/litellm-link`, and
+     `POST /api/litellm/users`, create and link on OSS) accept
+     `internal-admin` or `internal-org-admin`; a link write on the caller's
+     own identity is `403`; the usage-identity and alias writes
+     (`PUT /api/identities/[oid]/links`) stay `internal-admin` only (user,
+     2026-11-17; management improvements D6, D16; Access Control —
+     *Created app teams*, *LiteLLM user links*).
    - Validate query/body with Zod (`400` on failure).
    - Return `{ data: T }` on success, `{ error: { code, message } }` on failure.
    - Use the `DateRangeQuerySchema` 90-day cap on custom ranges.

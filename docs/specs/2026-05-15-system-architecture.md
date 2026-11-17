@@ -22,7 +22,7 @@ Organization (access is role-based and scope-limited — Access Control spec)
               └── Users   (IAM Identity Center SSO username from CloudTrail)
 ```
 
-- A department contains **one or more teams**. Each team owns **exactly one** AWS member account.
+- A department contains **one or more teams**. Each team owns **exactly one** AWS member account. *Amended 2026-11-17 (management improvements D5, agent decision; D6 user): a **created app team** has no AWS account and therefore no Bedrock cost; it exists for membership, its lead and its LiteLLM spend ([Data Model](2026-05-15-data-model.md) — *Entity: AppTeam*; [App Teams spec](2026-11-17-app-teams.md) — *Teams without an AWS account*). Every AWS account still maps to exactly one registry team.*
 - An AWS account therefore maps to exactly one team and exactly one department. This mapping lives in the DynamoDB account registry — department and team are always derivable from the account ID.
 - Service-level attribution uses **application inference profiles**: a team creates one inference profile per service, tagged `service=<name>`. Calls routed through a profile are attributable to that service in CloudTrail Lake (the v1 source for `byService` in DynamoDB). Cost Explorer cost allocation tags are **not** used for dashboard service breakdown in v1.
 - User-level attribution uses IAM Identity Center SSO usernames extracted from CloudTrail Lake, canonicalised to the lower-cased email after the SSO prefix ([Access Control spec](2026-11-10-access-control.md) — *Canonical usage identity*; the dashboard applies it on read until Phase 6).

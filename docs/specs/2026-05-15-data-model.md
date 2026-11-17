@@ -33,12 +33,40 @@ All data is stored in a single DynamoDB table (`bedrock-usage`) with one GSI. Th
 | DailyRollup | `ACCT#{accountId}` | `DAILY#{YYYY-MM-DD}` | `DATE#{YYYY-MM-DD}` | `ACCT#{accountId}` |
 | SyncStatus | `SYSTEM` | `SYNC#LATEST` | — | — |
 | Migration marker (PERF-1b) | `SYSTEM` | `MIGRATION#ACCOUNT_REGISTRY` | — | — |
+| AppTeam (management improvements D5, 2026-11-17) | `APPTEAM#{teamId}` | `META` | `APPTEAMS` | `APPTEAM#{teamId}` |
+| AppTeamNameClaim | `APPTEAMNAME#{lower(trim(name))}` | `OWNER` | — | — |
 
 The `SYSTEM` partition holds one-off system items: the sync status and, from PERF-1b, the account-registry migration marker that the backfill writes (*Access Patterns* — PERF-1b *Migration*). Neither item is on GSI1.
 
 Forward note (2026-11-17): from Phase 5 unit PERF-1b the `AccountMeta` GSI1 keys become `ACCOUNTS` / `DEPT#{departmentId}#ACCT#{accountId}` (*Access Patterns* below). Until that unit ships, the row above is what the code writes.
 
 Access-control entities (identity, member affiliation, admin scopes, role grants, group mappings, visibility, password users and their SSO reservations and references, audit records, the per-user approval, the password sign-in switch) share this table under new key prefixes — see [Access Control spec](2026-11-10-access-control.md) — *Data model additions* (decided 2026-11-10). `byUser` keys are canonical usage identities (the lower-cased email after the SSO prefix; same spec — *Canonical usage identity*), canonicalised on read until the Phase 6 collector writes them. LiteLLM entities (connection, operation toggles, team links and their claims, gateway configuration, key requests) use the `LITELLM#` prefix — see [LiteLLM spec](2026-11-10-litellm.md) — *Data model additions*; no service key or key value is ever stored.
+
+## Entity: AppTeam (management improvements D5, 2026-11-17)
+
+*Agent decision, 2026-11-17 (unit M2; user decision D6 for who creates). An app team can exist without an AWS account: LiteLLM limits how many LiteLLM teams exist, and people who do not use Bedrock directly still need a team for membership, a lead and LiteLLM spend.* Owned by the access-control storage boundary (Access Control — *Data model additions*, D26: `lib/data/access/app-teams.ts`), because a team is part of the membership hierarchy.
+
+```
+PK:      APPTEAM#{teamId}           e.g. APPTEAM#appteam-3f0c…
+SK:      META
+GSI1pk:  APPTEAMS
+GSI1sk:  APPTEAM#{teamId}
+
+Attributes:
+  teamId           string           "appteam-<uuid v4>", generated on the server
+  name             string           1–80 characters, trimmed
+  departmentId     string           an existing registry department
+  departmentName   string           the registry's department name at creation
+  createdBy        string           the creator's oid
+  createdAt        string           ISO8601
+  version          number           optimistic concurrency
+```
+
+- **Access patterns:** list created teams `Query GSI1 gsi1pk = APPTEAMS` (loop on `LastEvaluatedKey`, Rule 20.6); one team `GetItem PK = APPTEAM#{teamId}, SK = META`; name uniqueness `AppTeamNameClaim` (`APPTEAMNAME#{lower(trim(name))}` / `OWNER`) with `attribute_not_exists(PK)` in the same `TransactWriteItems` as the team and its audit record.
+- **The team list** is the registry teams (`AccountMeta`, deduplicated by `teamId`) plus the created teams, served by `GET /api/access/org-units` with `hasAwsAccount`. Rollup-based routes (`/api/teams`, `/api/teams/[id]`, Ranking) are unchanged: a created team has no `DailyRollup`, so no Bedrock row; pages that list teams show it as "No AWS account", never `$0`.
+- **Ids never collide:** the reserved prefix `appteam-` is refused (`400`) for `teamId` in `CreateAccountInputSchema` and `UpdateAccountPatchSchema` (amended 2026-11-17), so a registry team can never take a created team's id, and the create route never accepts an id from the body.
+- **Names never collide, both ways (agent decision, 2026-11-17, M0 review round 1):** `POST /api/teams` refuses a name equal (case-insensitively, after trimming) to a created team's or a registry team's name (`409 CONFLICT`), and `POST /api/accounts` and `PATCH /api/accounts/[id]` refuse a `teamName` equal to a created team's name (`409 CONFLICT`, no write; they read the `AppTeamNameClaim`). Reason: two teams with one name would be indistinguishable in every picker (Access Control — *Created app teams*, T-MI3).
+- **Create only** in v1; rename and delete are in `docs/future-improvements.md`. No TTL.
 
 ## Entity: AccountMeta
 
@@ -422,9 +450,10 @@ All routes live under `apps/dashboard/app/api/`, require an Auth.js session, val
 | `/api/users` | GET | `DateRangeQuerySchema` | Rollups → group by team, merge each team's `byUser` across its accounts |
 | `/api/sync-status` | GET | — | `getSyncStatus()` |
 | `/api/accounts` | GET | — | `getAllAccounts()` |
-| `/api/accounts` | POST | `CreateAccountInputSchema` | Settings CRUD (`Admin`) |
-| `/api/accounts/[id]` | PATCH | `UpdateAccountPatchSchema` | Settings CRUD (`Admin`) |
+| `/api/accounts` | POST | `CreateAccountInputSchema` | Settings CRUD (`Admin`); from 2026-11-17 a `teamName` equal to a created team's name is `409` (*Entity: AppTeam*) |
+| `/api/accounts/[id]` | PATCH | `UpdateAccountPatchSchema` | Settings CRUD (`Admin`); from 2026-11-17 a `teamName` equal to a created team's name is `409` (*Entity: AppTeam*) |
 | `/api/accounts/[id]` | DELETE | — | Soft-deactivate (`active: false`; `Admin`) |
+| `/api/teams` | POST | `{ name, departmentId }` (management improvements D5, D6, 2026-11-17) | Create an `AppTeam` (`internal-admin`, `internal-org-admin`; Access Control — *Created app teams*); `201`, audited, revalidates the team-list tags |
 
 The access-control routes (`/api/health`, `/api/me`, members, admins, moves, role grants, group mappings, visibility, identities, password users, the password sign-in switch, the per-user approval, audit, access review) and their permissions are listed in [Access Control spec](2026-11-10-access-control.md) — *API routes*. The LiteLLM routes (`/api/litellm/**`, `/api/finance/statement`) and the error codes `OPERATION_DISABLED` (403), `OPERATION_UNAVAILABLE` (403), `LITELLM_UNAVAILABLE` (503) and `PRIVILEGED_TARGET` (409) are in the [LiteLLM spec](2026-11-10-litellm.md) — *API routes*. `Admin` above reads `internal-admin` from Phase 4R.
 

@@ -58,3 +58,11 @@ Source: `docs/specs/2026-05-15-design-system.md`.
    button per view; tabs only for peer views with URL state; Settings uses
    route tabs (AWS accounts, Sync and data, LiteLLM, Access) on the one
    `Tabs` component (Design System — *Layout*, *Settings Page*).
+10. **Sidebar order (2026-11-17; management improvements D1 and D7, user;
+    D2 and D3, agent decisions).** Usage: Overview, My usage, Team usage, Ranking, Cost by
+    department, Cost by team, Cost by service, Cost by user. Management:
+    Users, Team, LiteLLM (route tabs Organisation, LiteLLM teams, LiteLLM
+    users), Audit. Administration: Settings, last; Settings → LiteLLM holds
+    configuration only (D3). The sidebar, `PageTitle` and `CommandMenu`
+    share one filter; an item the caller may not see is absent and its
+    route is `404` (Design System — *Navigation (Sidebar)*).
