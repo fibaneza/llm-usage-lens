@@ -15,6 +15,7 @@ worker sessions under a coordinator session (see *Parallel runs* below).
 | `rbac_prompt.md` | Role-based access from Entra ID (global `internal-admin`, `internal-org-admin`, `internal-auditor`, `internal-viewer`; scoped `internal-team-admin`; the legacy `Admin` alias only outside `APP_ENV=prod`), SSO group mapping, single-team affiliation and admin scopes, visibility and inheritance, the master user, password users and the pre-SSO mode, the audit log, plus the platform unit |
 | `litellm_prompt.md` | LiteLLM team and user administration through an allowlist gateway and a scoped service key in SSM, budgets, rate limits, keys, combined usage, self-service keys, the monthly statement. Its permissions follow the role model in `rbac_prompt.md` §1.1 |
 | `coordinator_prompt.md` | How one session coordinates the worker sessions that run the goals above: briefs, file ownership and conflict prevention, milestones, the shared usage freeze, **every merge into `main`** (full tests on the `main` candidate, fix agents, clean-up), and the live state in `temp/coordinator/` that survives a context reset |
+| `planner_prompt.md` | The planner session: it writes plans, spec text and prompts and never executes them (user, 2026-11-18); it reaches the coordinator only through the file relay in `temp/coordinator/` (coordinator prompt §2b). Start sheet: [`docs/guides/planner-session.md`](../docs/guides/planner-session.md) |
 
 ## How runs save tokens (Rule 70.12, decided 2026-11-14)
 
