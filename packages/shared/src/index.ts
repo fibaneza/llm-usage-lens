@@ -260,6 +260,39 @@ export type {
   TeamLink,
 } from "./schemas/litellm-gateway";
 
+export {
+  BedrockGatewayConfigSchema,
+  BedrockGatewayPutSchema,
+  BedrockGatewayViewSchema,
+  GatewayPrincipalSchema,
+} from "./schemas/bedrock-gateway";
+export type {
+  BedrockGatewayConfig,
+  BedrockGatewayPut,
+  BedrockGatewayView,
+} from "./schemas/bedrock-gateway";
+
+export {
+  CombinedMeResponseSchema,
+  CombinedOrganisationFigureSchema,
+  CombinedOrganisationResponseSchema,
+  CombinedPersonFigureSchema,
+  CombinedTeamFigureSchema,
+  CombinedTeamResponseSchema,
+  CombinedTeamsResponseSchema,
+  CombinedVisibilitySchema,
+} from "./schemas/combined";
+export type {
+  CombinedMeResponse,
+  CombinedOrganisationFigure,
+  CombinedOrganisationResponse,
+  CombinedPersonFigure,
+  CombinedTeamFigure,
+  CombinedTeamResponse,
+  CombinedTeamsResponse,
+  CombinedVisibility,
+} from "./schemas/combined";
+
 export { AppConfigSchema } from "./schemas/app-config";
 export type { AppConfig } from "./schemas/app-config";
 

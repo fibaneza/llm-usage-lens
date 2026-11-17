@@ -11,6 +11,7 @@ import {
   teamDetailBody,
   teamDetailFixture,
 } from "@/test/fakes/api-stubs";
+import { teamShow } from "@/test/fakes/combined-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { TeamDetailContent } from "./TeamDetailContent";
@@ -506,5 +507,37 @@ describe("TeamDetailContent -- loading, empty, not found and errors", () => {
 
     await loaded();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
+// (L6)": Where each figure appears ("Team Detail: a combined card for a
+// linked team"), Routes (GET /api/litellm/combined/teams/[teamId]). Mount
+// only. Contract: TeamDetailContent renders
+// <CombinedTeamCard teamId={id} range={range} /> alongside the Bedrock
+// sections; the id is URL-encoded in the request.
+describe("TeamDetailContent -- combined card mount (L6)", () => {
+  it("renders the combined card for the team and range", async () => {
+    const stub = stubApi({
+      teamDetail: detailFor(),
+      combinedTeam: () => apiResponse({ data: teamShow() }),
+    });
+    renderWithProviders(<TeamDetailContent id="team-a" />, URL_PARAMS);
+    await loaded();
+    const card = await screen.findByRole("region", { name: "Combined usage" });
+    expect(card).toHaveTextContent("$11.50");
+    const request = stub.combinedRequests()[0];
+    expect(request?.pathname).toBe("/api/litellm/combined/teams/team-a");
+    expect(Object.fromEntries(request?.searchParams ?? [])).toMatchObject(
+      RANGE,
+    );
+  });
+
+  it("a hidden or absent card leaves the Bedrock sections untouched", async () => {
+    stubApi({ teamDetail: detailFor() });
+    renderWithProviders(<TeamDetailContent id="team-a" />, URL_PARAMS);
+    await loaded();
+    expect(section("Services breakdown")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Combined usage" })).toBeNull();
   });
 });

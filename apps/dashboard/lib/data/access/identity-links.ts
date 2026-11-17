@@ -31,6 +31,24 @@ export async function getClaimedKeys(keys: string[]): Promise<string[]> {
   return claimed;
 }
 
+// Every usage key of the person who claims `key` (the key itself when nobody
+// does): the canonical email plus the link's usage identities and aliases.
+// Read-only; used for another person's combined figure (LiteLLM spec - L6).
+export async function getUsageKeysClaimedWith(key: string): Promise<string[]> {
+  const owner = await getItem(usageKeyPk(key), OWNER_SK);
+  const link =
+    owner && typeof owner.oid === "string"
+      ? await getIdentityLink(owner.oid)
+      : null;
+  return [
+    ...new Set([
+      key,
+      ...(link?.usageIdentities ?? []),
+      ...(link?.aliases ?? []),
+    ]),
+  ];
+}
+
 const snapshot = (
   l: Pick<IdentityLink, "usageIdentities" | "aliases" | "version">,
 ) => ({

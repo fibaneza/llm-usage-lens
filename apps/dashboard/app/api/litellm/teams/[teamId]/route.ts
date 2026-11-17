@@ -82,13 +82,35 @@ export const GET = withRoute(async (request, { params }, session) => {
       "getTeamDailySpend",
       ...(wantsMemberSum ? (["getUserDailySpend"] as const) : []),
     ]);
-    const [info, daily, memberSum] = await Promise.all([
-      getTeam({ litellmTeamId }),
-      getTeamDailySpend({ litellmTeamId, ...range }),
+    // LT25: a failed read stops the member sum, and the response waits for
+    // the member reads already in flight.
+    const halt = { stopped: false };
+    const run: { failure: { error: unknown } | null } = { failure: null };
+    const guard = <T>(read: Promise<T>) =>
+      read.catch((error: unknown) => {
+        halt.stopped = true;
+        run.failure ??= { error };
+        throw error;
+      });
+    const settled = await Promise.allSettled([
+      guard(getTeam({ litellmTeamId })),
+      guard(getTeamDailySpend({ litellmTeamId, ...range })),
       wantsMemberSum
-        ? computeMemberSum({ teamId, ...range, perUserCostHidden })
-        : undefined,
+        ? guard(computeMemberSum({ teamId, ...range, perUserCostHidden, halt }))
+        : Promise.resolve(undefined),
     ]);
+    if (run.failure) throw run.failure.error;
+    const [infoRead, dailyRead, sumRead] = settled;
+    if (
+      infoRead.status !== "fulfilled" ||
+      dailyRead.status !== "fulfilled" ||
+      sumRead.status !== "fulfilled"
+    ) {
+      throw new Error("A LiteLLM read failed without being recorded");
+    }
+    const info = infoRead.value;
+    const daily = dailyRead.value;
+    const memberSum = sumRead.value;
     const t = info.team_info;
     return jsonData(
       LiteLLMTeamDetailResponseSchema.parse({

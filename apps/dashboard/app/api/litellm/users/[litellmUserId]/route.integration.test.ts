@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { CombinedMeResponseSchema } from "@llm-usage-lens/shared";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { dailyRow } from "@/test/fakes/fake-litellm-combined";
 
 import {
   DATES,
   GHOST_USER_ID,
+  LUSER,
   enterProd,
   call,
   expectError,
@@ -14,7 +18,21 @@ import {
   stubLiteLLMEnv,
   useEnv,
 } from "@/test/fakes/fake-litellm-views";
-import { signInAs } from "@/test/fixtures/scope-fixtures";
+import {
+  getIdentityLink,
+  putIdentityLink,
+} from "@/lib/data/access/identity-links";
+import { CALLERS, signInAs } from "@/test/fixtures/scope-fixtures";
+import { ctxAt, ok } from "@/test/support/access-test-support";
+import {
+  ALT_KEY,
+  FIGURE_KEYS,
+  GW_ACCOUNT_B,
+  RANGE,
+  installCombined,
+  seedCombinedExtras,
+  storeGateway,
+} from "@/test/support/litellm-combined-support";
 import type { CallerName } from "@/test/fixtures/scope-fixtures";
 
 // Source: docs/specs/2026-11-10-litellm.md — "API routes" (/api/litellm/users/
@@ -44,8 +62,35 @@ vi.mock("next/cache", async () => {
 });
 
 const state = setupViewsSuite();
+// stubLiteLLMEnv resets modules on every request, so the client must be taken
+// from the registry the route is about to load: `get` calls `afterReset` once
+// the registry is fresh. Records the input of every command sent to DynamoDB;
+// `stop` clears the hook.
+let afterReset: (() => Promise<void>) | null = null;
+const watchDynamo = () => {
+  const inputs: string[] = [];
+  afterReset = async () => {
+    const { getDocumentClient } = await import("@/lib/dynamodb");
+    const client = getDocumentClient();
+    const original = client.send.bind(client) as (...a: unknown[]) => unknown;
+    (client as { send: unknown }).send = (
+      command: { input?: unknown },
+      ...rest: unknown[]
+    ) => {
+      inputs.push(JSON.stringify(command.input ?? {}));
+      return original(command, ...rest);
+    };
+  };
+  return {
+    reads: () => inputs.join("\n"),
+    stop: () => {
+      afterReset = null;
+    },
+  };
+};
 const get = async (userId: string, query = `?${DATES}`) => {
   stubLiteLLMEnv();
+  await afterReset?.();
   const { GET } = await import("./route");
   return call(GET, `/api/litellm/users/${encodeURIComponent(userId)}${query}`, {
     litellmUserId: userId,
@@ -254,5 +299,186 @@ describe("GET /api/litellm/users/[litellmUserId] - Organisation cap (LD23, T16)"
     const { body } = await get("ab@company.com");
     expect(body.data).toMatchObject({ spend: 6, maxBudget: 10 });
     expect(body.data.daily.length).toBeGreaterThan(0);
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage (L6)":
+// Routes (GET /api/litellm/users/[litellmUserId] "adds `combined`; omitted
+// while scope.userLevelCap is below all (LD23)"), The computation (Person P:
+// for another person the key set is the canonical email of the LiteLLM user's
+// user_email plus that identity's usage identities and aliases), Visibility
+// (global readers show/warn; a Lead show/hidden), LT31 ("Per-person combined
+// leaks under the Organisation cap": omitted unless userLevelCap = all).
+//
+// Contract (amended after L6 review round 1, Q1): the 200 data gains an
+// optional `combined` = CombinedMeResponseSchema (the same person figure as
+// /combined/me, for the viewed person) for GLOBAL READERS ONLY (Admin,
+// org-admin, Auditor). It is absent when the cap hides per-user cost, and
+// absent for everyone else (a Lead): no key, no Bedrock figure, and the
+// gateway config, the usage-key owner and the rollups are never read for them.
+// LiteLLMUserDetailResponseSchema accepts it.
+describe("GET /api/litellm/users/[litellmUserId] - combined (L6)", () => {
+  beforeEach(async () => {
+    await seedCombinedExtras();
+    installCombined(state, {
+      userPages: [[dailyRow(4, { bedrock: 4 })]],
+    });
+  });
+  const detail = (userId = "a1@company.com") => get(userId, `?${RANGE}`);
+
+  it("Admin sees the person's combined figure: direct Bedrock over all their usage keys plus their LiteLLM total", async () => {
+    await storeGateway({ accountIds: [GW_ACCOUNT_B] });
+    signInAs("admin");
+    const { res, body } = await detail();
+    expect(res.status).toBe(200);
+    expect(body.data.userId).toBe("a1@company.com");
+    expect(CombinedMeResponseSchema.parse(body.data.combined)).toMatchObject({
+      visibility: "show",
+      gatewayConfigured: true,
+      bedrockDirect: 23,
+      litellm: 4,
+      litellmUser: true,
+      combined: 27,
+      costEstimated: true,
+    });
+  });
+
+  it.each<["orgAdmin" | "auditor"]>([["orgAdmin"], ["auditor"]])(
+    "%s: warn when the gateway is not configured",
+    async (who) => {
+      signInAs(who);
+      const { body } = await detail();
+      expect(body.data.combined).toMatchObject({
+        visibility: "warn",
+        gatewayConfigured: false,
+        bedrockDirect: 23,
+      });
+    },
+  );
+
+  // L6 review round 1, Q1 (LT32; Access Control - Navigation and landing by
+  // role: a Lead has no AWS cost view; Rule 60.10): `combined` is for global
+  // readers only. A Lead gets the LiteLLM figures and nothing else, and the
+  // route reads no gateway config, no usage-key owner and no rollup for them.
+  describe("a Lead in scope gets no combined figure and no out-of-scope read (LT32; route row: global readers only)", () => {
+    const BEDROCK_AMOUNTS = /[:[,](23|27|243)[,}\]]/;
+
+    it.each([false, true])(
+      "gateway configured = %s: the detail carries LiteLLM figures only, no `combined` key and no Bedrock amount anywhere",
+      async (configured) => {
+        if (configured) await storeGateway({ accountIds: [GW_ACCOUNT_B] });
+        signInAs("teamAdminA");
+        const { res, body, text } = await detail();
+        expect(res.status).toBe(200);
+        expect(body.data).toMatchObject({
+          userId: "a1@company.com",
+          spend: expect.any(Number),
+        });
+        expect(body.data).not.toHaveProperty("combined");
+        for (const key of FIGURE_KEYS) {
+          expect(text).not.toContain(`"${key}"`);
+        }
+        expect(text).not.toContain("gatewayConfigured");
+        expect(text).not.toContain(ALT_KEY);
+        expect(text).not.toMatch(BEDROCK_AMOUNTS);
+      },
+    );
+
+    it("a department Lead likewise gets no `combined`", async () => {
+      await storeGateway({ accountIds: [GW_ACCOUNT_B] });
+      signInAs("deptAdminEng");
+      const { res, body } = await detail("b1@company.com");
+      expect(res.status).toBe(200);
+      expect(body.data).not.toHaveProperty("combined");
+    });
+
+    // Observed at the DynamoDB boundary (Rule 60.21: no spying on internals):
+    // absence of a read is only visible there.
+    it("reads no gateway config, no usage-key owner and no rollup day for a Lead (checked before any such read)", async () => {
+      await storeGateway({ accountIds: [GW_ACCOUNT_B] });
+      signInAs("teamAdminA");
+      const watch = watchDynamo();
+      try {
+        const { res } = await detail();
+        expect(res.status).toBe(200);
+        const reads = watch.reads();
+        // LITELLM#CONFIG / CONNECTION and / TOGGLES stay readable for a Lead
+        // (LD19 requireEnabled); only the GATEWAY item is out of scope here.
+        expect(reads).not.toContain('"SK":"GATEWAY"');
+        expect(reads).not.toContain("USAGEKEY#");
+        expect(reads).not.toContain("DATE#");
+      } finally {
+        watch.stop();
+      }
+    });
+
+    it("control: the same spy sees those reads for Admin, so the Lead absence above is meaningful", async () => {
+      await storeGateway({ accountIds: [GW_ACCOUNT_B] });
+      signInAs("admin");
+      const watch = watchDynamo();
+      try {
+        await detail();
+        const reads = watch.reads();
+        expect(reads).toContain('"SK":"GATEWAY"');
+        expect(reads).toContain("DATE#");
+      } finally {
+        watch.stop();
+      }
+    });
+  });
+
+  it("omitted under the Organisation cap (prod, no approval), even for Admin (LD23, LT31)", async () => {
+    await enterProd();
+    await storeGateway({ accountIds: [GW_ACCOUNT_B] });
+    signInAs("admin");
+    const { res, body } = await detail();
+    expect(res.status).toBe(200);
+    expect(body.data).not.toHaveProperty("combined");
+    expect(JSON.stringify(body)).not.toContain("bedrockDirect");
+  });
+
+  it("present again once the per-user approval is recorded (userLevelCap = all)", async () => {
+    await enterProd({ approved: true });
+    await storeGateway({ accountIds: [GW_ACCOUNT_B] });
+    signInAs("admin");
+    const { body } = await detail();
+    expect(body.data.combined).toMatchObject({
+      visibility: "show",
+      combined: 27,
+    });
+  });
+
+  // Rule 60.10 / LT29-LT32: the claimed keys are authorization data.
+  it("an out-of-scope caller gets the same 404 as a missing user and no claimed key or figure reaches the body", async () => {
+    await storeGateway({ accountIds: [GW_ACCOUNT_B] });
+    signInAs("teamAdminA");
+    const outOfScope = await detail("c1@company.com");
+    const missing = await detail(GHOST_USER_ID);
+    expect(outOfScope.res.status).toBe(404);
+    expect(outOfScope.text).toBe(missing.text);
+    expect(outOfScope.text).not.toContain(ALT_KEY);
+    expect(outOfScope.text).not.toContain("bedrockDirect");
+    const admin = (signInAs("admin"), await detail());
+    expect(admin.text).not.toContain(ALT_KEY);
+  });
+
+  it("reads the identity link per request: a link change between two requests changes the second figure (Rule 60.10)", async () => {
+    await storeGateway({ accountIds: [GW_ACCOUNT_B] });
+    signInAs("admin");
+    expect((await detail()).body.data.combined.bedrockDirect).toBe(23);
+    const current = await getIdentityLink(CALLERS.memberA.oid);
+    ok(
+      await putIdentityLink(
+        {
+          oid: CALLERS.memberA.oid,
+          usageIdentities: [CALLERS.memberA.email],
+          aliases: [],
+          litellmUserId: LUSER.memberA,
+          version: current?.version ?? null,
+        },
+        ctxAt(undefined, "req-ident-drop"),
+      ),
+    );
+    expect((await detail()).body.data.combined.bedrockDirect).toBe(21);
   });
 });

@@ -16,7 +16,11 @@ import {
   ok,
   resetFaults,
 } from "@/test/support/access-test-support";
-import { getIdentityLink, putIdentityLink } from "./identity-links";
+import {
+  getIdentityLink,
+  getUsageKeysClaimedWith,
+  putIdentityLink,
+} from "./identity-links";
 
 // Source: docs/specs/2026-11-10-access-control.md — "Data model additions"
 // (IdentityLink, UsageKeyClaim: unique usage keys claimed in the same
@@ -192,5 +196,63 @@ describe("putIdentityLink", () => {
       result: "failed",
     });
     ok(await putIdentityLink(link(OID_B, ["a@example.com"]), ctxAt(NOW, "r2")));
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
+// (L6)" (Person P: for another person the key set is the canonical email plus
+// that identity's usage identities and aliases); Rule 60.10 (authorization
+// data is read per request, never cached).
+describe("getUsageKeysClaimedWith", () => {
+  it("returns the key plus every usage identity and alias of the identity that claims it", async () => {
+    ok(
+      await putIdentityLink(
+        link(OID_A, ["jane@example.com", "jane2@example.com"], null, {
+          aliases: ["jane.doe"],
+        }),
+        ctx,
+      ),
+    );
+    expect(
+      [...(await getUsageKeysClaimedWith("jane@example.com"))].sort(),
+    ).toEqual(["jane.doe", "jane2@example.com", "jane@example.com"]);
+    expect([...(await getUsageKeysClaimedWith("jane.doe"))].sort()).toContain(
+      "jane@example.com",
+    );
+  });
+
+  it("with no claim returns only the key itself", async () => {
+    expect(await getUsageKeysClaimedWith("nobody@example.com")).toEqual([
+      "nobody@example.com",
+    ]);
+  });
+
+  it("never returns another identity's keys", async () => {
+    ok(await putIdentityLink(link(OID_A, ["a@example.com"]), ctx));
+    ok(
+      await putIdentityLink(
+        link(OID_B, ["b@example.com"], null, { aliases: ["bee"] }),
+        ctx,
+      ),
+    );
+    expect(await getUsageKeysClaimedWith("a@example.com")).toEqual([
+      "a@example.com",
+    ]);
+  });
+
+  it("sees a link change on the next call (read per request)", async () => {
+    const v1 = ok(await putIdentityLink(link(OID_A, ["a@example.com"]), ctx));
+    expect(await getUsageKeysClaimedWith("a@example.com")).toEqual([
+      "a@example.com",
+    ]);
+    ok(
+      await putIdentityLink(
+        link(OID_A, ["a@example.com", "a2@example.com"], v1.version),
+        ctx,
+      ),
+    );
+    expect(
+      [...(await getUsageKeysClaimedWith("a@example.com"))].sort(),
+    ).toEqual(["a2@example.com", "a@example.com"]);
   });
 });

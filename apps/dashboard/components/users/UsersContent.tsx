@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQueryStates } from "nuqs";
 import { useMemo } from "react";
 
@@ -24,6 +25,16 @@ export function UsersContent() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader description="Cost and usage for each person who calls Bedrock." />
+      <p className="text-cell text-muted-foreground max-w-[72ch]">
+        Combined Bedrock and LiteLLM usage for one person is under{" "}
+        <Link
+          href="/dashboard/manage/users"
+          className="text-link underline underline-offset-4"
+        >
+          Management → Users
+        </Link>
+        .
+      </p>
       <SectionBoundary
         title="the users"
         resetKeys={[range.dateFrom, range.dateTo]}

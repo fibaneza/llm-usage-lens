@@ -12,6 +12,7 @@ import {
   LazyModelBreakdownChart,
   LazyTopDepartmentsChart,
 } from "@/components/charts/LazyCharts";
+import { CombinedOrganisationSection } from "@/components/litellm/combined/CombinedOrganisationSection";
 import { Panel } from "@/components/display/Panel";
 import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
@@ -49,6 +50,8 @@ export function OverviewContent() {
       <SectionBoundary title="key metrics" {...boundary} onRetry={onRetry}>
         <KpiRow range={range} />
       </SectionBoundary>
+
+      <CombinedOrganisationSection range={range} />
 
       <div className="grid gap-4 lg:grid-cols-12">
         <Panel

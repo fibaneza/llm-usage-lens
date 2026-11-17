@@ -112,6 +112,81 @@ const ROWS: Row[] = [
     }),
     cells: [200, 200, 200, 200, 200, 200, 200],
   },
+
+  // ---- L6 combined usage (LiteLLM spec - Combined usage and My usage ->
+  // Routes; LT30 gateway write Admin only; LT32 team and organisation combined
+  // figures serve global readers only, others get the missing-team 404) ------
+  {
+    route: "GET /gateway",
+    write: false,
+    load: loader(() => import("../gateway/route"), "GET"),
+    request: () => ({
+      method: "GET",
+      path: "/api/litellm/gateway",
+      params: {},
+    }),
+    cells: READ_ADMIN_ORG_AUDITOR,
+  },
+  {
+    route: "PUT /gateway",
+    write: true,
+    load: loader(() => import("../gateway/route"), "PUT"),
+    request: () => ({
+      method: "PUT",
+      path: "/api/litellm/gateway",
+      params: {},
+      body: {
+        version: null,
+        principals: [{ type: "iam-role", value: "litellm-gateway" }],
+        accountIds: [],
+      },
+    }),
+    cells: ADMIN_ONLY,
+  },
+  {
+    route: "GET /combined/organisation",
+    write: false,
+    load: loader(() => import("../combined/organisation/route"), "GET"),
+    request: () => ({
+      method: "GET",
+      path: `/api/litellm/combined/organisation?${DATES}`,
+      params: {},
+    }),
+    cells: READ_ADMIN_ORG_AUDITOR,
+  },
+  {
+    route: "GET /combined/teams",
+    write: false,
+    load: loader(() => import("../combined/teams/route"), "GET"),
+    request: () => ({
+      method: "GET",
+      path: `/api/litellm/combined/teams?${DATES}`,
+      params: {},
+    }),
+    cells: READ_ADMIN_ORG_AUDITOR,
+  },
+  {
+    route: "GET /combined/teams/[teamId]",
+    write: false,
+    load: loader(() => import("../combined/teams/[teamId]/route"), "GET"),
+    request: (c) => ({
+      method: "GET",
+      path: `/api/litellm/combined/teams/${c.team}?${DATES}`,
+      params: { teamId: c.team },
+    }),
+    cells: [200, 200, 200, 404, 404, 404, 404],
+  },
+  {
+    route: "GET /combined/me",
+    write: false,
+    load: loader(() => import("../combined/me/route"), "GET"),
+    request: () => ({
+      method: "GET",
+      path: `/api/litellm/combined/me?${DATES}`,
+      params: {},
+    }),
+    cells: [200, 200, 200, 200, 200, 200, 200],
+  },
   ...(
     [
       ["", `?${DATES}`, () => import("../teams/[teamId]/route")],

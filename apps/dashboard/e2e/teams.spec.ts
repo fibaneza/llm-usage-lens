@@ -175,7 +175,7 @@ test.describe("teams page", () => {
     await mockApi(page, []);
     await page.goto(PAGE_URL);
     await waitForHydration(page);
-    await expect(page.getByText(/no teams/i)).toBeVisible();
+    await expect(page.getByText("No teams in this period")).toBeVisible();
     await expect(page.getByRole("table")).toHaveCount(0);
   });
 

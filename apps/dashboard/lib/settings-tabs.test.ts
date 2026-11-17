@@ -248,6 +248,9 @@ describe("settingsTabsFor - LiteLLM sub-tabs (unit A2)", () => {
     ["guardrails", "Guardrails", `${BASE}/litellm/guardrails`],
     ["team-links", "Team links", `${BASE}/litellm/team-links`],
     ["users", "Users", `${BASE}/litellm/users`],
+    // L6 (Design System "Settings Page", 2026-11-17): Gateway is the fifth,
+    // last sub-tab, for the same three roles.
+    ["gateway", "Gateway", `${BASE}/litellm/gateway`],
   ];
   const litellmSubTabs = (viewer: Parameters<typeof settingsTabsFor>[0]) =>
     settingsTabsFor(viewer)
@@ -260,7 +263,7 @@ describe("settingsTabsFor - LiteLLM sub-tabs (unit A2)", () => {
     ["internal-org-admin", ORG_ADMIN],
     ["internal-auditor", AUDITOR],
   ] as const)(
-    "%s sees Connection, Guardrails, Team links and Users, in order, as routes",
+    "%s sees Connection, Guardrails, Team links, Users and Gateway, in order, as routes",
     (_name, viewer) => {
       expect(litellmSubTabs(viewer)).toEqual(SUB);
     },

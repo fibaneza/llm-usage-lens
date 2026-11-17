@@ -1,7 +1,6 @@
 import {
   DateRangeQuerySchema,
   LiteLLMOrgResponseSchema,
-  runBounded,
 } from "@llm-usage-lens/shared";
 
 import {
@@ -15,6 +14,7 @@ import { listAllTeamMemberOids } from "@/lib/data/access/team-member-lookup";
 import { listTeamLinks } from "@/lib/data/litellm/team-links";
 import {
   MAX_MEMBERS,
+  MemberSumOverBudget,
   computeMemberSum,
   worstCaseCalls,
 } from "@/lib/litellm/member-sum";
@@ -32,6 +32,7 @@ import {
   teamAccess,
 } from "@/lib/litellm/read-views";
 import { openModeRefusal } from "@/lib/litellm/route-guard";
+import { runBoundedSettled } from "@/lib/litellm/run-settled";
 
 // Source: docs/specs/2026-11-17-app-teams.md — "Organisation view" (two
 // tables; the total comes from the LiteLLM teams, AT5; 200 member reads per
@@ -114,7 +115,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
         },
       ],
     );
-    await runBounded(reads, READ_CONCURRENCY, (read) => read());
+    await runBoundedSettled(reads, READ_CONCURRENCY, (read) => read());
     const byDate = new Map<string, number>();
     const rangeSpend = new Map<string, number>();
     for (const [litellmTeamId, days] of rangeOf) {
@@ -154,7 +155,9 @@ export const GET = withRoute(async (request, _ctx, session) => {
     // same list sizes the team and feeds the sum (LD34). A team's worst case is
     // reserved before it is summed; the fixed reads above are never skipped, so
     // past the budget every unlinked team is an open-team row.
-    let budget = Math.max(0, MEMBER_READ_BUDGET - (1 + reads.length));
+    const budget = {
+      remaining: Math.max(0, MEMBER_READ_BUDGET - (1 + reads.length)),
+    };
     const sized = await Promise.all(
       unlinked.map(async (teamId) => {
         const oids = await listAllTeamMemberOids(teamId);
@@ -178,20 +181,26 @@ export const GET = withRoute(async (request, _ctx, session) => {
         continue;
       }
       const worstCase = await worstCaseCalls(oids);
-      if (worstCase > budget) {
+      if (worstCase > budget.remaining) {
         sums.set(teamId, null);
         continue;
       }
-      budget -= worstCase;
-      sums.set(
-        teamId,
-        await computeMemberSum({
+      try {
+        sums.set(
           teamId,
-          memberOids: oids,
-          ...range,
-          perUserCostHidden: access.perUserCostHidden,
-        }),
-      );
+          await computeMemberSum({
+            teamId,
+            memberOids: oids,
+            ...range,
+            perUserCostHidden: access.perUserCostHidden,
+            budget,
+          }),
+        );
+      } catch (error) {
+        // Pages counted in flight; no partial sum (LD34).
+        if (!(error instanceof MemberSumOverBudget)) throw error;
+        sums.set(teamId, null);
+      }
     }
 
     const appRows = [...appTeams]

@@ -12,6 +12,7 @@ import {
   teamRowFixture,
   teamsBody,
 } from "@/test/fakes/api-stubs";
+import { teamRow, teamsShow } from "@/test/fakes/combined-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { TeamsContent } from "./TeamsContent";
@@ -340,5 +341,43 @@ describe("TeamsContent -- states", () => {
     });
     const { container } = renderWithProviders(<TeamsContent />, URL_PARAMS);
     expect(container.querySelector('[data-slot="skeleton"]')).not.toBeNull();
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
+// (L6)": Where each figure appears ("Teams: a separate 'Combined with
+// LiteLLM' panel under the Bedrock table ...; the Bedrock table and its CSV
+// stay Bedrock-only (provenance)"); Rule 20.3. Mount only (panel states are
+// tested in components/litellm/combined). Contract: TeamsContent renders
+// <CombinedTeamsPanel range={range} /> after the Bedrock table.
+describe("TeamsContent -- Combined with LiteLLM mount (L6)", () => {
+  it("renders the panel under the Bedrock table, which keeps no LiteLLM column", async () => {
+    const stub = stubApi({
+      teams: teamsFor(),
+      departments,
+      combinedTeams: () => apiResponse({ data: teamsShow([teamRow()]) }),
+    });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    const panel = await screen.findByRole("region", {
+      name: "Combined with LiteLLM",
+    });
+    const bedrock = (await screen.findAllByRole("table"))[0] as HTMLElement;
+    expect(bedrock).not.toBe(within(panel).queryByRole("table"));
+    expect(
+      bedrock.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(within(bedrock).queryByText(/Via LiteLLM|Combined/)).toBeNull();
+    expect(
+      stub.combinedRequests().map((u) => Object.fromEntries(u.searchParams)),
+    ).toContainEqual(RANGE);
+  });
+
+  it("without a combined figure (hidden) the page has no panel", async () => {
+    stubApi({ teams: teamsFor(), departments });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    await screen.findByRole("table");
+    expect(
+      screen.queryByRole("region", { name: "Combined with LiteLLM" }),
+    ).toBeNull();
   });
 });

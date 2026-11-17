@@ -58,6 +58,8 @@ export type ApiStub = {
   servicesRequests: () => URL[];
   // Every `/api/users` request URL (query params included), in call order.
   usersRequests: () => URL[];
+  // Every `/api/litellm/combined/*` request URL, in call order (L6).
+  combinedRequests: () => URL[];
 };
 
 export function stubApi(handlers: {
@@ -70,6 +72,15 @@ export function stubApi(handlers: {
   teamDetail?: Handler;
   services?: Handler;
   users?: Handler;
+  // L6 combined routes (docs/specs/2026-11-10-litellm.md - "Combined usage and
+  // My usage (L6)"): the default answer is the `hidden` body, which renders
+  // nothing, so pages that mount a combined section keep their own tests
+  // about their own data.
+  combinedOrganisation?: Handler;
+  combinedTeams?: Handler;
+  combinedTeam?: Handler;
+  combinedMe?: Handler;
+  me?: Handler;
 }): ApiStub {
   const overviewUrls: URL[] = [];
   const rankingUrls: URL[] = [];
@@ -79,6 +90,7 @@ export function stubApi(handlers: {
   const teamDetailUrls: URL[] = [];
   const servicesUrls: URL[] = [];
   const usersUrls: URL[] = [];
+  const combinedUrls: URL[] = [];
   let syncCalls = 0;
   const fetchStub = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
@@ -135,6 +147,29 @@ export function stubApi(handlers: {
       if (!handlers.users) throw new Error("unexpected /api/users call");
       return handlers.users(url);
     }
+    if (url.pathname.startsWith("/api/litellm/combined/")) {
+      combinedUrls.push(url);
+      const path = url.pathname.slice("/api/litellm/combined/".length);
+      const handler =
+        path === "organisation"
+          ? handlers.combinedOrganisation
+          : path === "teams"
+            ? handlers.combinedTeams
+            : path === "me"
+              ? handlers.combinedMe
+              : handlers.combinedTeam;
+      return (
+        handler?.(url) ??
+        apiResponse({
+          data: {
+            visibility: "hidden",
+            configured: true,
+            gatewayConfigured: false,
+          },
+        })
+      );
+    }
+    if (url.pathname === "/api/me" && handlers.me) return handlers.me(url);
     throw new Error(`unexpected fetch: ${url.pathname}`);
   });
   vi.stubGlobal("fetch", fetchStub);
@@ -152,6 +187,7 @@ export function stubApi(handlers: {
     teamDetailRequests: () => [...teamDetailUrls],
     servicesRequests: () => [...servicesUrls],
     usersRequests: () => [...usersUrls],
+    combinedRequests: () => [...combinedUrls],
   };
 }
 

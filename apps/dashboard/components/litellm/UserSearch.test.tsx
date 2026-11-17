@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { apiError, apiResponse } from "@/test/fakes/api-stubs";
+import { HIDDEN, personShow } from "@/test/fakes/combined-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { UserSearch } from "./UserSearch";
@@ -265,5 +266,80 @@ describe("UserSearch selected user", () => {
     );
     await pickAda();
     expect(await screen.findByText(/user not found/i)).toBeInTheDocument();
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
+// (L6)": Where each figure appears (Users: "the selected user's detail there
+// shows that person's combined figure, under the cap"), Routes (GET
+// /api/litellm/users/[litellmUserId] "adds `combined`; omitted while
+// scope.userLevelCap is below all (LD23)"), States, Visibility (a Lead:
+// show | hidden). Contract: when the detail's `combined` is present and not
+// hidden, a region "Combined usage" (CombinedPersonCard) sits inside the
+// "User usage" region; absent (cap) or hidden -> no such region. The figure
+// is not re-fetched: it comes from the detail response.
+describe("UserSearch selected user - combined figure (L6)", () => {
+  const withCombined = (combined?: unknown) =>
+    stub((url) =>
+      url.pathname === "/api/litellm/users"
+        ? apiResponse({ data: USERS })
+        : apiResponse({
+            data: combined === undefined ? DETAIL : { ...DETAIL, combined },
+          }),
+    );
+  async function pick() {
+    const user = setup();
+    await user.type(
+      screen.getByRole("searchbox", { name: /search users/i }),
+      "ad",
+    );
+    await settle();
+    await user.click(
+      await screen.findByRole("button", { name: "ada@example.test" }),
+    );
+    await settle();
+    return screen.findByRole("region", { name: /user usage/i });
+  }
+
+  it("shows the person's combined figure inside the user's detail, from the detail response", async () => {
+    const calls = withCombined(personShow());
+    const detail = await pick();
+    const card = await within(detail).findByRole("region", {
+      name: "Combined usage",
+    });
+    expect(within(card).getByTestId("combined-total")).toHaveTextContent(
+      "$15.00",
+    );
+    expect(
+      within(card).getByText("Direct Bedrock $10.00 · Via LiteLLM $5.00"),
+    ).toBeInTheDocument();
+    expect(calls.some((u) => u.pathname.includes("/combined/"))).toBe(false);
+  });
+
+  it("shows no combined region when the detail omits it (Organisation cap, LD23)", async () => {
+    withCombined();
+    const detail = await pick();
+    await within(detail).findByText("$77.10");
+    expect(
+      within(detail).queryByRole("region", { name: "Combined usage" }),
+    ).toBeNull();
+  });
+
+  it("shows no combined region for a hidden body (a Lead while the gateway is not configured)", async () => {
+    withCombined(HIDDEN);
+    const detail = await pick();
+    await within(detail).findByText("$77.10");
+    expect(
+      within(detail).queryByRole("region", { name: "Combined usage" }),
+    ).toBeNull();
+    expect(within(detail).queryByTestId("combined-total")).toBeNull();
+  });
+
+  it("warn shows the gateway warning in the card", async () => {
+    withCombined(personShow({ visibility: "warn", gatewayConfigured: false }));
+    const detail = await pick();
+    expect(await within(detail).findByRole("status")).toHaveTextContent(
+      "gateway not configured — totals may double count",
+    );
   });
 });

@@ -2,6 +2,7 @@ import { MemberSumSchema } from "@llm-usage-lens/shared";
 import { describe, expect, it, vi } from "vitest";
 
 import { getIdentityLink } from "@/lib/data/access/identity-links";
+import { USER_DAILY_PAGE_CAP } from "@/lib/litellm/operations";
 import {
   setToggles,
   setupViewsSuite,
@@ -224,6 +225,19 @@ describe("computeMemberSum (App Teams - Member sum)", () => {
       installMemberSumFake(state);
       await expect(sum()).rejects.toMatchObject({ code: "TOO_MANY_MEMBERS" });
       expect(state.fake.calls).toHaveLength(0);
+    });
+  });
+
+  // LD34 (amended 2026-11-17, L6 review round 2): the per-member reservation
+  // inside the sum is one email lookup plus the page cap; the smallest-first
+  // pre-check keeps its typical-cost count. `USER_DAILY_PAGE_CAP`
+  // (operations.ts, 10: LiteLLM spec - Combined usage, LT34) and
+  // `MAX_CALLS_PER_MEMBER` (member-sum.ts) are the exports the developer adds.
+  describe("per-member reservation constant (LD34 amended)", () => {
+    it("one member costs one email lookup plus the page cap, derived from the exported page cap", async () => {
+      const mod = await import("./member-sum");
+      expect(USER_DAILY_PAGE_CAP).toBe(10);
+      expect(mod.MAX_CALLS_PER_MEMBER).toBe(USER_DAILY_PAGE_CAP + 1);
     });
   });
 

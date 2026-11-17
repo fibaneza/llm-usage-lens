@@ -437,19 +437,36 @@ async function findUser(email: string) {
   return read("/user/list", { user_email: email }, UserListResponse);
 }
 
+// Paging (LiteLLM spec - Combined usage -> LiteLLM reads used, LT34): the
+// contract pages /user/daily/activity by `page` and `page_size` (<= 1000) and
+// reports `metadata.has_more`. Loop at most 10 pages; beyond that the read
+// fails rather than return a partial sum.
+const USER_DAILY_PAGE_SIZE = 1000;
+export const USER_DAILY_PAGE_CAP = 10;
+
 export async function getUserDailySpend(input: z.input<typeof UserDailyInput>) {
   await gate("getUserDailySpend");
   const i = UserDailyInput.parse(input);
-  return read(
-    "/user/daily/activity",
-    {
-      user_id: i.litellmUserId,
-      start_date: i.startDate,
-      end_date: i.endDate,
-      timezone: UTC_OFFSET,
-    },
-    DailyActivityResponse,
-  );
+  const results: z.output<typeof DailyActivityResponse>["results"] = [];
+  let metadata: z.output<typeof DailyActivityResponse>["metadata"] = {};
+  for (let page = 1; page <= USER_DAILY_PAGE_CAP; page += 1) {
+    const body = await read(
+      "/user/daily/activity",
+      {
+        user_id: i.litellmUserId,
+        start_date: i.startDate,
+        end_date: i.endDate,
+        timezone: UTC_OFFSET,
+        page,
+        page_size: USER_DAILY_PAGE_SIZE,
+      },
+      DailyActivityResponse,
+    );
+    results.push(...body.results);
+    metadata = body.metadata;
+    if (metadata.has_more !== true) return { results, metadata };
+  }
+  throw new LiteLLMError("upstream_error");
 }
 
 const ListKeysInput = z

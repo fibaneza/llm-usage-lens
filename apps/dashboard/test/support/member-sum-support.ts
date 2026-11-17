@@ -150,6 +150,11 @@ export type MemberSumFakeOptions = {
   // range spend and an all-teams read gets the sum. Differs on purpose from the
   // views fake's `team_info.spend` (12.5) so a budget-period figure is caught.
   teamDaily?: Record<string, number>;
+  // Pages of GET /user/daily/activity for a user with no entry in `daily`
+  // (LiteLLM spec - Combined usage, LT34: page_size 1000 and metadata.has_more):
+  // page n of N answers one row on 2026-11-0<n> of spend 1, has_more until N.
+  // So one such user spends N and costs N LiteLLM calls (LD34, L6 review Q3).
+  pagedDaily?: number;
 };
 
 export const TEAM_DAILY_SPEND = {
@@ -187,6 +192,25 @@ export function memberSumHandler(opts: MemberSumFakeOptions = {}): FakeHandler {
       const userId = q.get("user_id") ?? "";
       if (opts.failUsers?.includes(userId)) {
         return { status: 404, body: { detail: "user not found" } };
+      }
+      const pages = opts.pagedDaily;
+      if (pages !== undefined && !(opts.daily && userId in opts.daily)) {
+        const page = Number(q.get("page") ?? "1");
+        return {
+          status: 200,
+          body: {
+            results:
+              page <= pages
+                ? [
+                    {
+                      date: `2026-11-0${page}`,
+                      metrics: { spend: 1, total_tokens: 15 },
+                    },
+                  ]
+                : [],
+            metadata: { page, has_more: page < pages },
+          },
+        };
       }
       const rows = opts.daily?.[userId] ?? [];
       return {

@@ -256,6 +256,18 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ## LiteLLM
 
+### Combined usage on the Users list
+
+- **Status:** Deferred (agent decision, 2026-11-17, LiteLLM unit L6; LiteLLM
+  spec LD38).
+- **What:** a combined (Bedrock + LiteLLM) figure on every row of
+  `/dashboard/users`, not only on the Management → Users detail.
+- **Why deferred:** the list's rows are per (team, user) and the allowlisted
+  LiteLLM reads give one person's spend per call, so a column would fan out
+  one call per row (LD34).
+- **Trigger:** a bounded bulk per-user spend read in the allowlist (it widens
+  the allowlist, so it is the user's decision, like U1).
+
 ### Shared LiteLLM team mode (LiteLLM writes for unlinked app teams)
 
 - **Status:** Deferred (decided 2026-11-17, agent under the user's delegation;

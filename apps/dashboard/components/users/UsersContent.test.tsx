@@ -287,3 +287,22 @@ describe("UsersContent -- states", () => {
     expect(container.querySelector('[data-slot="skeleton"]')).not.toBeNull();
   });
 });
+
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
+// (L6)": Where each figure appears ("Users: the list's rows are per (team,
+// user) and a per-row figure would need one LiteLLM call per row, so the list
+// carries a one-line note pointing to Management -> Users"; LD34 no unbounded
+// fan-out). Contract: UsersContent shows, above the table, a note whose text
+// contains "LiteLLM" with a link named "Management → Users" to
+// /dashboard/manage/users, and makes no combined request.
+describe("UsersContent -- note pointing to Management -> Users (L6)", () => {
+  it("carries the note and link, and issues no combined request", async () => {
+    const stub = stubApi({ users: usersFor() });
+    renderWithProviders(<UsersContent />, URL_PARAMS);
+    await screen.findByRole("table");
+    const link = screen.getByRole("link", { name: "Management → Users" });
+    expect(link).toHaveAttribute("href", "/dashboard/manage/users");
+    expect(link.parentElement).toHaveTextContent(/LiteLLM/);
+    expect(stub.combinedRequests()).toHaveLength(0);
+  });
+});

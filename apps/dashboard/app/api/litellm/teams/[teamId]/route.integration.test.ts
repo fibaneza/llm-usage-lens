@@ -2,6 +2,7 @@ import { MemberSumSchema } from "@llm-usage-lens/shared";
 import { describe, expect, it, vi } from "vitest";
 
 import { getIdentityLink } from "@/lib/data/access/identity-links";
+import { holdFetch, macrotask, trackSettled } from "@/test/support/fetch-hold";
 import { clearTable } from "@/test/support/test-support";
 import {
   DATES,
@@ -22,7 +23,9 @@ import {
   SCENARIO,
   SCENARIO_FAKE,
   installMemberSumFake,
+  memberSumHandler,
   seedBoundMember,
+  seedLinkedMembers,
   seedScenario,
   seedUnlinkedTeam,
   userDailyCalls,
@@ -349,6 +352,54 @@ describe("GET /api/litellm/teams/[teamId] - spend source (App Teams)", () => {
         expect(userDailyCalls(state)).toHaveLength(0);
       },
     );
+
+    // LT25 (amended 2026-11-17) / LD34: a failed team read stops the member
+    // sum and the 503 waits for its in-flight reads, so no call outlives the
+    // request. Team-a gets 7 more linked members: 5 spend reads fill the
+    // concurrency cap and are held, then getTeam fails. The other 3 members
+    // must never be read, and the response must wait for the 5.
+    it("a failed getTeam stops the member sum: the 503 waits for the in-flight member reads, no new read starts and no call follows (LT25; LD34; AT7)", async () => {
+      await seedLinkedMembers("team-a", 7);
+      installMemberSumFake(state);
+      const base = memberSumHandler();
+      state.fake.setHandler((callInfo, attempt) =>
+        callInfo.path === "/team/info"
+          ? { status: 404, body: { detail: "team not found" } }
+          : base(callInfo, attempt),
+      );
+      const claimed = new Set<string>();
+      const memberHolds = Array.from({ length: 5 }, () =>
+        holdFetch((u) => {
+          const id = u.searchParams.get("user_id") ?? "";
+          if (u.pathname !== "/user/daily/activity" || claimed.has(id)) {
+            return false;
+          }
+          claimed.add(id);
+          return true;
+        }),
+      );
+      const teamRead = holdFetch((u) => u.pathname === "/team/info");
+      signInAs("admin");
+      const request = get("team-a", `?${DATES}&include=memberSum`);
+      const answered = trackSettled(request);
+      await Promise.all([
+        teamRead.arrived,
+        ...memberHolds.map((h) => h.arrived),
+      ]);
+      teamRead.release();
+      await teamRead.settled;
+      await macrotask();
+      expect(answered()).toBe(false);
+      expect(userDailyCalls(state)).toHaveLength(0);
+      for (const h of memberHolds) h.release();
+      const { res } = await request;
+      await expectError(res, 503, "LITELLM_UNAVAILABLE");
+      const atResponse = state.fake.calls.length;
+      await macrotask();
+      await macrotask();
+      expect(state.fake.calls).toHaveLength(atResponse);
+      expect(userDailyCalls(state)).toHaveLength(5);
+    });
 
     it.each(["admin", "orgAdmin", "auditor"] as CallerName[])(
       "%s with include=memberSum gets the team figure and the member sum",

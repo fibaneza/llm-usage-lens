@@ -820,7 +820,8 @@ password).
   bind), admin scopes, visibility, identity links, password users (create, setup,
   reset, TOTP reset, disable, delete, own password change, bind), the
   password sign-in switch, accounts, the approval, sign-ins and sign-outs, denied write attempts, and the
-  LiteLLM actions (LiteLLM spec — *Audit*).
+  LiteLLM actions (LiteLLM spec — *Audit*), including the gateway
+  configuration (`litellm.gateway.update`, LiteLLM unit L6, 2026-11-17).
 - **Atomicity:** a successful write's audit item is written **in the same
   `TransactWriteItems`** as the change, so neither exists without the
   other; a `failed` record is a separate `PutItem` after the downstream

@@ -12,6 +12,17 @@ import { signInAsTestUser } from "./support/session";
 // (Rule 60.24).
 const DETAIL_URL = /\/api\/teams\/team-a(\?|$)/;
 const SYNC_STATUS_URL = /\/api\/sync-status(\?|$)/;
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
+// (L6)": Where each figure appears (Team Detail: a combined card for a linked
+// team). The fixture team is not linked, so the server answers the hidden
+// head only (LT29, LT32; packages/shared/src/schemas/combined.ts); the card
+// renders nothing and the browser must not log a 404.
+const COMBINED_URL = /\/api\/litellm\/combined\//;
+const COMBINED_HIDDEN = {
+  visibility: "hidden",
+  configured: true,
+  gatewayConfigured: false,
+};
 const RANGE = { dateFrom: "2026-01-11", dateTo: "2026-01-20" };
 const PAGE_URL = `/dashboard/teams/team-a?dateFrom=${RANGE.dateFrom}&dateTo=${RANGE.dateTo}`;
 
@@ -85,6 +96,9 @@ async function mockApi(page: Page) {
   await page.route(DETAIL_URL, (route) =>
     route.fulfill({ json: { data: DETAIL } }),
   );
+  await page.route(COMBINED_URL, (route) =>
+    route.fulfill({ json: { data: COMBINED_HIDDEN } }),
+  );
 }
 
 async function openDetail(page: Page) {
@@ -94,6 +108,53 @@ async function openDetail(page: Page) {
     page.getByRole("heading", { name: "Platform" }).first(),
   ).toBeVisible();
 }
+
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
+// (L6)": Where each figure appears (Team Detail: a "Combined usage" card for
+// a linked team, the parts as text, "Billed via LiteLLM" when the gateway
+// slice is above zero); L6 review round 1 (shown-state coverage). Fulfilled
+// after mockApi, so this route wins over the hidden default.
+const COMBINED_TEAM_SHOWN = {
+  visibility: "show",
+  configured: true,
+  gatewayConfigured: true,
+  teamId: "team-a",
+  teamName: "Platform",
+  bedrockDirect: 40,
+  gatewaySlice: 5,
+  litellm: 12.5,
+  combined: 52.5,
+  costEstimated: false,
+  provisional: false,
+};
+
+test.describe("team detail page - combined usage (L6)", () => {
+  test("a linked team shows the card with its parts and Billed via LiteLLM, axe clean", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.route(/\/api\/litellm\/combined\/teams\/team-a(\?|$)/, (route) =>
+      route.fulfill({ json: { data: COMBINED_TEAM_SHOWN } }),
+    );
+    await openDetail(page);
+    const card = page.getByRole("region", { name: "Combined usage" });
+    await expect(card).toContainText("$52.50");
+    await expect(
+      card.getByText("Direct Bedrock $40.00 · Via LiteLLM $12.50"),
+    ).toBeVisible();
+    await expect(card.getByText("Billed via LiteLLM $5.00")).toBeVisible();
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    expect(
+      results.violations.filter(
+        (v) => v.impact === "serious" || v.impact === "critical",
+      ),
+    ).toEqual([]);
+  });
+});
 
 test.describe("team detail page", () => {
   test.beforeEach(async ({ context }) => {

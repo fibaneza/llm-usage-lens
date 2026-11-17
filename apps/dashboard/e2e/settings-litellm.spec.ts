@@ -41,21 +41,22 @@ async function openSettings(page: Page) {
 }
 
 test.describe("settings LiteLLM tabs (L3b)", () => {
-  test("an Admin sees Connection, Guardrails, Team links and Users tabs, Connection first", async ({
+  test("an Admin sees Connection, Guardrails, Team links, Users and Gateway tabs, Connection first", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
     await openSettings(page);
-    const tabs = page
-      .getByRole("tab")
-      .filter({ hasText: /^(Connection|Guardrails|Team links|Users)$/ });
+    const tabs = page.getByRole("tab").filter({
+      hasText: /^(Connection|Guardrails|Team links|Users|Gateway)$/,
+    });
     expect((await tabs.allTextContents()).map((t) => t.trim())).toEqual([
       "Connection",
       "Guardrails",
       "Team links",
       "Users",
+      "Gateway",
     ]);
     await expect(page.getByRole("tab", { name: "Connection" })).toHaveAttribute(
       "aria-selected",
@@ -169,7 +170,13 @@ test.describe("settings LiteLLM section", () => {
 
     const response = await page.goto("/dashboard/settings/litellm");
     expect(response?.status()).toBe(404);
-    for (const section of ["connection", "guardrails", "team-links", "users"]) {
+    for (const section of [
+      "connection",
+      "guardrails",
+      "team-links",
+      "users",
+      "gateway",
+    ]) {
       const sub = await page.goto(`/dashboard/settings/litellm/${section}`);
       expect(sub?.status()).toBe(404);
     }
@@ -255,7 +262,7 @@ test.describe("settings LiteLLM base URL entry", () => {
     await openSettings(page);
     await page.getByLabel(/base url/i).fill(NEW_URL);
     await page.getByRole("button", { name: /^save/i }).click();
-    await expect(page.locator("main").getByRole("alert")).toContainText(
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
       "Connection changed, reload",
     );
   });
@@ -415,7 +422,7 @@ test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
     "internal-org-admin",
     "internal-auditor",
   ]) {
-    test(`${role} sees the four sub-tabs in order`, async ({
+    test(`${role} sees the five sub-tabs in order`, async ({
       page,
       context,
     }) => {
@@ -427,7 +434,7 @@ test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
         (await sub(page).getByRole("tab").allTextContents()).map((t) =>
           t.trim(),
         ),
-      ).toEqual(["Connection", "Guardrails", "Team links", "Users"]);
+      ).toEqual(["Connection", "Guardrails", "Team links", "Users", "Gateway"]);
     });
   }
 
@@ -575,6 +582,154 @@ test.describe("settings LiteLLM Team links - spend source table (L4b)", () => {
         .getByRole("cell", { name: "Sum of members" }),
     ).toBeVisible();
 
+    await expect(page).toHaveTitle(/\S/);
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => v.id),
+    ).toEqual([]);
+  });
+});
+
+// Unit L6. docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
+// (L6)" -> Where each figure appears (Settings -> LiteLLM -> Gateway at
+// /dashboard/settings/litellm/gateway: Admin edits the principal and account
+// lists; Auditor and org-admin read only, LD24; Lead and user 404; save sends
+// the version; 409 shows 'Changed elsewhere - reload'); Design System
+// "Settings Page". The API is fulfilled from fixtures (Rule 60.24). Labels and
+// copy are the contract of LiteLLMGatewaySection.test.tsx.
+test.describe("settings LiteLLM Gateway sub-tab (L6)", () => {
+  const PATH = "/dashboard/settings/litellm/gateway";
+  const VIEW = {
+    gatewayConfigured: true,
+    version: 3,
+    principals: [{ type: "iam-role", value: "litellm-gateway" }],
+    accountIds: ["111122223333"],
+    updatedAt: "2026-11-14T10:00:00.000Z",
+    updatedBy: "oid-admin",
+  };
+
+  async function mockGateway(page: Page) {
+    await mockApi(page);
+    const puts: unknown[] = [];
+    await page.route(/\/api\/litellm\/gateway$/, (route) => {
+      const req = route.request();
+      if (req.method() === "PUT") {
+        puts.push(req.postDataJSON());
+        return route.fulfill({
+          status: 409,
+          json: { error: { code: "CONFLICT", message: "reload" } },
+        });
+      }
+      return route.fulfill({ json: { data: VIEW } });
+    });
+    return puts;
+  }
+
+  test("an Admin edits the lists; a stale save shows 'Changed elsewhere — reload' and sent the loaded version", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    const puts = await mockGateway(page);
+    await page.goto(PATH);
+    await waitForHydration(page);
+    await expect(
+      page
+        .getByRole("tablist", { name: "LiteLLM sections" })
+        .getByRole("tab", { name: "Gateway" }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(page.getByLabel("Principal 1 value")).toHaveValue(
+      "litellm-gateway",
+    );
+    await expect(page.getByLabel("Account ID 1")).toHaveValue("111122223333");
+    await page.getByRole("button", { name: "Add account" }).click();
+    await page.getByLabel("Account ID 2").fill("000000000002");
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
+      "Changed elsewhere — reload",
+    );
+    expect(puts).toEqual([
+      {
+        version: 3,
+        principals: [{ type: "iam-role", value: "litellm-gateway" }],
+        accountIds: ["111122223333", "000000000002"],
+      },
+    ]);
+  });
+
+  for (const role of ["internal-auditor", "internal-org-admin"]) {
+    test(`${role} reads the Gateway sub-tab and cannot edit`, async ({
+      page,
+      context,
+    }) => {
+      await signInAsTestUser(context, { roles: [role] });
+      await mockGateway(page);
+      await page.goto(PATH);
+      await waitForHydration(page);
+      await expect(page.getByText("litellm-gateway")).toBeVisible();
+      await expect(page.getByText("111122223333")).toBeVisible();
+      await expect(page.getByRole("textbox")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /^add / })).toHaveCount(0);
+    });
+  }
+
+  // Design System - Layout (no page-level horizontal scroll at 375, Rule 40.6);
+  // L6 review round 1 (overflow check on the populated form). Long unbroken
+  // values are the worst case: a 64-character iam-role, a 200-character
+  // usage-key and the 10 account ids the schema allows.
+  test("a populated config has no horizontal scroll at 375px", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockGateway(page);
+    const populated = {
+      ...VIEW,
+      principals: [
+        { type: "iam-role", value: "r".repeat(64) },
+        { type: "usage-key", value: "k".repeat(200) },
+      ],
+      accountIds: Array.from(
+        { length: 10 },
+        (_, i) => `1111222233${String(i).padStart(2, "0")}`,
+      ),
+    };
+    await page.route(/\/api\/litellm\/gateway$/, (route) =>
+      route.fulfill({ json: { data: populated } }),
+    );
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto(PATH);
+    await waitForHydration(page);
+    await expect(page.getByLabel("Principal 2 value")).toBeVisible();
+    await expect(page.getByLabel("Account ID 10")).toBeVisible();
+    const widths = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }));
+    expect(widths.scrollWidth).toBeLessThanOrEqual(widths.innerWidth);
+  });
+
+  test("a Viewer gets the 404 page", async ({ page, context }) => {
+    await signInAsTestUser(context, { roles: ["internal-viewer"] });
+    await mockGateway(page);
+    const response = await page.goto(PATH);
+    expect(response?.status()).toBe(404);
+  });
+
+  test("has no serious or critical axe violations", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockGateway(page);
+    await page.goto(PATH);
+    await waitForHydration(page);
+    await expect(page.getByLabel("Principal 1 value")).toBeVisible();
     await expect(page).toHaveTitle(/\S/);
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa"])

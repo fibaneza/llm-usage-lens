@@ -176,10 +176,38 @@ If LiteLLM's SSO mapping is ever changed, re-resolve the links as above.
 
 ## 8. Gateway principals (for combined totals, L6)
 
-Identify the IAM role names (or canonical usage keys) LiteLLM uses to call
-Bedrock, and the gateway account id(s), and enter them in Settings. Until
-then, combined totals are hidden from Viewers and Leads and Admins see a
-"gateway not configured" warning.
+Combined totals add direct Bedrock usage and LiteLLM-reported usage. When
+LiteLLM calls Bedrock, that traffic is already in the Bedrock data, so the
+dashboard must know which Bedrock usage is LiteLLM's (shared contract §5;
+LiteLLM spec — *Combined usage and My usage (L6)*).
+
+1. Identify, with the LiteLLM operators, the IAM role names LiteLLM uses to
+   call Bedrock and, if LiteLLM runs in its own AWS account, that account
+   id. These production values are a user decision (U2).
+2. As `internal-admin`, open **Settings → LiteLLM → Gateway**
+   (`/dashboard/settings/litellm/gateway`) and add:
+   - **IAM role** principals by role name. A role matches the bare name, an
+     `arn:aws:sts::<account>:assumed-role/<role>/<session>` key or an
+     `arn:aws:iam::<account>:role/<path>/<role>` key, case-insensitively and
+     exactly (never a substring).
+   - **Usage key** principals for any other exact usage key, such as the
+     `AROA…:<session>` form, which carries no role name.
+   - **Account IDs** (12 digits) for an account whose whole Bedrock cost is
+     LiteLLM's. The account must already be registered in Settings.
+
+   A person's email is refused as a principal: excluding it would hide real
+   usage. Every save is audited (`litellm.gateway.update`). The Auditor and
+   `internal-org-admin` see the configuration read-only.
+3. Check Overview → *Combined usage*: "Billed via LiteLLM" is the gateway
+   slice, and the reconciliation row compares it with LiteLLM's reported
+   Bedrock spend. A large difference usually means a missing or extra
+   principal.
+
+Until a principal or account id is configured, combined totals are hidden
+from Viewers and Leads, and Admins, Auditors and org-admins see "gateway not
+configured — totals may double count". The organisation's LiteLLM part
+covers LiteLLM teams only (spend on keys outside any team is not included;
+pending user decision U1).
 
 ## 9. Team links
 

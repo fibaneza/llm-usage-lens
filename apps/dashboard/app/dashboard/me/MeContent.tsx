@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/display/EmptyState";
 import { MetricCard } from "@/components/display/MetricCard";
 import { Panel } from "@/components/display/Panel";
 import { SectionBoundary } from "@/components/display/SectionBoundary";
+import { CombinedMeCard } from "@/components/litellm/combined/CombinedMeCard";
 import { LiteLLMSection } from "@/components/litellm/LiteLLMSection";
 import { MyUsageSection } from "@/components/litellm/MyUsageSection";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,6 +46,7 @@ export function MeContent() {
         <AccessNotice />
         <BudgetIncreaseLink />
       </SectionBoundary>
+      <CombinedMeCard range={range} />
       <section className="flex flex-col gap-4">
         <h2 className="text-foreground text-lg font-semibold">
           Your Bedrock usage

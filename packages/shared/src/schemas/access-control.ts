@@ -284,6 +284,7 @@ export const AUDIT_ACTIONS = [
   "litellm.team.budget",
   "litellm.team.limits",
   "litellm.team.models",
+  "litellm.gateway.update",
 ] as const;
 export const AuditActionSchema = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditActionSchema>;
@@ -409,6 +410,8 @@ const SNAPSHOT_KEYS: ReadonlySet<string> = new Set([
   "teamAlias",
   "toggles",
   "rules",
+  "principals",
+  "accountIds",
 ]);
 
 export function sanitizeAuditSnapshot(

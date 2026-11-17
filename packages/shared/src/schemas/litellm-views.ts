@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { CombinedMeResponseSchema } from "./combined";
+
 // Source: docs/specs/2026-11-10-litellm.md - "API routes" (read routes) and
 // Rule 20.11 (response shapes validated on both ends). Object schemas strip
 // unknown fields, so a key value or an audit before/after value can never
@@ -255,5 +257,7 @@ export const LiteLLMUserDetailResponseSchema = z.object({
   spend: z.number().optional(),
   maxBudget: z.number().nullable().optional(),
   daily: DailySchema.optional(),
+  // L6: the person's combined figure, absent while the cap hides per-user cost.
+  combined: CombinedMeResponseSchema.optional(),
   enabledOperations: EnabledOperations,
 });

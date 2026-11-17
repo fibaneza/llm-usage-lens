@@ -9,6 +9,7 @@ import {
   srOnlyMatches,
   stubSizedResizeObserver,
 } from "@/test/support/chart-test-utils";
+import { HIDDEN, personShow } from "@/test/fakes/combined-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import MePage from "./page";
@@ -101,6 +102,8 @@ function stub(
   usage: () => Promise<Response>,
   litellm: () => Promise<Response> = () =>
     Promise.resolve(apiResponse({ data: LITELLM_UNLINKED })),
+  combined: () => Promise<Response> = () =>
+    Promise.resolve(apiResponse({ data: HIDDEN })),
 ) {
   const urls: string[] = [];
   vi.stubGlobal(
@@ -111,6 +114,7 @@ function stub(
       if (url.pathname === "/api/me/usage") return usage();
       if (url.pathname === "/api/me") return me();
       if (url.pathname === "/api/litellm/me") return litellm();
+      if (url.pathname === "/api/litellm/combined/me") return combined();
       return Promise.resolve(apiError(404, "NOT_FOUND", "unexpected"));
     }),
   );
@@ -416,5 +420,73 @@ describe("MePage LiteLLM My usage view (moved from the LiteLLM tab)", () => {
     expect(
       await within(await liteLLMRegion()).findByText(/not linked to LiteLLM/i),
     ).toBeInTheDocument();
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
+// (L6)": Where each figure appears (My usage: 'a "Your combined usage" card
+// above the existing Bedrock and LiteLLM sections; per Visibility'), States
+// ("hidden: no combined card, the source sections stay"; 503 -> that
+// section's ErrorBoundary only), Visibility (Viewer/Lead: show when the
+// gateway is configured, else hidden). Mount only (Rule 60.24a). Contract:
+// MeContent renders <CombinedMeCard range={range} /> first in the page body
+// (after the access notice), above "Your Bedrock usage".
+describe("MePage - Your combined usage card mount (L6)", () => {
+  const combinedOk = (data: unknown) => () =>
+    Promise.resolve(apiResponse({ data }));
+
+  it("without the gateway configured (hidden) there is no combined card and both source sections stay", async () => {
+    const urls = stub(ok(ME), ok(USAGE), undefined, combinedOk(HIDDEN));
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+    await screen.findByText("$12.50");
+    expect(
+      screen.getByRole("heading", { name: /your bedrock usage/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /litellm usage/i }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(urls.some((u) => u.startsWith("/api/litellm/combined/me"))).toBe(
+        true,
+      ),
+    );
+    expect(
+      screen.queryByRole("region", { name: "Your combined usage" }),
+    ).toBeNull();
+  });
+
+  it("with the gateway configured the card shows above the Bedrock section, for the URL range", async () => {
+    const urls = stub(ok(ME), ok(USAGE), undefined, combinedOk(personShow()));
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+    const card = await screen.findByRole("region", {
+      name: "Your combined usage",
+    });
+    expect(card).toHaveTextContent("$15.00");
+    const heading = screen.getByRole("heading", {
+      name: /your bedrock usage/i,
+    });
+    expect(
+      card.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(urls).toContain(
+      "/api/litellm/combined/me?dateFrom=2026-01-11&dateTo=2026-01-20",
+    );
+  });
+
+  it("a LiteLLM outage breaks only the combined card", async () => {
+    stub(ok(ME), ok(USAGE), undefined, () =>
+      Promise.resolve(apiError(503, "LITELLM_UNAVAILABLE", "unavailable")),
+    );
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+    expect(
+      await screen.findByText("Couldn't load your combined usage."),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("$12.50")).toBeInTheDocument();
   });
 });

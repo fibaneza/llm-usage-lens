@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { ApiRequestError } from "@/lib/query/fetch-api";
 
+import { CombinedPersonCard } from "./combined/CombinedPersonCard";
 import { DailySpend } from "./DailySpend";
 import { LiteLLMReportedBadge } from "./LiteLLMReportedBadge";
 import { Empty, Unavailable } from "./LiteLLMSection";
@@ -87,6 +88,13 @@ function UserDetail({ userId }: { userId: string }) {
             icon={Wallet}
           />
         </div>
+        {user.combined ? (
+          <CombinedPersonCard
+            title="Combined usage"
+            response={user.combined}
+            headingLevel={3}
+          />
+        ) : null}
         {user.daily ? <DailySpend daily={user.daily} /> : null}
       </div>
     );

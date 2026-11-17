@@ -253,7 +253,8 @@ describe("audit schemas", () => {
     // LD24/LT22 add the denied-only connection-test action.
     // L4 slice 1 adds the eight member-write actions (LiteLLM spec - Writes).
     // L4 slices 2 and 3 add six key actions and four team actions.
-    expect(AUDIT_ACTIONS).toHaveLength(65);
+    // L6 adds litellm.gateway.update (LiteLLM spec - Combined usage, Gateway configuration).
+    expect(AUDIT_ACTIONS).toHaveLength(66);
     for (const op of [
       "add",
       "remove",
@@ -285,6 +286,7 @@ describe("audit schemas", () => {
     expect(AUDIT_ACTIONS).toContain("auth.signout");
     expect(AUDIT_ACTIONS).toContain("affiliation.move");
     expect(AUDIT_ACTIONS).toContain("accessreview.export");
+    expect(AUDIT_ACTIONS).toContain("litellm.gateway.update");
     expect(AUDIT_ACTIONS).toContain("litellm.toggles.update");
     expect(AUDIT_ACTIONS).toContain("litellm.toggles.reset");
     expect(AUDIT_ACTIONS).toContain("litellm.teamlink.link");
@@ -438,6 +440,16 @@ describe("sanitizeAuditSnapshot (T17)", () => {
     expect(sanitizeAuditSnapshot({ ...fields, key: "sk-secret" })).toEqual(
       fields,
     );
+  });
+  // LiteLLM spec - Gateway configuration: the audit record holds the lists
+  // before and after as string lists ("<type>:<value>", account ids).
+  it("keeps the gateway principal and account lists (litellm.gateway.update)", () => {
+    const lists = {
+      version: 2,
+      principals: ["iam-role:litellm-bedrock", "usage-key:svc-gateway"],
+      accountIds: ["123456789012"],
+    };
+    expect(sanitizeAuditSnapshot(lists)).toEqual(lists);
   });
   it("drops secrets and claim-like keys", () => {
     const out = sanitizeAuditSnapshot({

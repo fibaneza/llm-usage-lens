@@ -3,6 +3,7 @@
 import { parseAsString, useQueryState, useQueryStates } from "nuqs";
 import { useMemo } from "react";
 
+import { CombinedTeamsPanel } from "@/components/litellm/combined/CombinedTeamsPanel";
 import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
@@ -40,6 +41,7 @@ export function TeamsContent() {
           onDepartmentChange={(next) => void setDepartment(next)}
         />
       </SectionBoundary>
+      <CombinedTeamsPanel range={range} />
     </div>
   );
 }

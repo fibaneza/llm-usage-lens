@@ -204,6 +204,7 @@ to call Bedrock, and optionally the **gateway account id** or ids.
   combined views show a "gateway not configured — totals may double count"
   warning to Admins and Auditors, and hide combined totals from Viewers and
   Leads.
+- *Note (2026-11-17, LiteLLM L6; proposed amendment, pending the user):* the LiteLLM spec LD38 warns all global readers (org-admin included), and the Organisation part covers LiteLLM teams only until user decision U1 (a proxy-wide read).
 
 ## 6. Governance
 

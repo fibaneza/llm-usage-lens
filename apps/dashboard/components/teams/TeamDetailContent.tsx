@@ -3,6 +3,7 @@
 import { useQueryStates } from "nuqs";
 import { useMemo } from "react";
 
+import { CombinedTeamCard } from "@/components/litellm/combined/CombinedTeamCard";
 import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { useDefaultPreset } from "@/components/providers/DefaultPresetProvider";
 import { resolveUrlRange } from "@/lib/date-range";
@@ -21,11 +22,14 @@ export function TeamDetailContent({ id }: { id: string }) {
   );
 
   return (
-    <SectionBoundary
-      title="the team"
-      resetKeys={[id, range.dateFrom, range.dateTo]}
-    >
-      <TeamDetailBody id={id} range={range} urlRange={{ dateFrom, dateTo }} />
-    </SectionBoundary>
+    <div className="flex flex-col gap-4">
+      <SectionBoundary
+        title="the team"
+        resetKeys={[id, range.dateFrom, range.dateTo]}
+      >
+        <TeamDetailBody id={id} range={range} urlRange={{ dateFrom, dateTo }} />
+      </SectionBoundary>
+      <CombinedTeamCard teamId={id} range={range} />
+    </div>
   );
 }

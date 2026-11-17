@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { auth } from "@/auth";
 import { LiteLLMConnectionSection } from "@/components/settings/litellm-panel/LiteLLMConnectionSection";
+import { LiteLLMGatewaySection } from "@/components/settings/litellm-panel/LiteLLMGatewaySection";
 import { LiteLLMGuardrailsSection } from "@/components/settings/litellm-panel/LiteLLMGuardrailsSection";
 import { LiteLLMTeamLinksSection } from "@/components/settings/litellm-panel/LiteLLMTeamLinksSection";
 import { LiteLLMUsersSection } from "@/components/settings/litellm-panel/LiteLLMUsersSection";
@@ -45,6 +46,9 @@ export default async function LiteLLMSectionPage({
       break;
     case "users":
       body = <LiteLLMUsersSection />;
+      break;
+    case "gateway":
+      body = <LiteLLMGatewaySection canEdit={capabilities.editConnection} />;
       break;
     default:
       notFound();

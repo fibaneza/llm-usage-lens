@@ -385,6 +385,30 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   }),
   read("litellm/toggles/route.ts", { family: "litellm" }),
 
+  // ---- litellm L6 (LiteLLM spec - Combined usage and My usage -> Routes) ----
+  read("litellm/gateway/route.ts", { family: "litellm" }),
+  read("litellm/combined/organisation/route.ts", {
+    family: "litellm",
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
+  read("litellm/combined/teams/route.ts", {
+    family: "litellm",
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
+  read("litellm/combined/teams/[teamId]/route.ts", {
+    family: "litellm",
+    validParams: { teamId: "team-a" },
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
+  read("litellm/combined/me/route.ts", {
+    family: "litellm",
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
+
   // ---- admin-only writes, core ----
   adminWrite("POST", "accounts/route.ts", {
     action: "account.create",
@@ -555,6 +579,19 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     family: "litellm",
     action: "litellm.connection.update",
     validBody: { baseUrl: "http://litellm.test:4000", version: null },
+  }),
+  // L6: the gateway configuration decides what the combined totals subtract,
+  // so it is Admin only (org-admin 403, LT30); a refusal records a denied
+  // litellm.gateway.update; it reaches no LiteLLM call.
+  adminWrite("PUT", "litellm/gateway/route.ts", {
+    family: "litellm",
+    action: "litellm.gateway.update",
+    validBody: {
+      version: null,
+      principals: [{ type: "iam-role", value: "litellm-gateway" }],
+      accountIds: [],
+    },
+    successStatuses: [200],
   }),
   adminWrite("POST", "litellm/connection/test/route.ts", {
     family: "litellm",

@@ -23,6 +23,7 @@ import {
   stubApi,
   syncedFixture,
 } from "@/test/fakes/api-stubs";
+import { orgShow } from "@/test/fakes/combined-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { OverviewContent } from "./OverviewContent";
@@ -715,5 +716,67 @@ describe("OverviewContent — compact workspace panels", () => {
 
     expect(secondLine.contains(split)).toBe(false);
     expect(secondLine.textContent).not.toMatch(/Non-model \$/);
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
+// (L6)": Where each figure appears ("Overview: a Combined usage section under
+// the KPI row"), UI pieces, States ("LiteLLM unavailable ... 503 -> that
+// section's ErrorBoundary only"); Rule 40.4 (own Panel/boundary). The section
+// itself is tested in components/litellm/combined; this tests the mount only
+// (Rule 60.24a). Contract: OverviewContent renders
+// <CombinedOrganisationSection range={range} /> after the KPI row.
+describe("OverviewContent - Combined usage mount (L6)", () => {
+  const combined = (response: unknown) => () => apiResponse({ data: response });
+
+  it("renders the Combined usage section below the KPI row, for the URL range", async () => {
+    const stub = stubApi({
+      overview: overviewFor(),
+      syncStatus: () => apiResponse({ data: NEVER_SYNCED }),
+      combinedOrganisation: combined(orgShow()),
+    });
+    renderWithProviders(<OverviewContent />, URL_PARAMS);
+    const region = await screen.findByRole("region", {
+      name: "Combined usage",
+    });
+    expect(within(region).getByTestId("combined-total")).toHaveTextContent(
+      "$16.20",
+    );
+    const kpi = await card("Total Cost");
+    expect(
+      kpi.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      stub.combinedRequests().map((u) => Object.fromEntries(u.searchParams)),
+    ).toContainEqual(RANGE);
+  });
+
+  it("the default hidden body adds no section and leaves the page as before", async () => {
+    stubApi({
+      overview: overviewFor(),
+      syncStatus: () => apiResponse({ data: NEVER_SYNCED }),
+    });
+    renderWithProviders(<OverviewContent />, URL_PARAMS);
+    await card("Total Cost");
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: "Combined usage" }),
+      ).toBeNull(),
+    );
+    expect(screen.queryByText(/Direct Bedrock/)).toBeNull();
+  });
+
+  it("a LiteLLM outage breaks only the combined section, not the KPI row", async () => {
+    stubApi({
+      overview: overviewFor(),
+      syncStatus: () => apiResponse({ data: NEVER_SYNCED }),
+      combinedOrganisation: () =>
+        apiError(503, "LITELLM_UNAVAILABLE", "unavailable"),
+    });
+    renderWithProviders(<OverviewContent />, URL_PARAMS);
+    expect(
+      await screen.findByText("Couldn't load combined usage."),
+    ).toBeInTheDocument();
+    expect(await card("Total Cost")).toHaveTextContent("$1,234.56");
   });
 });

@@ -315,11 +315,15 @@ const CASES: Case[] = [
         method: "GET",
         template: "/user/daily/activity",
         path: "/user/daily/activity",
+        // L6 paging fix (LiteLLM spec - Combined usage -> LiteLLM reads used,
+        // LT34): the first request names page 1 and page_size 1000.
         query: {
           user_id: USER_ID,
           start_date: DATE,
           end_date: DATE,
           timezone: TZ,
+          page: "1",
+          page_size: "1000",
         },
       },
     ],
@@ -1871,5 +1875,121 @@ describe("L2 review carry-overs: rotateKey, generateMemberKey, memberKeyTokens",
       expect((err as Error).name).toBe("LiteLLMError");
       expect(writes()).toHaveLength(0);
     });
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage (L6)
+// -> LiteLLM reads used" (Paging fix: /user/daily/activity pages by `page` and
+// `page_size` <= 1000 and says so in metadata.has_more; L6 sends page_size=1000
+// and loops while has_more, at most 10 pages; beyond that the read returns 503
+// LITELLM_UNAVAILABLE, never a partial sum; /team/daily/activity/aggregated has
+// no paging and is unchanged), LT34, LD35 precedent.
+//
+// Contract: getUserDailySpend resolves { results: <all pages' rows in page
+// order>, metadata }; it rejects with a LiteLLMError (code LITELLM_UNAVAILABLE)
+// on the cap or on any failed page.
+describe("getUserDailySpend paging (LT34)", () => {
+  const RANGE_INPUT = { litellmUserId: USER_ID, startDate: D1, endDate: D2 };
+
+  // Page n answers one row of spend n; has_more while n < total (or always).
+  function pagedFake(total: number, opts: { endless?: boolean } = {}) {
+    fake = createFakeLiteLLM((call) => {
+      if (call.path !== "/user/daily/activity") {
+        return { status: 404, body: { detail: "not found" } };
+      }
+      const page = Number(new URL(call.url).searchParams.get("page") ?? "1");
+      return {
+        status: 200,
+        body: {
+          results: [{ date: D1, metrics: { spend: page } }],
+          metadata: { page, has_more: opts.endless === true || page < total },
+        },
+      };
+    });
+    vi.stubGlobal("fetch", fake.fetch);
+  }
+  const pagesRequested = () =>
+    fake.calls.map((c) => new URL(c.url).searchParams.get("page"));
+
+  it("follows has_more: one request per page with page_size 1000, rows concatenated in page order", async () => {
+    pagedFake(3);
+    const { ops } = await load();
+    const out = (await ops.getUserDailySpend!(RANGE_INPUT)) as {
+      results: Array<{ metrics: { spend: number } }>;
+    };
+    expect(pagesRequested()).toEqual(["1", "2", "3"]);
+    for (const c of fake.calls) {
+      expect(q(c).page_size).toBe("1000");
+      expect(q(c).user_id).toBe(USER_ID);
+      expect(q(c).timezone).toBe("0");
+    }
+    expect(out.results.map((r) => r.metrics.spend)).toEqual([1, 2, 3]);
+  });
+
+  it("stops after one request when has_more is false or absent", async () => {
+    install();
+    const { ops } = await load();
+    await ops.getUserDailySpend!(RANGE_INPUT);
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it("accepts exactly 10 pages", async () => {
+    pagedFake(10);
+    const { ops } = await load();
+    const out = (await ops.getUserDailySpend!(RANGE_INPUT)) as {
+      results: unknown[];
+    };
+    expect(fake.calls).toHaveLength(10);
+    expect(out.results).toHaveLength(10);
+  });
+
+  it("an 11th page is never requested: 503 LITELLM_UNAVAILABLE after the 10th says has_more", async () => {
+    pagedFake(11);
+    const { ops } = await load();
+    await expect(ops.getUserDailySpend!(RANGE_INPUT)).rejects.toMatchObject({
+      code: "LITELLM_UNAVAILABLE",
+    });
+    expect(fake.calls).toHaveLength(10);
+  });
+
+  it("an endless has_more also stops at 10 requests", async () => {
+    pagedFake(1, { endless: true });
+    const { ops } = await load();
+    await expect(ops.getUserDailySpend!(RANGE_INPUT)).rejects.toMatchObject({
+      code: "LITELLM_UNAVAILABLE",
+    });
+    expect(fake.calls).toHaveLength(10);
+  });
+
+  it("a failed later page rejects the whole read: no partial sum", async () => {
+    fake = createFakeLiteLLM((call) => {
+      const page = Number(new URL(call.url).searchParams.get("page") ?? "1");
+      return page === 1
+        ? {
+            status: 200,
+            body: {
+              results: [{ date: D1, metrics: { spend: 1 } }],
+              metadata: { has_more: true },
+            },
+          }
+        : { status: 500, body: { detail: "boom" } };
+    });
+    vi.stubGlobal("fetch", fake.fetch);
+    const { ops } = await load();
+    await expect(ops.getUserDailySpend!(RANGE_INPUT)).rejects.toMatchObject({
+      code: "LITELLM_UNAVAILABLE",
+    });
+  });
+
+  it("getTeamDailySpend is unchanged: no page or page_size", async () => {
+    install();
+    const { ops } = await load();
+    await ops.getTeamDailySpend!({
+      litellmTeamId: TEAM_ID,
+      startDate: D1,
+      endDate: D2,
+    });
+    expect(q(fake.calls[0]!)).not.toHaveProperty("page");
+    expect(q(fake.calls[0]!)).not.toHaveProperty("page_size");
   });
 });

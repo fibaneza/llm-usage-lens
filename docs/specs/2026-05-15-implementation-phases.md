@@ -775,8 +775,11 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### L6 — Combined usage and *My usage* (`feature/phase-l6-litellm-combined`)
 
-- [ ] `GatewayConfig` (`/api/litellm/gateway`, audited); combined totals on Overview, Teams, Team Detail and Users per shared contract §5 (parts shown, gateway slice, reconciliation, unconfigured warning); *My usage* LiteLLM part; R5 landings extended
-- [ ] Verify: counted-once fixture (gateway traffic not doubled); hidden combined totals without a gateway for Viewers and Leads; warning for Admins and Auditors
+- [x] `GatewayConfig` (`/api/litellm/gateway`, audited; Settings → LiteLLM → Gateway sub-tab); combined totals on Overview, Teams and Team Detail per shared contract §5 (parts shown, gateway slice, reconciliation, unconfigured warning); *My usage* combined card; R5 landings extended (Overview and My usage open on the combined headline); `getUserDailySpend` paging fix
+- [x] Users: the person's combined figure on Management → Users (user detail, under the Organisation cap); **not built:** a combined column on the Users list (one LiteLLM call per row; LD38 — a bulk read is a future improvement)
+- [ ] **Not built (user decision U1):** the organisation's LiteLLM part covers LiteLLM teams only; spend on keys outside any team needs a proxy-wide read that widens the allowlist
+- [x] Spec: LiteLLM spec — *Combined usage and My usage (L6)*, LD38, LT29–LT34 (agent decisions, 2026-11-17); user decisions U1 (proxy-wide read) and U2 (production gateway values) listed, not decided
+- [x] Verify: counted-once fixture (gateway traffic not doubled; `lib/litellm/combined.test.ts`, both gateway forms); hidden combined totals without a gateway for Viewers and Leads (route matrix, server-side hidden body; e2e My usage); warning for Admins and Auditors (and org-admin, LD38; route matrix, e2e Overview)
 
 ### L7 — Self-service key requests (`feature/phase-l7-litellm-key-requests`)
 

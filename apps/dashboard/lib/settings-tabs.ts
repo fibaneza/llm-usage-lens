@@ -23,7 +23,8 @@ export type LiteLLMSubTabId =
   | "connection"
   | "guardrails"
   | "team-links"
-  | "users";
+  | "users"
+  | "gateway";
 export type AccessSectionSlug =
   | "members"
   | "team-admins"
@@ -127,6 +128,7 @@ const LITELLM_SUB_TABS: readonly { id: LiteLLMSubTabId; label: string }[] = [
   { id: "guardrails", label: "Guardrails" },
   { id: "team-links", label: "Team links" },
   { id: "users", label: "Users" },
+  { id: "gateway", label: "Gateway" },
 ];
 
 function tab(

@@ -52,6 +52,9 @@ vi.mock("@/components/settings/litellm-panel/LiteLLMTeamLinksSection", () => ({
 vi.mock("@/components/settings/litellm-panel/LiteLLMUsersSection", () => ({
   LiteLLMUsersSection: flagged("users"),
 }));
+vi.mock("@/components/settings/litellm-panel/LiteLLMGatewaySection", () => ({
+  LiteLLMGatewaySection: flagged("gateway"),
+}));
 
 import {
   resetManageAccess,
@@ -76,7 +79,17 @@ function as(roles: string[], scoped = false) {
 const open = (section: string) =>
   LiteLLMSectionPage({ params: Promise.resolve({ section }) });
 
-const SECTIONS = ["connection", "guardrails", "team-links", "users"] as const;
+// L6 adds "gateway" (LiteLLM spec - Combined usage and My usage (L6): "Admin
+// edits ...; Auditor and org-admin read only (configuration writes are
+// Admin-only, LD24); Lead and user 404"): <LiteLLMGatewaySection canEdit />
+// from `@/components/settings/litellm-panel/LiteLLMGatewaySection`.
+const SECTIONS = [
+  "connection",
+  "guardrails",
+  "team-links",
+  "users",
+  "gateway",
+] as const;
 
 describe("LiteLLM settings section page", () => {
   it.each(SECTIONS)(
@@ -104,11 +117,23 @@ describe("LiteLLM settings section page", () => {
     ["internal-auditor", "connection", "false"],
     ["internal-auditor", "guardrails", "false"],
     ["internal-auditor", "team-links", "false"],
+    ["internal-admin", "gateway", "true"],
+    ["internal-org-admin", "gateway", "false"],
+    ["internal-auditor", "gateway", "false"],
   ])("%s on %s passes canEdit=%s", async (role, section, flag) => {
     as([role]);
     render(await open(section));
     expect(screen.getByTestId(section)).toHaveTextContent(flag);
   });
+
+  it.each([["internal-admin"], ["internal-org-admin"], ["internal-auditor"]])(
+    "%s may open Gateway (read-only below Admin)",
+    async (role) => {
+      as([role]);
+      render(await open("gateway"));
+      expect(screen.getByTestId("gateway")).toBeInTheDocument();
+    },
+  );
 
   it.each([["internal-admin"], ["internal-org-admin"], ["internal-auditor"]])(
     "%s may open Users",

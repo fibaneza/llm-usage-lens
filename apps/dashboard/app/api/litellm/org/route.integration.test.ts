@@ -29,7 +29,9 @@ import {
   seedLinkedMembers,
   seedScenario,
   seedUnlinkedTeam,
+  userIdsRead,
 } from "@/test/support/member-sum-support";
+import { holdFetch, macrotask, trackSettled } from "@/test/support/fetch-hold";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Views by role (L3b)" (Organisation
 // tab: totals across every linked team via getTeamDailySpend with all linked
@@ -415,6 +417,60 @@ describe("GET /api/litellm/org", () => {
     expect(state.fake.calls.length).toBeLessThanOrEqual(200);
   });
 
+  // L6 review round 1, Q3 (LD34 amended; LiteLLM spec - Combined usage ->
+  // LiteLLM reads used, Person): getUserDailySpend pages (page_size 1000,
+  // has_more), and every page is one LiteLLM call against the 200 of a request.
+  // Each member below has a stored LiteLLM user id and 3 pages of daily rows.
+  // team-big (70 members) needs 210 page reads: it cannot fit in 200 under any
+  // counting, so it is an open-team row (no partial sum) and the request stays
+  // within 200 calls (LD34 amended 2026-11-17, L6 review round 2: the per-member
+  // reservation in the sum bounds the request; a team that runs out partway is
+  // open-team with no partial sum). team-small (2 members, 6 pages) always fits and is summed
+  // over every page.
+  describe("Q3: pages count toward the 200-call budget (LD34)", () => {
+    it("a team whose paged member reads would exceed 200 calls is open-team, never a partial sum, and the request makes at most 200 calls", async () => {
+      await seedUnlinkedTeam("team-small", 7);
+      await seedUnlinkedTeam("team-big", 8);
+      await seedLinkedMembers("team-small", 2);
+      await seedLinkedMembers("team-big", 70);
+      installMemberSumFake(state, {
+        teamDaily: TEAM_DAILY_SPEND,
+        pagedDaily: 3,
+      });
+      signInAs("admin");
+      const { res, body } = await get();
+      expect(res.status).toBe(200);
+      const rows = body.data.appTeams as Array<Record<string, unknown>>;
+      const byId = (id: string) => rows.find((r) => r.teamId === id);
+      expect(byId("team-small")).toMatchObject({
+        spendSource: "member-sum",
+        spend: 6,
+      });
+      expect(byId("team-big")).toMatchObject({
+        spendSource: "member-sum",
+        spend: null,
+        reason: "open-team",
+      });
+      expect(state.fake.calls.length).toBeLessThanOrEqual(200);
+    });
+
+    it("a team that fits is summed over every page of every member and each page is read (control)", async () => {
+      await seedUnlinkedTeam("team-small", 7);
+      await seedLinkedMembers("team-small", 5);
+      installMemberSumFake(state, {
+        teamDaily: TEAM_DAILY_SPEND,
+        pagedDaily: 3,
+      });
+      signInAs("admin");
+      const { body } = await get();
+      const rows = body.data.appTeams as Array<Record<string, unknown>>;
+      expect(rows.find((r) => r.teamId === "team-small")?.spend).toBe(15);
+      expect(
+        state.fake.calls.filter((c) => c.path === "/user/daily/activity"),
+      ).toHaveLength(15);
+    });
+  });
+
   it("a failing member read fails the request: 503, no partial table (AT7)", async () => {
     await seedScenario();
     installMemberSumFake(state, {
@@ -424,6 +480,44 @@ describe("GET /api/litellm/org", () => {
     signInAs("admin");
     const { res } = await get();
     await expectError(res, 503, "LITELLM_UNAVAILABLE");
+  });
+
+  // LT25 (amended 2026-11-17) / LD34: on the first failed read no new LiteLLM
+  // read starts and the in-flight ones settle before the response. u1's read
+  // fails while u2's email lookup is in flight (held); u2's spend read must
+  // never start and the 503 must wait for the lookup.
+  it("on a failed member read no new read starts and the response waits for the in-flight one (LT25; LD34; AT7)", async () => {
+    await seedScenario();
+    installMemberSumFake(state, {
+      ...SCENARIO_FAKE,
+      failUsers: [SCENARIO.luserU1],
+    });
+    const failing = holdFetch(
+      (u) =>
+        u.pathname === "/user/daily/activity" &&
+        u.searchParams.get("user_id") === SCENARIO.luserU1,
+    );
+    const lookup = holdFetch(
+      (u) =>
+        u.pathname === "/user/list" &&
+        u.searchParams.get("user_email") === SCENARIO.u2.email,
+    );
+    signInAs("admin");
+    const request = get();
+    const answered = trackSettled(request);
+    await Promise.all([failing.arrived, lookup.arrived]);
+    failing.release();
+    await failing.settled;
+    await macrotask();
+    expect(answered()).toBe(false);
+    lookup.release();
+    const { res } = await request;
+    await expectError(res, 503, "LITELLM_UNAVAILABLE");
+    const atResponse = state.fake.calls.length;
+    await macrotask();
+    await macrotask();
+    expect(state.fake.calls).toHaveLength(atResponse);
+    expect(userIdsRead(state)).toEqual([SCENARIO.luserU1]);
   });
 
   it("a disabled listProxyTeams is 403 OPERATION_DISABLED before any LiteLLM call (Allowlist changes; LD19)", async () => {
