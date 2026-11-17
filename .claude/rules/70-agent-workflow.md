@@ -235,7 +235,8 @@ A Claude Code workflow may run a unit's work or the coordinator's merge
 review only where the implementation-phases spec lists it (*Workflow
 pilots*), with the user's opt-in per run. Its agents keep the roles in
 rule 8, the unit keeps one branch and one squash commit (Rule 30.4), it
-runs at most 5 agents, and it stops at the 5-hour freeze (`prompts/coordinator_prompt.md` §3). It never merges
+runs at most 5 agents, and it stops at the usage freeze (`prompts/coordinator_prompt.md` §3: 5-hour,
+and weekly caution 85 % / freeze 95 %, user, 2026-11-18). It never merges
 or skips the review.
 
 ## When to use

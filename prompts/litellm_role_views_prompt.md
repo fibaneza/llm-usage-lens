@@ -360,8 +360,8 @@ anything out. Fix what it finds through the loop.
   names only. No review fan-out and no full suite of your own.
 - **Usage:**
   `jq -r '[(.rate_limits.five_hour.used_percentage // "na"),(.rate_limits.seven_day.used_percentage // "na"),(.rate_limits.five_hour.resets_at // "na")] | @tsv' "$HOME/.claude/usage-snapshot.json"`
-  before each dispatch. 5-hour ≥ 60% or weekly ≥ 75%: no optional work
-  (A3 P2 findings, the identity picker). 5-hour ≥ 75% or weekly ≥ 85%:
+  before each dispatch. 5-hour ≥ 60% or weekly ≥ 85%: no optional work
+  (A3 P2 findings, the identity picker). 5-hour ≥ 75% or weekly ≥ 95%:
   start nothing new, commit what is green, write the report, send
   `frozen …`, stop.
 - **Messages to the coordinator, one line each, only these:**

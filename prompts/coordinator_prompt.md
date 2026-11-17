@@ -209,6 +209,9 @@ never overrides a rule; it only adds coordination.
 - At **≥ 60 %** (caution) tell workers to stay at 2 agents and skip optional
   work. At **≥ 75 %** (freeze) tell every worker to start no new agents, let
   running ones finish, commit what passed, write its report and stop.
+- **Weekly (7-day) window (user, 2026-11-18):** caution at **≥ 85 %** and
+  freeze at **≥ 95 %**, with the same actions as the 5-hour tiers. Previously
+  75 % and 85 %. The stricter of the two windows applies.
 - After a freeze, offer the user a scheduled resume a few minutes after
   `resets_at` (`CronCreate`, one-shot, session-only). On resume, re-read
   state (§0) before briefing — workers may have moved on.

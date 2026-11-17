@@ -68,9 +68,9 @@ Explorer access is allowed by company policy.
 1. Make sure `main` is clean, and push the previous run's commits if you
    want CI.
 2. Check usage (`master_prompt.md` §2). In the **caution** tier (5-hour
-   window at or above 60%, or weekly at or above 75%) the run uses at most 2
+   window at or above 60%, or weekly at or above 85%) the run uses at most 2
    agents and skips optional work. In the **freeze** tier (5-hour at or above
-   75%, weekly at or above 85%, or the spend limit at or above 85%) the run
+   75%, weekly at or above 95%, or the spend limit at or above 85%) the run
    starts no agent and only writes a report. Wait for the reset. Implementation
    freezes at T+55 and the report is due at T+60.
 3. Start the run with `/goal` and the **exact condition** below, never the

@@ -277,9 +277,9 @@ jq -r '[.captured_at,
 
 | Reading | Tier | Rule |
 |---|---|---|
-| Session (5-hour) < 60% **and** weekly (7-day) < 75% | normal | Budget in §5 applies |
-| Session ≥ 60% **or** weekly ≥ 75% | **caution** | Max 2 concurrent agents. No optional work (Track C code, NITs, extra audits). Prefer `haiku`/`sonnet` except for review gates. Update the draft report now |
-| Session ≥ **75%** **or** weekly ≥ **85%** **or** spend limit ≥ 85% | **usage freeze** | Start **no new agents or tasks**, including rework, reviews and retries. Let tasks already running finish, verify their output with gates already defined, commit what passed, then go straight to consolidation and write the report. Do not wait for T+55 |
+| Session (5-hour) < 60% **and** weekly (7-day) < 85% | normal | Budget in §5 applies |
+| Session ≥ 60% **or** weekly ≥ 85% | **caution** | Max 2 concurrent agents. No optional work (Track C code, NITs, extra audits). Prefer `haiku`/`sonnet` except for review gates. Update the draft report now |
+| Session ≥ **75%** **or** weekly ≥ **95%** **or** spend limit ≥ 85% | **usage freeze** | Start **no new agents or tasks**, including rework, reviews and retries. Let tasks already running finish, verify their output with gates already defined, commit what passed, then go straight to consolidation and write the report. Do not wait for T+55 |
 | Snapshot missing, `na`, or `captured_at` older than 10 minutes | **unknown** | Log `usage: unknown`. Cap concurrency at 4, keep the draft report current at every checkpoint, and tell the user at T+00 that the guard is blind |
 
 - **The freeze is sticky.** A usage freeze lasts for the rest of the run.

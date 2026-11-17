@@ -470,9 +470,9 @@ Read before every dispatch and at every phase boundary:
 jq -r '[.captured_at,(.rate_limits.five_hour.used_percentage // "na"),(.rate_limits.seven_day.used_percentage // "na"),(.rate_limits.spend_limit.used_percentage // "na"),(.rate_limits.five_hour.resets_at // "na")] | @tsv' "$HOME/.claude/usage-snapshot.json"
 ```
 
-- 5-hour < 60% and weekly < 75%: normal.
-- 5-hour ≥ 60% or weekly ≥ 75%: **caution** — 2 agents, no optional work.
-- 5-hour ≥ 75% or weekly ≥ 85% or spend ≥ 85%: **freeze** — start nothing
+- 5-hour < 60% and weekly < 85%: normal.
+- 5-hour ≥ 60% or weekly ≥ 85%: **caution** — 2 agents, no optional work.
+- 5-hour ≥ 75% or weekly ≥ 95% or spend ≥ 85%: **freeze** — start nothing
   new, let running agents finish, commit what is green, update the report,
   send `frozen …` (§9), create a one-shot `CronCreate` for one minute after
   `resets_at` that says "Resume `$REPO/temp/run-ui/goal.md` from
