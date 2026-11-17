@@ -1330,3 +1330,88 @@ describe("TeamPageContent spend source - linked team (App Teams: Spend source, U
     expect(text).toMatch(/personal keys/i);
   });
 });
+
+// ---- LD37: LiteLLM not configured (docs/specs/2026-11-10-litellm.md, Decisions;
+// Design System - LiteLLM Page, States). Contract: the team response
+// `{ configured: false, connected, spendSource, daily: [] }` makes the spend
+// panel show "LiteLLM not configured" (no figures, no error) and the page
+// render none of the LiteLLM panels or controls, linked team or not; the
+// server-rendered `access` slot still mounts.
+describe("TeamPageContent LiteLLM not configured (LD37; Design System - LiteLLM Page, States)", () => {
+  const unconfigured = (connected: boolean) => ({
+    configured: false,
+    connected,
+    spendSource: connected ? "litellm-team" : "member-sum",
+    daily: [],
+  });
+  const meFor = (linked: boolean) => () =>
+    apiResponse({
+      data: {
+        linked: false,
+        enabledOperations: [],
+        teams: [
+          { teamId: "t1", teamName: "Payments", linked, configurable: true },
+        ],
+      },
+    });
+
+  it.each([
+    ["an unlinked team", "Team spend", false],
+    ["a linked team", "Team spend & budgets", true],
+  ] as const)(
+    "%s: the spend panel says 'LiteLLM not configured', with no figures and no error",
+    async (_n, regionName, linked) => {
+      stub({
+        "GET /api/litellm/me": meFor(linked),
+        "GET /api/litellm/teams/t1": () =>
+          apiResponse({ data: unconfigured(linked) }),
+      });
+      renderConfig();
+      const spend = await region(regionName);
+      expect(
+        await within(spend).findByText(/LiteLLM not configured/i),
+      ).toBeInTheDocument();
+      expect(within(spend).queryByText(/LiteLLM unavailable/i)).toBeNull();
+      expect(spend.textContent).not.toContain("$");
+      expect(screen.queryByRole("alert")).toBeNull();
+    },
+  );
+
+  it("renders no LiteLLM panel or control and calls none of the team's L4 routes, linked or not", async () => {
+    const api = stub({
+      "GET /api/litellm/me": meFor(true),
+      "GET /api/litellm/teams/t1": () =>
+        apiResponse({ data: unconfigured(true) }),
+    });
+    renderWithProviders(
+      <TeamPageContent
+        canRaiseLimits
+        scopeLabel={null}
+        access={<section aria-label="Members">app members</section>}
+      />,
+    );
+    await within(await region("Team spend & budgets")).findByText(
+      /LiteLLM not configured/i,
+    );
+    for (const name of LITELLM_PANELS) {
+      expect(screen.queryByRole("region", { name }), name).toBeNull();
+    }
+    for (const name of [
+      "Add member",
+      "Generate key",
+      "Save budget",
+      "Save limits",
+      "Save models",
+      "Reset spend for all members",
+    ]) {
+      expect(screen.queryByRole("button", { name }), name).toBeNull();
+    }
+    const l4 = api.calls.filter(
+      (c) => c.path !== "/api/litellm/me" && c.path !== "/api/litellm/teams/t1",
+    );
+    expect(l4).toEqual([]);
+    expect(screen.getByRole("region", { name: "Members" })).toHaveTextContent(
+      "app members",
+    );
+  });
+});

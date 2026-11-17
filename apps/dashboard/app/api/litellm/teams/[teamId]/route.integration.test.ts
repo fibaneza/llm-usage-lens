@@ -2,6 +2,7 @@ import { MemberSumSchema } from "@llm-usage-lens/shared";
 import { describe, expect, it, vi } from "vitest";
 
 import { getIdentityLink } from "@/lib/data/access/identity-links";
+import { clearTable } from "@/test/support/test-support";
 import {
   DATES,
   LTEAM,
@@ -10,6 +11,7 @@ import {
   enterProd,
   expectError,
   expectNoSentinels,
+  seedViews,
   setToggles,
   setupViewsSuite,
   stubLiteLLMEnv,
@@ -62,6 +64,7 @@ defineTeamReadContract(state, {
   query: `?${DATES}`,
   toggleOp: "getTeam",
   upstreamPath: "/team/info",
+  unconfiguredIs200: true,
 });
 
 describe("GET /api/litellm/teams/[teamId]", () => {
@@ -419,5 +422,53 @@ describe("GET /api/litellm/teams/[teamId] - spend source (App Teams)", () => {
       expect(urls).toContain(LTEAM["team-b"]);
       expect(urls).not.toContain(LTEAM["team-a"]);
     });
+  });
+});
+
+// LD37 (docs/specs/2026-11-10-litellm.md, Decisions; Design System - LiteLLM
+// Page, States). Contract: when no connection is stored (or no service key) the
+// route answers 200 `{ configured: false, connected: <team has a link>,
+// spendSource: "litellm-team" | "member-sum", daily: [] }` with no `team`, no
+// `memberSum` and no LiteLLM call. A configured response omits the marker.
+describe("GET /api/litellm/teams/[teamId] - LiteLLM not configured (LD37)", () => {
+  const get = async (team: string) =>
+    call(await load(), `/api/litellm/teams/${team}?${DATES}`, { teamId: team });
+
+  it.each([
+    ["an unlinked team", "team-u", false, "member-sum"],
+    ["a linked team", "team-a", true, "litellm-team"],
+  ] as const)(
+    "%s: no stored connection is 200 configured:false and no LiteLLM call (LD37)",
+    async (_n, team, connected, spendSource) => {
+      await clearTable();
+      await seedViews({ connection: false });
+      signInAs("admin");
+      const { res, body } = await get(team);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control")).toBe("private, no-store");
+      expect(body.data).toMatchObject({
+        configured: false,
+        connected,
+        spendSource,
+        daily: [],
+      });
+      expect(body.data).not.toHaveProperty("team");
+      expect(body.data).not.toHaveProperty("memberSum");
+      expect(state.fake.calls).toHaveLength(0);
+    },
+  );
+
+  it("an out-of-scope team is still the 404 when not configured (Enforcement 2)", async () => {
+    await clearTable();
+    await seedViews({ connection: false });
+    signInAs("teamAdminA");
+    const { res } = await get("team-b");
+    await expectError(res, 404, "NOT_FOUND");
+  });
+
+  it("a configured response does not carry configured:false (LD37)", async () => {
+    signInAs("admin");
+    const { body } = await get("team-a");
+    expect(body.data.configured).not.toBe(false);
   });
 });

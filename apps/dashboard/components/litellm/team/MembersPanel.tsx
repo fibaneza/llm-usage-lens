@@ -201,7 +201,11 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
   if (detail.status === "unavailable" || members.status === "unavailable") {
     return <Unavailable />;
   }
-  if (!detail.data.connected || !members.data.connected) {
+  if (
+    detail.data.configured === false ||
+    !detail.data.connected ||
+    !members.data.connected
+  ) {
     return <NotConnected />;
   }
   const ops = new Set(detail.data.enabledOperations);

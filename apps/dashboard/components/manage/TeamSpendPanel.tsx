@@ -37,6 +37,13 @@ export function TeamSpendPanel({ teamId }: { teamId: string }) {
     );
   }
   const data = result.data;
+  if (data.configured === false) {
+    return (
+      <p className="text-muted-foreground py-6 text-sm">
+        LiteLLM not configured
+      </p>
+    );
+  }
   if (!data.connected) {
     const { memberSum, daily } = data;
     return (

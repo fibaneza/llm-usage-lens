@@ -78,7 +78,8 @@ export function ModelsPanel({ teamId }: TeamPanelProps) {
   if (detail.status === "unavailable" || proxy.status === "unavailable") {
     return <Unavailable />;
   }
-  if (!detail.data.connected) return <NotConnected />;
+  if (detail.data.configured === false || !detail.data.connected)
+    return <NotConnected />;
   if (!detail.data.enabledOperations.includes("setTeamModels")) {
     return <Empty>Changing team models is switched off.</Empty>;
   }

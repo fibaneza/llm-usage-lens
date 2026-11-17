@@ -131,6 +131,13 @@ function retryable(error: LiteLLMError): boolean {
   );
 }
 
+// LD37: configured means a service key and a stored connection; the same two
+// `not_configured` cases as callLiteLLM, checked without calling LiteLLM.
+export async function isLiteLLMConfigured(): Promise<boolean> {
+  if (!env.LITELLM_SERVICE_KEY) return false;
+  return (await getLiteLLMConnection()) !== null;
+}
+
 export async function callLiteLLM(
   request: LiteLLMRequest,
   options: { baseUrl?: string } = {},

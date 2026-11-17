@@ -167,7 +167,12 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
   if (detail.status === "unavailable" || keys.status === "unavailable") {
     return <Unavailable />;
   }
-  if (!detail.data.connected || !keys.data.connected) return <NotConnected />;
+  if (
+    detail.data.configured === false ||
+    !detail.data.connected ||
+    !keys.data.connected
+  )
+    return <NotConnected />;
   const ops = new Set(detail.data.enabledOperations);
   const { items } = keys.data;
 

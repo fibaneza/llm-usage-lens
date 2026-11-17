@@ -4,6 +4,7 @@ import { parseAsString, useQueryState } from "nuqs";
 import { useId, type ReactNode } from "react";
 
 import { Panel } from "@/components/display/Panel";
+import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { LiteLLMReportedBadge } from "@/components/litellm/LiteLLMReportedBadge";
 import { BudgetLimitsPanel } from "@/components/litellm/team/BudgetLimitsPanel";
@@ -12,6 +13,7 @@ import { MembersPanel } from "@/components/litellm/team/MembersPanel";
 import { ModelsPanel } from "@/components/litellm/team/ModelsPanel";
 import { NativeSelect } from "@/components/litellm/team/native-select";
 import { useMeQuery } from "@/components/litellm/use-me-query";
+import { useTeamSpendDetail } from "@/components/litellm/use-team-detail";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { TeamSpendPanel } from "./TeamSpendPanel";
@@ -19,6 +21,21 @@ import { TeamSpendPanel } from "./TeamSpendPanel";
 const PANEL_SKELETON = <Skeleton className="h-40 w-full" />;
 const DESCRIPTION =
   "Spend, budgets, members, keys and models for your teams, as LiteLLM reports them.";
+
+// LD37: when LiteLLM is not configured the L4 panels and their controls are
+// not rendered, so none of their routes is called. Shares the spend panel's
+// query, so it adds no request.
+function WhenConfigured({
+  teamId,
+  children,
+}: {
+  teamId: string;
+  children: ReactNode;
+}) {
+  const result = useTeamSpendDetail(teamId);
+  if (result.status === "ok" && result.data.configured === false) return null;
+  return <>{children}</>;
+}
 
 type TeamPageContentProps = {
   // True for internal-admin only; everyone else lowers (LiteLLM spec - LD26).
@@ -109,21 +126,32 @@ export function TeamPageContent({
           >
             <TeamSpendPanel teamId={team.teamId} />
           </Panel>
-          <Panel {...panel("LiteLLM members", true)}>
-            <MembersPanel teamId={team.teamId} capabilities={capabilities} />
-          </Panel>
-          <Panel {...panel("Keys", true)}>
-            <KeysPanel teamId={team.teamId} capabilities={capabilities} />
-          </Panel>
-          <Panel {...panel("Budget and limits")}>
-            <BudgetLimitsPanel
-              teamId={team.teamId}
-              capabilities={capabilities}
-            />
-          </Panel>
-          <Panel {...panel("Models")}>
-            <ModelsPanel teamId={team.teamId} capabilities={capabilities} />
-          </Panel>
+          <SectionBoundary
+            title="LiteLLM panels"
+            fallback={PANEL_SKELETON}
+            resetKeys={[team.teamId]}
+          >
+            <WhenConfigured teamId={team.teamId}>
+              <Panel {...panel("LiteLLM members", true)}>
+                <MembersPanel
+                  teamId={team.teamId}
+                  capabilities={capabilities}
+                />
+              </Panel>
+              <Panel {...panel("Keys", true)}>
+                <KeysPanel teamId={team.teamId} capabilities={capabilities} />
+              </Panel>
+              <Panel {...panel("Budget and limits")}>
+                <BudgetLimitsPanel
+                  teamId={team.teamId}
+                  capabilities={capabilities}
+                />
+              </Panel>
+              <Panel {...panel("Models")}>
+                <ModelsPanel teamId={team.teamId} capabilities={capabilities} />
+              </Panel>
+            </WhenConfigured>
+          </SectionBoundary>
         </>
       ) : (
         <Panel {...panel("Team spend", true)}>

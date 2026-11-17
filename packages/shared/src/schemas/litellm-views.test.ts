@@ -232,6 +232,34 @@ describe("LiteLLMTeamDetailResponseSchema", () => {
         .success,
     ).toBe(true);
   });
+  // LD37: the not-configured team response; the marker is sent only when false.
+  it.each([
+    ["an unlinked team", { connected: false, spendSource: "member-sum" }],
+    ["a linked team", { connected: true, spendSource: "litellm-team" }],
+  ])("accepts the not-configured shape for %s (LD37)", (_n, base) => {
+    expect(
+      LiteLLMTeamDetailResponseSchema.safeParse({
+        configured: false,
+        daily: [],
+        ...base,
+      }).success,
+    ).toBe(true);
+  });
+  it("rejects a not-configured team response without connected or with a non-boolean marker (LD37)", () => {
+    expect(
+      LiteLLMTeamDetailResponseSchema.safeParse({
+        configured: false,
+        spendSource: "member-sum",
+        daily: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      LiteLLMTeamDetailResponseSchema.safeParse({
+        ...unlinkedDetail,
+        configured: "no",
+      }).success,
+    ).toBe(false);
+  });
   it.each([
     ["connected only (spendSource is always returned)", { connected: false }],
     [
@@ -270,6 +298,7 @@ describe("LiteLLMOrgResponseSchema", () => {
     linkedAppTeam: { teamId: "t1", teamName: "Payments" },
   };
   const org = {
+    configured: true,
     totals: { spend: 1.5 },
     daily,
     enabledOperations,
@@ -316,6 +345,45 @@ describe("LiteLLMOrgResponseSchema", () => {
         appTeams: [],
       }).success,
     ).toBe(true);
+  });
+  // LD37 (docs/specs/2026-11-10-litellm.md, Decisions): `configured` is always
+  // present on the Organisation response; false means no LiteLLM teams.
+  it("accepts the not-configured shape: configured false, no LiteLLM teams, app teams with spend null (LD37)", () => {
+    expect(
+      LiteLLMOrgResponseSchema.safeParse({
+        ...org,
+        configured: false,
+        totals: { spend: 0 },
+        daily: [],
+        litellmTeams: [],
+        appTeams: [
+          {
+            teamId: "t1",
+            teamName: "Payments",
+            spendSource: "litellm-team",
+            spend: null,
+          },
+          {
+            teamId: "t2",
+            teamName: "Risk",
+            spendSource: "member-sum",
+            spend: null,
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+  it("rejects configured false with LiteLLM team rows, and a missing or non-boolean configured (LD37)", () => {
+    expect(
+      LiteLLMOrgResponseSchema.safeParse({ ...org, configured: false }).success,
+    ).toBe(false);
+    expect(
+      LiteLLMOrgResponseSchema.safeParse({ ...org, configured: undefined })
+        .success,
+    ).toBe(false);
+    expect(
+      LiteLLMOrgResponseSchema.safeParse({ ...org, configured: "no" }).success,
+    ).toBe(false);
   });
   it("has no teams[] any more: a leftover one is stripped from the output", () => {
     const parsed = LiteLLMOrgResponseSchema.parse({

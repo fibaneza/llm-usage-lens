@@ -39,49 +39,61 @@ export function OrganisationSection() {
     LiteLLMOrgResponseSchema,
   );
   if (result.status === "unavailable") return <Unavailable />;
-  const { totals, daily, litellmTeams, appTeams } = result.data;
+  const { configured, totals, daily, litellmTeams, appTeams } = result.data;
   if (litellmTeams.length === 0 && appTeams.length === 0) {
     return <Empty>No teams</Empty>;
   }
   return (
     <div className="flex flex-col gap-4">
-      <MetricCard
-        title="Total spend"
-        value={formatUsd(totals.spend)}
-        icon={CircleDollarSign}
-      />
-      <DailySpend daily={daily} />
-      <Table>
-        <TableCaption className="mt-0 mb-2 text-left">
-          LiteLLM teams
-        </TableCaption>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Alias</TableHead>
-            <TableHead className="text-right">Spend</TableHead>
-            <TableHead className="text-right">Budget</TableHead>
-            <TableHead className="text-right">Members</TableHead>
-            <TableHead>App team</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {litellmTeams.map((team) => (
-            <TableRow key={team.litellmTeamId}>
-              <TableCell>{team.alias ?? team.litellmTeamId}</TableCell>
-              <TableCell className={NUMERIC}>{formatUsd(team.spend)}</TableCell>
-              <TableCell className={NUMERIC}>
-                {team.maxBudget === null
-                  ? "No limit"
-                  : formatUsd(team.maxBudget)}
-              </TableCell>
-              <TableCell className={NUMERIC}>{team.memberCount}</TableCell>
-              <TableCell>
-                {team.linkedAppTeam ? team.linkedAppTeam.teamName : "unlinked"}
-              </TableCell>
+      {configured ? (
+        <>
+          <MetricCard
+            title="Total spend"
+            value={formatUsd(totals.spend)}
+            icon={CircleDollarSign}
+          />
+          <DailySpend daily={daily} />
+        </>
+      ) : null}
+      {configured ? (
+        <Table>
+          <TableCaption className="mt-0 mb-2 text-left">
+            LiteLLM teams
+          </TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Alias</TableHead>
+              <TableHead className="text-right">Spend</TableHead>
+              <TableHead className="text-right">Budget</TableHead>
+              <TableHead className="text-right">Members</TableHead>
+              <TableHead>App team</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {litellmTeams.map((team) => (
+              <TableRow key={team.litellmTeamId}>
+                <TableCell>{team.alias ?? team.litellmTeamId}</TableCell>
+                <TableCell className={NUMERIC}>
+                  {formatUsd(team.spend)}
+                </TableCell>
+                <TableCell className={NUMERIC}>
+                  {team.maxBudget === null
+                    ? "No limit"
+                    : formatUsd(team.maxBudget)}
+                </TableCell>
+                <TableCell className={NUMERIC}>{team.memberCount}</TableCell>
+                <TableCell>
+                  {team.linkedAppTeam
+                    ? team.linkedAppTeam.teamName
+                    : "unlinked"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <Empty>LiteLLM not configured</Empty>
+      )}
       <div className="flex flex-col gap-1">
         <p className="text-cell text-muted-foreground">
           Per app team. Rows overlap with each other and do not add up to the
@@ -103,7 +115,9 @@ export function OrganisationSection() {
                 <TableCell>{team.teamName}</TableCell>
                 <TableCell>{SOURCE_LABEL[team.spendSource]}</TableCell>
                 <TableCell className={NUMERIC}>
-                  {team.spend === null ? (
+                  {team.spend === null && !configured ? (
+                    "Not available"
+                  ) : team.spend === null ? (
                     <Link
                       className="text-link underline-offset-4 hover:underline"
                       href={`/dashboard/manage/team?team=${encodeURIComponent(team.teamId)}`}

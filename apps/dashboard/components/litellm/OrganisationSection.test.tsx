@@ -38,6 +38,7 @@ afterEach(() => {
 });
 
 const ORG = {
+  configured: true,
   totals: { spend: 1234.5 },
   daily: [{ date: "2026-11-14", spend: 100 }],
   enabledOperations: [],
@@ -175,6 +176,7 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     stub(() =>
       apiResponse({
         data: {
+          configured: true,
           totals: { spend: 0 },
           daily: [],
           litellmTeams: [],
@@ -185,6 +187,62 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     );
     renderSection();
     expect(await screen.findByText(/no teams/i)).toBeInTheDocument();
+  });
+
+  // LD37 (docs/specs/2026-11-10-litellm.md); Design System - LiteLLM Page,
+  // States: `configured: false` shows "LiteLLM not configured" in place of the
+  // LiteLLM teams table and still lists the app teams with "Not available".
+  describe("LiteLLM not configured (LD37; Design System - LiteLLM Page, States)", () => {
+    const UNCONFIGURED = {
+      configured: false,
+      totals: { spend: 0 },
+      daily: [],
+      litellmTeams: [],
+      appTeams: [
+        {
+          teamId: "t1",
+          teamName: "Payments",
+          spendSource: "litellm-team",
+          spend: null,
+        },
+        {
+          teamId: "t2",
+          teamName: "Risk",
+          spendSource: "member-sum",
+          spend: null,
+        },
+      ],
+      enabledOperations: [],
+    };
+
+    it("shows 'LiteLLM not configured' instead of the LiteLLM teams table, with no error and no 'No teams'", async () => {
+      stub(() => apiResponse({ data: UNCONFIGURED }));
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      renderWithProviders(
+        <LiteLLMSection title="Organisation" reported>
+          <OrganisationSection />
+        </LiteLLMSection>,
+      );
+      expect(
+        await screen.findByText(/LiteLLM not configured/i),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("table", { name: "LiteLLM teams" })).toBeNull();
+      expect(screen.queryByText(/no teams/i)).toBeNull();
+      expect(screen.queryByText(/LiteLLM unavailable/i)).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(errors).not.toHaveBeenCalled();
+    });
+
+    it("still renders the App teams table with 'Not available' in the spend column", async () => {
+      stub(() => apiResponse({ data: UNCONFIGURED }));
+      renderSection();
+      const table = await screen.findByRole("table", { name: "App teams" });
+      for (const name of [/Payments/, /Risk/]) {
+        const row = within(table).getByRole("row", { name });
+        expect(within(row).getByText(/not available/i)).toBeInTheDocument();
+        expect(row.textContent).not.toContain("$");
+      }
+    });
   });
 
   it("shows an inline 'LiteLLM unavailable' on a 503 (Design System -- LiteLLM Page, States)", async () => {

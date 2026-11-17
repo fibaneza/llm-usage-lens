@@ -75,34 +75,46 @@ export const MemberSumSchema = z.object({
   ),
 });
 
-export const LiteLLMTeamDetailResponseSchema = z.discriminatedUnion(
-  "connected",
-  [
-    z.object({
-      connected: z.literal(true),
-      spendSource: z.literal("litellm-team"),
-      team: z.object({
-        alias: z.string().nullable(),
-        spend: z.number(),
-        maxBudget: z.number().nullable(),
-        softBudget: z.number().nullable(),
-        budgetDuration: z.string().nullable(),
-        models: z.array(z.string()),
-        rpmLimit: z.number().nullable(),
-        tpmLimit: z.number().nullable(),
-      }),
-      daily: DailySchema,
-      enabledOperations: EnabledOperations,
-      memberSum: MemberSumSchema.optional(),
+// LD37: LiteLLM not configured. The marker is sent only when false.
+const TeamDetailUnconfiguredSchema = z.object({
+  configured: z.literal(false),
+  connected: z.boolean(),
+  spendSource: SpendSourceSchema,
+  daily: DailySchema,
+});
+
+const TeamDetailConfiguredSchema = z.discriminatedUnion("connected", [
+  z.object({
+    configured: z.undefined().optional(),
+    connected: z.literal(true),
+    spendSource: z.literal("litellm-team"),
+    team: z.object({
+      alias: z.string().nullable(),
+      spend: z.number(),
+      maxBudget: z.number().nullable(),
+      softBudget: z.number().nullable(),
+      budgetDuration: z.string().nullable(),
+      models: z.array(z.string()),
+      rpmLimit: z.number().nullable(),
+      tpmLimit: z.number().nullable(),
     }),
-    z.object({
-      connected: z.literal(false),
-      spendSource: z.literal("member-sum"),
-      daily: DailySchema,
-      memberSum: MemberSumSchema,
-    }),
-  ],
-);
+    daily: DailySchema,
+    enabledOperations: EnabledOperations,
+    memberSum: MemberSumSchema.optional(),
+  }),
+  z.object({
+    configured: z.undefined().optional(),
+    connected: z.literal(false),
+    spendSource: z.literal("member-sum"),
+    daily: DailySchema,
+    memberSum: MemberSumSchema,
+  }),
+]);
+
+export const LiteLLMTeamDetailResponseSchema = z.union([
+  TeamDetailUnconfiguredSchema,
+  TeamDetailConfiguredSchema,
+]);
 
 const MemberSchema = z.object({
   userId: z.string(),
@@ -186,33 +198,39 @@ export const LiteLLMAuditResponseSchema = z.object({
 });
 
 // L3b: Views by role (Organisation, Users tabs).
-export const LiteLLMOrgResponseSchema = z.object({
-  totals: z.object({ spend: z.number() }),
-  daily: DailySchema,
-  litellmTeams: z.array(
-    z.object({
-      litellmTeamId: z.string(),
-      alias: z.string().nullable(),
-      spend: z.number(),
-      maxBudget: z.number().nullable(),
-      memberCount: z.number(),
-      linkedAppTeam: z
-        .object({ teamId: z.string(), teamName: z.string() })
-        .nullable(),
-    }),
-  ),
-  appTeams: z.array(
-    z.object({
-      teamId: z.string(),
-      teamName: z.string(),
-      spendSource: SpendSourceSchema,
-      spend: z.number().nullable(),
-      reason: z.literal("open-team").optional(),
-      coverage: MemberSumCoverageSchema.optional(),
-    }),
-  ),
-  enabledOperations: EnabledOperations,
-});
+export const LiteLLMOrgResponseSchema = z
+  .object({
+    configured: z.boolean(),
+    totals: z.object({ spend: z.number() }),
+    daily: DailySchema,
+    litellmTeams: z.array(
+      z.object({
+        litellmTeamId: z.string(),
+        alias: z.string().nullable(),
+        spend: z.number(),
+        maxBudget: z.number().nullable(),
+        memberCount: z.number(),
+        linkedAppTeam: z
+          .object({ teamId: z.string(), teamName: z.string() })
+          .nullable(),
+      }),
+    ),
+    appTeams: z.array(
+      z.object({
+        teamId: z.string(),
+        teamName: z.string(),
+        spendSource: SpendSourceSchema,
+        spend: z.number().nullable(),
+        reason: z.literal("open-team").optional(),
+        coverage: MemberSumCoverageSchema.optional(),
+      }),
+    ),
+    enabledOperations: EnabledOperations,
+  })
+  .refine((org) => org.configured || org.litellmTeams.length === 0, {
+    message: "LiteLLM teams require a configured LiteLLM",
+    path: ["litellmTeams"],
+  });
 
 export const LiteLLMUserSearchResponseSchema = z.object({
   users: z.array(

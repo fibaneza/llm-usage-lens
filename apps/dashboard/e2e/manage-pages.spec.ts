@@ -51,6 +51,7 @@ async function mockApi(page: Page, me: unknown = ME) {
       "/api/litellm/me": me,
       "/api/litellm/org": {
         // LD36: the total is the sum of the LiteLLM teams rows for the range.
+        configured: true,
         totals: { spend: 321.75 },
         enabledOperations: [],
         daily: [{ date: "2026-11-14", spend: 100 }],

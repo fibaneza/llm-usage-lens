@@ -18,6 +18,7 @@ import {
   computeMemberSum,
   worstCaseCalls,
 } from "@/lib/litellm/member-sum";
+import { isLiteLLMConfigured } from "@/lib/litellm/client";
 import {
   getTeam,
   getTeamDailySpend,
@@ -72,6 +73,29 @@ export const GET = withRoute(async (request, _ctx, session) => {
       "getTeamDailySpend",
       ...(unlinked.length > 0 ? (["getUserDailySpend"] as const) : []),
     ]);
+    // LD37 (after LD19): not configured is an empty LiteLLM view, not a failure; the app
+    // teams stay listed with no spend and LiteLLM is never called.
+    if (!(await isLiteLLMConfigured())) {
+      return jsonData(
+        LiteLLMOrgResponseSchema.parse({
+          configured: false,
+          totals: { spend: 0 },
+          daily: [],
+          litellmTeams: [],
+          appTeams: [...appTeams]
+            .sort(([, a], [, b]) => a.localeCompare(b))
+            .map(([teamId, teamName]) => ({
+              teamId,
+              teamName,
+              spendSource: linkOf.has(teamId)
+                ? ("litellm-team" as const)
+                : ("member-sum" as const),
+              spend: null,
+            })),
+          enabledOperations: enabled,
+        }),
+      );
+    }
 
     // LD34/LD36: the 200-call budget counts every LiteLLM call of the request.
     // The list, a getTeam and a one-team range read per proxy team come first.
@@ -202,6 +226,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
 
     return jsonData(
       LiteLLMOrgResponseSchema.parse({
+        configured: true,
         totals: { spend: rows.reduce((sum, r) => sum + r.spend, 0) },
         daily: rows,
         litellmTeams,

@@ -9,6 +9,7 @@ import {
   expectError,
   expectNoSentinels,
   installFake,
+  seedViews,
   setToggles,
   setupViewsSuite,
   signInWithRoles,
@@ -16,6 +17,7 @@ import {
   useEnv,
 } from "@/test/fakes/fake-litellm-views";
 import { signInAs } from "@/test/fixtures/scope-fixtures";
+import { clearTable } from "@/test/support/test-support";
 import type { CallerName } from "@/test/fixtures/scope-fixtures";
 import {
   SCENARIO,
@@ -452,6 +454,79 @@ describe("GET /api/litellm/org", () => {
     const { res, text } = await get();
     await expectError(res, 503, "LITELLM_UNAVAILABLE");
     expect(text).not.toContain("fetch failed");
+  });
+
+  // LD37 (docs/specs/2026-11-10-litellm.md, Decisions; Design System -
+  // LiteLLM Page, States): not configured is an explicit 200 state, never a
+  // silent empty and never a 503. Marker contract: `configured: false` is sent
+  // only when not configured; a configured response carries `configured: true`
+  // (asserted below). Genuine failures keep their 503 (Rule 60.17).
+  describe("LiteLLM not configured (LD37; Design System - LiteLLM Page, States)", () => {
+    const expectUnconfigured = async (data: Record<string, unknown>) => {
+      expect(data.configured).toBe(false);
+      expect(data.litellmTeams).toEqual([]);
+      expect(data.totals).toEqual({ spend: 0 });
+      expect(data.daily).toEqual([]);
+      const rows = data.appTeams as Array<Record<string, unknown>>;
+      expect(rows.map((r) => r.teamId).sort()).toEqual([
+        "team-a",
+        "team-b",
+        "team-c",
+        "team-m",
+        "team-u",
+      ]);
+      for (const r of rows) {
+        expect(r.spend, String(r.teamId)).toBeNull();
+        expect(r.spendSource).toBe(
+          r.teamId === "team-u" ? "member-sum" : "litellm-team",
+        );
+      }
+      expect(state.fake.calls).toHaveLength(0);
+    };
+
+    it.each(["orgAdmin", "admin", "auditor"] as const)(
+      "%s: no stored connection is 200 configured:false, app teams with spend null, no LiteLLM call (LD37)",
+      async (who) => {
+        await clearTable();
+        await seedViews({ connection: false });
+        signInAs(who);
+        const { res, body } = await get();
+        expect(res.status).toBe(200);
+        expect(res.headers.get("cache-control")).toBe("private, no-store");
+        await expectUnconfigured(body.data);
+      },
+    );
+
+    it("no service key is 200 configured:false with the same shape and no LiteLLM call (LD37)", async () => {
+      useEnv({ LITELLM_SERVICE_KEY: "" });
+      signInAs("admin");
+      const { res, body } = await get();
+      expect(res.status).toBe(200);
+      await expectUnconfigured(body.data);
+    });
+
+    it("no stored connection with listProxyTeams disabled is 403 OPERATION_DISABLED, not configured:false (LD19 before LD37)", async () => {
+      await clearTable();
+      await seedViews({ connection: false });
+      await setToggles({ listProxyTeams: false });
+      signInAs("orgAdmin");
+      const { res } = await get();
+      await expectError(res, 403, "OPERATION_DISABLED");
+      expect(state.fake.calls).toHaveLength(0);
+    });
+
+    it("a configured response carries configured:true (LD37)", async () => {
+      signInAs("admin");
+      const { body } = await get();
+      expect(body.data.configured).toBe(true);
+    });
+
+    it("a configured but unreachable LiteLLM is still 503 LITELLM_UNAVAILABLE (LD37; Rule 60.17)", async () => {
+      installFake(state, { outage: true });
+      signInAs("admin");
+      const { res } = await get();
+      await expectError(res, 503, "LITELLM_UNAVAILABLE");
+    });
   });
 
   it("open access mode is 403 OPERATION_UNAVAILABLE (LT11)", async () => {

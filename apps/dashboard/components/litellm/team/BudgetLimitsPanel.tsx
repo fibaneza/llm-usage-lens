@@ -170,7 +170,8 @@ export function BudgetLimitsPanel({
 }: TeamPanelProps) {
   const detail = useTeamDetail(teamId);
   if (detail.status === "unavailable") return <Unavailable />;
-  if (!detail.data.connected) return <NotConnected />;
+  if (detail.data.configured === false || !detail.data.connected)
+    return <NotConnected />;
   const { team, enabledOperations } = detail.data;
   const { maxBudget, rpmLimit, tpmLimit } = team;
   return (

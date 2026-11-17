@@ -629,6 +629,9 @@ export function defineTeamReadContract(
     toggleOp: string;
     // LiteLLM path the route reads for a linked team.
     upstreamPath: string;
+    // LD37: the route answers 200 `configured: false` when LiteLLM is not
+    // configured, so it has its own cases instead of the shared 503 one.
+    unconfiguredIs200?: boolean;
   },
 ) {
   const path = (team: string) =>
@@ -735,13 +738,16 @@ export function defineTeamReadContract(
       expect(text).not.toContain("fetch failed");
     });
 
-    it("no stored connection is 503 LITELLM_UNAVAILABLE (error codes: not configured)", async () => {
-      await clearTable();
-      await seedViews({ connection: false });
-      signInAs("admin");
-      const { res } = await run("team-a");
-      await expectError(res, 503, "LITELLM_UNAVAILABLE");
-    });
+    it.skipIf(spec.unconfiguredIs200 === true)(
+      "no stored connection is 503 LITELLM_UNAVAILABLE (error codes: not configured, except the two LD37 read views)",
+      async () => {
+        await clearTable();
+        await seedViews({ connection: false });
+        signInAs("admin");
+        const { res } = await run("team-a");
+        await expectError(res, 503, "LITELLM_UNAVAILABLE");
+      },
+    );
 
     it("a disabled read is 403 OPERATION_DISABLED before any LiteLLM call (Toggles narrow only; LD19)", async () => {
       await setToggles({ [spec.toggleOp]: false });

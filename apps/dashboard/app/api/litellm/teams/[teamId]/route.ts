@@ -1,4 +1,7 @@
-import { DateRangeQuerySchema } from "@llm-usage-lens/shared";
+import {
+  DateRangeQuerySchema,
+  LiteLLMTeamDetailResponseSchema,
+} from "@llm-usage-lens/shared";
 import { z } from "zod";
 
 import { IdParamSchema } from "@/lib/api/id-param";
@@ -8,6 +11,7 @@ import {
   parseSearchParams,
   withRoute,
 } from "@/lib/api/respond";
+import { isLiteLLMConfigured } from "@/lib/litellm/client";
 import { getTeam, getTeamDailySpend } from "@/lib/litellm/operations";
 import {
   enabledOperations,
@@ -44,18 +48,31 @@ export const GET = withRoute(async (request, { params }, session) => {
   const { litellmTeamId, perUserCostHidden } = team;
   const range = { startDate: dateFrom, endDate: dateTo };
   return liteLLMResponse(async () => {
+    // LD37: not configured answers 200 with no LiteLLM call.
+    if (!(await isLiteLLMConfigured())) {
+      return jsonData(
+        LiteLLMTeamDetailResponseSchema.parse({
+          configured: false,
+          connected: litellmTeamId !== null,
+          spendSource: litellmTeamId === null ? "member-sum" : "litellm-team",
+          daily: [],
+        }),
+      );
+    }
     if (litellmTeamId === null) {
       const memberSum = await computeMemberSum({
         teamId,
         ...range,
         perUserCostHidden,
       });
-      return jsonData({
-        connected: false,
-        spendSource: "member-sum",
-        daily: memberSum.daily,
-        memberSum,
-      });
+      return jsonData(
+        LiteLLMTeamDetailResponseSchema.parse({
+          connected: false,
+          spendSource: "member-sum",
+          daily: memberSum.daily,
+          memberSum,
+        }),
+      );
     }
     const wantsMemberSum =
       include === "memberSum" && (await isOrgWideReader(session));
@@ -73,22 +90,24 @@ export const GET = withRoute(async (request, { params }, session) => {
         : undefined,
     ]);
     const t = info.team_info;
-    return jsonData({
-      connected: true,
-      spendSource: "litellm-team",
-      team: {
-        alias: t.team_alias ?? null,
-        spend: t.spend ?? 0,
-        maxBudget: t.max_budget ?? null,
-        softBudget: t.soft_budget ?? null,
-        budgetDuration: t.budget_duration ?? null,
-        models: t.models ?? [],
-        rpmLimit: t.rpm_limit ?? null,
-        tpmLimit: t.tpm_limit ?? null,
-      },
-      daily: reduceDaily(daily.results),
-      enabledOperations: enabled,
-      ...(memberSum ? { memberSum } : {}),
-    });
+    return jsonData(
+      LiteLLMTeamDetailResponseSchema.parse({
+        connected: true,
+        spendSource: "litellm-team",
+        team: {
+          alias: t.team_alias ?? null,
+          spend: t.spend ?? 0,
+          maxBudget: t.max_budget ?? null,
+          softBudget: t.soft_budget ?? null,
+          budgetDuration: t.budget_duration ?? null,
+          models: t.models ?? [],
+          rpmLimit: t.rpm_limit ?? null,
+          tpmLimit: t.tpm_limit ?? null,
+        },
+        daily: reduceDaily(daily.results),
+        enabledOperations: enabled,
+        ...(memberSum ? { memberSum } : {}),
+      }),
+    );
   });
 });

@@ -80,6 +80,24 @@ The pre-push hook runs `unit` and `infra`; CI runs everything
 Read results, not logs: redirect a run to a file and read the exit code and
 the `Test Files` / `Tests` lines (Rule 70.12).
 
+### E2E without LiteLLM
+
+CI's e2e job starts from a freshly seeded table (`pnpm db:create-table`,
+`pnpm db:seed`) with **no stored LiteLLM connection**, so LiteLLM is _not
+configured_ there (the base URL lives in the connection item; the e2e service
+key alone is not enough). Locally, a connection saved by an earlier run (the
+`dev-login` spec stores one) persists in DynamoDB Local and hides that state.
+Every page must render without a `5xx` or a console error when LiteLLM is not
+configured: it shows "LiteLLM not configured" (Design System — _LiteLLM Page_, _States_; LiteLLM spec LD37). Before `ready`, when a change touches
+a LiteLLM page or route, reset the local table first, as CI does:
+
+```bash
+pnpm db:seed:empty && pnpm db:seed && CI=1 pnpm --filter @llm-usage-lens/dashboard exec node ../../scripts/e2e-lock.mjs playwright test smoke responsive manage-pages
+```
+
+(Added 2026-11-17 after `main` e76e2e5 went red in CI: the Organisation route
+called LiteLLM while no connection was stored.)
+
 ## Coverage
 
 `pnpm test:coverage` uses `@vitest/coverage-v8` and writes `coverage/`
