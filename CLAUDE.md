@@ -35,6 +35,7 @@ The `docs/specs/` directory is the source of truth:
 - `docs/guides/github-best-practices.md` — general GitHub/Actions practice reconciled to this project's GitHub Flow, SAM, and pnpm conventions
 - `docs/guides/git-hooks.md` — local git-hook strategy: the current simulator pre-push hook and the Phase 1 Husky suite that supersedes it
 - `docs/guides/testing.md` — Vitest layout (unit / integration / infra projects), where a test goes, the `apps/dashboard/test/` folders, how to run one project or file, coverage
+- `docs/guides/session-roles.md` — the three session roles (planner, coordinator, workers), how to start or clear a session, and how a unit goes from a request to `main`; runbook in `prompts/README-sessions.md`
 - `docs/guides/learning-path.md` — guided, phase-by-phase walk-through of the whole build (lesson + tracker); start here if you're new to the project
 
 Not in the reading path above, but worth knowing they exist:

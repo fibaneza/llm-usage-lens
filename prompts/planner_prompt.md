@@ -23,8 +23,15 @@ diverge silently.
 
 ## 0. Start or resume (every new session or after a context reset)
 
+Nothing from before the reset is in your context: take every fact from a
+file or from git. Your working directory is the primary checkout;
+`temp/planner/**` and `temp/coordinator/**` are in it.
+
 1. Read this file, then `temp/planner/state.md` (your live state; create it
-   from §9 if missing).
+   from §9 if missing). Your session must be named `planner`; if `ListAgents`
+   shows another name, ask the user to rename it. `CLAUDE.md` and
+   `.claude/rules/` load by themselves; if they are not in your context,
+   read them first.
 2. Read, without editing: `temp/coordinator/state.md` (active goals, the
    ownership map, each session's goal queue) and the tail of
    `temp/coordinator/status.log`.
@@ -62,6 +69,7 @@ use `SendMessage` for the coordinator.
 |---|---|
 | Read anything in the repository and in any worktree | Any edit under `apps/`, `packages/`, `infra/`, `scripts/`, `tools/`, `.github/`, `.claude/` |
 | Read-only git (`log`, `status`, `diff`, `show`, `worktree list`, `merge-base`) | `git add`, `commit`, `merge`, `checkout`, `worktree add/remove`, `stash`, `push` |
+| A **new**, untracked guide under `docs/guides/` when the user asks for one, for the coordinator to commit | Editing a tracked file; propose the edit to the coordinator instead |
 | New files under `temp/planner/**` (gitignored drafts and the plan package) | Editing a tracked file in the primary checkout, `docs/specs/**` included |
 | A **new**, untracked prompt file `prompts/<slug>_prompt.md` in the primary checkout, for the coordinator to commit | Editing an existing file under `prompts/` (propose the change in the package) |
 | Read-only research agents (`Explore`, `Plan`, `spec-guardian`), at most 3 at a time, on the cheapest adequate model, only when a question spans many files | `typescript-developer`, `tdd-test-engineer`, reviewers, the `Workflow` tool, `pnpm` scripts that build, test, seed or start servers |
@@ -116,8 +124,8 @@ in the package are absolute or repo-relative, never "see above".
 |---|---|---|
 | `plan.md` | coordinator, user | The ask; start condition; the **unit table** (id, title, owner session, worktree, branch, depends on, wave); the **ownership table** (§5); per-session queues and the merge order (§6); the **agent ledger** (§7); a usage estimate; the user's actions (opt-ins, settings, decisions, pushes); open questions with their defaults; risks |
 | `spec-changes.md` | the spec unit | Per spec or rule file: new sections in full, and amendments as "section → old statement → new statement", each with its source (user decision and date, or agent decision and reason); the checkbox block for implementation-phases with a Verify line per unit; the statements this supersedes, so the spec unit can grep for them (Rule 70.12 — *Spec consistency*) |
-| `brief-<unit>.md` | the coordinator, to send as written | For a worker that follows `prompts/worker_prompt.md`. The eight points of `coordinator_prompt.md` §1 for that unit: prompt and unit, absolute worktree path and branch, starting state, run folder, owned files and declared overlaps, limits and models, the steps in order, the one-line message formats |
-| `workflow-<session>.md` | the worker that owns the session | The workflow design for that session's units (§7): phases, the fan-out per phase, each agent's role, model, owned files and what "done" means, the gate commands, what the worker itself does between phases (commit, merge `main`, e2e) |
+| `brief-<unit>.md` | the coordinator, to send as written | For a worker that follows `prompts/worker_prompt.md`; the coordinator copies it to `temp/coordinator/briefs/<session>-<unit>.md`. The eight points of `coordinator_prompt.md` §1 for that unit: prompt and unit, absolute worktree path and branch, starting state, run folder, owned files and declared overlaps, limits and models, the steps in order, the one-line message formats |
+| `workflow-<session>.md` | the worker that owns the session | The workflow design for that session's units (§7): phases, the fan-out per phase, each agent's role, model, owned files and what "done" means, the gate commands, what the worker itself does between phases (commit, merge `main`, e2e), and what each phase leaves on disk (files, a commit), so that a cleared worker resumes at a phase boundary |
 | `prompts/<slug>_prompt.md` | worker sessions | The worker prompt, in the shape of `prompts/management_improvements_prompt.md`: the ask, what exists, decisions and questions, units and ownership, what each unit delivers, tests, orchestration, guards and out of scope, handover, completion criteria and the exact `/goal` condition |
 
 The coordinator commits the prompt file and adds its row to
@@ -280,11 +288,16 @@ You do not follow the run.
 
 ## 9. `temp/planner/state.md` template
 
+When the user says "update your state file", rewrite `temp/planner/state.md`
+at once and say when it is done.
+
 ```markdown
 # Planner state (updated <UTC>)
 
 ## Plan in progress
 <slug> — <one line> — status: drafting | questions open | ready (relay line sent <UTC>) | revised <UTC>
+Steps of §3 done: <1–8>
+Package files written: <list>
 
 ## Open questions
 - Q<n>: <question> — default: <default> — asked <UTC>

@@ -17,6 +17,7 @@ worker sessions under a coordinator session (see *Parallel runs* below).
 | `coordinator_prompt.md` | How one session coordinates the worker sessions that run the goals above: briefs, file ownership and conflict prevention, milestones, the shared usage freeze, **every merge into `main`** (full tests on the `main` candidate, fix agents, clean-up), and the live state in `temp/coordinator/` that survives a context reset |
 | `planner_prompt.md` | The planner session: it writes plans, spec text and prompts and never executes them (user, 2026-11-18); it reaches the coordinator only through the file relay in `temp/coordinator/` (coordinator prompt §2b). Start sheet: [`docs/guides/planner-session.md`](../docs/guides/planner-session.md) |
 | `worker_prompt.md` | The role prompt for every worker session (`improvements`, `rbac_worker`, `litellm_worker`): run the unit the coordinator's brief assigns, in its worktree, stop at "ready to merge". The unit's own prompt says what to build. Roles overview: [`docs/guides/session-roles.md`](../docs/guides/session-roles.md) |
+| `README-sessions.md` | How to run the planner, coordinator and worker sessions: set up, start lines, a piece of work step by step, the relay, clearing or replacing a session, stopping, troubleshooting |
 
 ## How runs save tokens (Rule 70.12, decided 2026-11-14)
 
@@ -94,27 +95,15 @@ then the `/goal` line as a second message.
 
 ## Parallel runs (coordinator and workers)
 
-1. **Coordinator session.** Open Claude in the repository and say: 
-
-  ```text
-    You are the coordinator of the worker sessions. Follow `prompts/coordinator_prompt.md` and resume from `temp/coordinator/state.md`
-  ``` 
-  It assigns goals, creates a fresh worktree per goal, briefs the workers by 
-  message, watches usage, and **does every merge into `main`** with the full 
-  test run and any fix agents.
-   
-2. **Worker sessions** (for example `rbac_worker` and `litellm_worker`).
-   Keep one session per prompt; the coordinator tells each which worktree and
-   branch to use for its current goal, so the worktree can change from goal
-   to goal. Type the `/goal` line from the table above in each worker when
-   the coordinator says a new goal starts — a slash command cannot be sent by
-   message.
-3. **Limits.** All sessions share one usage pool: each worker runs at most 2
-   agents, and a 5-hour reading at or above 75% freezes every session.
-4. **Workers stop at "ready to merge".** They commit, leave the worktree
-   clean and report; the coordinator lands the work and cleans up.
-5. Each worker writes its own run folder (`temp/run-<slug>/`) and report;
-   the coordinator keeps `temp/coordinator/state.md` and `status.log`.
+Several sessions can run at once: a planner (plans only), one coordinator,
+and worker sessions (`improvements`, `rbac_worker`, `litellm_worker`). How to
+start, resume, clear and stop each one is in
+[`README-sessions.md`](README-sessions.md); the reference is
+[`docs/guides/session-roles.md`](../docs/guides/session-roles.md). A worker
+runs 2 agents for a goal with no plan, and its plan's per-session peak for a
+plan unit (at most 80 agents running at once across all sessions). Workers
+stop at "ready to merge"; the coordinator lands every unit, and the user
+pushes.
 
 ## Your inputs, collected early
 

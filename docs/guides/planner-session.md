@@ -1,5 +1,7 @@
 # Planner session — start sheet
 
+For all three roles, see [`session-roles.md`](session-roles.md).
+
 How to start and use the **planner** session, the Claude session that turns a
 request into a plan the coordinator and its worker sessions run in parallel.
 The planner's full instructions are in
