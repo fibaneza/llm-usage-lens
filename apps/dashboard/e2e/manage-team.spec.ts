@@ -27,6 +27,14 @@ const OPS = [
   "resetMemberSpend",
 ];
 const TEAM_URL = "/dashboard/manage/team?team=t1";
+// Slice B2b (Design System - Management pages, *Team page views and links*):
+// the page is three views, ?view= in the URL, only the active one rendered.
+const VIEW_REGIONS = {
+  members: "LiteLLM members",
+  budgets: "Team spend & budgets",
+  keys: "Models",
+} as const;
+const VIEWS = ["members", "budgets", "keys"] as const;
 const REMOVE_PATH = "/api/litellm/teams/t1/members/oid-ada";
 // Team is a rail item (NAV_ITEMS), so accessibility.spec.ts and smoke.spec.ts
 // reach it at one width as the default auditor; this spec adds the four
@@ -120,21 +128,24 @@ test.describe("Management -> Team page", () => {
       page.getByRole("heading", { level: 1, name: "Team usage & management" }),
     ).toBeVisible();
 
-    for (const name of [
-      "Team spend & budgets",
-      "LiteLLM members",
-      "Keys",
-      "Budget and limits",
-      "Models",
-    ]) {
+    // B2b: each view holds its sections (Members opens first).
+    await expect(
+      page.getByRole("region", { name: "LiteLLM members" }),
+    ).toBeVisible();
+    await page.getByRole("tab", { name: "Budgets" }).click();
+    for (const name of ["Team spend & budgets", "Budget and limits"]) {
       await expect(page.getByRole("region", { name })).toBeVisible();
     }
-    // Budget as a bar: the team budget and each member carry a bar with text.
+    // Budget as a bar: the team budget carries a bar with text.
     await expect(
       page
         .getByRole("region", { name: "Team spend & budgets" })
         .getByRole("progressbar"),
     ).toBeVisible();
+    await page.getByRole("tab", { name: "Keys" }).click();
+    for (const name of ["Keys", "Models"]) {
+      await expect(page.getByRole("region", { name })).toBeVisible();
+    }
 
     await page.getByRole("button", { name: "Generate key" }).click();
     const form = page.getByRole("dialog");
@@ -161,32 +172,39 @@ test.describe("Management -> Team page", () => {
       await page.setViewportSize({ width, height: 900 });
       await signInAsTestUser(context, { roles: ["internal-admin"] });
       await mockApi(page);
-      await page.goto(TEAM_URL);
-      await waitForHydration(page);
-      await expect(page.getByRole("region", { name: "Models" })).toBeVisible();
+      // B2b: each of the three views is checked (Design System - Management
+      // pages, Team page views and links).
+      for (const view of VIEWS) {
+        await page.goto(`${TEAM_URL}&view=${view}`);
+        await waitForHydration(page);
+        await expect(
+          page.getByRole("region", { name: VIEW_REGIONS[view] }),
+        ).toBeVisible();
 
-      const overflow = await page.evaluate(() => ({
-        scrollWidth: document.documentElement.scrollWidth,
-        clientWidth: document.documentElement.clientWidth,
-      }));
-      expect(
-        overflow.scrollWidth,
-        `Team page overflows horizontally at ${width}px`,
-      ).toBeLessThanOrEqual(overflow.clientWidth);
+        const overflow = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+        }));
+        expect(
+          overflow.scrollWidth,
+          `Team page (${view}) overflows horizontally at ${width}px`,
+        ).toBeLessThanOrEqual(overflow.clientWidth);
 
-      const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa"])
-        .analyze();
-      const blocking = results.violations.filter(
-        (v) => v.impact === "serious" || v.impact === "critical",
-      );
-      expect(
-        blocking.map((v) => ({
-          id: v.id,
-          impact: v.impact,
-          nodes: v.nodes.map((n) => n.target.join(" ")),
-        })),
-      ).toEqual([]);
+        const results = await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa"])
+          .analyze();
+        const blocking = results.violations.filter(
+          (v) => v.impact === "serious" || v.impact === "critical",
+        );
+        expect(
+          blocking.map((v) => ({
+            id: v.id,
+            impact: v.impact,
+            nodes: v.nodes.map((n) => n.target.join(" ")),
+          })),
+          `axe on the ${view} view`,
+        ).toEqual([]);
+      }
     });
   }
 
@@ -414,7 +432,7 @@ test.describe("Management -> Team: spend source (App Teams)", () => {
         new URL(request.url()).pathname === "/api/litellm/teams/t1" &&
         new URL(request.url()).searchParams.get("include") === "memberSum",
     );
-    await page.goto("/dashboard/manage/team?team=t1");
+    await page.goto("/dashboard/manage/team?team=t1&view=budgets");
     await waitForHydration(page);
     await asked;
     const spend = page.getByRole("region", { name: "Team spend & budgets" });
@@ -425,7 +443,7 @@ test.describe("Management -> Team: spend source (App Teams)", () => {
     await expect(spend).toContainText(
       "each app member spent through the gateway",
     );
-    await expect(page.getByRole("region", { name: "Keys" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Keys" })).toBeVisible();
   });
 
   test("an unlinked team shows the member sum with coverage and 'not in LiteLLM', and no LiteLLM control", async ({
@@ -451,6 +469,9 @@ test.describe("Management -> Team: spend source (App Teams)", () => {
     await expect(spend.getByRole("row", { name: /Cuatro Four/ })).toContainText(
       "Hidden until per-user reporting is approved",
     );
+    // B2b (Unlinked rule): only the Members view, so no Budgets or Keys tab.
+    await expect(page.getByRole("tab", { name: "Budgets" })).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "Keys" })).toHaveCount(0);
     // AT4: no LiteLLM panel renders for an unlinked team.
     for (const name of [
       "LiteLLM members",

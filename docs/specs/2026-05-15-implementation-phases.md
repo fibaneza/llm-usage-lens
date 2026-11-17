@@ -771,6 +771,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [x] Verify (L5): matrix green; the probe run in the named fake mode (`pnpm probe:litellm:fake`, 9/9, 2026-11-17) with its keys and member cleaned up and toggles restored; a real local LiteLLM run is a user action
 - [x] Verify (L5b): axe clean per role and dialog state; no horizontal scroll at 375 / 768 / 1024 / 1440 / 1920 (1920 in `litellm-a11y.spec.ts`, the rest in the B2 specs); cards below `md`
 - Moved to **B2b** (coordinator, 2026-11-17): the keyboard walk of the Team page's view tabs and member search, with the features themselves (Design System — *Management pages*)
+- [x] **Built in B2b** (`feature/ui-slice-b2b-team-tabs`, 2026-11-17): the Team page view tabs (Members, Budgets, Keys; `?view=` with history push; Members only for an unlinked or not-configured team), member search, G1 member daily spend (linked teams; existing users route), G2 Organisation → Team links, Rotate focus return, axe on the 375 cards and at 1920, the LD37 card test, shared `MemberActions`/`KeyActions`, and the keyboard walk of the view tabs and search (Design System — *Management pages* → *Team page views and links*)
 
 ### L6 — Combined usage and *My usage* (`feature/phase-l6-litellm-combined`)
 

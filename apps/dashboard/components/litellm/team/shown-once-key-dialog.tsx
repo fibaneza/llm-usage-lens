@@ -21,7 +21,7 @@ export function ShownOnceKeyDialog({
   onClose,
 }: {
   value: string;
-  returnFocusRef: RefObject<HTMLElement | null>;
+  returnFocusRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
 }) {
   const [copyFailed, setCopyFailed] = useState(false);
@@ -29,10 +29,14 @@ export function ShownOnceKeyDialog({
     <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
       <DialogContent
         showCloseButton={false}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          returnFocusRef.current?.focus();
-        }}
+        onCloseAutoFocus={
+          returnFocusRef
+            ? (event) => {
+                event.preventDefault();
+                returnFocusRef.current?.focus();
+              }
+            : undefined
+        }
       >
         <DialogHeader>
           <DialogTitle>Key generated</DialogTitle>

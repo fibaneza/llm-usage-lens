@@ -274,6 +274,23 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 - **References:** [App Teams spec](specs/2026-11-17-app-teams.md) — *Decisions*
   (AT4); [LiteLLM spec](specs/2026-11-10-litellm.md) — *Writes*, LD32, LT5.
 
+### Member daily spend on unlinked app teams
+
+- **Status:** Deferred (decided 2026-11-17, Slice B2b; Design System —
+  *Management pages* → *Team page views and links*, G1).
+- **What:** The Team page's "Daily spend" action on the member-sum rows of an
+  unlinked app team, so a Lead can open each member's daily spend there too.
+- **Why deferred:** `GET /api/litellm/users/[litellmUserId]` scopes a Lead by
+  membership of a *linked* LiteLLM team in scope; an unlinked team's members
+  sit in any LiteLLM team. Widening it means scoping by app-team affiliation
+  (LiteLLM spec LD23, LT23), a route and threat-model change outside B2b.
+- **Adopt when:** Leads of unlinked teams ask to see per-member daily spend,
+  **or** the follow-up unit C (cleanups after B2b) takes the route scope change
+  with its own security review.
+- **References:** [Design System](specs/2026-05-15-design-system.md) —
+  *Management pages*; [LiteLLM spec](specs/2026-11-10-litellm.md) — *API
+  routes*, LD23, LT23; [App Teams spec](specs/2026-11-17-app-teams.md).
+
 ### Membership history (daily membership snapshot)
 
 - **Status:** Deferred (decided 2026-11-17, App Teams spec — *Residual

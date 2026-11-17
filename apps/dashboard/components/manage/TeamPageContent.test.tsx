@@ -174,6 +174,18 @@ function renderConfig(canRaiseLimits = false, searchParams = {}) {
 const user = () => userEvent.setup({ pointerEventsCheck: 0 });
 const region = (name: string) => screen.findByRole("region", { name });
 
+// Slice B2b (Design System - Management pages, *Team page views and links*):
+// the page body is three views on the one Tabs component, ?view= in the URL,
+// and only the active view is rendered. Members holds the LiteLLM members and
+// the app-membership `access` slot; Budgets holds "Team spend & budgets" and
+// "Budget and limits"; Keys holds "Keys" and "Models". Cases that read a panel
+// of another view open it with ?view= (renderView) or by clicking its tab.
+type View = "members" | "budgets" | "keys";
+const renderView = (view: View, canRaiseLimits = false) =>
+  renderConfig(canRaiseLimits, { view });
+const openTab = async (u: ReturnType<typeof user>, name: string) =>
+  u.click(await screen.findByRole("tab", { name }));
+
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -220,7 +232,7 @@ describe("TeamPageContent time rendering and key metadata (LD20, Keys metadata o
           },
         }),
     });
-    renderConfig();
+    renderView("budgets");
     expect(
       within(await region("Team spend & budgets")).getByText(/UTC days?/i),
     ).toBeInTheDocument();
@@ -228,7 +240,7 @@ describe("TeamPageContent time rendering and key metadata (LD20, Keys metadata o
 
   it("renders key expiry in Australia/Sydney with the zone label (LD20)", async () => {
     stub();
-    renderConfig();
+    renderView("keys");
     // 2026-12-01T13:00:00Z is 2026-12-02 00:00 in AEDT.
     expect(
       await within(await region("Keys")).findByText(/2 Dec 2026,? 00:00 AEDT/),
@@ -245,7 +257,7 @@ describe("TeamPageContent time rendering and key metadata (LD20, Keys metadata o
           },
         }),
     });
-    const { container } = renderConfig();
+    const { container } = renderView("keys");
     const keys = await region("Keys");
     expect(await within(keys).findByText("ci-key")).toBeInTheDocument();
     expect(within(keys).getByText("$8.40")).toBeInTheDocument();
@@ -255,25 +267,29 @@ describe("TeamPageContent time rendering and key metadata (LD20, Keys metadata o
 });
 
 describe("TeamPageContent sections (Design System -- LiteLLM Page)", () => {
-  it("renders LiteLLM members, Keys, Budget and limits and Models, each its own region (the L4 panel is titled LiteLLM members; the mounted Access sections keep Members)", async () => {
-    stub();
-    renderConfig();
-    for (const name of [
-      "LiteLLM members",
-      "Keys",
-      "Budget and limits",
-      "Models",
-    ]) {
-      expect(await region(name)).toBeInTheDocument();
-    }
-  });
+  it.each([
+    ["members", ["LiteLLM members"]],
+    ["budgets", ["Team spend & budgets", "Budget and limits"]],
+    ["keys", ["Keys", "Models"]],
+  ] as const)(
+    "the %s view renders its sections, each its own region (the L4 panel is titled LiteLLM members; the mounted Access sections keep Members)",
+    async (view, names) => {
+      stub();
+      renderView(view);
+      for (const name of names) {
+        expect(await region(name)).toBeInTheDocument();
+      }
+    },
+  );
 
-  it("a failing section does not break the others (Rule 40.4)", async () => {
+  it("a failing section does not break the others in its view (Rule 40.4)", async () => {
     stub({ "GET /api/litellm/teams/t1/keys": () => apiError(500) });
-    renderConfig();
+    renderView("keys");
     const keys = await region("Keys");
     expect(await within(keys).findByRole("alert")).toBeInTheDocument();
-    expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("checkbox", { name: "claude-haiku" }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -337,26 +353,38 @@ describe("TeamPageContent operation gating (Team configuration page: each contro
     ],
   ];
 
-  it("renders every control when every operation is enabled", async () => {
+  // The controls sit in three views (B2b): scan Members, then open Budgets and
+  // Keys by their tabs, collecting what each renders.
+  async function presentControls() {
+    const u = user();
+    const found = new Set<string>();
+    const scan = () => {
+      for (const [name, find] of controls) if (find()) found.add(name);
+    };
+    await screen.findByText("Ada Lovelace");
+    scan();
+    await openTab(u, "Budgets");
+    await region("Budget and limits");
+    scan();
+    await openTab(u, "Keys");
+    await screen.findByText("ci-key");
+    await within(await region("Models")).findAllByText(
+      /claude-haiku|switched off/,
+    );
+    scan();
+    return controls.map(([name]) => name).filter((name) => found.has(name));
+  }
+
+  it("renders every control when every operation is enabled, across the three views", async () => {
     stub();
     renderConfig();
-    await screen.findByText("Ada Lovelace");
-    await screen.findByText("ci-key");
-    await screen.findByRole("button", { name: "Save models" });
-    for (const [name, find] of controls) {
-      expect(find(), name).toBeInTheDocument();
-    }
+    expect(await presentControls()).toEqual(controls.map(([name]) => name));
   });
 
   it("renders only the controls whose operation is enabled", async () => {
     stub({}, ["resetMemberSpend", "blockKey"]);
     renderConfig();
-    await screen.findByText("Ada Lovelace");
-    await screen.findByText("ci-key");
-    const present = controls
-      .filter(([, find]) => find() !== null)
-      .map(([name]) => name);
-    expect(present).toEqual([
+    expect(await presentControls()).toEqual([
       "Reset spend for Ada Lovelace",
       "Block key ci-key",
     ]);
@@ -395,7 +423,7 @@ describe("TeamPageContent destructive actions (Design System: AlertDialog confir
       const reply: Handler = () => apiResponse({ data: { ok: true } });
       const api = stub({ [`${method} ${path}`]: reply });
       const u = user();
-      renderConfig();
+      renderView(button.startsWith("Delete key") ? "keys" : "members");
       await u.click(await screen.findByRole("button", { name: button }));
       const dialog = await screen.findByRole("alertdialog");
       expect(api.writes()).toEqual([]);
@@ -430,7 +458,7 @@ describe("TeamPageContent destructive actions (Design System: AlertDialog confir
         apiResponse({ data: { tokenId: "tok-1", blocked: true } }),
     });
     const u = user();
-    renderConfig();
+    renderView("keys");
     await u.click(
       await screen.findByRole("button", { name: "Block key ci-key" }),
     );
@@ -456,7 +484,7 @@ describe("TeamPageContent generate key (Writes: the key value is shown once)", (
   it("shows the returned key once with a copy button and the warning; after closing it is gone from the DOM and never re-fetched", async () => {
     const api = stub({ "POST /api/litellm/teams/t1/keys": generated });
     const u = user();
-    renderConfig();
+    renderView("keys");
     await u.click(await screen.findByRole("button", { name: "Generate key" }));
     const form = await screen.findByRole("dialog");
     await u.selectOptions(
@@ -491,7 +519,7 @@ describe("TeamPageContent generate key (Writes: the key value is shown once)", (
 describe("TeamPageContent budget, limits and models", () => {
   it("a Lead's budget and limit inputs are bounded to the current value; Admin and org-admin's are not (Budgets and limits: client-side hint only)", async () => {
     stub();
-    const { unmount } = renderConfig(false);
+    const { unmount } = renderView("budgets");
     const budget = await screen.findByLabelText("Max budget (USD)");
     expect(budget).toHaveAttribute("max", "500");
     expect(screen.getByLabelText("Requests per minute")).toHaveAttribute(
@@ -505,7 +533,7 @@ describe("TeamPageContent budget, limits and models", () => {
     unmount();
 
     stub();
-    renderConfig(true);
+    renderView("budgets", true);
     expect(
       await screen.findByLabelText("Max budget (USD)"),
     ).not.toHaveAttribute("max");
@@ -517,7 +545,7 @@ describe("TeamPageContent budget, limits and models", () => {
         apiResponse({ data: { teamId: "t1", maxBudget: 300 } }),
     });
     const u = user();
-    renderConfig();
+    renderView("budgets");
     const budget = await screen.findByLabelText("Max budget (USD)");
     await u.clear(budget);
     await u.type(budget, "300");
@@ -536,7 +564,7 @@ describe("TeamPageContent budget, limits and models", () => {
         apiResponse({ data: { teamId: "t1", models: ["claude-sonnet"] } }),
     });
     const u = user();
-    renderConfig();
+    renderView("keys");
     const haiku = await screen.findByRole("checkbox", { name: "claude-haiku" });
     expect(haiku).toBeChecked();
     // /models lists claude-opus, but the team does not have it: not a choice.
@@ -561,7 +589,7 @@ describe("TeamPageContent budget, limits and models", () => {
           data: { ...detail, team: { ...detail.team, models: [] } },
         }),
     });
-    renderConfig();
+    renderView("keys");
     expect(
       await screen.findByRole("checkbox", { name: "claude-opus" }),
     ).toBeInTheDocument();
@@ -581,7 +609,7 @@ describe("TeamPageContent errors (API routes: error codes)", () => {
           apiError(status, code, message),
       });
       const u = user();
-      renderConfig();
+      renderView("budgets");
       const budget = await screen.findByLabelText("Max budget (USD)");
       await u.clear(budget);
       await u.type(budget, "100");
@@ -590,8 +618,9 @@ describe("TeamPageContent errors (API routes: error codes)", () => {
       expect(await within(budgetRegion).findByRole("alert")).toHaveTextContent(
         message,
       );
-      // The page stays up.
-      expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+      // The page stays up (Budgets view only; member rows are not rendered here).
+      expect(budgetRegion).toBeInTheDocument();
+      expect(screen.getByLabelText("Max budget (USD)")).toBeInTheDocument();
     },
   );
 });
@@ -688,7 +717,7 @@ describe("TeamPageContent member and key edits", () => {
         apiResponse({ data: { tokenId: "tok-1", maxBudget: 75 } }),
     });
     const u = user();
-    renderConfig();
+    renderView("keys");
     await u.click(
       await screen.findByRole("button", { name: "Edit key ci-key" }),
     );
@@ -708,7 +737,7 @@ describe("TeamPageContent member and key edits", () => {
       "POST /api/litellm/teams/t1/keys/tok-1/unblock": okEmpty,
     });
     const u = user();
-    renderConfig();
+    renderView("keys");
     await u.click(
       await screen.findByRole("button", { name: "Unblock key ci-key" }),
     );
@@ -724,7 +753,7 @@ describe("TeamPageContent member and key edits", () => {
         }),
     });
     const u = user();
-    renderConfig();
+    renderView("keys");
     await u.click(
       await screen.findByRole("button", { name: "Rotate key ci-key" }),
     );
@@ -873,7 +902,7 @@ describe("TeamPageContent page frame (Management pages - Team)", () => {
 describe("TeamPageContent team spend and budget (Management pages - Team usage)", () => {
   it("has a 'Team spend & budgets' region with the LiteLLM-reported label, USD, UTC-day label and a BudgetBar", async () => {
     stub();
-    renderConfig();
+    renderView("budgets");
     const spend = await region("Team spend & budgets");
 
     expect(
@@ -902,7 +931,7 @@ describe("TeamPageContent team spend and budget (Management pages - Team usage)"
         ],
       }),
     });
-    renderConfig();
+    renderView("budgets");
     const spend = await region("Team spend & budgets");
 
     const card = await within(spend).findByRole("group", { name: "Spend" });
@@ -916,12 +945,16 @@ describe("TeamPageContent team spend and budget (Management pages - Team usage)"
 
   it("labels LiteLLM members and Keys spend as LiteLLM-reported too (LT8)", async () => {
     stub();
+    const u = user();
     renderConfig();
-    for (const name of ["LiteLLM members", "Keys"]) {
-      expect(
-        within(await region(name)).getAllByText("LiteLLM-reported").length,
-      ).toBeGreaterThan(0);
-    }
+    expect(
+      within(await region("LiteLLM members")).getAllByText("LiteLLM-reported")
+        .length,
+    ).toBeGreaterThan(0);
+    await openTab(u, "Keys");
+    expect(
+      within(await region("Keys")).getAllByText("LiteLLM-reported").length,
+    ).toBeGreaterThan(0);
   });
 
   it("switching the team selector re-reads the team spend for the picked team", async () => {
@@ -931,7 +964,7 @@ describe("TeamPageContent team spend and budget (Management pages - Team usage)"
         team: { ...detailWith(ALL_OPS).team, alias: "Risk", spend: 9.99 },
       }),
     });
-    renderConfig();
+    renderView("budgets");
     await userEvent.selectOptions(
       await screen.findByRole("combobox", { name: "Team" }),
       "Risk",
@@ -951,7 +984,7 @@ describe("TeamPageContent keys and time (LD20, LT8)", () => {
         items: [{ ...KEYS.items[0], key: SENTINEL_KEY_VALUE }],
       }),
     });
-    const { container } = renderConfig();
+    const { container } = renderView("keys");
     const keys = await region("Keys");
 
     // 2026-12-01T13:00:00Z is 2026-12-02 00:00 in AEDT.
@@ -982,11 +1015,21 @@ describe("TeamPageContent states (Design System - LiteLLM Page: States)", () => 
       "GET /api/litellm/teams/t1/members": unavailable,
       "GET /api/litellm/teams/t1/keys": unavailable,
     });
+    const u = user();
     renderConfig();
 
-    for (const name of ["Team spend & budgets", "LiteLLM members", "Keys"]) {
+    // An outage does not hide a view: the tabs follow `configured === false`
+    // only (B2b), so each view shows its own "LiteLLM unavailable".
+    for (const [tab, name] of [
+      ["Members", "LiteLLM members"],
+      ["Budgets", "Team spend & budgets"],
+      ["Keys", "Keys"],
+    ]) {
+      await openTab(u, tab as string);
       expect(
-        await within(await region(name)).findByText(/LiteLLM unavailable/i),
+        await within(await region(name as string)).findByText(
+          /LiteLLM unavailable/i,
+        ),
       ).toBeInTheDocument();
     }
     expect(screen.getByRole("combobox", { name: "Team" })).toBeInTheDocument();
@@ -1030,16 +1073,26 @@ describe("TeamPageContent read-only caller (auditor: write controls absent, read
 
   it("shows members and keys with no write control when no operation is enabled", async () => {
     stub({}, []);
+    const u = user();
     renderConfig();
 
+    const noWriteControl = () => {
+      for (const name of WRITE_CONTROLS) {
+        expect(
+          screen.queryByRole("button", { name }),
+          name,
+        ).not.toBeInTheDocument();
+      }
+    };
     expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument();
+    noWriteControl();
+    // The auditor still sees every view it can read (B2b), read-only.
+    await openTab(u, "Budgets");
+    await region("Budget and limits");
+    noWriteControl();
+    await openTab(u, "Keys");
     expect(await screen.findByText("ci-key")).toBeInTheDocument();
-    for (const name of WRITE_CONTROLS) {
-      expect(
-        screen.queryByRole("button", { name }),
-        name,
-      ).not.toBeInTheDocument();
-    }
+    noWriteControl();
   });
 });
 
@@ -1294,7 +1347,7 @@ describe("TeamPageContent spend source - linked team (App Teams: Spend source, U
 
   it("only the spend section's team read sends include=memberSum; the L4 panels' reads do not; the server decides who gets it (ATT6, AT6)", async () => {
     const api = stub();
-    renderConfig();
+    renderView("budgets");
     await region("Team spend & budgets");
     const includes = api.calls
       .filter((c) => c.path === "/api/litellm/teams/t1")
@@ -1308,7 +1361,7 @@ describe("TeamPageContent spend source - linked team (App Teams: Spend source, U
 
   it("a Lead's response has no member sum: the 'LiteLLM team' badge, the team figure and no second figure", async () => {
     stub();
-    renderConfig();
+    renderView("budgets");
     const spend = await region("Team spend & budgets");
     expect(await within(spend).findByText("$321.75")).toBeInTheDocument();
     expect(within(spend).getByText("LiteLLM team")).toBeInTheDocument();
@@ -1318,7 +1371,7 @@ describe("TeamPageContent spend source - linked team (App Teams: Spend source, U
 
   it("with a member sum in the response (Admin, org-admin, Auditor) a second figure 'Sum of members' appears next to the team figure with the 'Why the figures differ' text", async () => {
     stub({ "GET /api/litellm/teams/t1": okData(withMemberSum) });
-    renderConfig();
+    renderView("budgets");
     const spend = await region("Team spend & budgets");
     expect(await within(spend).findByText("$321.75")).toBeInTheDocument();
     expect(within(spend).getByText("LiteLLM team")).toBeInTheDocument();
@@ -1412,6 +1465,302 @@ describe("TeamPageContent LiteLLM not configured (LD37; Design System - LiteLLM 
     expect(l4).toEqual([]);
     expect(screen.getByRole("region", { name: "Members" })).toHaveTextContent(
       "app members",
+    );
+  });
+});
+
+// ---- Slice B2b: view tabs (Design System - Management pages, *Team page views
+// and links*; Tabs). Contract for the developer (TeamPageContent.tsx):
+//   - the one `Tabs` component (components/ui/tabs.tsx), triggers named
+//     "Members", "Budgets", "Keys" in that order; state in nuqs `view`
+//     (values members | budgets | keys; default members) with history "push"
+//     so Back steps through the views;
+//   - only the ACTIVE view is rendered (its sections, its reads): Members =
+//     "LiteLLM members" + the `access` slot; Budgets = "Team spend & budgets" +
+//     "Budget and limits"; Keys = "Keys" + "Models";
+//   - the tabs show for a linked team unless its detail says configured:false
+//     (LD37) - an outage (503) does not hide a tab; an unlinked team or
+//     configured:false has only Members: no Budgets/Keys tab, the team spend
+//     panel stays above the view, and ?view=budgets|keys falls back to Members;
+//   - an unknown ?view= value falls back to Members.
+describe("TeamPageContent view tabs (Team page views and links)", () => {
+  const tabNames = () =>
+    within(screen.getByRole("tablist"))
+      .getAllByRole("tab")
+      .map((tab) => tab.textContent);
+  const accessSlot = <div data-testid="access-slot" />;
+  const renderWithAccess = (searchParams: Record<string, string> = {}) =>
+    renderWithProviders(
+      <TeamPageContent
+        canRaiseLimits={false}
+        scopeLabel={null}
+        access={accessSlot}
+      />,
+      { searchParams },
+    );
+  const OTHER_REGIONS = {
+    members: ["Team spend & budgets", "Budget and limits", "Keys", "Models"],
+    budgets: ["LiteLLM members", "Keys", "Models"],
+    keys: ["LiteLLM members", "Team spend & budgets", "Budget and limits"],
+  } as const;
+
+  it("a linked team offers the tabs Members, Budgets, Keys, in that order", async () => {
+    stub();
+    renderConfig();
+    await screen.findByRole("tablist");
+    expect(tabNames()).toEqual(["Members", "Budgets", "Keys"]);
+  });
+
+  it("opens on Members: the LiteLLM members and the access slot, nothing of the other views, and no request for them", async () => {
+    const api = stub();
+    renderWithAccess();
+    expect(await region("LiteLLM members")).toBeInTheDocument();
+    expect(screen.getByTestId("access-slot")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Members" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    for (const name of OTHER_REGIONS.members) {
+      expect(screen.queryByRole("region", { name }), name).toBeNull();
+    }
+    expect(api.gets("/api/litellm/teams/t1/keys")).toBe(0);
+    expect(api.gets("/api/litellm/models")).toBe(0);
+  });
+
+  it.each([
+    ["budgets", "Budgets", ["Team spend & budgets", "Budget and limits"]],
+    ["keys", "Keys", ["Keys", "Models"]],
+  ] as const)(
+    "?view=%s opens that view alone: its sections, not the Members view or the access slot",
+    async (view, tab, names) => {
+      stub();
+      renderWithAccess({ view });
+      for (const name of names) expect(await region(name)).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: tab })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      for (const name of OTHER_REGIONS[view]) {
+        expect(screen.queryByRole("region", { name }), name).toBeNull();
+      }
+      expect(screen.queryByTestId("access-slot")).toBeNull();
+    },
+  );
+
+  it("choosing a tab shows its view and writes ?view= to the URL as a history push, so Back steps through the views", async () => {
+    stub();
+    const onUrlUpdate = vi.fn();
+    const u = user();
+    renderWithProviders(
+      <TeamPageContent canRaiseLimits={false} scopeLabel={null} />,
+      { onUrlUpdate },
+    );
+    await region("LiteLLM members");
+
+    await openTab(u, "Keys");
+
+    expect(await region("Keys")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "LiteLLM members" }),
+    ).toBeNull();
+    const update = onUrlUpdate.mock.lastCall?.[0];
+    expect(update.searchParams.get("view")).toBe("keys");
+    expect(update.options.history).toBe("push");
+  });
+
+  it.each(["bogus", "MEMBERS-ish"])(
+    "an unknown ?view=%j falls back to Members",
+    async (view) => {
+      stub();
+      renderWithAccess({ view });
+      expect(await region("LiteLLM members")).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Members" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(screen.getByTestId("access-slot")).toBeInTheDocument();
+    },
+  );
+
+  // Review B1: Component Inventory `PageTabs` (label prop -> tablist aria-label).
+  it("the view tablist has the accessible name 'Team views' (PageTabs label; review B1)", async () => {
+    stub();
+    renderConfig();
+    expect(
+      await screen.findByRole("tablist", { name: "Team views" }),
+    ).toBeInTheDocument();
+  });
+
+  // Review B1: Team page views and links -- unlinked / not configured has
+  // Members alone, so no Tabs wrapper (no tablist, no tabpanel).
+  it("an unlinked team renders no tablist and no tabpanel (review B1)", async () => {
+    stubUnlinked();
+    renderWithAccess();
+    await region("Team spend");
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("tabpanel")).toBeNull();
+  });
+
+  it("LiteLLM not configured (LD37) renders no tablist and no tabpanel (review B1)", async () => {
+    stub({
+      "GET /api/litellm/me": () =>
+        apiResponse({
+          data: {
+            linked: false,
+            enabledOperations: [],
+            teams: [
+              {
+                teamId: "t1",
+                teamName: "Payments",
+                linked: true,
+                configurable: true,
+              },
+            ],
+          },
+        }),
+      "GET /api/litellm/teams/t1": () =>
+        apiResponse({
+          data: {
+            configured: false,
+            connected: true,
+            spendSource: "litellm-team",
+            daily: [],
+          },
+        }),
+    });
+    renderWithAccess();
+    await within(await region("Team spend & budgets")).findByText(
+      /LiteLLM not configured/i,
+    );
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("tabpanel")).toBeNull();
+  });
+
+  it.each(["budgets", "keys"])(
+    "an unlinked team has no Budgets or Keys tab and ?view=%s falls back to Members: the member-sum spend above, the access slot, no LiteLLM region (Unlinked rule)",
+    async (view) => {
+      stubUnlinked();
+      renderWithAccess({ view });
+      expect(await region("Team spend")).toBeInTheDocument();
+      expect(screen.getByTestId("access-slot")).toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: "Budgets" })).toBeNull();
+      expect(screen.queryByRole("tab", { name: "Keys" })).toBeNull();
+      for (const name of ["Keys", "Models", "Budget and limits"]) {
+        expect(screen.queryByRole("region", { name }), name).toBeNull();
+      }
+    },
+  );
+
+  it.each(["budgets", "keys"])(
+    "LiteLLM not configured (LD37) leaves only Members for a linked team too: ?view=%s falls back, the spend panel keeps saying so above, no Budgets or Keys tab",
+    async (view) => {
+      stub({
+        "GET /api/litellm/me": () =>
+          apiResponse({
+            data: {
+              linked: false,
+              enabledOperations: [],
+              teams: [
+                {
+                  teamId: "t1",
+                  teamName: "Payments",
+                  linked: true,
+                  configurable: true,
+                },
+              ],
+            },
+          }),
+        "GET /api/litellm/teams/t1": () =>
+          apiResponse({
+            data: {
+              configured: false,
+              connected: true,
+              spendSource: "litellm-team",
+              daily: [],
+            },
+          }),
+      });
+      renderWithAccess({ view });
+      await within(await region("Team spend & budgets")).findByText(
+        /LiteLLM not configured/i,
+      );
+      expect(screen.getByTestId("access-slot")).toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: "Budgets" })).toBeNull();
+      expect(screen.queryByRole("tab", { name: "Keys" })).toBeNull();
+      expect(screen.queryByRole("region", { name: "Keys" })).toBeNull();
+      expect(
+        screen.queryByRole("region", { name: "Budget and limits" }),
+      ).toBeNull();
+    },
+  );
+});
+
+// ---- Slice B2b, G1: an unlinked team's member-sum rows have no Daily spend
+// action (Team page views and links - G1: that route scopes a Lead by linked
+// LiteLLM team membership; widening it is left to unit C). The linked team's
+// action is tested in MembersPanel.test.tsx.
+describe("TeamPageContent unlinked member-sum rows (G1)", () => {
+  it("offers no Daily spend action on a member-sum row", async () => {
+    stubUnlinked();
+    renderConfig();
+    const spend = await region("Team spend");
+    await within(spend).findByRole("row", { name: /Una One/ });
+    expect(screen.queryByRole("button", { name: /daily spend/i })).toBeNull();
+  });
+});
+
+// ---- Slice B2b, L5b review warning: the shown-once dialog returns focus to the
+// button that opened it - Generate key or Rotate - and calls no preventDefault
+// when there is no ref to focus (so Radix restores focus itself).
+describe("TeamPageContent shown-once key dialog focus (L5b review warning)", () => {
+  it("Generate key: closing the dialog returns focus to Generate key", async () => {
+    stub({
+      "POST /api/litellm/teams/t1/keys": () =>
+        apiResponse({ data: { tokenId: "tok-new", key: NEW_KEY } }, 201),
+    });
+    const u = user();
+    renderView("keys");
+    await u.click(await screen.findByRole("button", { name: "Generate key" }));
+    const form = await screen.findByRole("dialog");
+    await u.selectOptions(
+      within(form).getByRole("combobox", { name: "Key owner" }),
+      "oid-ada",
+    );
+    await u.click(within(form).getByRole("button", { name: "Generate" }));
+    const shown = await screen.findByRole("dialog", { name: /key generated/i });
+    await u.click(within(shown).getByRole("button", { name: "Close" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Generate key" }),
+      ).toHaveFocus(),
+    );
+  });
+
+  it("Rotate: closing the dialog returns focus to that key's Rotate button, even with no Generate key button on the page", async () => {
+    stub(
+      {
+        "POST /api/litellm/teams/t1/keys/tok-1/rotate": () =>
+          apiResponse({
+            data: { tokenId: "tok-2", previousTokenId: "tok-1", key: NEW_KEY },
+          }),
+      },
+      ["rotateKey"],
+    );
+    const u = user();
+    renderView("keys");
+    await u.click(
+      await screen.findByRole("button", { name: "Rotate key ci-key" }),
+    );
+    const confirm = await screen.findByRole("alertdialog");
+    await u.click(within(confirm).getByRole("button", { name: "Confirm" }));
+    const shown = await screen.findByRole("dialog", { name: /key generated/i });
+    await u.click(within(shown).getByRole("button", { name: "Close" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Rotate key ci-key" }),
+      ).toHaveFocus(),
     );
   });
 });

@@ -35,7 +35,12 @@ import { useLiteLLMQuery, useLiteLLMQueryState } from "../use-litellm-query";
 import { useTeamDetail } from "../use-team-detail";
 import { keyPath, teamPath, useTeamWrite } from "./use-team-write";
 
-type ShownKey = { value: string };
+// `returnFocusRef` is the button that opened the dialog: Generate key, or the
+// row's Rotate (disabled while its write runs, so Radix cannot restore focus).
+type ShownKey = {
+  value: string;
+  returnFocusRef: RefObject<HTMLElement | null>;
+};
 
 const keyValueOf = (data: Record<string, unknown>) =>
   typeof data.key === "string" ? data.key : null;
@@ -159,6 +164,85 @@ function EditKey({
   );
 }
 
+// One action block for a key row, shared by the table and the card layouts.
+function KeyActions({
+  teamId,
+  tokenId,
+  alias,
+  ops,
+  pending,
+  write,
+  refresh,
+  onIssued,
+}: {
+  teamId: string;
+  tokenId: string;
+  alias: string;
+  ops: ReadonlySet<string>;
+  pending: boolean;
+  write: ReturnType<typeof useTeamWrite>["write"];
+  refresh: ReturnType<typeof useTeamWrite>["refresh"];
+  onIssued: (shown: ShownKey) => void;
+}) {
+  const rotateRef = useRef<HTMLButtonElement>(null);
+  const act = (action: string) =>
+    write(keyPath(teamId, tokenId, action), "POST", undefined, ["keys"]);
+  return (
+    <span className="flex flex-wrap gap-2">
+      {ops.has("updateMemberKey") ? (
+        <EditKey teamId={teamId} tokenId={tokenId} alias={alias} />
+      ) : null}
+      {ops.has("blockKey") ? (
+        <ActionButton
+          label={`Block key ${alias}`}
+          text="Block"
+          disabled={pending}
+          onClick={() => void act("/block")}
+        />
+      ) : null}
+      {ops.has("unblockKey") ? (
+        <ActionButton
+          label={`Unblock key ${alias}`}
+          text="Unblock"
+          disabled={pending}
+          onClick={() => void act("/unblock")}
+        />
+      ) : null}
+      {ops.has("rotateKey") ? (
+        <ConfirmAction
+          triggerRef={rotateRef}
+          label={`Rotate key ${alias}`}
+          text="Rotate"
+          title={`Rotate ${alias}?`}
+          description="A new key is issued and shown once."
+          disabled={pending}
+          onConfirm={() =>
+            void write(keyPath(teamId, tokenId, "/rotate"), "POST", {}, [], {
+              refetch: false,
+            }).then((result) => {
+              const value = result.ok ? keyValueOf(result.data) : null;
+              if (value) onIssued({ value, returnFocusRef: rotateRef });
+              else void refresh(["keys"]);
+            })
+          }
+        />
+      ) : null}
+      {ops.has("deleteKey") ? (
+        <ConfirmAction
+          label={`Delete key ${alias}`}
+          text="Delete"
+          title={`Delete ${alias}?`}
+          description="The key stops working immediately."
+          disabled={pending}
+          onConfirm={() =>
+            void write(keyPath(teamId, tokenId), "DELETE", undefined, ["keys"])
+          }
+        />
+      ) : null}
+    </span>
+  );
+}
+
 export function KeysPanel({ teamId }: TeamPanelProps) {
   const detail = useTeamDetail(teamId);
   const keys = useLiteLLMQuery(
@@ -181,6 +265,16 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
     return <NotConnected />;
   const ops = new Set(detail.data.enabledOperations);
   const { items } = keys.data;
+  const actionProps = (key: { tokenId: string }, alias: string) => ({
+    teamId,
+    tokenId: key.tokenId,
+    alias,
+    ops,
+    pending,
+    write,
+    refresh,
+    onIssued: setShown,
+  });
 
   return (
     <div className="flex flex-col gap-3">
@@ -188,7 +282,9 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
         <div>
           <GenerateKey
             teamId={teamId}
-            onIssued={(value) => setShown({ value })}
+            onIssued={(value) =>
+              setShown({ value, returnFocusRef: generateRef })
+            }
             triggerRef={generateRef}
           />
         </div>
@@ -197,7 +293,7 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
       {shown ? (
         <ShownOnceKeyDialog
           value={shown.value}
-          returnFocusRef={generateRef}
+          returnFocusRef={shown.returnFocusRef}
           onClose={() => {
             setShown(null);
             void refresh(["keys"]);
@@ -210,78 +306,6 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
         <ul role="list" aria-label="Team keys" className="space-y-3">
           {items.map((key) => {
             const alias = key.keyAlias ?? `…${key.tokenId.slice(-4)}`;
-            const act = (action: string) =>
-              write(keyPath(teamId, key.tokenId, action), "POST", undefined, [
-                "keys",
-              ]);
-            const actions = (
-              <span className="flex flex-wrap gap-2">
-                {ops.has("updateMemberKey") ? (
-                  <EditKey
-                    teamId={teamId}
-                    tokenId={key.tokenId}
-                    alias={alias}
-                  />
-                ) : null}
-                {ops.has("blockKey") ? (
-                  <ActionButton
-                    label={`Block key ${alias}`}
-                    text="Block"
-                    disabled={pending}
-                    onClick={() => void act("/block")}
-                  />
-                ) : null}
-                {ops.has("unblockKey") ? (
-                  <ActionButton
-                    label={`Unblock key ${alias}`}
-                    text="Unblock"
-                    disabled={pending}
-                    onClick={() => void act("/unblock")}
-                  />
-                ) : null}
-                {ops.has("rotateKey") ? (
-                  <ConfirmAction
-                    label={`Rotate key ${alias}`}
-                    text="Rotate"
-                    title={`Rotate ${alias}?`}
-                    description="A new key is issued and shown once."
-                    disabled={pending}
-                    onConfirm={() =>
-                      void write(
-                        keyPath(teamId, key.tokenId, "/rotate"),
-                        "POST",
-                        {},
-                        [],
-                        { refetch: false },
-                      ).then((result) => {
-                        const value = result.ok
-                          ? keyValueOf(result.data)
-                          : null;
-                        if (value) setShown({ value });
-                        else void refresh(["keys"]);
-                      })
-                    }
-                  />
-                ) : null}
-                {ops.has("deleteKey") ? (
-                  <ConfirmAction
-                    label={`Delete key ${alias}`}
-                    text="Delete"
-                    title={`Delete ${alias}?`}
-                    description="The key stops working immediately."
-                    disabled={pending}
-                    onConfirm={() =>
-                      void write(
-                        keyPath(teamId, key.tokenId),
-                        "DELETE",
-                        undefined,
-                        ["keys"],
-                      )
-                    }
-                  />
-                ) : null}
-              </span>
-            );
             return (
               <li
                 key={key.tokenId}
@@ -315,7 +339,7 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
                     <dd>{formatSydneyTime(key.expires)}</dd>
                   </div>
                 </dl>
-                {actions}
+                <KeyActions {...actionProps(key, alias)} />
               </li>
             );
           })}
@@ -335,78 +359,6 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
           <TableBody>
             {items.map((key) => {
               const alias = key.keyAlias ?? `…${key.tokenId.slice(-4)}`;
-              const act = (action: string) =>
-                write(keyPath(teamId, key.tokenId, action), "POST", undefined, [
-                  "keys",
-                ]);
-              const actions = (
-                <span className="flex flex-wrap gap-2">
-                  {ops.has("updateMemberKey") ? (
-                    <EditKey
-                      teamId={teamId}
-                      tokenId={key.tokenId}
-                      alias={alias}
-                    />
-                  ) : null}
-                  {ops.has("blockKey") ? (
-                    <ActionButton
-                      label={`Block key ${alias}`}
-                      text="Block"
-                      disabled={pending}
-                      onClick={() => void act("/block")}
-                    />
-                  ) : null}
-                  {ops.has("unblockKey") ? (
-                    <ActionButton
-                      label={`Unblock key ${alias}`}
-                      text="Unblock"
-                      disabled={pending}
-                      onClick={() => void act("/unblock")}
-                    />
-                  ) : null}
-                  {ops.has("rotateKey") ? (
-                    <ConfirmAction
-                      label={`Rotate key ${alias}`}
-                      text="Rotate"
-                      title={`Rotate ${alias}?`}
-                      description="A new key is issued and shown once."
-                      disabled={pending}
-                      onConfirm={() =>
-                        void write(
-                          keyPath(teamId, key.tokenId, "/rotate"),
-                          "POST",
-                          {},
-                          [],
-                          { refetch: false },
-                        ).then((result) => {
-                          const value = result.ok
-                            ? keyValueOf(result.data)
-                            : null;
-                          if (value) setShown({ value });
-                          else void refresh(["keys"]);
-                        })
-                      }
-                    />
-                  ) : null}
-                  {ops.has("deleteKey") ? (
-                    <ConfirmAction
-                      label={`Delete key ${alias}`}
-                      text="Delete"
-                      title={`Delete ${alias}?`}
-                      description="The key stops working immediately."
-                      disabled={pending}
-                      onConfirm={() =>
-                        void write(
-                          keyPath(teamId, key.tokenId),
-                          "DELETE",
-                          undefined,
-                          ["keys"],
-                        )
-                      }
-                    />
-                  ) : null}
-                </span>
-              );
               return (
                 <TableRow key={key.tokenId}>
                   <TableCell>
@@ -426,7 +378,9 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
                       : formatUsd(key.maxBudget)}
                   </TableCell>
                   <TableCell>{formatSydneyTime(key.expires)}</TableCell>
-                  <TableCell>{actions}</TableCell>
+                  <TableCell>
+                    <KeyActions {...actionProps(key, alias)} />
+                  </TableCell>
                 </TableRow>
               );
             })}

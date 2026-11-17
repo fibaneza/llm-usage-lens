@@ -42,6 +42,7 @@ export function ConfirmAction({
   description,
   disabled,
   onConfirm,
+  triggerRef,
 }: {
   label: string;
   text: string;
@@ -49,11 +50,13 @@ export function ConfirmAction({
   description: string;
   disabled: boolean;
   onConfirm: () => void;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
 }) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button
+          ref={triggerRef}
           variant="outline"
           size="sm"
           aria-label={label}

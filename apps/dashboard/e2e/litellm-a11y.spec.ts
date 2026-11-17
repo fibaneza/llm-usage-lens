@@ -43,6 +43,12 @@ const ADMIN_OPS = [
 ] as const;
 
 const TEAM_URL = "/dashboard/manage/team?team=t1";
+// Slice B2b (Design System -- Management pages, *Team page views and links*):
+// the Team page is three views on ?view= (default members); only the active
+// view is rendered, so a test opens the view that holds what it uses.
+type TeamView = "members" | "budgets" | "keys";
+const TEAM_VIEWS: readonly TeamView[] = ["members", "budgets", "keys"];
+const teamUrl = (view: TeamView) => `${TEAM_URL}&view=${view}`;
 const KEY_VALUE = "sk-L5B-SHOWN-ONCE";
 
 type MockOptions = {
@@ -197,6 +203,16 @@ async function mockApi(page: Page, options: MockOptions = {}) {
     if (path === "/api/litellm/teams/t1/keys" && request.method() === "POST") {
       return ok({ tokenId: "tok-new", key: KEY_VALUE, oid: "oid-ada" }, 201);
     }
+    if (
+      path === "/api/litellm/teams/t1/keys/tok-1234/rotate" &&
+      request.method() === "POST"
+    ) {
+      return ok({
+        tokenId: "tok-rotated",
+        previousTokenId: "tok-1234",
+        key: KEY_VALUE,
+      });
+    }
     switch (`${request.method()} ${path}`) {
       case "GET /api/litellm/me":
         return ok({
@@ -317,14 +333,24 @@ async function expectNoHorizontalScroll(page: Page, label: string) {
 const pageBody = (page: Page) =>
   page.locator('[data-slot="sidebar-inset"] > header + *');
 
-async function teamPageReady(page: Page) {
+async function teamPageReady(page: Page, view: TeamView = "members") {
   await expect(
     page.getByRole("heading", { level: 1, name: "Team usage & management" }),
   ).toBeVisible();
-  await expect(page.getByRole("region", { name: "Models" })).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "LiteLLM members" }),
-  ).toContainText("Ada Lovelace");
+  if (view === "members") {
+    await expect(
+      page.getByRole("region", { name: "LiteLLM members" }),
+    ).toContainText("Ada Lovelace");
+  } else if (view === "budgets") {
+    await expect(
+      page.getByRole("region", { name: "Team spend & budgets" }),
+    ).toContainText("$321.75");
+  } else {
+    await expect(page.getByRole("region", { name: "Keys" })).toContainText(
+      "ci-key",
+    );
+    await expect(page.getByRole("region", { name: "Models" })).toBeVisible();
+  }
 }
 
 async function focusIsInside(dialog: Locator) {
@@ -383,6 +409,19 @@ test.describe("axe per role and dialog state (L5 Accessibility floor)", () => {
     });
   }
 
+  for (const view of TEAM_VIEWS) {
+    test(`admin: the Team ${view} view with data is axe-clean (B2b view tabs)`, async ({
+      page,
+      context,
+    }) => {
+      await signInAsTestUser(context, { roles: ["internal-admin"] });
+      await mockApi(page);
+      await open(page, teamUrl(view));
+      await teamPageReady(page, view);
+      await expectNoBlockingViolations(page);
+    });
+  }
+
   test("org admin: Users with search results is axe-clean", async ({
     page,
     context,
@@ -426,17 +465,25 @@ test.describe("axe per role and dialog state (L5 Accessibility floor)", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-auditor"] });
     await mockApi(page, { ops: [] });
-    await open(page, TEAM_URL);
-    await teamPageReady(page);
-    for (const name of [
-      "Generate key",
-      "Add member",
-      "Reset spend for all members",
-      "Save budget",
-    ]) {
-      await expect(page.getByRole("button", { name })).toHaveCount(0);
+    // B2b: the auditor reads all three views, none with a write control.
+    for (const view of TEAM_VIEWS) {
+      await open(page, teamUrl(view));
+      await teamPageReady(page, view);
+      for (const name of [
+        "Generate key",
+        "Add member",
+        "Reset spend for all members",
+        "Save budget",
+      ]) {
+        await expect(page.getByRole("button", { name })).toHaveCount(0);
+      }
+      await expectNoBlockingViolations(page);
     }
-    await expectNoBlockingViolations(page);
+    await expect(page.getByRole("tab")).toHaveText([
+      "Members",
+      "Budgets",
+      "Keys",
+    ]);
   });
 
   test("auditor: Audit is axe-clean on the default source and on the Gateway source with data", async ({
@@ -497,8 +544,8 @@ test.describe("axe per role and dialog state (L5 Accessibility floor)", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
-    await open(page, TEAM_URL);
-    await teamPageReady(page);
+    await open(page, teamUrl("keys"));
+    await teamPageReady(page, "keys");
     await page.getByRole("button", { name: "Generate key" }).click();
     await page
       .getByRole("combobox", { name: "Key owner" })
@@ -522,8 +569,8 @@ test.describe("keyboard walk (L5 Accessibility floor)", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
-    await open(page, TEAM_URL);
-    await teamPageReady(page);
+    await open(page, teamUrl("budgets"));
+    await teamPageReady(page, "budgets");
 
     // Exact name excludes "Team totals"; the page-header selector precedes the
     // Members region's own "Team" select in the DOM.
@@ -539,6 +586,75 @@ test.describe("keyboard walk (L5 Accessibility floor)", () => {
     await expect(
       page.getByRole("region", { name: "Team spend & budgets" }),
     ).toContainText("$10.00");
+  });
+
+  // Design System -- Management pages, Team: PageHeader holds "the view tabs
+  // Members, Budgets, Keys" and *Team page views and links* (the one Tabs
+  // component, `?view=` URL state); Design System -- Components, Tabs (Arrow /
+  // Home / End). Moved here from L5b (coordinator ruling): the feature is B2b.
+  test("Team view tabs: Arrow keys move between Members, Budgets, Keys and the URL records the view", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await open(page, TEAM_URL);
+    await teamPageReady(page);
+
+    const tablist = page.getByRole("tablist");
+    await expect(tablist).toBeVisible();
+    const tabs = tablist.getByRole("tab");
+    await expect(tabs).toHaveText(["Members", "Budgets", "Keys"]);
+
+    await tabs.first().focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(tabs.nth(1)).toBeFocused();
+    await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
+    await expect(page).toHaveURL(/[?&]view=budgets(&|$)/);
+    await expect(
+      page.getByRole("region", { name: "Team spend & budgets" }),
+    ).toBeVisible();
+
+    await page.keyboard.press("End");
+    await expect(tabs.nth(2)).toBeFocused();
+    await expect(page).toHaveURL(/[?&]view=keys(&|$)/);
+
+    await page.keyboard.press("Home");
+    await expect(tabs.first()).toBeFocused();
+    await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
+  });
+
+  // Design System -- Management pages, *Team page views and links*: "Member
+  // search on Members: a labelled search box ('Search members') filtering the
+  // loaded member rows client-side by name or email, case-insensitive".
+  test("Team member search: a labelled searchbox reachable by Tab from the view tabs, filtering members as you type", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await open(page, TEAM_URL);
+    await teamPageReady(page);
+
+    const search = page.getByRole("searchbox", { name: /search members/i });
+    await expect(search).toBeVisible();
+    await page
+      .getByRole("tablist")
+      .getByRole("tab", { name: "Members" })
+      .focus();
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press("Tab");
+      if (await search.evaluate((el) => el === document.activeElement)) break;
+    }
+    await expect(search).toBeFocused();
+
+    await page.keyboard.type("grace");
+    const members = page.getByRole("region", { name: "LiteLLM members" });
+    await expect(members).toContainText("Grace Hopper");
+    await expect(members).not.toContainText("Ada Lovelace");
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("zzz");
+    await expect(members).toContainText(/no members match/i);
   });
 
   // Design System -- Management pages, Audit: segmented toggle, nuqs `source`,
@@ -577,24 +693,26 @@ test.describe("keyboard walk (L5 Accessibility floor)", () => {
   test.describe("form dialogs", () => {
     // The app membership "Add member" (Access "Members" section) is an inline
     // form, not a dialog, so only the LiteLLM panel's is walked.
-    const FORM_DIALOGS: readonly [string, string, string][] = [
-      ["LiteLLM members", "Add member", "LiteLLM Add member"],
-      ["Keys", "Generate key", "Generate key"],
-      ["LiteLLM members", "Edit limits for Ada Lovelace", "Edit limits"],
-      ["Keys", "Edit key ci-key", "Edit key"],
+    const FORM_DIALOGS: readonly [string, string, string, TeamView][] = [
+      ["LiteLLM members", "Add member", "LiteLLM Add member", "members"],
+      ["Keys", "Generate key", "Generate key", "keys"],
+      [
+        "LiteLLM members",
+        "Edit limits for Ada Lovelace",
+        "Edit limits",
+        "members",
+      ],
+      ["Keys", "Edit key ci-key", "Edit key", "keys"],
     ];
-    for (const [region, button, trigger] of FORM_DIALOGS) {
+    for (const [region, button, trigger, view] of FORM_DIALOGS) {
       test(`${trigger}: opens with focus inside, Escape closes, focus returns to the trigger`, async ({
         page,
         context,
       }) => {
         await signInAsTestUser(context, { roles: ["internal-admin"] });
         await mockApi(page);
-        await open(page, TEAM_URL);
-        await teamPageReady(page);
-        await expect(page.getByRole("region", { name: "Keys" })).toContainText(
-          "ci-key",
-        );
+        await open(page, teamUrl(view));
+        await teamPageReady(page, view);
 
         await walkDialog(
           page,
@@ -610,24 +728,21 @@ test.describe("keyboard walk (L5 Accessibility floor)", () => {
   // Confirm dialogs (AlertDialog) other than remove member. The same
   // ConfirmAction component backs reset budget and the rest.
   test.describe("confirm dialogs", () => {
-    const CONFIRMS = [
-      "Reset spend for Ada Lovelace",
-      "Reset spend for all members",
-      "Rotate key ci-key",
-      "Delete key ci-key",
-    ] as const;
-    for (const trigger of CONFIRMS) {
+    const CONFIRMS: readonly [string, TeamView][] = [
+      ["Reset spend for Ada Lovelace", "members"],
+      ["Reset spend for all members", "members"],
+      ["Rotate key ci-key", "keys"],
+      ["Delete key ci-key", "keys"],
+    ];
+    for (const [trigger, view] of CONFIRMS) {
       test(`${trigger}: Enter opens it with focus inside, Escape closes, focus returns to the trigger`, async ({
         page,
         context,
       }) => {
         await signInAsTestUser(context, { roles: ["internal-admin"] });
         await mockApi(page);
-        await open(page, TEAM_URL);
-        await teamPageReady(page);
-        await expect(page.getByRole("region", { name: "Keys" })).toContainText(
-          "ci-key",
-        );
+        await open(page, teamUrl(view));
+        await teamPageReady(page, view);
 
         await walkDialog(
           page,
@@ -644,8 +759,8 @@ test.describe("keyboard walk (L5 Accessibility floor)", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
-    await open(page, TEAM_URL);
-    await teamPageReady(page);
+    await open(page, teamUrl("keys"));
+    await teamPageReady(page, "keys");
 
     const trigger = page.getByRole("button", { name: "Generate key" });
     await trigger.focus();
@@ -666,6 +781,36 @@ test.describe("keyboard walk (L5 Accessibility floor)", () => {
     await expect(shown).toBeHidden();
     await expect(page.getByText(KEY_VALUE)).toHaveCount(0);
     await expect(trigger).toBeFocused();
+  });
+
+  // L5b review warning (B2b): the dialog returns focus to the button that
+  // opened it, so after a rotation that is the key's Rotate button, not Generate.
+  test("the shown-once key dialog after Rotate returns focus to that key's Rotate button", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await open(page, teamUrl("keys"));
+    await teamPageReady(page, "keys");
+
+    const rotate = page.getByRole("button", {
+      name: "Rotate key ci-key",
+      exact: true,
+    });
+    await rotate.focus();
+    await page.keyboard.press("Enter");
+    const confirm = page.getByRole("alertdialog");
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "Confirm" }).click();
+
+    const shown = page.getByRole("dialog", { name: /key generated/i });
+    await expect(shown).toContainText(KEY_VALUE);
+    await focusIsInside(shown);
+    await page.keyboard.press("Escape");
+    await expect(shown).toBeHidden();
+    await expect(page.getByText(KEY_VALUE)).toHaveCount(0);
+    await expect(rotate).toBeFocused();
   });
 });
 
@@ -696,8 +841,8 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
-    await open(page, TEAM_URL);
-    await teamPageReady(page);
+    await open(page, teamUrl("keys"));
+    await teamPageReady(page, "keys");
     await expect(
       page
         .getByRole("region", { name: "Keys" })
@@ -788,13 +933,14 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
-    await open(page, TEAM_URL);
-    await teamPageReady(page);
+    await open(page, teamUrl("budgets"));
+    await teamPageReady(page, "budgets");
 
     const team = page.getByRole("region", { name: "Team spend & budgets" });
     await expect(team.getByRole("progressbar")).toBeVisible();
     await expect(team).toContainText("64%");
 
+    await page.getByRole("tab", { name: "Members" }).click();
     const members = page.getByRole("region", { name: "LiteLLM members" });
     const over = members.getByRole("row", { name: /Ada Lovelace/ });
     await expect(over.getByRole("progressbar")).toBeVisible();
@@ -862,6 +1008,8 @@ test.describe("responsive (L5 Responsive; Design System: Responsive Tables)", ()
       await open(page, path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expectNoHorizontalScroll(page, `${label} at 1920px`);
+      // The L5b Verify line: axe clean at 1920 as well as 375-1440.
+      await expectNoBlockingViolations(page);
     });
   }
 
@@ -894,7 +1042,7 @@ test.describe("responsive (L5 Responsive; Design System: Responsive Tables)", ()
       roles: ["internal-admin"],
       rows: 2,
       prepare: async (page) => {
-        await open(page, TEAM_URL);
+        await open(page, teamUrl("keys"));
         await expect(page.getByRole("region", { name: "Keys" })).toContainText(
           "ci-key",
         );
@@ -962,6 +1110,8 @@ test.describe("responsive (L5 Responsive; Design System: Responsive Tables)", ()
       await expect(cards, `${name} has no card list below md`).toBeVisible();
       await expect(cards.getByRole("listitem")).toHaveCount(rows);
       await expectNoHorizontalScroll(page, `${name} at 375px`);
+      // L5b review warning (B2b): the card layout is axe-clean too.
+      await expectNoBlockingViolations(page);
 
       await page.setViewportSize({ width: 768, height: 900 });
       await expect(page.getByRole("table", { name: caption })).toBeVisible();

@@ -1,11 +1,11 @@
 "use client";
 
-import { parseAsString, useQueryState } from "nuqs";
-import { useId, type ReactNode } from "react";
+import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
+import { Fragment, useId, type ReactNode } from "react";
 
 import { Panel } from "@/components/display/Panel";
-import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageTabs } from "@/components/layout/PageTabs";
 import { LiteLLMReportedBadge } from "@/components/litellm/LiteLLMReportedBadge";
 import { BudgetLimitsPanel } from "@/components/litellm/team/BudgetLimitsPanel";
 import { KeysPanel } from "@/components/litellm/team/KeysPanel";
@@ -13,7 +13,7 @@ import { MembersPanel } from "@/components/litellm/team/MembersPanel";
 import { ModelsPanel } from "@/components/litellm/team/ModelsPanel";
 import { NativeSelect } from "@/components/litellm/team/native-select";
 import { useMeQuery } from "@/components/litellm/use-me-query";
-import { useTeamSpendDetail } from "@/components/litellm/use-team-detail";
+import { useTeamDetailState } from "@/components/litellm/use-team-detail";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { TeamSpendPanel } from "./TeamSpendPanel";
@@ -22,20 +22,18 @@ const PANEL_SKELETON = <Skeleton className="h-40 w-full" />;
 const DESCRIPTION =
   "Spend, budgets, members, keys and models for your teams, as LiteLLM reports them.";
 
-// LD37: when LiteLLM is not configured the L4 panels and their controls are
-// not rendered, so none of their routes is called. Shares the spend panel's
-// query, so it adds no request.
-function WhenConfigured({
-  teamId,
-  children,
-}: {
-  teamId: string;
-  children: ReactNode;
-}) {
-  const result = useTeamSpendDetail(teamId);
-  if (result.status === "ok" && result.data.configured === false) return null;
-  return <>{children}</>;
-}
+const VIEWS = ["members", "budgets", "keys"] as const;
+const VIEW_ITEMS = [
+  { value: "members", label: "Members" },
+  { value: "budgets", label: "Budgets" },
+  { value: "keys", label: "Keys" },
+] as const;
+// An unknown ?view= parses to null and takes the default; each tab is a
+// history entry so Back steps through the views (Design System - Management
+// pages, Team page views and links).
+const viewParser = parseAsStringLiteral(VIEWS)
+  .withDefault("members")
+  .withOptions({ history: "push" });
 
 type TeamPageContentProps = {
   // True for internal-admin only; everyone else lowers (LiteLLM spec - LD26).
@@ -81,15 +79,6 @@ export function TeamPageContent({
     );
   }
 
-  const panel = (title: string, reported = false) => ({
-    title,
-    boundaryTitle: title.toLowerCase(),
-    skeleton: PANEL_SKELETON,
-    resetKeys: [team.teamId],
-    badge: reported ? <LiteLLMReportedBadge /> : undefined,
-  });
-  const capabilities = { canRaiseLimits };
-
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -119,46 +108,130 @@ export function TeamPageContent({
         </div>
       </PageHeader>
       {team.linked ? (
-        <>
-          <Panel
-            {...panel("Team spend & budgets", true)}
-            description="Daily figures are UTC days."
-          >
-            <TeamSpendPanel teamId={team.teamId} />
-          </Panel>
-          <SectionBoundary
-            title="LiteLLM panels"
-            fallback={PANEL_SKELETON}
-            resetKeys={[team.teamId]}
-          >
-            <WhenConfigured teamId={team.teamId}>
-              <Panel {...panel("LiteLLM members", true)}>
-                <MembersPanel
-                  teamId={team.teamId}
-                  capabilities={capabilities}
-                />
-              </Panel>
-              <Panel {...panel("Keys", true)}>
-                <KeysPanel teamId={team.teamId} capabilities={capabilities} />
-              </Panel>
-              <Panel {...panel("Budget and limits")}>
-                <BudgetLimitsPanel
-                  teamId={team.teamId}
-                  capabilities={capabilities}
-                />
-              </Panel>
-              <Panel {...panel("Models")}>
-                <ModelsPanel teamId={team.teamId} capabilities={capabilities} />
-              </Panel>
-            </WhenConfigured>
-          </SectionBoundary>
-        </>
+        <LinkedTeamViews
+          teamId={team.teamId}
+          capabilities={{ canRaiseLimits }}
+          access={access}
+        />
       ) : (
-        <Panel {...panel("Team spend", true)}>
-          <TeamSpendPanel teamId={team.teamId} />
-        </Panel>
+        <>
+          <SpendPanel teamId={team.teamId} withBudgets={false} />
+          {access}
+        </>
       )}
-      {access}
     </div>
+  );
+}
+
+const panelProps = (teamId: string, title: string, reported = false) => ({
+  title,
+  boundaryTitle: title.toLowerCase(),
+  skeleton: PANEL_SKELETON,
+  resetKeys: [teamId],
+  badge: reported ? <LiteLLMReportedBadge /> : undefined,
+});
+
+function SpendPanel({
+  teamId,
+  withBudgets,
+}: {
+  teamId: string;
+  withBudgets: boolean;
+}) {
+  const title = withBudgets ? "Team spend & budgets" : "Team spend";
+  return (
+    <Panel
+      {...panelProps(teamId, title, true)}
+      description={withBudgets ? "Daily figures are UTC days." : undefined}
+    >
+      <TeamSpendPanel teamId={teamId} />
+    </Panel>
+  );
+}
+
+// Linked team: the Members, Budgets and Keys views on the one Tabs component,
+// only the active view mounted (Design System - Management pages, Team page
+// views and links). LiteLLM not configured (LD37) leaves Members alone, with
+// the spend panel saying so above it and no tabs. An outage does not hide a
+// view, and the tabs show while the detail loads.
+//
+// The views sit in PageTabs; the not-configured state renders no tabs at all.
+function LinkedTeamViews({
+  teamId,
+  capabilities,
+  access,
+}: {
+  teamId: string;
+  capabilities: { canRaiseLimits: boolean };
+  access: ReactNode;
+}) {
+  const [requested, setView] = useQueryState("view", viewParser);
+  const detail = useTeamDetailState(teamId);
+  const panel = (title: string, reported = false) =>
+    panelProps(teamId, title, reported);
+
+  const showTabs = !(
+    detail.data?.status === "ok" && detail.data.data.configured === false
+  );
+  const view = showTabs ? requested : "budgets";
+
+  // The L4 panels mount once the detail has answered, so a team that is not
+  // configured never calls their routes.
+  const gated = (children: ReactNode) =>
+    detail.isPending ? PANEL_SKELETON : children;
+
+  const accessSlot = <Fragment key="access">{access}</Fragment>;
+  // Mounted once the detail has answered: the tabs wrapper goes away for a
+  // team that is not configured, which would remount (and refetch) it.
+  const spend = detail.isPending ? (
+    <Fragment key="spend">{PANEL_SKELETON}</Fragment>
+  ) : (
+    <SpendPanel key="spend" teamId={teamId} withBudgets />
+  );
+  const content = !showTabs
+    ? [spend, accessSlot]
+    : view === "members"
+      ? [
+          <Panel key="members" {...panel("LiteLLM members", true)}>
+            {gated(
+              <MembersPanel teamId={teamId} capabilities={capabilities} />,
+            )}
+          </Panel>,
+          accessSlot,
+        ]
+      : view === "budgets"
+        ? [
+            spend,
+            <Panel key="budget" {...panel("Budget and limits")}>
+              {gated(
+                <BudgetLimitsPanel
+                  teamId={teamId}
+                  capabilities={capabilities}
+                />,
+              )}
+            </Panel>,
+          ]
+        : [
+            <Panel key="keys" {...panel("Keys", true)}>
+              {gated(<KeysPanel teamId={teamId} capabilities={capabilities} />)}
+            </Panel>,
+            <Panel key="models" {...panel("Models")}>
+              {gated(
+                <ModelsPanel teamId={teamId} capabilities={capabilities} />,
+              )}
+            </Panel>,
+          ];
+
+  if (!showTabs) return <div className="flex flex-col gap-4">{content}</div>;
+  return (
+    <PageTabs
+      label="Team views"
+      value={view}
+      onValueChange={(next) => void setView(next)}
+      items={VIEW_ITEMS}
+      panelId="team-view-panel"
+    >
+      <div className="flex flex-col gap-4">{content}</div>
+    </PageTabs>
   );
 }

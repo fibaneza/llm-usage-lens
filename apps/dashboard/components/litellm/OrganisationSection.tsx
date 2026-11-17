@@ -30,6 +30,20 @@ const SOURCE_LABEL = {
 
 type OrgData = ReturnType<typeof LiteLLMOrgResponseSchema.parse>;
 
+const teamPageHref = (teamId: string) =>
+  `/dashboard/manage/team?team=${encodeURIComponent(teamId)}`;
+
+function AppTeamName({ team }: { team: OrgData["appTeams"][number] }) {
+  return (
+    <Link
+      className="text-link underline-offset-4 hover:underline"
+      href={teamPageHref(team.teamId)}
+    >
+      {team.teamName}
+    </Link>
+  );
+}
+
 function AppTeamSpend({
   team,
   configured,
@@ -42,7 +56,7 @@ function AppTeamSpend({
   return (
     <Link
       className="text-link underline-offset-4 hover:underline"
-      href={`/dashboard/manage/team?team=${encodeURIComponent(team.teamId)}`}
+      href={teamPageHref(team.teamId)}
     >
       Open the team page
     </Link>
@@ -174,7 +188,7 @@ export function OrganisationSection() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 font-medium break-words">
-                    {team.teamName}
+                    <AppTeamName team={team} />
                   </div>
                   <div className="shrink-0 text-base font-semibold">
                     <span className="sr-only">Spend</span>
@@ -214,7 +228,9 @@ export function OrganisationSection() {
             <TableBody>
               {appTeams.map((team) => (
                 <TableRow key={team.teamId}>
-                  <TableCell>{team.teamName}</TableCell>
+                  <TableCell>
+                    <AppTeamName team={team} />
+                  </TableCell>
                   <TableCell>{SOURCE_LABEL[team.spendSource]}</TableCell>
                   <TableCell className={NUMERIC}>
                     <AppTeamSpend team={team} configured={configured} />

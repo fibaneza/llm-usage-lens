@@ -379,3 +379,246 @@ describe("MembersPanel bulk reset counts only members with an oid (B2 review)", 
     ).toEqual(["ada", "bob", "cy"].map(resetUrl));
   });
 });
+
+// ---- Slice B2b. Sources: Design System - Management pages, *Team page views
+// and links* ("Member search on Members: a labelled search box ('Search
+// members') filtering the loaded member rows client-side by name or email,
+// case-insensitive; 'No members match' when nothing matches. No new request.";
+// "G1 - member daily spend: on a linked team, each LiteLLM member row has a
+// 'Daily spend' action that opens that person's daily spend for the selected
+// range, read through the existing GET /api/litellm/users/[litellmUserId] ...
+// LD23 cap applies. No new route"); LiteLLM spec - Gateway allowlist
+// (getUserDailySpend; a control for a disabled operation is absent, not dead).
+// Contract (MembersPanel.tsx, both the table and the card layout):
+//   - a `searchbox` named "Search members" above the rows, shown when the team
+//     has members; it ANDs with the "Near or over budget" toggle;
+//   - when `getUserDailySpend` is in the team detail's enabledOperations each
+//     row has a button, accessible name `Daily spend for <name>` (visible text
+//     "Daily spend"); it requests GET /api/litellm/users/<member.userId>?
+//     dateFrom=..&dateTo=.. (the URL range, Rule 20.8) and the result shows the
+//     member's daily rows in the DailySpend table "Daily spend by UTC day";
+//     the action is absent when the operation is not enabled.
+describe("MembersPanel member search (Slice B2b)", () => {
+  const searchbox = () =>
+    screen.getByRole("searchbox", { name: "Search members" });
+  const listed = () =>
+    ["Ada Lovelace", "Bob Builder", "Cy Poe", "Dee Nolimit"].filter(
+      (name) => screen.queryByText(name) !== null,
+    );
+
+  it("filters by name, case-insensitively, and shows every member again when cleared", async () => {
+    stub();
+    const u = user();
+    renderPanel();
+    await screen.findByText("Ada Lovelace");
+
+    await u.type(searchbox(), "BOB");
+    expect(listed()).toEqual(["Bob Builder"]);
+
+    await u.clear(searchbox());
+    expect(listed()).toHaveLength(4);
+  });
+
+  it("filters by email as well", async () => {
+    stub();
+    const u = user();
+    renderPanel();
+    await screen.findByText("Ada Lovelace");
+
+    await u.type(searchbox(), "cy@Example");
+    expect(listed()).toEqual(["Cy Poe"]);
+  });
+
+  it("says 'No members match' when nothing matches, and lists no row", async () => {
+    stub();
+    const u = user();
+    renderPanel();
+    await screen.findByText("Ada Lovelace");
+
+    await u.type(searchbox(), "zzz");
+    expect(screen.getByText(/no members match/i)).toBeInTheDocument();
+    expect(listed()).toEqual([]);
+  });
+
+  it("filters the loaded rows without a new request", async () => {
+    const api = stub();
+    const u = user();
+    renderPanel();
+    await screen.findByText("Ada Lovelace");
+    const before = api.calls.length;
+
+    await u.type(searchbox(), "ada");
+
+    expect(listed()).toEqual(["Ada Lovelace"]);
+    expect(api.calls).toHaveLength(before);
+  });
+
+  it("combines with 'Near or over budget': both must match", async () => {
+    stub();
+    const u = user();
+    renderPanel();
+    await screen.findByText("Ada Lovelace");
+
+    await u.click(screen.getByRole("button", { name: "Near or over budget" }));
+    expect(listed()).toEqual(["Bob Builder", "Cy Poe"]);
+    await u.type(searchbox(), "cy");
+    expect(listed()).toEqual(["Cy Poe"]);
+    await u.clear(searchbox());
+    await u.type(searchbox(), "ada");
+    expect(screen.getByText(/no members match/i)).toBeInTheDocument();
+  });
+
+  describe("in the card layout (below md)", () => {
+    const originalWidth = window.innerWidth;
+    beforeEach(() => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: 375,
+      });
+    });
+    afterEach(() => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: originalWidth,
+      });
+    });
+
+    it("filters the cards too", async () => {
+      stub();
+      const u = user();
+      renderPanel();
+      const cards = await screen.findByRole("list", { name: "Team members" });
+
+      await u.type(searchbox(), "dee");
+
+      expect(within(cards).getAllByRole("listitem")).toHaveLength(1);
+      expect(within(cards).getByText("Dee Nolimit")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("MembersPanel member daily spend (Slice B2b, G1)", () => {
+  const DAILY = {
+    userId: "u-ada",
+    email: "ada@example.test",
+    spend: 77.1,
+    maxBudget: 150,
+    daily: [
+      { date: "2026-11-02", spend: 1.25 },
+      { date: "2026-11-03", spend: 2.5 },
+    ],
+    enabledOperations: ["getUserDailySpend"],
+  };
+
+  function stubDaily(ops: string[]) {
+    const api = stub(ops, {
+      "GET /api/litellm/users/u-ada": () => apiResponse({ data: DAILY }),
+    });
+    const urls: URL[] = [];
+    const base = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        urls.push(new URL(String(input), "http://localhost"));
+        return base(input, init);
+      }),
+    );
+    return { api, urls };
+  }
+
+  it("each row offers 'Daily spend' when getUserDailySpend is enabled", async () => {
+    stubDaily([...ALL_OPS, "getUserDailySpend"]);
+    renderPanel();
+    await screen.findByText("Ada Lovelace");
+    for (const name of [
+      "Ada Lovelace",
+      "Bob Builder",
+      "Cy Poe",
+      "Dee Nolimit",
+    ]) {
+      expect(
+        screen.getByRole("button", { name: `Daily spend for ${name}` }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("the action is absent, not dead, when getUserDailySpend is not enabled", async () => {
+    stub();
+    renderPanel();
+    await screen.findByText("Ada Lovelace");
+    expect(screen.queryByRole("button", { name: /daily spend/i })).toBeNull();
+  });
+
+  it("opens the member's daily spend for the URL range through the existing user route, and lists the UTC days", async () => {
+    const { urls } = stubDaily([...ALL_OPS, "getUserDailySpend"]);
+    const u = user();
+    renderWithProviders(
+      <MembersPanel teamId="t1" capabilities={{ canRaiseLimits: false }} />,
+      { searchParams: { dateFrom: "2026-11-01", dateTo: "2026-11-14" } },
+    );
+    await u.click(
+      await screen.findByRole("button", {
+        name: "Daily spend for Ada Lovelace",
+      }),
+    );
+
+    const table = await screen.findByRole("table", {
+      name: "Daily spend by UTC day",
+    });
+    expect(within(table).getByText("2026-11-03")).toBeInTheDocument();
+    expect(within(table).getByText("$2.50")).toBeInTheDocument();
+    const request = urls.find(
+      (url) => url.pathname === "/api/litellm/users/u-ada",
+    );
+    expect(request?.searchParams.get("dateFrom")).toBe("2026-11-01");
+    expect(request?.searchParams.get("dateTo")).toBe("2026-11-14");
+  });
+
+  // Review W1: under the Organisation cap (LD23) members carry no `spend`
+  // (the panel shows "Hidden until per-user reporting is approved"); the
+  // per-user route omits `daily` too, so the action is hidden, not misleading.
+  it("hides the Daily spend action when per-user cost is hidden (spend omitted; LD23, review W1)", async () => {
+    stub([...ALL_OPS, "getUserDailySpend"], {
+      "GET /api/litellm/teams/t1/members": () =>
+        apiResponse({
+          data: {
+            connected: true,
+            candidates: [],
+            items: [
+              member("ada", "Ada Lovelace", undefined, 150),
+              member("bob", "Bob Builder", undefined, null),
+            ],
+          },
+        }),
+    });
+    renderPanel();
+    await screen.findByText("Ada Lovelace");
+    expect(screen.queryByRole("button", { name: /daily spend/i })).toBeNull();
+  });
+
+  it("reads nothing for a member until the action is used", async () => {
+    const { urls } = stubDaily([...ALL_OPS, "getUserDailySpend"]);
+    renderPanel();
+    await screen.findByText("Ada Lovelace");
+    expect(
+      urls.some((url) => url.pathname.startsWith("/api/litellm/users")),
+    ).toBe(false);
+  });
+});
+
+// Review W4: a row with no available action renders nothing for MemberActions
+// (no empty wrapper span), as before the G1 change.
+describe("MembersPanel member actions with no operation enabled (review W4)", () => {
+  it("leaves the actions cell empty: no empty span", async () => {
+    stub([]);
+    renderPanel();
+    await screen.findByText("Ada Lovelace");
+    const row = rowOf("Ada Lovelace");
+    const cells = within(row).getAllByRole("cell");
+    const lastCell = cells[cells.length - 1];
+    expect(lastCell).toBeDefined();
+    if (!lastCell) throw new Error("no actions cell");
+    expect(lastCell).toBeEmptyDOMElement();
+    expect(lastCell.querySelector("span:empty")).toBeNull();
+  });
+});

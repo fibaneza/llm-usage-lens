@@ -1,6 +1,6 @@
 import { act, screen, within } from "@testing-library/react";
 import { useQueryStates } from "nuqs";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
@@ -166,10 +166,112 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     const table = await screen.findByRole("table", { name: "App teams" });
     const ops = within(table).getByRole("row", { name: /Ops/ });
     expect(ops.textContent).not.toContain("$");
-    const link = within(ops).getByRole("link");
+    // B2b (G2): the name links too, so the row holds two links to the team.
+    const link = within(ops).getByRole("link", {
+      name: /open the team page/i,
+    });
     expect(link.getAttribute("href")).toMatch(
       /^\/dashboard\/manage\/team\?(.*&)?team=t3(&|$)/,
     );
+  });
+
+  // Slice B2b, G2 (Design System - Management pages, *Team page views and
+  // links*): "each App teams row links its name to
+  // /dashboard/manage/team?team=<id> for callers who may open the Team page
+  // (every Organisation reader may - admin, org-admin, auditor)". The section
+  // takes no role prop: every reader of this view gets the links.
+  it.each([
+    ["Payments", "t1"],
+    ["Risk", "t2"],
+    ["Ops", "t3"],
+  ])(
+    "G2: the App teams row '%s' links its name to the Team page for team %s",
+    async (name, teamId) => {
+      stub(() => apiResponse({ data: ORG }));
+      renderSection();
+      const table = await screen.findByRole("table", { name: "App teams" });
+      const row = within(table).getByRole("row", { name: new RegExp(name) });
+      expect(within(row).getByRole("link", { name })).toHaveAttribute(
+        "href",
+        `/dashboard/manage/team?team=${teamId}`,
+      );
+    },
+  );
+
+  it("G2: the LiteLLM teams table has no such link (only App teams rows name a team page)", async () => {
+    stub(() => apiResponse({ data: ORG }));
+    renderSection();
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    expect(within(table).queryByRole("link")).toBeNull();
+  });
+
+  describe("in the card layout (below md)", () => {
+    const originalWidth = window.innerWidth;
+    beforeEach(() => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: 375,
+      });
+    });
+    afterEach(() => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: originalWidth,
+      });
+    });
+
+    it("G2: each App teams card links its team name to the Team page", async () => {
+      stub(() => apiResponse({ data: ORG }));
+      renderSection();
+      const cards = await screen.findByRole("list", { name: "App teams" });
+      const items = within(cards).getAllByRole("listitem");
+      expect(items).toHaveLength(3);
+      expect(
+        within(items[0]!).getByRole("link", { name: "Payments" }),
+      ).toHaveAttribute("href", "/dashboard/manage/team?team=t1");
+    });
+
+    // L5b review warning, LD37 in the card layout (docs/specs/2026-11-10-
+    // litellm.md LD37; Design System - LiteLLM Page, States).
+    it("LD37: configured:false shows 'LiteLLM not configured' and the App teams cards with 'Not available', no figure", async () => {
+      stub(() =>
+        apiResponse({
+          data: {
+            configured: false,
+            totals: { spend: 0 },
+            daily: [],
+            litellmTeams: [],
+            appTeams: [
+              {
+                teamId: "t1",
+                teamName: "Payments",
+                spendSource: "litellm-team",
+                spend: null,
+              },
+              {
+                teamId: "t2",
+                teamName: "Risk",
+                spendSource: "member-sum",
+                spend: null,
+              },
+            ],
+            enabledOperations: [],
+          },
+        }),
+      );
+      renderSection();
+      expect(
+        await screen.findByText(/LiteLLM not configured/i),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("list", { name: "LiteLLM teams" })).toBeNull();
+      const cards = screen.getByRole("list", { name: "App teams" });
+      const items = within(cards).getAllByRole("listitem");
+      expect(items).toHaveLength(2);
+      for (const item of items) {
+        expect(within(item).getByText(/not available/i)).toBeInTheDocument();
+        expect(item.textContent).not.toContain("$");
+      }
+    });
   });
 
   it("shows an empty state when there is no team at all", async () => {

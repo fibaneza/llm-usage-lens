@@ -6,12 +6,27 @@ import type { z } from "zod";
 
 import { ApiRequestError, fetchApi } from "@/lib/query/fetch-api";
 
-import { useLiteLLMQuery, useUrlRange } from "./use-litellm-query";
+import {
+  useLiteLLMQuery,
+  useLiteLLMQueryState,
+  useUrlRange,
+} from "./use-litellm-query";
 import type { LiteLLMResult } from "./use-litellm-query";
 
 export function useTeamDetail(teamId: string) {
   const { keyParts, query } = useUrlRange();
   return useLiteLLMQuery(
+    ["team", teamId, ...keyParts],
+    `/api/litellm/teams/${encodeURIComponent(teamId)}?${query}`,
+    LiteLLMTeamDetailResponseSchema,
+  );
+}
+
+// The same cache entry as useTeamDetail, without suspending: for the page
+// chrome (the view tabs) that renders around a pending or failed read.
+export function useTeamDetailState(teamId: string) {
+  const { keyParts, query } = useUrlRange();
+  return useLiteLLMQueryState(
     ["team", teamId, ...keyParts],
     `/api/litellm/teams/${encodeURIComponent(teamId)}?${query}`,
     LiteLLMTeamDetailResponseSchema,
