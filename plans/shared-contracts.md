@@ -1,9 +1,9 @@
 # Shared Contracts — RBAC + LiteLLM (LLM Usage Lens)
 
-The single source for everything that `rbac_prompt.md` and
-`litellm_prompt.md` both depend on.
+The single source for everything that `rbac.md` and
+`litellm.md` both depend on.
 - **Precedence:** `CLAUDE.md` → `.claude/rules/**` → `docs/specs/**` →
-  **this file** → `rbac_prompt.md` / `litellm_prompt.md` → `master_prompt.md`.
+  **this file** → `rbac.md` / `litellm.md` → `master.md`.
 - **Changes here** are made in the spec units (RBAC R0 and LiteLLM L0)
   together, then mirrored into `docs/specs/**`. The specs stay the source of
   truth (Rule 00).
@@ -12,7 +12,7 @@ The single source for everything that `rbac_prompt.md` and
   this file wins, and the run reports the conflict.
 
 **Role words.** Plain words in the sections below stand for role values
-(`rbac_prompt.md` §1.1): **Admin** is `internal-admin`; **Lead** is
+(`rbac.md` §1.1): **Admin** is `internal-admin`; **Lead** is
 `internal-team-admin` within its scope (and `internal-org-admin` on every
 team, with no configuration); **Auditor** is `internal-auditor`; **Viewer**
 is `internal-viewer` and members. The role values are authoritative.
@@ -38,7 +38,7 @@ is `internal-viewer` and members. The role values are authoritative.
 
 ## 2. Roles
 
-**Revised 2026-11-10** (`rbac_prompt.md` §1.1–§1.5). There are two kinds of role,
+**Revised 2026-11-10** (`rbac.md` §1.1–§1.5). There are two kinds of role,
 modelled on LiteLLM's proxy and team roles, and every app role value carries
 the `internal-` prefix.
 
@@ -73,7 +73,7 @@ the `internal-` prefix.
   `internal-admin`. It is the only password login in production: an
   Argon2id hash in an SSM SecureString, TOTP in `prod`, a 5-attempt
   lockout, a 1-hour session, and every sign-in audited
-  (`rbac_prompt.md` §1.3).
+  (`rbac.md` §1.3).
 - **Sessions and entry points.** Sessions are capped at 8 hours, 4 hours
   with `internal-admin` or `internal-org-admin`, and 1 hour for the master
   user. A sign-in that fails closed (a malformed token, a foreign `tid`, no
@@ -81,7 +81,7 @@ the `internal-` prefix.
   Entra is configured. `AUTH_ACCESS_MODE` (`open` | `enforce`) stages the
   rollout and is `enforce` in `prod`.
 - **Storage:** the existing DynamoDB table. Aurora Serverless v2 was
-  considered and deferred; see `rbac_prompt.md` §1.5 *Storage*.
+  considered and deferred; see `rbac.md` §1.5 *Storage*.
 
 - **Viewer by default for SSO users (decided 2026-11-10).** A missing or
   empty `roles` claim, or only unknown roles, means `internal-viewer`. Data stays
@@ -104,7 +104,7 @@ the `internal-` prefix.
 - **Identity links**, one entity keyed by `oid`:
   - `usageIdentities[]`: the canonical usage keys that belong to this person
     (§3.1).
-  - `litellmUserId`: the person's LiteLLM user (`litellm_prompt.md` §1.3,
+  - `litellmUserId`: the person's LiteLLM user (`litellm.md` §1.3,
     per environment).
   - `aliases[]`: other known emails or usernames (a former name, a second
     domain, a contractor address), **managed by Admins**. Leads cannot edit
@@ -226,7 +226,7 @@ to call Bedrock, and optionally the **gateway account id** or ids.
 
 The requirement changed (2026-11-09). The dashboard runs on **AWS**, not
 Netlify, for **private use only**, inside the company network and VPN. The
-infrastructure is defined in **CDK**. R0 and `litellm_prompt.md` L0 record
+infrastructure is defined in **CDK**. R0 and `litellm.md` L0 record
 these changes jointly as spec amendments.
 
 **Region.** All stacks deploy to `ap-southeast-2`, from `COLLECTOR_REGION`
@@ -358,7 +358,7 @@ is deployable on its own and has a deploy and undeploy runbook.
     and create mode creates exactly one internal ALB with HTTPS only.
   - Runs **never** run `cdk deploy`, never call AWS, and never create
     resources.
-  - `infra/` is created by unit **RP** (`rbac_prompt.md` §2), with only
+  - `infra/` is created by unit **RP** (`rbac.md` §2), with only
     what the dashboard needs to run (Rule 30.2).
 
 ## 8. Operations
@@ -377,7 +377,7 @@ is deployable on its own and has a deploy and undeploy runbook.
   reachable, and LiteLLM reachable when configured) with no data. It stays
   unauthenticated (§7).
 - **Runbook:** `docs/guides/operations.md`, covering alarms, a first look at
-  each, the redeploy, and service-key rotation (`litellm_prompt.md`).
+  each, the redeploy, and service-key rotation (`litellm.md`).
 
 ## 9. Finance: monthly statement
 

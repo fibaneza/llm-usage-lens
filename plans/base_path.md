@@ -10,7 +10,7 @@ Work only in the worktree `.claude/worktrees/base-path` on branch
 in the primary checkout or on `main`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`prompts/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
+`plans/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
 This file never overrides a rule. Where it disagrees with a spec, the spec
 is amended first (§4, step 1) — never diverge silently (Rule 00.2).
 
@@ -230,5 +230,5 @@ freeze with the report written:
 `/goal` line:
 
 ```
-/goal prompts/base_path_prompt.md §8 completion criteria met, and the report written — or the run ended by a usage freeze, with the report written.
+/goal plans/base_path.md §8 completion criteria met, and the report written — or the run ended by a usage freeze, with the report written.
 ```

@@ -9,7 +9,7 @@ Read specs, rules and state from `$REPO` (`main`). Never edit in the primary
 checkout, on `main` or in another session's worktree.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`prompts/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
+`plans/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
 This file never overrides a rule. Where it disagrees with a spec, the spec
 is amended first (§4, step 1) — never diverge silently (Rule 00.2).
 
@@ -154,7 +154,7 @@ one squash commit (Rule 30.4). It is not in the phase plan today, so it
 starts with a spec change (Rule 00, Rule 30).
 
 **Place in the queue:** after the Settings admin area (unit D of
-`litellm_role_views_prompt.md`) and after L3d, because the locked-state UI
+`litellm_role_views.md`) and after L3d, because the locked-state UI
 sits on the new Settings tabs and the toggle precedence touches L3d's
 routes. Step 1 (spec and inventory) may run earlier; it changes no code.
 
@@ -282,5 +282,5 @@ freeze or an unanswered user decision with the report written:
 `/goal` line:
 
 ```
-/goal prompts/app_config_yaml_prompt.md §8 completion criteria met, and the report written — or the run ended by a usage freeze or an unanswered user decision, with the report written.
+/goal plans/app_config_yaml.md §8 completion criteria met, and the report written — or the run ended by a usage freeze or an unanswered user decision, with the report written.
 ```

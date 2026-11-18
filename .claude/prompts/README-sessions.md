@@ -7,14 +7,14 @@ role, and one prompt in this folder defines it:
 |---|---|---|
 | Planner | `planner` | [`planner_prompt.md`](planner_prompt.md) |
 | Coordinator | `Coordinator` | [`coordinator_prompt.md`](coordinator_prompt.md) |
-| Worker | `improvements_worker`, `bedrock_worker`, `litellm_worker` | [`worker_prompt.md`](worker_prompt.md), plus the unit's own prompt |
+| Worker | `improvements_worker`, `bedrock_worker`, `litellm_worker` | [`worker_prompt.md`](worker_prompt.md), plus the unit's plan |
 
 This file says **how to run them** and, briefly, **how they work**. The
 reference (what each role may and may not do, where every state file is,
 the message formats, the limits) is
 [`docs/guides/session-roles.md`](../../docs/guides/session-roles.md). Its
 *Status* section says which parts are on `main`. One run in one session,
-with no coordinator, is in [`prompts/README.md`](../../prompts/README.md) — *How to start a run*.
+with no coordinator, is in [`plans/README.md`](../../plans/README.md) — *How to start a run*.
 
 Worker sessions are being renamed from `<x>_prompt` to `<x>_worker`. Until
 you rename a session, its old name (`rbac_prompt`, `litellm_prompt`) is the

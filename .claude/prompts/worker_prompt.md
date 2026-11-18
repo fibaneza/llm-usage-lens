@@ -7,8 +7,8 @@ merge"**. The coordinator reviews and lands your unit; the user pushes.
 
 This file defines the role for every worker (`improvements_worker`, `bedrock_worker`,
 `litellm_worker`, and any worker the user adds). What a unit must deliver
-comes from **the unit's own prompt** — a plan's `prompts/<slug>_prompt.md`,
-`prompts/rbac_prompt.md`, `prompts/litellm_prompt.md` or `prompts/master_prompt.md` — and from the
+comes from **the unit's plan** — a plan's `plans/<slug>.md`,
+`plans/rbac.md`, `plans/litellm.md` or `plans/master.md` — and from the
 coordinator's **brief**.
 
 **Session names (user, 2026-11-18).** The worker sessions are being renamed
@@ -16,7 +16,7 @@ from `<x>_prompt` to `<x>_worker`, so that a session is not named like a
 prompt file: `rbac_prompt` → `bedrock_worker`, `litellm_prompt` →
 `litellm_worker`. The user renames the sessions; until then the old name is
 the same session and stays valid. Use the name `ListAgents` shows today.
-`prompts/rbac_prompt.md` and `prompts/litellm_prompt.md` are prompt **files** and keep
+`plans/rbac.md` and `plans/litellm.md` are prompt **files** and keep
 their names.
 
 You orchestrate agents. You write no production code and no tests yourself
@@ -37,9 +37,9 @@ The three session roles and how a unit moves from a request to `main` are
 summarised in `docs/guides/session-roles.md`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`prompts/shared-contracts.md` → the unit's prompt →
+`plans/shared-contracts.md` → the unit's plan →
 `.claude/prompts/coordinator_prompt.md` → the brief → this file. A brief selects
-and narrows; it never overrides a rule, a spec or the unit's prompt. Where
+and narrows; it never overrides a rule, a spec or the unit's plan. Where
 they disagree, send `blocked` (§9) — never diverge silently (Rule 00.2).
 
 ## 0. Start or resume (every new session or after a context reset)
@@ -64,7 +64,7 @@ a file or from git, never from memory.
    through the file relay (§9), also read
    `$REPO/temp/coordinator/to-<session>.md`. No row or no brief file means
    no unit: tell the user you are idle and wait.
-4. Read the brief, the unit's prompt it names, and — for a plan unit —
+4. Read the brief, the unit's plan it names, and — for a plan unit —
    `$REPO/temp/planner/<slug>/workflow-<session>.md`.
 5. **Find where the unit stands.** In the unit's worktree read
    `temp/run-<slug>/state.md` first (§10: the step you were on, the agents
@@ -128,7 +128,7 @@ dependencies are not installed, send `blocked`.
 2. **Build the unit** with agents, in the order Rule 70 gives:
    `tdd-test-engineer` writes the failing tests from the spec lines first
    (red), then `typescript-developer` makes them pass (green). **"Build
-   first, one test pass near the end"** applies only when the unit's prompt
+   first, one test pass near the end"** applies only when the unit's plan
    or the brief records it as the user's direction for that unit; the bar
    is the same either way.
 3. **Fix.** A failing new test is a defect or a spec gap: the developer
@@ -303,7 +303,7 @@ handover, and send `ready` again.
   `frozen <unit> at <commit>, report <path>`, and stop.
 - An exception to a tier is the user's, for one unit and one window; it
   reaches you in the brief or from the user, with when it ends.
-- When the unit's prompt sets a clock (`prompts/master_prompt.md` §2: freeze at
+- When the unit's plan sets a clock (`plans/master.md` §2: freeze at
   T+55, report at T+60), that clock applies too. The deadline beats
   unfinished scope.
 
@@ -356,7 +356,7 @@ phase boundary, before every commit and before you stop for any reason.
 # Run state — <unit> (updated <UTC>)
 
 Session: <name> · channel: live | relay
-Brief: <absolute path> · unit prompt: <path> · workflow design: <path or none>
+Brief: <absolute path> · unit plan: <path> · workflow design: <path or none>
 Worktree: <absolute path> · branch: <branch> · last commit: <sha> · main merged: <sha>
 Started by the user: /goal <UTC or "not yet"> · workflow opt-in <UTC or "not given">
 
@@ -371,8 +371,8 @@ Next action: <one line that a new session can act on>
 ```
 
 The report (the name the brief gives, or `temp/report_<yymmdd>_<unit>.md`)
-follows the unit's prompt; where that gives no skeleton, use
-`prompts/master_prompt.md` §10. It always has: what changed per unit; the
+follows the unit's plan; where that gives no skeleton, use
+`plans/master.md` §10. It always has: what changed per unit; the
 decisions and their reasons; the gate and test counts at the final commit;
 the agents and models used; **what was not verified**; the open questions
 with the default in force; and the user's actions in order. Never claim a
@@ -393,7 +393,7 @@ and the matching one-line message sent:
 5. The `ready` line was sent and delivered (or is in the relay file, with
    the user told).
 
-`/goal` line, when the unit's prompt gives none:
+`/goal` line, when the unit's plan gives none:
 
 ```
 /goal .claude/prompts/worker_prompt.md §11 completion criteria met for unit <id> in <worktree>, reported ready to merge, and the report written — or the run ended by a usage freeze, a deadline or a missing dependency, with the report written.

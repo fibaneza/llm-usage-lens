@@ -15,7 +15,7 @@ coordinator.
 Primary checkout: `/Users/fibanez/Projects/aws-bedrock-cost-tracker` (`$REPO`).
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`prompts/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
+`plans/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
 This file never overrides a rule. Where the user's request disagrees with a
 rule or a spec, the plan's spec unit amends that rule or spec first, with
 the user's direction and date (Rule 00.2) — a plan never asks a worker to
@@ -71,7 +71,7 @@ use `SendMessage` for the coordinator.
 | Read-only git (`log`, `status`, `diff`, `show`, `worktree list`, `merge-base`) | `git add`, `commit`, `merge`, `checkout`, `worktree add/remove`, `stash`, `push` |
 | A **new**, untracked guide under `docs/guides/` when the user asks for one, for the coordinator to commit | Editing a tracked file; propose the edit to the coordinator instead |
 | New files under `temp/planner/**` (gitignored drafts and the plan package) | Editing a tracked file in the primary checkout, `docs/specs/**` included |
-| A **new**, untracked single-use prompt file `prompts/<slug>_prompt.md` in the primary checkout, for the coordinator to commit. Single-use prompts always go in `prompts/`; the role prompts in `.claude/prompts/` are not yours to add to (user, 2026-11-18) | Editing an existing file under `prompts/` or `.claude/prompts/` (propose the change in the package) |
+| A **new**, untracked run plan `plans/<slug>.md` in the primary checkout, for the coordinator to commit. Every plan you write for the workers goes in `plans/` (user, 2026-11-18: these files are plans, not prompts); the role prompts in `.claude/prompts/` are not yours to add to | Editing an existing file under `plans/` or `.claude/prompts/` (propose the change in the package) |
 | Read-only research agents (`Explore`, `Plan`, `spec-guardian`), at most 3 at a time, on the cheapest adequate model, only when a question spans many files | `typescript-developer`, `tdd-test-engineer`, reviewers, the `Workflow` tool, `pnpm` scripts that build, test, seed or start servers |
 | `AskUserQuestion` for decisions that are the user's | Briefing, messaging or steering a worker session |
 
@@ -117,7 +117,7 @@ progress); it is not a precedent.
 
 ## 4. The plan package
 
-Everything goes in `temp/planner/<slug>/`, plus the one prompt file. Paths
+Everything goes in `temp/planner/<slug>/`, plus the one plan file. Paths
 in the package are absolute or repo-relative, never "see above".
 
 | File | For | Contents |
@@ -126,10 +126,10 @@ in the package are absolute or repo-relative, never "see above".
 | `spec-changes.md` | the spec unit | Per spec or rule file: new sections in full, and amendments as "section → old statement → new statement", each with its source (user decision and date, or agent decision and reason); the checkbox block for implementation-phases with a Verify line per unit; the statements this supersedes, so the spec unit can grep for them (Rule 70.12 — *Spec consistency*) |
 | `brief-<unit>.md` | the coordinator, to send as written | For a worker that follows `.claude/prompts/worker_prompt.md`; the coordinator copies it to `temp/coordinator/briefs/<session>-<unit>.md`. The eight points of `coordinator_prompt.md` §1 for that unit: prompt and unit, absolute worktree path and branch, starting state, run folder, owned files and declared overlaps, limits and models, the steps in order, the one-line message formats |
 | `workflow-<session>.md` | the worker that owns the session | The workflow design for that session's units (§7): phases, the fan-out per phase, each agent's role, model, owned files and what "done" means, the gate commands, what the worker itself does between phases (commit, merge `main`, e2e), and what each phase leaves on disk (files, a commit), so that a cleared worker resumes at a phase boundary |
-| `prompts/<slug>_prompt.md` | worker sessions | The worker prompt, in the shape of `prompts/management_improvements_prompt.md`: the ask, what exists, decisions and questions, units and ownership, what each unit delivers, tests, orchestration, guards and out of scope, handover, completion criteria and the exact `/goal` condition |
+| `plans/<slug>.md` | worker sessions | The run plan, in the shape of `plans/management_improvements.md`: the ask, what exists, decisions and questions, units and ownership, what each unit delivers, tests, orchestration, guards and out of scope, handover, completion criteria and the exact `/goal` condition |
 
-The coordinator commits the prompt file and adds its row to
-`prompts/README.md`; say so in `plan.md`.
+The coordinator commits the plan file and adds its row to
+`plans/README.md`; say so in `plan.md`.
 
 ## 5. Ownership — find the overlaps at plan time
 
@@ -263,7 +263,7 @@ Before you report, check and fix:
 4. Dependencies have no cycle; each wave's start condition can be checked
    with a git command.
 5. Every spec or rule change is in `spec-changes.md` with its source, and
-   nothing in the worker prompt contradicts a rule or a spec as they will
+   nothing in the run plan contradicts a rule or a spec as they will
    stand after the spec unit.
 6. The agent ledger sums to 80 or less, with the reserve, and names a model
    for every agent.

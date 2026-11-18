@@ -14,7 +14,7 @@ import type { ResolveScopeInput } from "./policy";
 // Source: docs/specs/2026-11-10-access-control.md — "Visibility and
 // inheritance" (evaluation order, caps), "Membership, admin scopes and
 // lifecycle" (department scope per day, W3), "Enforcement" item 1; threats
-// T5, T6, T16; prompts/rbac_prompt.md section 3 (role x route callers).
+// T5, T6, T16; plans/rbac.md section 3 (role x route callers).
 // Assumed API (pure, no env/IO): resolveScope(ResolveScopeInput) -> Scope with
 // `authenticated`; can(scope, "read", resource); effectiveUserLevel(scope,
 // { teamId, departmentId }) -> "all" | "own" | "none".

@@ -33,7 +33,7 @@ See [CLAUDE.md](CLAUDE.md) for project conventions, [ONBOARDING.md](ONBOARDING.m
 ├── tools/
 │   └── bedrock-simulator/    # Standalone AWS SAM test harness for generating Bedrock traffic (not in the workspace)
 ├── poc/                      # Isolated proof of concept: the dashboard image on one EC2 instance (not the deployment path)
-├── prompts/                  # Prompts for the guarded, agent-driven build runs
+├── plans/                  # Prompts for the guarded, agent-driven build runs
 ├── docs/                     # Specifications (docs/specs/) and runbooks (docs/guides/)
 ├── .claude/                  # Claude Code rules, agents, slash commands, and hooks
 ├── .devcontainer/            # DevContainer configuration, Docker Compose, and OTel/Grafana stack
@@ -203,4 +203,4 @@ See [.devcontainer/README.md](.devcontainer/README.md) for pipeline details and 
   - [Strata design system](docs/design-system/README.md)
   - [Future improvements](docs/future-improvements.md)
   - [EC2 proof of concept](poc/README.md)
-  - [Build-run prompts](prompts/README.md)
+  - [Build-run prompts](plans/README.md)

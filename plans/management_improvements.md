@@ -11,7 +11,7 @@ created from an up-to-date `main` (Rule 31). Never edit in the primary
 checkout or on `main`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`prompts/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
+`plans/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
 This file never overrides a rule. Where it disagrees with a rule or a spec,
 the spec step amends that rule or spec first (M4 for its own items, M0 for
 the rest), with the user's direction and date — never diverge silently
@@ -553,5 +553,5 @@ freeze with the report written:
 `/goal` line:
 
 ```
-/goal prompts/management_improvements_prompt.md §10 completion criteria met for units M0–M5 (M4 first), each reported ready to merge, and the report written — or the run ended by a usage freeze, with the report written.
+/goal plans/management_improvements.md §10 completion criteria met for units M0–M5 (M4 first), each reported ready to merge, and the report written — or the run ended by a usage freeze, with the report written.
 ```

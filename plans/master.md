@@ -86,8 +86,8 @@ dependency order across the tracks below. Track B is the main deliverable.
   "done locally, pending CI": in that case, finish only what a run may do
   and list the user-only steps (§12).
 - **Scope of this prompt.** It drives Phase 4.9 and Phase 5. The Phase 4R
-  units (RP, R0–R5) are driven by `rbac_prompt.md` and the LiteLLM units
-  (L0–L8) by `litellm_prompt.md`; the global order is in `README.md`.
+  units (RP, R0–R5) are driven by `rbac.md` and the LiteLLM units
+  (L0–L8) by `litellm.md`; the global order is in `README.md`.
   Phase 3 and Phase 4.1–4.9 have shipped. Phase 4.9b (tag coverage) is
   deferred and does not block Phase 5.
 - **State.** Never take repo state from this prompt. `/phase-status`, the
@@ -772,10 +772,10 @@ A run never performs them and never marks them done.
 
 If you track this prompt with `/goal`, use this exact condition (not the bare
 file path):
-**"prompts/master_prompt.md §12 completion criteria met for this run's
+**"plans/master.md §12 completion criteria met for this run's
 target, and the report written — or the run ended by a usage freeze, the T+60
 deadline, or a missing dependency, with the report written."**
-Do not use the bare file path (`/goal @prompts/master_prompt.md`), and do not
+Do not use the bare file path (`/goal @plans/master.md`), and do not
 use "all items resolved". Neither can be met in one run without the user,
 and both make the goal check loop: run 10 on 2026-11-08 was rejected
 repeatedly for open Phase 4.9 tasks and an early finish.

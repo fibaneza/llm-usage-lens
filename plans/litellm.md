@@ -1,10 +1,10 @@
 # Goal Prompt: LiteLLM Team & User Administration — LLM Usage Lens
 
-Companion to `master_prompt.md` (run discipline) and `rbac_prompt.md` (roles,
+Companion to `master.md` (run discipline) and `rbac.md` (roles,
 scopes, membership, audit). It adds one feature: **administration of a
 LiteLLM proxy, limited to teams and users, through the dashboard**, together
 with a view of LiteLLM cost per team and per user. Where this file is silent,
-`rbac_prompt.md` and then `master_prompt.md` apply. Where they conflict, this
+`rbac.md` and then `master.md` apply. Where they conflict, this
 file wins for this feature only.
 
 LiteLLM references:
@@ -19,14 +19,14 @@ LiteLLM references:
 ## 0. Read first — precedence
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`shared-contracts.md` → `rbac_prompt.md` → this prompt → `master_prompt.md`.
+`shared-contracts.md` → `rbac.md` → this prompt → `master.md`.
 `shared-contracts.md` defines environments, roles, identity, the audit log,
 the combined usage rules, governance, the platform, operations and the
 finance statement once. This file cites it and never contradicts it. Record any conflict in
 the report and never resolve it silently (Rule 00.2).
 
 **Read before dispatching any work:**
-- `rbac_prompt.md`, all of it. This feature **depends on its R1–R4**: roles,
+- `rbac.md`, all of it. This feature **depends on its R1–R4**: roles,
   scopes, server-side scoping and the Settings sections.
 - System Architecture: *Authentication & Access* and *Organizational
   Hierarchy*.
@@ -47,7 +47,7 @@ the report and never resolve it silently (Rule 00.2).
 ## 1. Mission
 
 Add a **LiteLLM** area to the dashboard, as a page and Settings panels. There,
-using the dashboard's own roles (`rbac_prompt.md` §1.1 and shared-contracts §2).
+using the dashboard's own roles (`rbac.md` §1.1 and shared-contracts §2).
 
 **Role words in this file.** Plain words below stand for these role values:
 - **Viewer:** `internal-viewer`, and members (users affiliated to a team
@@ -115,7 +115,7 @@ the read-only model list or info endpoint as confirmed in L0.
    - Toggles can only *narrow* the allowlist. They can never add an operation
      to it.
 4. **Authorization before every call.**
-   - The `rbac_prompt.md` policy module decides whether the caller may act on
+   - The `rbac.md` policy module decides whether the caller may act on
      the target dashboard team. Only then is the LiteLLM call made, against
      that team's **linked** LiteLLM `team_id`.
    - Ids are resolved server-side, from the link table and from member and
@@ -213,14 +213,14 @@ the read-only model list or info endpoint as confirmed in L0.
      the LiteLLM panels only. The rest of the dashboard keeps working
      (Rule 40.4).
 6a. **Cloud permissions (yes, they are required), in the CDK DashboardServiceStack**
-    (`rbac_prompt.md` §1.8).
+    (`rbac.md` §1.8).
     - **ECS task execution role.** It injects the secret at task start:
       - `ssm:GetParameters` on the exact parameter ARN only
       - `kms:Decrypt` on its key, with the condition
         `kms:ViaService = ssm.ap-southeast-2.amazonaws.com` (the stacks' region, Rule 50.7)
       - plus the standard ECR pull and log permissions
     - **ECS task role (app runtime).** No SSM or KMS access at all. It has
-      only the DynamoDB access that `rbac_prompt.md` §1.6 item 9a defines; one
+      only the DynamoDB access that `rbac.md` §1.6 item 9a defines; one
       shared definition. R2 adds the access-control leading keys and the
       `PutItem`-only audit statement, and L2 adds the `LITELLM#*` leading
       key.
@@ -230,7 +230,7 @@ the read-only model list or info endpoint as confirmed in L0.
       hand.
     - **Network path to LiteLLM.** LiteLLM already exists and is not deployed
       by these prompts. The dashboard reaches it over the existing internal
-      network (same VPC or the Transit Gateway; `rbac_prompt.md` §1.8),
+      network (same VPC or the Transit Gateway; `rbac.md` §1.8),
       through its existing internal hostname.
       - No network resources are added for it.
       - `LITELLM_ALLOWED_HOSTS` contains only that hostname.
@@ -245,21 +245,21 @@ the read-only model list or info endpoint as confirmed in L0.
      carries `Cache-Control: no-store`.
    - Lists show only the key alias, the masked prefix and suffix (as LiteLLM
      returns them) and the LiteLLM token id.
-8. **Every write is audited** in the `rbac_prompt.md` audit log: actor, team,
+8. **Every write is audited** in the `rbac.md` audit log: actor, team,
    operation, target (LiteLLM user id or key token id, **never key values**),
    sanitised before and after, and the result. Use the shared audit
-  semantics in `rbac_prompt.md` §1.6 item 8.
+  semantics in `rbac.md` §1.6 item 8.
 9. **Rate limits are enforced by LiteLLM and configured through its API.**
-   - The dashboard has no rate limiting of its own (`rbac_prompt.md` §1.6
+   - The dashboard has no rate limiting of its own (`rbac.md` §1.6
      item 6). Admins and Leads **configure** LiteLLM's limits through the
      gateway (§1.3, *Rate limits*), and LiteLLM enforces them.
    - Every rate-limit write is an allowlisted operation with an Admin
      toggle, and is audited.
 9a. **Enforced access only.** While `AUTH_ACCESS_MODE` is `open`
-    (`rbac_prompt.md` §1.6.10), every LiteLLM route returns `403` and no
+    (`rbac.md` §1.6.10), every LiteLLM route returns `403` and no
     LiteLLM call is made. The open staging mode never exposes LiteLLM.
 10. **Writes use** the same-origin check, Zod validation, body and path id
-    matching and the `403` before parsing from `rbac_prompt.md` §1.6. The
+    matching and the `403` before parsing from `rbac.md` §1.6. The
     structural write-route test must include every LiteLLM write route.
 
 ### 1.3 Data and identity mapping
@@ -284,8 +284,8 @@ the read-only model list or info endpoint as confirmed in L0.
       OPERATION_UNAVAILABLE`.
   - The flag can only enable operations that are already in the allowlist.
 - **User mapping (per edition).** It is resolved through the dashboard
-  identity record (`oid`, `tid`, `email`, `upn`; `rbac_prompt.md` §1.2) and
-  stored as an identity link `oid → litellmUserId` (`rbac_prompt.md` §1.5).
+  identity record (`oid`, `tid`, `email`, `upn`; `rbac.md` §1.2) and
+  stored as an identity link `oid → litellmUserId` (`rbac.md` §1.5).
   - **OSS, no SSO:** LiteLLM users are keyed by the **work email**,
     lower-cased. The dashboard creates the user with `user_id` and
     `user_email` both set to the email.
@@ -304,7 +304,7 @@ the read-only model list or info endpoint as confirmed in L0.
     least-privilege role (`internal_user`, or what L0 confirms), and adds it
     to the linked team.
   - Leads can add only people who are already members of that dashboard team
-    (`rbac_prompt.md` §1.5), so LiteLLM access never exceeds dashboard
+    (`rbac.md` §1.5), so LiteLLM access never exceeds dashboard
     membership.
   - **Removing a dashboard membership never silently changes LiteLLM.** The
     UI tells the Lead the person is still in the LiteLLM team and offers
@@ -410,11 +410,11 @@ the read-only model list or info endpoint as confirmed in L0.
 - **Caching.**
   - LiteLLM reads are **not cached** on the server. Each request reads
     LiteLLM, so no task ever serves another task's stale state
-    (`rbac_prompt.md` §1.8).
+    (`rbac.md` §1.8).
   - TanStack Query on the client may keep data briefly. After a write, the
     UI shows the post-write state from the write response and refetches.
   - Scoping happens after the cache read; responses send `Cache-Control:
-    private, no-store` (`rbac_prompt.md` §1.6).
+    private, no-store` (`rbac.md` §1.6).
   - Currency is USD. Dates come from LiteLLM in UTC; convert them and label
     the time zone.
 
@@ -437,7 +437,7 @@ the read-only model list or info endpoint as confirmed in L0.
 
 ## 2. Units and phase placement (Rule 30)
 
-**Global order, shared with `rbac_prompt.md`:**
+**Global order, shared with `rbac.md`:**
 Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
 (see `README.md`).
 
@@ -510,7 +510,7 @@ Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
     handling.
   - Data Model: entities, API Routes, and the error codes
     `OPERATION_DISABLED`, `OPERATION_UNAVAILABLE` and `LITELLM_UNAVAILABLE`,
-    added to the shared error-code registry that `rbac_prompt.md` R0 also
+    added to the shared error-code registry that `rbac.md` R0 also
     extends (`409`).
   - Design System: the page, the panels and the provenance labels.
   - Implementation-phases: L1–L8 as sub-phases with tasks and Verify items.
@@ -624,13 +624,13 @@ Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
   - Writes are not retried.
   - A `401` from LiteLLM is not retried. It reports "service key rejected —
     rotate and redeploy" (status only) to Admins.
-- **Audit** (shared semantics, `rbac_prompt.md` §1.6 item 8).
+- **Audit** (shared semantics, `rbac.md` §1.6 item 8).
   - A successful write creates exactly one `success` record.
   - A write that passed authorization but failed upstream (LiteLLM error or
     timeout) creates exactly one `failed` record.
   - A write rejected with `400`/`401`/`403`/`404`/`409` creates none.
   - No record contains secrets.
-- **Unchanged guarantees:** everything listed in `rbac_prompt.md` §1.6.12.
+- **Unchanged guarantees:** everything listed in `rbac.md` §1.6.12.
 
 ## 4. Verification
 
@@ -650,12 +650,12 @@ Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
   - **Teardown:** the probe cleans up only the LiteLLM teams, users and keys
     it created, uniquely prefixed.
   - **Not committed;** results go in the report.
-- **Gates** as in `master_prompt.md` §8, on each branch and on `main` after
+- **Gates** as in `master.md` §8, on each branch and on `main` after
   each merge.
 - **User actions:**
   - creating and updating the SSM `SecureString` by hand
   - forcing a new ECS deployment after a rotation
-  - `cdk deploy` of the stacks (`rbac_prompt.md` §1.8)
+  - `cdk deploy` of the stacks (`rbac.md` §1.8)
   - the LiteLLM network path from the VPC
   - setting `LITELLM_ALLOWED_HOSTS`
   - configuring the production URL and edition in Settings
@@ -670,7 +670,7 @@ Phase 4.9 Settings → RBAC R0, RP, R1–R5 → LiteLLM L0–L8 → Phase 5
 
 ## 5. Timing, usage, orchestration, git, report
 
-These are as in `master_prompt.md`:
+These are as in `master.md`:
 - §2 timing (T+55 freeze, T+60 report) and the usage tiers
 - §3 monitoring
 - §5 orchestration, model routing and budget
@@ -702,14 +702,14 @@ A run is **Completed** when all of these hold:
    coordinator, so a worker's run is complete at "ready to merge" with a
    green branch gate (typecheck, lint, format, impacted tests) and every
    red test from the run green.
-2. Units after the target, and any `rbac_prompt.md` unit, are **out of scope
+2. Units after the target, and any `rbac.md` unit, are **out of scope
    for that run** and do not count against completion. If a dependency is
    missing, the run is **Blocked**: it says so and stops.
 3. The report exists by T+60, is marked on time, and lists every user action.
 
 A run also ends **legitimately**, recorded as Partially completed or Blocked
 and not as a failure of these criteria, when either of these happens:
-- **A usage freeze (`master_prompt.md` §2):** consolidate and write the
+- **A usage freeze (`master.md` §2):** consolidate and write the
   report immediately.
 - **The T+60 deadline:** after T+55, only the report.
 
@@ -722,7 +722,7 @@ User-only actions never count against completion:
 - policy choices that L0 marks as needing the user
 
 If this prompt is tracked with `/goal`, use this exact condition:
-**"prompts/litellm_prompt.md §6 completion criteria met for this run's target unit,
+**"plans/litellm.md §6 completion criteria met for this run's target unit,
 and the report written — or the run ended by a usage freeze, the T+60
 deadline, or a missing dependency, with the report written."**
 Never use the bare file path or "all units done".

@@ -14,8 +14,8 @@ prompt wins. *Status* at the end says which parts are on `main`.
 | | Planner | Coordinator | Worker |
 |---|---|---|---|
 | Session name | `planner` | `Coordinator` | `improvements_worker`, `bedrock_worker`, `litellm_worker` |
-| Prompt | [`planner_prompt.md`](../../.claude/prompts/planner_prompt.md) | [`coordinator_prompt.md`](../../.claude/prompts/coordinator_prompt.md) | [`worker_prompt.md`](../../.claude/prompts/worker_prompt.md), plus the unit's own prompt |
-| Does | Turns a request into a plan package: units, file ownership, queues, workflow designs, spec text, the worker prompt | Assigns units, prevents conflicts, tracks usage and agents, reviews once per unit, lands every unit on local `main`, cleans up | Builds one assigned unit at a time in its worktree, by orchestrating agents; runs the branch gate; stops at "ready to merge" |
+| Prompt | [`planner_prompt.md`](../../.claude/prompts/planner_prompt.md) | [`coordinator_prompt.md`](../../.claude/prompts/coordinator_prompt.md) | [`worker_prompt.md`](../../.claude/prompts/worker_prompt.md), plus the unit's plan |
+| Does | Turns a request into a plan package: units, file ownership, queues, workflow designs, spec text, the run plan | Assigns units, prevents conflicts, tracks usage and agents, reviews once per unit, lands every unit on local `main`, cleans up | Builds one assigned unit at a time in its worktree, by orchestrating agents; runs the branch gate; stops at "ready to merge" |
 | Never does | Builds, tests, runs a workflow, commits, edits a tracked file or a unit worktree, takes a unit | Feature work; pushes; merges into a worker's tree; gives a unit to `planner` | Writes code or tests itself; reviews; merges into `main`; pushes; edits another unit's files; starts a unit on its own |
 | Agents | Read-only research, at most 3 | Review and fix agents at the merge | `tdd-test-engineer` and `typescript-developer`, through the plan's workflow |
 | Resumes from | `temp/planner/state.md` | `temp/coordinator/state.md`, `status.log` | Its row in `temp/coordinator/state.md` → the brief file → `temp/run-<slug>/state.md` in the unit's worktree |
@@ -24,7 +24,7 @@ prompt wins. *Status* at the end says which parts are on `main`.
 Worker sessions are being renamed from `<x>_prompt` to `<x>_worker` (user,
 2026-11-18), so that a session is not named like a prompt file. Until the
 user renames a session, its old name is the same session and stays valid.
-The prompt files `rbac_prompt.md` and `litellm_prompt.md` keep their names.
+The plan files `plans/rbac.md` and `plans/litellm.md` were `prompts/rbac_prompt.md` and `prompts/litellm_prompt.md` until 2026-11-18.
 
 All `temp/coordinator/**` and `temp/planner/**` paths are in the **primary
 checkout**. Each worktree has its own gitignored `temp/`; a worker's run
@@ -87,8 +87,8 @@ scheduled resume) and creates them again at resume.
 - **Project context:** `CLAUDE.md`, Rules 00–70 and the memory index load in
   every session opened in the repository. The specs in `docs/specs/` are
   read per task (Rule 00).
-- **Precedence:** `CLAUDE.md` → rules → specs → `prompts/shared-contracts.md`
-  → the unit's prompt → `.claude/prompts/coordinator_prompt.md` → the brief → the role
+- **Precedence:** `CLAUDE.md` → rules → specs → `plans/shared-contracts.md`
+  → the unit's plan → `.claude/prompts/coordinator_prompt.md` → the brief → the role
   prompt. A prompt, a brief or a plan never overrides a rule or a spec; a
   conflict is raised, and the spec is amended first (Rule 00.2).
 - **Standing limits for every role:** no push, no deploy, no `--no-verify`,
@@ -99,10 +99,10 @@ scheduled resume) and creates them again at resume.
 
 ```text
 user request
-  → planner       plan package in temp/planner/<slug>/ + prompts/<slug>_prompt.md
+  → planner       plan package in temp/planner/<slug>/ + plans/<slug>.md
                   relay line "plan <slug>: ready"
   → coordinator   plan intake: checks owners, ownership, start conditions, agent ledger
-                  tells the user; waits for go; commits the prompt file
+                  tells the user; waits for go; commits the plan file
   → spec unit     spec and rule changes land on main first
   → coordinator   per wave: worktree per unit, brief file per unit, one-line pointer
   → user          types the /goal line and the workflow opt-in in each worker

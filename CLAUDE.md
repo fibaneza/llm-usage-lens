@@ -42,7 +42,7 @@ Not in the reading path above, but worth knowing they exist:
 
 - `docs/future-improvements.md` — the parking lot of intentionally-deferred enhancements, each with the trigger that would revisit it; per Rule 00, adopting any starts with a spec change, not a PR
 - `ONBOARDING.md` — new-contributor setup checklist (codebases, MCP servers, skills to know)
-- `prompts/` — the single-use prompts behind the guarded, agent-driven build runs (one per goal or plan; the planner writes new ones here); [`prompts/README.md`](prompts/README.md) is the index. The standing role prompts (coordinator, planner, worker) and the sessions runbook are in `.claude/prompts/`
+- `plans/` — the run plans behind the guarded, agent-driven build runs (one per goal; the planner writes new ones here as `plans/<slug>.md`; renamed from `prompts/` on 2026-11-18); [`plans/README.md`](plans/README.md) is the index. The standing role prompts (coordinator, planner, worker) and the sessions runbook are in `.claude/prompts/`
 - `poc/` — an isolated proof of concept that runs the dashboard image on one EC2 instance with Docker Compose; **not** the deployment path and not in the pnpm workspace ([`poc/README.md`](poc/README.md))
 - `docs/superpowers/` — the design spec + implementation plan for the already-shipped `/new-component` command; kept for provenance, not active guidance
 

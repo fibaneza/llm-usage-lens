@@ -14,7 +14,7 @@ worktree. Writing under `$REPO/temp/` from a worktree session is outside
 the Bash sandbox: use the file tools, or run that one command outside it.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`prompts/shared-contracts.md` → `prompts/litellm_prompt.md` (run discipline,
+`plans/shared-contracts.md` → `plans/litellm.md` (run discipline,
 role model, LiteLLM threat items) → `.claude/prompts/coordinator_prompt.md` → this
 file. This file never overrides a rule.
 
@@ -398,4 +398,4 @@ anything out. Fix what it finds through the loop.
   each unit after its review and the user's approval.
 
 `/goal` condition:
-`prompts/litellm_role_views_prompt.md §6 completion criteria met for this run's units, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.`
+`plans/litellm_role_views.md §6 completion criteria met for this run's units, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.`

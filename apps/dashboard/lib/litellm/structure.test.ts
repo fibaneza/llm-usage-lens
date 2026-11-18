@@ -9,7 +9,7 @@ import { LITELLM_OPERATIONS } from "./allowlist";
 // Source: docs/specs/2026-11-10-litellm.md — "Security architecture" items 1,
 // 3, 5 and threats LT1 (server-only; key never in the bundle), LT2 (no master
 // key variable, parameter or reference); Rule 10.2 (lib/litellm/** is
-// server-only; no Client Component imports it); prompts/litellm_prompt.md §3
+// server-only; no Client Component imports it); plans/litellm.md §3
 // (no SSM client import under apps/).
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const SKIP = new Set([
