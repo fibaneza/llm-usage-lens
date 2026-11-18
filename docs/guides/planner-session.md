@@ -28,8 +28,8 @@ To pass the coordinator's messages to it, say `check the relay`.
 - **Output.** A plan package in `temp/planner/<slug>/` — `plan.md`,
   `spec-changes.md`, one `brief-<unit>.md` per unit, one
   `workflow-<session>.md` per worker session — and a new worker prompt
-  `plans/<slug>.md`. The coordinator commits the plan file and
-  adds its row to `plans/README.md`.
+  `docs/plans/<slug>.md`. The coordinator commits the plan file and
+  adds its row to `docs/plans/README.md`.
 - **Parallel sessions.** Every unit gets a worker session, a worktree, a
   branch and a file list. Overlaps between units are found at plan time, by
   tracing who reads what a unit changes, and are written into the

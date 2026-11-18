@@ -772,10 +772,10 @@ A run never performs them and never marks them done.
 
 If you track this prompt with `/goal`, use this exact condition (not the bare
 file path):
-**"plans/master.md §12 completion criteria met for this run's
+**"docs/plans/master.md §12 completion criteria met for this run's
 target, and the report written — or the run ended by a usage freeze, the T+60
 deadline, or a missing dependency, with the report written."**
-Do not use the bare file path (`/goal @plans/master.md`), and do not
+Do not use the bare file path (`/goal @docs/plans/master.md`), and do not
 use "all items resolved". Neither can be met in one run without the user,
 and both make the goal check loop: run 10 on 2026-11-08 was rejected
 repeatedly for open Phase 4.9 tasks and an early finish.

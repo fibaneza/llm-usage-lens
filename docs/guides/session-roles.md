@@ -24,7 +24,7 @@ prompt wins. *Status* at the end says which parts are on `main`.
 Worker sessions are being renamed from `<x>_prompt` to `<x>_worker` (user,
 2026-11-18), so that a session is not named like a prompt file. Until the
 user renames a session, its old name is the same session and stays valid.
-The plan files `plans/rbac.md` and `plans/litellm.md` were `prompts/rbac_prompt.md` and `prompts/litellm_prompt.md` until 2026-11-18.
+The plan files `docs/plans/rbac.md` and `docs/plans/litellm.md` were `prompts/rbac_prompt.md` and `prompts/litellm_prompt.md` until 2026-11-18.
 
 All `temp/coordinator/**` and `temp/planner/**` paths are in the **primary
 checkout**. Each worktree has its own gitignored `temp/`; a worker's run
@@ -87,7 +87,7 @@ scheduled resume) and creates them again at resume.
 - **Project context:** `CLAUDE.md`, Rules 00–70 and the memory index load in
   every session opened in the repository. The specs in `docs/specs/` are
   read per task (Rule 00).
-- **Precedence:** `CLAUDE.md` → rules → specs → `plans/shared-contracts.md`
+- **Precedence:** `CLAUDE.md` → rules → specs → `docs/plans/shared-contracts.md`
   → the unit's plan → `.claude/prompts/coordinator_prompt.md` → the brief → the role
   prompt. A prompt, a brief or a plan never overrides a rule or a spec; a
   conflict is raised, and the spec is amended first (Rule 00.2).
@@ -99,7 +99,7 @@ scheduled resume) and creates them again at resume.
 
 ```text
 user request
-  → planner       plan package in temp/planner/<slug>/ + plans/<slug>.md
+  → planner       plan package in temp/planner/<slug>/ + docs/plans/<slug>.md
                   relay line "plan <slug>: ready"
   → coordinator   plan intake: checks owners, ownership, start conditions, agent ledger
                   tells the user; waits for go; commits the plan file

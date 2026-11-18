@@ -1,7 +1,7 @@
 # Coordinator Prompt — LLM Usage Lens
 
 One Claude session **coordinates** other Claude sessions ("workers") that each
-run a goal from `plans/rbac.md`, `plans/litellm.md`, `plans/master.md` or the
+run a goal from `docs/plans/rbac.md`, `docs/plans/litellm.md`, `docs/plans/master.md` or the
 prompt of a plan the planner wrote (§2c).
 The coordinator does no feature work itself. It assigns goals, **prevents
 conflicts between goals**, **owns every merge into `main`** — the full test
@@ -13,7 +13,7 @@ the state needed to carry on after a context reset or in a new session
 coordinator's, §4).
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`plans/shared-contracts.md` → the goal's plan a worker runs → this file. This file
+`docs/plans/shared-contracts.md` → the goal's plan a worker runs → this file. This file
 never overrides a rule; it only adds coordination.
 
 **The sessions it coordinates are listed in §0a.** A session that is not in
@@ -65,9 +65,9 @@ branch, queue) for each one; this table says what each session **is**.
 | Session name | Kind | Role | Runs | Channel | Agents |
 |---|---|---|---|---|---|
 | `Coordinator` | this session | Assigns goals, prevents conflicts, reviews and lands every unit, keeps state | this file | — | review and fix agents only (§4) |
-| `improvements_worker` | worker (Claude Desktop session) | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `plans/master.md`, `plans/ui_refresh.md`, `plans/management_improvements.md`, a plan's `<slug>_prompt.md` | live message; relay if held | per the brief (§3a) |
-| `bedrock_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `plans/rbac.md` (4R units), chores and plan units assigned to it | live message; relay if held | per the brief (§3a) |
-| `litellm_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `plans/litellm.md` (L units), plan units assigned to it | live message; relay if held | per the brief (§3a) |
+| `improvements_worker` | worker (Claude Desktop session) | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/master.md`, `docs/plans/ui_refresh.md`, `docs/plans/management_improvements.md`, a plan's `<slug>_prompt.md` | live message; relay if held | per the brief (§3a) |
+| `bedrock_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/rbac.md` (4R units), chores and plan units assigned to it | live message; relay if held | per the brief (§3a) |
+| `litellm_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/litellm.md` (L units), plan units assigned to it | live message; relay if held | per the brief (§3a) |
 | `planner` | planner | Writes plans, spec text and prompts; **never** builds, tests, commits or takes a unit | `planner_prompt.md` | **file relay only** (§2b) | read-only research agents, at most 3 |
 
 **Renaming in progress (user, 2026-11-18).** Worker sessions go from
@@ -77,7 +77,7 @@ the same session: address it by the name `ListAgents` shows, and keep one
 row for it in `state.md` under the new name with the old one beside it.
 File names keyed by session (`briefs/<session>-<unit>.md`,
 `to-<session>.md`, `from-<session>.md`, `workflow-<session>.md`) use the
-**new** name from now on. `plans/rbac.md` and `plans/litellm.md` are
+**new** name from now on. `docs/plans/rbac.md` and `docs/plans/litellm.md` are
 plan files (renamed from `prompts/*_prompt.md` on 2026-11-18).
 
 Not coordinated, whatever `ListAgents` shows:
@@ -372,7 +372,7 @@ Rules for the roster:
 `planner` delivers a **plan package** (`.claude/prompts/planner_prompt.md` §4) in
 `temp/planner/<slug>/`: `plan.md`, `spec-changes.md`, one
 `brief-<unit>.md` per unit, one `workflow-<session>.md` per worker
-session, and a new untracked `plans/<slug>.md` in the primary
+session, and a new untracked `docs/plans/<slug>.md` in the primary
 checkout. A plan is a proposal until you have taken it in:
 
 1. **Read `plan.md`** and check it against reality, not against itself:
@@ -392,7 +392,7 @@ checkout. A plan is a proposal until you have taken it in:
    user's actions (the workflow opt-in per run, *Dynamic workflow size* in
    each worker's `/config`, the `/goal` lines, pushes). Start nothing
    before the user says go.
-3. **Commit the plan file** and its row in `plans/README.md` as your own
+3. **Commit the plan file** and its row in `docs/plans/README.md` as your own
    docs change (§5). It is the one untracked file `planner` may leave in the
    primary checkout; `git status --short` is clean again after this step.
 4. **Land the spec unit first.** `spec-changes.md` is applied on a

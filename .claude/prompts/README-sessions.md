@@ -14,7 +14,7 @@ reference (what each role may and may not do, where every state file is,
 the message formats, the limits) is
 [`docs/guides/session-roles.md`](../../docs/guides/session-roles.md). Its
 *Status* section says which parts are on `main`. One run in one session,
-with no coordinator, is in [`plans/README.md`](../../plans/README.md) — *How to start a run*.
+with no coordinator, is in [`docs/plans/README.md`](../../docs/plans/README.md) — *How to start a run*.
 
 Worker sessions are being renamed from `<x>_prompt` to `<x>_worker`. Until
 you rename a session, its old name (`rbac_prompt`, `litellm_prompt`) is the

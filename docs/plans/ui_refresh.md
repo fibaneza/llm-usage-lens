@@ -9,7 +9,7 @@ Primary checkout: `/Users/fibanez/Projects/aws-bedrock-cost-tracker` (`$REPO`).
 Always use absolute paths; never edit in the primary checkout or on `main`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`plans/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
+`docs/plans/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
 This file never overrides a rule. Where the user's direction below needs a
 spec to change, amend the spec first (Rule 00.2).
 
@@ -166,7 +166,7 @@ in §4 and after every `main` merge:
   `feature/phase-l3b-litellm-role-views`; both **land before the UI unit
   touches their files**;
 - the LiteLLM and sign-in surfaces, owned by the role-views run
-  (`plans/litellm_role_views.md`) until it lands:
+  (`docs/plans/litellm_role_views.md`) until it lands:
   `components/litellm/**`, `components/settings/LiteLLMPanel*`,
   `app/dashboard/litellm/**`, `components/auth/SignInOptions*`,
   `app/sign-in/**`, and the Settings page —
@@ -175,7 +175,7 @@ in §4 and after every `main` merge:
   search, using this run's design plan §1.3 and §3 as input; the Settings
   page is out of this run's scope). The UI unit restyles them only through tokens and the
   shared primitives, never by editing those files;
-- `plans/**`, `.claude/**` except Rule 40, `poc/**`, `tools/**`,
+- `docs/plans/**`, `.claude/**` except Rule 40, `poc/**`, `tools/**`,
   `apps/collector/**`, `.github/**`.
 
 A frozen file is not edited, moved, renamed or deleted, and its tests are
@@ -544,4 +544,4 @@ usage freeze with the report written and the resume scheduled:
   sandbox: use the file tools, or run that one command outside the sandbox.
 
 `/goal` condition, if the user wants to pin it in the session:
-`plans/ui_refresh.md §11 completion criteria met for both units with the report written and nothing merged into main — or the run ended by a usage freeze with the report written and the resume scheduled.`
+`docs/plans/ui_refresh.md §11 completion criteria met for both units with the report written and nothing merged into main — or the run ended by a usage freeze with the report written and the resume scheduled.`

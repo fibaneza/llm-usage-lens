@@ -722,7 +722,7 @@ User-only actions never count against completion:
 - policy choices that L0 marks as needing the user
 
 If this prompt is tracked with `/goal`, use this exact condition:
-**"plans/litellm.md §6 completion criteria met for this run's target unit,
+**"docs/plans/litellm.md §6 completion criteria met for this run's target unit,
 and the report written — or the run ended by a usage freeze, the T+60
 deadline, or a missing dependency, with the report written."**
 Never use the bare file path or "all units done".

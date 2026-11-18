@@ -7,8 +7,8 @@ merge"**. The coordinator reviews and lands your unit; the user pushes.
 
 This file defines the role for every worker (`improvements_worker`, `bedrock_worker`,
 `litellm_worker`, and any worker the user adds). What a unit must deliver
-comes from **the unit's plan** — a plan's `plans/<slug>.md`,
-`plans/rbac.md`, `plans/litellm.md` or `plans/master.md` — and from the
+comes from **the unit's plan** — a plan's `docs/plans/<slug>.md`,
+`docs/plans/rbac.md`, `docs/plans/litellm.md` or `docs/plans/master.md` — and from the
 coordinator's **brief**.
 
 **Session names (user, 2026-11-18).** The worker sessions are being renamed
@@ -16,7 +16,7 @@ from `<x>_prompt` to `<x>_worker`, so that a session is not named like a
 prompt file: `rbac_prompt` → `bedrock_worker`, `litellm_prompt` →
 `litellm_worker`. The user renames the sessions; until then the old name is
 the same session and stays valid. Use the name `ListAgents` shows today.
-`plans/rbac.md` and `plans/litellm.md` are prompt **files** and keep
+`docs/plans/rbac.md` and `docs/plans/litellm.md` are prompt **files** and keep
 their names.
 
 You orchestrate agents. You write no production code and no tests yourself
@@ -37,7 +37,7 @@ The three session roles and how a unit moves from a request to `main` are
 summarised in `docs/guides/session-roles.md`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`plans/shared-contracts.md` → the unit's plan →
+`docs/plans/shared-contracts.md` → the unit's plan →
 `.claude/prompts/coordinator_prompt.md` → the brief → this file. A brief selects
 and narrows; it never overrides a rule, a spec or the unit's plan. Where
 they disagree, send `blocked` (§9) — never diverge silently (Rule 00.2).
@@ -303,7 +303,7 @@ handover, and send `ready` again.
   `frozen <unit> at <commit>, report <path>`, and stop.
 - An exception to a tier is the user's, for one unit and one window; it
   reaches you in the brief or from the user, with when it ends.
-- When the unit's plan sets a clock (`plans/master.md` §2: freeze at
+- When the unit's plan sets a clock (`docs/plans/master.md` §2: freeze at
   T+55, report at T+60), that clock applies too. The deadline beats
   unfinished scope.
 
@@ -372,7 +372,7 @@ Next action: <one line that a new session can act on>
 
 The report (the name the brief gives, or `temp/report_<yymmdd>_<unit>.md`)
 follows the unit's plan; where that gives no skeleton, use
-`plans/master.md` §10. It always has: what changed per unit; the
+`docs/plans/master.md` §10. It always has: what changed per unit; the
 decisions and their reasons; the gate and test counts at the final commit;
 the agents and models used; **what was not verified**; the open questions
 with the default in force; and the user's actions in order. Never claim a

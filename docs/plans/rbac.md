@@ -1,13 +1,13 @@
 # Goal Prompt: Role-Based Access from Entra ID — LLM Usage Lens
 
-Companion to `master.md`. All three prompts live in `plans/`. It reuses that prompt's run discipline
+Companion to `master.md`. All three prompts live in `docs/plans/`. It reuses that prompt's run discipline
 (timing, usage guard, progress monitoring, orchestration, git guardrails,
 report skeleton) and replaces its mission with one production feature:
 **role-based, scope-limited access driven by Microsoft Entra ID**, fit for use
 across a company. Where this file is silent, `master.md` applies. Where
 they conflict, this file wins for this feature only.
 
-**Related files (all in `plans/`):**
+**Related files (all in `docs/plans/`):**
 - `shared-contracts.md`: environments, roles, identity, the audit log, the
   combined Bedrock + LiteLLM usage rules, governance, the platform,
   operations and the finance statement. It is defined once and **wins over
@@ -838,7 +838,7 @@ User-only actions never count against completion:
   service endpoints
 
 If this prompt is tracked with `/goal`, use this exact condition:
-**"plans/rbac.md §6 completion criteria met for this run's target unit, and
+**"docs/plans/rbac.md §6 completion criteria met for this run's target unit, and
 the report written — or the run ended by a usage freeze or the T+60 deadline
 with the report written."**
 Never use the bare file path or "all units done": those conditions cannot be

@@ -11,7 +11,7 @@ the primary checkout — `plan.md`, `spec-changes.md`, `brief-sync1.md`,
 `brief-sync2.md`, `workflow-litellm_worker.md`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`plans/shared-contracts.md` → this file → `.claude/prompts/coordinator_prompt.md`
+`docs/plans/shared-contracts.md` → this file → `.claude/prompts/coordinator_prompt.md`
 → the brief → `.claude/prompts/worker_prompt.md`. This file never overrides a rule
 or a spec. Each unit amends its specs **first**, as the first commit on its
 branch (Rule 00.2), from `spec-changes.md`.
@@ -413,5 +413,5 @@ A unit is complete when:
 `/goal` line, one unit per run:
 
 ```
-/goal plans/litellm_user_sync.md §10 completion criteria met for unit <RS1|SYNC1|SYNC2>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.
+/goal docs/plans/litellm_user_sync.md §10 completion criteria met for unit <RS1|SYNC1|SYNC2>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.
 ```

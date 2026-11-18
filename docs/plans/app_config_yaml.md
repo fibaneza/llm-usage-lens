@@ -9,7 +9,7 @@ Read specs, rules and state from `$REPO` (`main`). Never edit in the primary
 checkout, on `main` or in another session's worktree.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`plans/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
+`docs/plans/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
 This file never overrides a rule. Where it disagrees with a spec, the spec
 is amended first (§4, step 1) — never diverge silently (Rule 00.2).
 
@@ -282,5 +282,5 @@ freeze or an unanswered user decision with the report written:
 `/goal` line:
 
 ```
-/goal plans/app_config_yaml.md §8 completion criteria met, and the report written — or the run ended by a usage freeze or an unanswered user decision, with the report written.
+/goal docs/plans/app_config_yaml.md §8 completion criteria met, and the report written — or the run ended by a usage freeze or an unanswered user decision, with the report written.
 ```

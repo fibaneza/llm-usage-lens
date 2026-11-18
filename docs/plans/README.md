@@ -9,14 +9,14 @@ Runs can go **one at a time** in a single session, or **in parallel** in
 worker sessions under a coordinator session (see *Parallel runs* below).
 
 **Two folders (user, 2026-11-18).** This folder holds the **run plans**: one per goal, which the
-planner writes here as `plans/<slug>.md` (renamed from `prompts/*_prompt.md`). The standing **role prompts**
-(coordinator, planner, worker) and the sessions runbook live in [`.claude/prompts/`](../.claude/prompts/):
+planner writes here as `docs/plans/<slug>.md` (renamed from `prompts/*_prompt.md`). The standing **role prompts**
+(coordinator, planner, worker) and the sessions runbook live in [`.claude/prompts/`](../../.claude/prompts/):
 
 | Role prompt | Purpose |
 |---|---|
 | `.claude/prompts/coordinator_prompt.md` | How one session coordinates the worker sessions that run the goals above: briefs, file ownership and conflict prevention, milestones, the shared usage freeze, **every merge into `main`** (full tests on the `main` candidate, fix agents, clean-up), and the live state in `temp/coordinator/` that survives a context reset |
-| `.claude/prompts/planner_prompt.md` | The planner session: it writes plans, spec text and prompts and never executes them (user, 2026-11-18); it reaches the coordinator only through the file relay in `temp/coordinator/` (coordinator prompt §2b). Start sheet: [`docs/guides/planner-session.md`](../docs/guides/planner-session.md) |
-| `.claude/prompts/worker_prompt.md` | The role prompt for every worker session (`improvements_worker`, `bedrock_worker`, `litellm_worker`): run the unit the coordinator's brief assigns, in its worktree, stop at "ready to merge". The unit's own prompt says what to build. Roles overview: [`docs/guides/session-roles.md`](../docs/guides/session-roles.md) |
+| `.claude/prompts/planner_prompt.md` | The planner session: it writes plans, spec text and prompts and never executes them (user, 2026-11-18); it reaches the coordinator only through the file relay in `temp/coordinator/` (coordinator prompt §2b). Start sheet: [`docs/guides/planner-session.md`](../guides/planner-session.md) |
+| `.claude/prompts/worker_prompt.md` | The role prompt for every worker session (`improvements_worker`, `bedrock_worker`, `litellm_worker`): run the unit the coordinator's brief assigns, in its worktree, stop at "ready to merge". The unit's own prompt says what to build. Roles overview: [`docs/guides/session-roles.md`](../guides/session-roles.md) |
 | `.claude/prompts/README-sessions.md` | How to run the planner, coordinator and worker sessions: set up, start lines, a piece of work step by step, the relay, clearing or replacing a session, stopping, troubleshooting |
 
 Run plans:
@@ -28,6 +28,7 @@ Run plans:
 | `rbac.md` | Role-based access from Entra ID (global `internal-admin`, `internal-org-admin`, `internal-auditor`, `internal-viewer`; scoped `internal-team-admin`; the legacy `Admin` alias only outside `APP_ENV=prod`), SSO group mapping, single-team affiliation and admin scopes, visibility and inheritance, the master user, password users and the pre-SSO mode, the audit log, plus the platform unit |
 | `litellm.md` | LiteLLM team and user administration through an allowlist gateway and a scoped service key in SSM, budgets, rate limits, keys, combined usage, self-service keys, the monthly statement. Its permissions follow the role model in `rbac.md` §1.1 |
 | `litellm_user_sync.md` | Units RS1, SYNC1 and SYNC2 (user, 2026-11-18): Reset spend from the LiteLLM users tab and the Users page; LiteLLM users synced into Management → Users on demand and on a schedule, with team membership only through linked LiteLLM teams that exist (supersedes Access Control D27 "never automatic"; T-MI1 stays) |
+| `management_round2.md` | Management round 2 (user, 2026-11-18): it combines the LiteLLM user sync units with 17 new items in six units (LF1 LiteLLM page fixes, ST1 settings and small UX, TM1 team list then team, US1 users table with API sort, US2 user page, SRT1 sort in other tables), in three waves; runs at the weekly usage reset |
 
 ## How runs save tokens (Rule 70.12, decided 2026-11-14)
 
@@ -92,12 +93,12 @@ Explorer access is allowed by company policy.
 
 | Plan | `/goal` condition |
 |---|---|
-| `master.md` | `plans/master.md §12 completion criteria met for this run's target, and the report written — or the run ended by a usage freeze, the T+60 deadline, or a missing dependency, with the report written.` |
-| `rbac.md` | `plans/rbac.md §6 completion criteria met for this run's target unit, and the report written — or the run ended by a usage freeze or the T+60 deadline with the report written.` |
-| `litellm.md` | `plans/litellm.md §6 completion criteria met for this run's target unit, and the report written — or the run ended by a usage freeze, the T+60 deadline, or a missing dependency, with the report written.` |
+| `master.md` | `docs/plans/master.md §12 completion criteria met for this run's target, and the report written — or the run ended by a usage freeze, the T+60 deadline, or a missing dependency, with the report written.` |
+| `rbac.md` | `docs/plans/rbac.md §6 completion criteria met for this run's target unit, and the report written — or the run ended by a usage freeze or the T+60 deadline with the report written.` |
+| `litellm.md` | `docs/plans/litellm.md §6 completion criteria met for this run's target unit, and the report written — or the run ended by a usage freeze, the T+60 deadline, or a missing dependency, with the report written.` |
 
-Send the instruction first (for example "Run plans/rbac.md for unit
-R3 in this worktree…", mentioning the plan with `@plans/rbac.md`),
+Send the instruction first (for example "Run docs/plans/rbac.md for unit
+R3 in this worktree…", mentioning the plan with `@docs/plans/rbac.md`),
 then the `/goal` line as a second message.
 
 4. After the run, read the report in `temp/`: §8 lists your actions (push,
@@ -108,8 +109,8 @@ then the `/goal` line as a second message.
 Several sessions can run at once: a planner (plans only), one coordinator,
 and worker sessions (`improvements_worker`, `bedrock_worker`, `litellm_worker`). How to
 start, resume, clear and stop each one is in
-[`.claude/prompts/README-sessions.md`](../.claude/prompts/README-sessions.md); the reference is
-[`docs/guides/session-roles.md`](../docs/guides/session-roles.md). A worker
+[`.claude/prompts/README-sessions.md`](../../.claude/prompts/README-sessions.md); the reference is
+[`docs/guides/session-roles.md`](../guides/session-roles.md). A worker
 runs 2 agents for a goal with no plan, and its allocation from the shared pool for a
 plan unit (80 agents running at once, summed across all sessions and
 distributed dynamically by the coordinator). Workers
