@@ -415,7 +415,7 @@ and members, **auditor** = `internal-auditor`.
 |---|---|---|---|---|---|
 | **Usage** — Overview, Ranking, Cost by department, Cost by team, Cost by service, Cost by user | ✓ | ✓ | ✓ read-only | ✗ (no AWS cost view, decided 2026-11-17) | ✗ |
 | Usage — My usage (moved from Management 2026-11-17, user; second in the group, D1) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Usage — Team usage (D7, user, 2026-11-17; global readers: coordinator decision, 2026-11-17, MI-D7) | ✓ every team | ✓ every team | ✓ every team, read-only | ✓ teams in scope (a live admin scope) | ✗ |
+| Usage — Team usage (D7, user, 2026-11-17; global readers: coordinator decision, 2026-11-17, MI-D7; *hidden until M2 lands the page — `TEAM_USAGE_ROUTE = false`, Design System — D7*) | ✓ every team | ✓ every team | ✓ every team, read-only | ✓ teams in scope (a live admin scope) | ✗ |
 | **Management** — Team | ✓ every team | ✓ every team | ✓ read-only | ✓ teams it leads | ✗ |
 | Management — Users | ✓ | ✓ | ✓ read-only | ✗ | ✗ |
 | Management — LiteLLM: tabs Organisation, LiteLLM teams, LiteLLM users (D2, agent decision, 2026-11-17; replaces the Organisation item) | ✓ | ✓ | ✓ read-only | ✗ | ✗ |
@@ -500,7 +500,8 @@ and members, **auditor** = `internal-auditor`.
     improvements MI-D1): My usage is second, after Overview, and Team
     usage third. "A lead or a user sees only My usage" superseded
     2026-11-17 (user, MI-D7: "Team lead is also a user"): a lead with a
-    live admin scope sees My usage and Team usage; a user sees only My
+    live admin scope sees My usage and Team usage (Team usage hidden until M2
+    lands its page: `TEAM_USAGE_ROUTE = false`, Design System — D7); a user sees only My
     usage; a global reader sees all eight items (Team usage included,
     MI-D7). The rest of B1-14 holds.*
 - **Slice B2 decisions (agent decisions, 2026-11-17; implementation-phases

@@ -18,9 +18,11 @@ describe("PageTitle", () => {
     ["/dashboard/teams/team-1", "Cost by team"],
     ["/dashboard/me", "My usage"],
     // Slice B2 B2-2 / Design System routes table: the Management page titles.
-    ["/dashboard/manage/team", "Team usage & management"],
-    ["/dashboard/manage/organisation", "Organisation usage"],
-    ["/dashboard/manage/users", "User lookup"],
+    // M1 (MI-D1, MI-D2; Design System routes table): titles of the new order.
+    ["/dashboard/manage/team", "Team management"],
+    ["/dashboard/manage/litellm", "LiteLLM"],
+    ["/dashboard/manage/litellm/teams", "LiteLLM"],
+    ["/dashboard/manage/users", "Users"],
     ["/dashboard/manage/audit", "Audit log"],
   ])("%s reads %s as the page h1", (path, title) => {
     mockUsePathname.mockReturnValue(path);

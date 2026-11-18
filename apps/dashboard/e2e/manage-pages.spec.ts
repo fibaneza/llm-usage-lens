@@ -147,10 +147,10 @@ test.describe("Management -> Organisation and Users", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
-    await open(page, "/dashboard/manage/organisation");
+    await open(page, "/dashboard/manage/litellm/organisation");
 
     await expect(
-      page.getByRole("heading", { level: 1, name: "Organisation usage" }),
+      page.getByRole("heading", { level: 1, name: "LiteLLM" }),
     ).toBeVisible();
     const region = page.getByRole("region", { name: "Organisation" });
     await expect(region).toContainText("Payments");
@@ -178,7 +178,7 @@ test.describe("Management -> Organisation and Users", () => {
     await open(page, "/dashboard/manage/users");
 
     await expect(
-      page.getByRole("heading", { level: 1, name: "User lookup" }),
+      page.getByRole("heading", { level: 1, name: "Users" }),
     ).toBeVisible();
     await page.getByRole("searchbox", { name: /search users/i }).fill("ada");
     await page.getByRole("button", { name: "ada@example.test" }).click();
@@ -280,7 +280,7 @@ test.describe("retired /dashboard/litellm redirects", () => {
   });
 
   for (const [tab, target] of [
-    ["organisation", "/dashboard/manage/organisation"],
+    ["organisation", "/dashboard/manage/litellm/organisation"],
     ["users", "/dashboard/manage/users"],
     ["audit", "/dashboard/manage/audit"],
     ["team", "/dashboard/manage/team"],
@@ -341,6 +341,10 @@ test.describe("My usage LiteLLM view and user 404s", () => {
     for (const path of [
       "/dashboard/manage/team",
       "/dashboard/manage/organisation",
+      "/dashboard/manage/litellm",
+      "/dashboard/manage/litellm/organisation",
+      "/dashboard/manage/litellm/teams",
+      "/dashboard/manage/litellm/users",
       "/dashboard/manage/users",
       "/dashboard/manage/audit",
     ]) {

@@ -1,22 +1,20 @@
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { LiteLLMSection } from "@/components/litellm/LiteLLMSection";
-import { OrganisationSection } from "@/components/litellm/OrganisationSection";
-import { managementAccessFor } from "@/lib/manage-access";
+import { withSearchParams } from "@/lib/nav";
 
-// Design System - Management pages, Organisation (global readers only; slice
-// B2, B2-7). The h1 stays in the top bar.
-export default async function OrganisationManagePage() {
-  const access = await managementAccessFor(await auth());
-  if (!access.organisation) notFound();
-  return (
-    <div className="flex flex-col gap-4">
-      <PageHeader description="Organisation-wide spend and budgets as LiteLLM reports them." />
-      <LiteLLMSection title="Organisation" reported>
-        <OrganisationSection />
-      </LiteLLMSection>
-    </div>
+// Design System - Routes and redirects (D3, 2026-11-17): Organisation is the
+// first tab of Management -> LiteLLM. A server redirect that keeps the query;
+// the target page applies its own gate, so a caller who may not see it gets
+// that page's 404.
+export default async function OrganisationRedirectPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  redirect(
+    withSearchParams(
+      "/dashboard/manage/litellm/organisation",
+      await searchParams,
+    ),
   );
 }

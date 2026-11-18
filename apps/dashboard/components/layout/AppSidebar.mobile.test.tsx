@@ -98,7 +98,8 @@ const FULL_SCOPE: NavScope = {
   departmentScopes: new Set<string>(),
   management: {
     team: true,
-    organisation: true,
+    teamUsage: true,
+    litellm: true,
     users: true,
     audit: true,
     settings: true,

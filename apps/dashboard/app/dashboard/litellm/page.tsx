@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 // range) travel along.
 const TARGETS: ReadonlyMap<string, string> = new Map([
   ["team", "/dashboard/manage/team"],
-  ["organisation", "/dashboard/manage/organisation"],
+  ["organisation", "/dashboard/manage/litellm/organisation"],
   ["users", "/dashboard/manage/users"],
   ["audit", "/dashboard/manage/audit"],
 ]);

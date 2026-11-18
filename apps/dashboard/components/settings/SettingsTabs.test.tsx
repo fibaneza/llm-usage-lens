@@ -150,27 +150,22 @@ describe("SettingsTabs - LiteLLM sub-tabs (unit A2)", () => {
     ["internal-org-admin", ORG_ADMIN],
     ["internal-auditor", AUDITOR],
   ] as const)(
-    "%s: on a LiteLLM route shows the five sub-tab links (Gateway last), the current one marked",
+    "%s: on a LiteLLM route shows the three sub-tab links (Connection, Guardrails, Gateway), the current one marked",
     (_name, viewer) => {
-      pathname.current = "/dashboard/settings/litellm/team-links";
+      pathname.current = "/dashboard/settings/litellm/guardrails";
       render(<SettingsTabs tabs={settingsTabsFor(viewer)} />);
       const sub = screen.getByRole("tablist", { name: "LiteLLM sections" });
-      // Design System — Settings Page, LiteLLM sub-tabs (2026-11-17): five
-      // sub-tabs, Gateway last (LiteLLM spec L6 Gateway bullet).
-      expect(tabNames(sub)).toEqual([
-        "Connection",
-        "Guardrails",
-        "Team links",
-        "Users",
-        "Gateway",
-      ]);
+      // Design System — Settings Page, LiteLLM sub-tabs (M1, D3,
+      // 2026-11-17): Team links and Users moved to Management -> LiteLLM;
+      // Gateway stays last (LiteLLM spec L6).
+      expect(tabNames(sub)).toEqual(["Connection", "Guardrails", "Gateway"]);
       expect(
         within(sub).getByRole("tab", { name: "Guardrails" }),
       ).toHaveAttribute("href", "/dashboard/settings/litellm/guardrails");
       expect(
-        within(sub).getByRole("tab", { name: "Team links" }),
+        within(sub).getByRole("tab", { name: "Guardrails" }),
       ).toHaveAttribute("aria-current", "page");
-      for (const name of ["Connection", "Guardrails", "Users", "Gateway"]) {
+      for (const name of ["Connection", "Gateway"]) {
         expect(within(sub).getByRole("tab", { name })).not.toHaveAttribute(
           "aria-current",
         );

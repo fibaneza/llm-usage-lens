@@ -306,8 +306,6 @@ const ROUTES: [string, string][] = [
   [`${BASE}/sync`, "Sync status"],
   [`${BASE}/litellm/connection`, "LiteLLM"],
   [`${BASE}/litellm/guardrails`, "LiteLLM"],
-  [`${BASE}/litellm/team-links`, "LiteLLM"],
-  [`${BASE}/litellm/users`, "LiteLLM"],
   [`${BASE}/litellm/gateway`, "LiteLLM"],
   [`${BASE}/access/people`, "Members"],
   [`${BASE}/access/visibility`, "Visibility"],

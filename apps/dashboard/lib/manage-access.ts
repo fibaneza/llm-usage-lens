@@ -22,7 +22,8 @@ import { loadAuthorization } from "@/lib/data/access/authorization";
 export type ManagementAccess = {
   global: boolean;
   team: boolean;
-  organisation: boolean;
+  teamUsage: boolean;
+  litellm: boolean;
   users: boolean;
   audit: { app: boolean; gateway: boolean };
   settings: boolean;
@@ -31,7 +32,8 @@ export type ManagementAccess = {
 const CLOSED: ManagementAccess = {
   global: false,
   team: false,
-  organisation: false,
+  teamUsage: false,
+  litellm: false,
   users: false,
   audit: { app: false, gateway: false },
   settings: false,
@@ -63,7 +65,9 @@ export async function managementAccessFor(
     return {
       global: reader,
       team: reader || lead,
-      organisation: reader,
+      // `lead` comes from resolveScope, which drops suspended SSO scopes (MI-D7).
+      teamUsage: reader || lead,
+      litellm: reader,
       users: reader,
       audit: {
         app: accessCapabilities({ roles, adminScopes: [] }).auditLog,

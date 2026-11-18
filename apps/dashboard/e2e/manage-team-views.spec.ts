@@ -220,7 +220,7 @@ test.describe("Organisation to Team (G2)", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-org-admin"] });
     await mockApi(page);
-    await page.goto("/dashboard/manage/organisation");
+    await page.goto("/dashboard/manage/litellm/organisation");
     await waitForHydration(page);
 
     await page
@@ -230,7 +230,7 @@ test.describe("Organisation to Team (G2)", () => {
 
     await expect(page).toHaveURL(/\/dashboard\/manage\/team\?team=t1/);
     await expect(
-      page.getByRole("heading", { level: 1, name: "Team usage & management" }),
+      page.getByRole("heading", { level: 1, name: "Team management" }),
     ).toBeVisible();
   });
 });

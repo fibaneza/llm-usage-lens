@@ -41,7 +41,7 @@ async function openSettings(page: Page) {
 }
 
 test.describe("settings LiteLLM tabs (L3b)", () => {
-  test("an Admin sees Connection, Guardrails, Team links, Users and Gateway tabs, Connection first", async ({
+  test("an Admin sees Connection, Guardrails and Gateway tabs, Connection first (Team links and Users moved to Management, D3)", async ({
     page,
     context,
   }) => {
@@ -54,81 +54,17 @@ test.describe("settings LiteLLM tabs (L3b)", () => {
     expect((await tabs.allTextContents()).map((t) => t.trim())).toEqual([
       "Connection",
       "Guardrails",
-      "Team links",
-      "Users",
       "Gateway",
     ]);
     await expect(page.getByRole("tab", { name: "Connection" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    await page.getByRole("tab", { name: "Users" }).click();
-    await expect(
-      page.getByRole("searchbox", { name: /search users/i }),
-    ).toBeVisible();
   });
 });
 
-// L3b review (UI warning): the Settings -> LiteLLM data tabs get an axe scan
-// (WCAG 2.1 AA, serious or critical only); fixtures only (Rule 60.24).
-test.describe("settings LiteLLM tabs accessibility (L3b)", () => {
-  async function scanTab(page: Page, tab: string, ready: () => Promise<void>) {
-    await page.route(/\/api\/litellm\/team-links(\?|$)/, (route) =>
-      route.fulfill({
-        json: {
-          data: {
-            items: [
-              {
-                teamId: "payments",
-                litellmTeamId: "ll-111",
-                version: 1,
-                updatedAt: "2026-11-01T00:00:00Z",
-              },
-            ],
-          },
-        },
-      }),
-    );
-    await page.getByRole("tab", { name: tab }).click();
-    await ready();
-    // Next streams metadata after first paint; axe document-title needs it.
-    await expect(page).toHaveTitle(/\S/);
-    const results = await new AxeBuilder({ page })
-      .withTags(["wcag2a", "wcag2aa"])
-      .analyze();
-    expect(
-      results.violations
-        .filter((v) => v.impact === "serious" || v.impact === "critical")
-        .map((v) => v.id),
-    ).toEqual([]);
-  }
-
-  test("the Users tab has no serious or critical axe violations", async ({
-    page,
-    context,
-  }) => {
-    await signInAsTestUser(context, { roles: ["internal-admin"] });
-    await mockApi(page);
-    await openSettings(page);
-    await scanTab(page, "Users", () =>
-      expect(
-        page.getByRole("searchbox", { name: /search users/i }),
-      ).toBeVisible(),
-    );
-  });
-
-  test("the Team links tab has no serious or critical axe violations", async ({
-    page,
-    context,
-  }) => {
-    await signInAsTestUser(context, { roles: ["internal-admin"] });
-    await mockApi(page);
-    await openSettings(page);
-    await scanTab(page, "Team links", () =>
-      expect(page.getByText("ll-111")).toBeVisible(),
-    );
-  });
-});
+// The Users and Team links tabs left Settings (M1 D3); their axe scan is in
+// e2e/manage-litellm.spec.ts.
 
 test.describe("settings LiteLLM section", () => {
   test("renders for internal-admin with status, no key input, and a working connection test", async ({
@@ -331,14 +267,9 @@ test.describe("settings LiteLLM by role (LD24)", () => {
     await expect(
       page.getByRole("button", { name: /reset to defaults/i }),
     ).toHaveCount(0);
-
-    await page.getByRole("tab", { name: "Team links" }).click();
-    await expect(page.getByText("ll-111")).toBeVisible();
-    await expect(page.getByRole("button", { name: /^unlink/i })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /^link$/i })).toHaveCount(0);
   });
 
-  test("an org-admin cannot edit Connection but edits Guardrails and Team links", async ({
+  test("an org-admin cannot edit Connection but edits Guardrails (Team links moved to Management, D3)", async ({
     page,
     context,
   }) => {
@@ -357,12 +288,6 @@ test.describe("settings LiteLLM by role (LD24)", () => {
     await page.getByRole("tab", { name: "Guardrails" }).click();
     await expect(
       page.getByRole("switch", { name: "createTeam" }),
-    ).toBeVisible();
-
-    await page.getByRole("tab", { name: "Team links" }).click();
-    await expect(page.getByLabel("Dashboard team ID")).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Unlink payments" }),
     ).toBeVisible();
   });
 });
@@ -422,7 +347,7 @@ test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
     "internal-org-admin",
     "internal-auditor",
   ]) {
-    test(`${role} sees the five sub-tabs in order`, async ({
+    test(`${role} sees the three sub-tabs in order`, async ({
       page,
       context,
     }) => {
@@ -434,7 +359,7 @@ test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
         (await sub(page).getByRole("tab").allTextContents()).map((t) =>
           t.trim(),
         ),
-      ).toEqual(["Connection", "Guardrails", "Team links", "Users", "Gateway"]);
+      ).toEqual(["Connection", "Guardrails", "Gateway"]);
     });
   }
 
@@ -449,7 +374,10 @@ test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
     await expect(page).toHaveURL(`${BASE}/guardrails`);
   });
 
-  test("an old #team-links link on the Settings root lands on the Team links route", async ({
+  // Design System - Routes and redirects, "Old hash links" (2026-11-18, M1):
+  // an old `#team-links` on the Settings root lands on Management -> LiteLLM
+  // teams. The `$` anchor fails a leftover fragment: the target is the bare route.
+  test("an old #team-links link on the Settings root lands on Management -> LiteLLM teams (M1)", async ({
     page,
     context,
   }) => {
@@ -457,7 +385,36 @@ test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
     await mockApi(page);
     await mockEmptyLinks(page);
     await page.goto("/dashboard/settings#team-links");
-    await expect(page).toHaveURL(`${BASE}/team-links`);
+    await expect(page).toHaveURL(/\/dashboard\/manage\/litellm\/teams$/);
+  });
+
+  // Design System - Routes and redirects, "Old hash links" (2026-11-18, M1).
+  test("an old #users link on the LiteLLM Settings route lands on Management -> LiteLLM users (M1)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await mockEmptyLinks(page);
+    await page.goto(`${BASE}#users`);
+    await expect(page).toHaveURL(/\/dashboard\/manage\/litellm\/users$/);
+  });
+
+  // Design System - Routes and redirects, "Old hash links" (2026-11-18, M1): a
+  // caller who may not see the target gets its missing-page 404. A user
+  // (internal-viewer) gets 404 from Settings first, so the Management target is
+  // checked directly as well (Access Control - Navigation and landing by role:
+  // Management LiteLLM is admin, org admin and auditor only).
+  test("a user who follows an old #team-links link gets the 404 page at the target (M1)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-viewer"] });
+    await mockApi(page);
+    const settings = await page.goto(`${BASE}#team-links`);
+    expect(settings?.status()).toBe(404);
+    const target = await page.goto("/dashboard/manage/litellm/teams");
+    expect(target?.status()).toBe(404);
   });
 
   test("an unknown section is the 404 page, even for an admin", async ({
@@ -468,38 +425,6 @@ test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
     await mockApi(page);
     const response = await page.goto(`${BASE}/nope`);
     expect(response?.status()).toBe(404);
-  });
-
-  test("Team links with no team linked explains the empty state; an editor is pointed at the form", async ({
-    page,
-    context,
-  }) => {
-    await signInAsTestUser(context, { roles: ["internal-admin"] });
-    await mockApi(page);
-    await mockEmptyLinks(page);
-    await page.goto(`${BASE}/team-links`);
-    await waitForHydration(page);
-    const status = page.getByRole("status").filter({
-      hasText: "No LiteLLM team is linked yet.",
-    });
-    await expect(status).toContainText(/the form below links one/i);
-    await expect(page.getByLabel("Dashboard team ID")).toBeVisible();
-  });
-
-  test("Team links with no team linked tells an auditor who links teams", async ({
-    page,
-    context,
-  }) => {
-    await signInAsTestUser(context, { roles: ["internal-auditor"] });
-    await mockApi(page);
-    await mockEmptyLinks(page);
-    await page.goto(`${BASE}/team-links`);
-    await waitForHydration(page);
-    await expect(
-      page.getByRole("status").filter({
-        hasText: "No LiteLLM team is linked yet.",
-      }),
-    ).toContainText(/an admin or org-admin links teams/i);
   });
 
   test("Users with no team linked explains what the search lists", async ({
@@ -519,78 +444,6 @@ test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
     await expect(
       page.getByRole("searchbox", { name: /search users/i }),
     ).toBeVisible();
-  });
-});
-
-// L4b review round 1 (playwright-ui-reviewer BLOCKER). docs/specs/2026-11-17-app-teams.md
-// - UI (Settings -> LiteLLM -> Team links: a "Spend source" column for every
-// app team); no earlier fixture carried `appTeams`, so the table never
-// rendered in a browser. Fixtures only (Rule 60.24).
-test.describe("settings LiteLLM Team links - spend source table (L4b)", () => {
-  test("lists a linked and an unlinked app team with their spend source and is axe-clean", async ({
-    page,
-    context,
-  }) => {
-    await signInAsTestUser(context, { roles: ["internal-admin"] });
-    await mockApi(page);
-    await page.route(/\/api\/litellm\/team-links(\?|$)/, (route) =>
-      route.fulfill({
-        json: {
-          data: {
-            items: [
-              {
-                teamId: "payments",
-                litellmTeamId: "ll-111",
-                version: 1,
-                updatedAt: "2026-11-01T00:00:00Z",
-              },
-            ],
-            appTeams: [
-              {
-                teamId: "payments",
-                teamName: "Payments",
-                spendSource: "litellm-team",
-              },
-              {
-                teamId: "growth",
-                teamName: "Growth",
-                spendSource: "member-sum",
-              },
-            ],
-          },
-        },
-      }),
-    );
-    await page.route(/\/api\/litellm\/toggles$/, (route) =>
-      route.fulfill({
-        json: { data: { version: 0, edition: "oss", operations: {} } },
-      }),
-    );
-    await page.goto("/dashboard/settings/litellm/team-links");
-    await waitForHydration(page);
-
-    const table = page.getByRole("table", { name: "Spend source by app team" });
-    await expect(table).toBeVisible();
-    await expect(
-      table
-        .getByRole("row", { name: /Payments/ })
-        .getByRole("cell", { name: "LiteLLM team" }),
-    ).toBeVisible();
-    await expect(
-      table
-        .getByRole("row", { name: /Growth/ })
-        .getByRole("cell", { name: "Sum of members" }),
-    ).toBeVisible();
-
-    await expect(page).toHaveTitle(/\S/);
-    const results = await new AxeBuilder({ page })
-      .withTags(["wcag2a", "wcag2aa"])
-      .analyze();
-    expect(
-      results.violations
-        .filter((v) => v.impact === "serious" || v.impact === "critical")
-        .map((v) => v.id),
-    ).toEqual([]);
   });
 });
 

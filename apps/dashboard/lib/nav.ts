@@ -1,13 +1,15 @@
 import {
   Boxes,
-  CircleUser,
   Building2,
+  CircleUser,
   FileClock,
   LayoutDashboard,
+  Network,
   Settings,
   Trophy,
   User,
   UserSearch,
+  Users,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -29,6 +31,11 @@ export type NavGroup = {
   items: readonly NavItem[];
 };
 
+export const LITELLM_AREA_HREF = "/dashboard/manage/litellm";
+export const TEAM_USAGE_HREF = "/dashboard/team-usage";
+// Unit M2 flips this when it lands /dashboard/team-usage (coordinator ruling).
+export const TEAM_USAGE_ROUTE = false;
+
 const USAGE_GROUP_LABEL = "Usage";
 const MANAGEMENT_GROUP_LABEL = "Management";
 
@@ -47,6 +54,22 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: "/dashboard",
         icon: LayoutDashboard,
       },
+      {
+        title: "My usage",
+        pageTitle: "My usage",
+        href: "/dashboard/me",
+        icon: CircleUser,
+      },
+      ...(TEAM_USAGE_ROUTE
+        ? [
+            {
+              title: "Team usage",
+              pageTitle: "Team usage",
+              href: TEAM_USAGE_HREF,
+              icon: Users,
+            },
+          ]
+        : []),
       {
         title: "Ranking",
         pageTitle: "Cost ranking",
@@ -77,34 +100,28 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: "/dashboard/users",
         icon: User,
       },
-      {
-        title: "My usage",
-        pageTitle: "My usage",
-        href: "/dashboard/me",
-        icon: CircleUser,
-      },
     ],
   },
   {
     label: MANAGEMENT_GROUP_LABEL,
     items: [
       {
+        title: "Users",
+        pageTitle: "Users",
+        href: "/dashboard/manage/users",
+        icon: UserSearch,
+      },
+      {
         title: "Team",
-        pageTitle: "Team usage & management",
+        pageTitle: "Team management",
         href: "/dashboard/manage/team",
         icon: UsersRound,
       },
       {
-        title: "Organisation",
-        pageTitle: "Organisation usage",
-        href: "/dashboard/manage/organisation",
-        icon: Building2,
-      },
-      {
-        title: "Users",
-        pageTitle: "User lookup",
-        href: "/dashboard/manage/users",
-        icon: UserSearch,
+        title: "LiteLLM",
+        pageTitle: "LiteLLM",
+        href: LITELLM_AREA_HREF,
+        icon: Network,
       },
       {
         title: "Audit",
@@ -147,7 +164,8 @@ export function isNavItemActive(pathname: string, href: string): boolean {
 // mean false: the nav fails closed (slice B2, B2-1, B2-2).
 export type ManagementNav = {
   team: boolean;
-  organisation: boolean;
+  teamUsage: boolean;
+  litellm: boolean;
   users: boolean;
   audit: boolean;
   settings: boolean;
@@ -162,7 +180,7 @@ const MY_USAGE_HREF = "/dashboard/me";
 
 const MANAGEMENT_FLAG_BY_HREF: Readonly<Record<string, keyof ManagementNav>> = {
   "/dashboard/manage/team": "team",
-  "/dashboard/manage/organisation": "organisation",
+  [LITELLM_AREA_HREF]: "litellm",
   "/dashboard/manage/users": "users",
   "/dashboard/manage/audit": "audit",
   "/dashboard/settings": "settings",
@@ -179,7 +197,10 @@ export function navGroupsFor(scope: NavScope): readonly NavGroup[] {
     ...group,
     items: group.items.filter((item) => {
       if (group.label === USAGE_GROUP_LABEL) {
-        return scope.global || item.href === MY_USAGE_HREF;
+        if (item.href === MY_USAGE_HREF) return true;
+        if (item.href === TEAM_USAGE_HREF)
+          return TEAM_USAGE_ROUTE && management?.teamUsage === true;
+        return scope.global;
       }
       const flag = MANAGEMENT_FLAG_BY_HREF[item.href];
       return flag !== undefined && management?.[flag] === true;
@@ -189,4 +210,22 @@ export function navGroupsFor(scope: NavScope): readonly NavGroup[] {
 
 export function landingPathFor(scope: NavScope): string {
   return scope.global ? "/dashboard" : "/dashboard/me";
+}
+
+// Carries an awaited searchParams object onto a redirect target, repeating
+// array values and dropping undefined ones (Design System - Routes and
+// redirects).
+export function withSearchParams(
+  target: string,
+  params: Readonly<Record<string, string | string[] | undefined>>,
+): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    for (const v of Array.isArray(value) ? value : [value]) {
+      query.append(key, v);
+    }
+  }
+  const text = query.toString();
+  return text === "" ? target : `${target}?${text}`;
 }

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Source: Design System "Settings Page" - LiteLLM sub-tabs (unit A2,
 // 2026-11-17, D-A2-1 / D-A2-2): the sub-tab is the route segment
-// (connection | guardrails | team-links | users); visibility follows
+// (connection | guardrails | gateway after M1 D3); visibility follows
 // litellmPanelCapabilities(viewer.roles); an unknown segment or a caller
 // without the tab is the same 404. Read-only flags per LD24: Connection edit
 // Admin only; Guardrails and Team links Admin + org-admin; Auditor read-only.
@@ -12,7 +12,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // `LiteLLMSectionPage({ params: Promise<{ section: string }> })` rendering,
 // under an h2 "LiteLLM" (SettingsSection), exactly one of:
 //   LiteLLMConnectionSection ({canEdit}), LiteLLMGuardrailsSection ({canEdit}),
-//   LiteLLMTeamLinksSection ({canEdit}), LiteLLMUsersSection ({}), from
+//   LiteLLMGatewaySection ({canEdit}) (M1, D3: Team links and Users moved to
+//   Management -> LiteLLM and are no longer sections here), from
 //   `@/components/settings/litellm-panel/<ExportName>`.
 const auth = vi.fn();
 vi.mock("@/auth", () => ({ auth: () => auth() }));
@@ -46,12 +47,6 @@ vi.mock("@/components/settings/litellm-panel/LiteLLMConnectionSection", () => ({
 vi.mock("@/components/settings/litellm-panel/LiteLLMGuardrailsSection", () => ({
   LiteLLMGuardrailsSection: flagged("guardrails"),
 }));
-vi.mock("@/components/settings/litellm-panel/LiteLLMTeamLinksSection", () => ({
-  LiteLLMTeamLinksSection: flagged("team-links"),
-}));
-vi.mock("@/components/settings/litellm-panel/LiteLLMUsersSection", () => ({
-  LiteLLMUsersSection: flagged("users"),
-}));
 vi.mock("@/components/settings/litellm-panel/LiteLLMGatewaySection", () => ({
   LiteLLMGatewaySection: flagged("gateway"),
 }));
@@ -83,13 +78,7 @@ const open = (section: string) =>
 // edits ...; Auditor and org-admin read only (configuration writes are
 // Admin-only, LD24); Lead and user 404"): <LiteLLMGatewaySection canEdit />
 // from `@/components/settings/litellm-panel/LiteLLMGatewaySection`.
-const SECTIONS = [
-  "connection",
-  "guardrails",
-  "team-links",
-  "users",
-  "gateway",
-] as const;
+const SECTIONS = ["connection", "guardrails", "gateway"] as const;
 
 describe("LiteLLM settings section page", () => {
   it.each(SECTIONS)(
@@ -110,13 +99,10 @@ describe("LiteLLM settings section page", () => {
   it.each([
     ["internal-admin", "connection", "true"],
     ["internal-admin", "guardrails", "true"],
-    ["internal-admin", "team-links", "true"],
     ["internal-org-admin", "connection", "false"],
     ["internal-org-admin", "guardrails", "true"],
-    ["internal-org-admin", "team-links", "true"],
     ["internal-auditor", "connection", "false"],
     ["internal-auditor", "guardrails", "false"],
-    ["internal-auditor", "team-links", "false"],
     ["internal-admin", "gateway", "true"],
     ["internal-org-admin", "gateway", "false"],
     ["internal-auditor", "gateway", "false"],
@@ -135,15 +121,6 @@ describe("LiteLLM settings section page", () => {
     },
   );
 
-  it.each([["internal-admin"], ["internal-org-admin"], ["internal-auditor"]])(
-    "%s may open Users",
-    async (role) => {
-      as([role]);
-      render(await open("users"));
-      expect(screen.getByTestId("users")).toBeInTheDocument();
-    },
-  );
-
   it.each([
     ["internal-viewer", false],
     ["internal-viewer", true],
@@ -159,7 +136,16 @@ describe("LiteLLM settings section page", () => {
     },
   );
 
-  it.each(["nope", "constructor", "audit", "Connection", "connection/x", ""])(
+  it.each([
+    "nope",
+    "constructor",
+    "audit",
+    "Connection",
+    "connection/x",
+    "",
+    "team-links",
+    "users",
+  ])(
     "an unknown section %j is the not-found page, even for an admin",
     async (section) => {
       as(["internal-admin"]);

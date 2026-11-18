@@ -21,6 +21,7 @@ import { settingsTabsFor } from "./settings-tabs";
 // section, else null. The slugs are the ten Settings `AccessSection` ids that
 // existed before the split (components/settings/access/AccessSections.tsx).
 const BASE = "/dashboard/settings";
+const MANAGE_LITELLM = "/dashboard/manage/litellm";
 
 const OLD_SLUGS: [string, string][] = [
   ["members", `${BASE}/access/people`],
@@ -98,15 +99,13 @@ describe("resolveSettingsHash", () => {
 });
 
 // Unit A2. Source: Design System "Settings Page" - LiteLLM sub-tabs (D-A2-4):
-// an old `#<connection|guardrails|team-links|users>` link lands on the matching
+// an old `#<connection|guardrails>` link lands on the matching
 // LiteLLM route. The target is the bare route (no fragment): the route has no
 // anchor of that name.
 describe("resolveSettingsHash - LiteLLM sub-tabs (unit A2)", () => {
   it.each([
     ["connection", `${BASE}/litellm/connection`],
     ["guardrails", `${BASE}/litellm/guardrails`],
-    ["team-links", `${BASE}/litellm/team-links`],
-    ["users", `${BASE}/litellm/users`],
   ])(
     "#%s lands on its LiteLLM route for the three LiteLLM roles",
     (slug, route) => {
@@ -117,6 +116,24 @@ describe("resolveSettingsHash - LiteLLM sub-tabs (unit A2)", () => {
       }
     },
   );
+
+  // M1 (Design System - Routes and redirects, "Old hash links", 2026-11-18,
+  // line 390): Team links and Users left Settings, so their old `#slug` links
+  // land on the Management LiteLLM route instead of being ignored. The target
+  // is the bare route (no fragment), as for the LiteLLM sub-tabs above. A
+  // caller who may not see the target gets its missing-page 404 there, not a
+  // null from this resolver; every caller with Settings can see both targets
+  // (Access Control - Navigation and landing by role, Management - LiteLLM).
+  it.each([
+    ["team-links", `${MANAGE_LITELLM}/teams`],
+    ["users", `${MANAGE_LITELLM}/users`],
+  ])("#%s lands on %s for the three Settings roles", (slug, route) => {
+    for (const viewer of [ADMIN, ORG_ADMIN, AUDITOR]) {
+      expect(resolveSettingsHash(`#${slug}`, settingsTabsFor(viewer))).toBe(
+        route,
+      );
+    }
+  });
 
   it("returns null for a LiteLLM slug when the caller has no LiteLLM tab", () => {
     expect(

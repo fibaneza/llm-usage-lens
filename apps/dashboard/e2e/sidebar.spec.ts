@@ -77,6 +77,7 @@ for (const width of [768, 1440]) {
       await expect(tooltip(page, "Ranking")).toBeHidden();
     });
 
+    // MI-D1: My usage is the second item, so Tab from Overview reaches it.
     test("collapsed: keyboard focus shows a link's tooltip and Escape hides it", async ({
       page,
     }) => {
@@ -85,11 +86,11 @@ for (const width of [768, 1440]) {
       await page.getByRole("link", { name: "Overview", exact: true }).focus();
       await page.keyboard.press("Tab");
 
-      await expect(page.getByRole("link", { name: "Ranking" })).toBeFocused();
-      await expect(tooltip(page, "Ranking")).toBeVisible();
+      await expect(page.getByRole("link", { name: "My usage" })).toBeFocused();
+      await expect(tooltip(page, "My usage")).toBeVisible();
 
       await page.keyboard.press("Escape");
-      await expect(tooltip(page, "Ranking")).toBeHidden();
+      await expect(tooltip(page, "My usage")).toBeHidden();
     });
 
     test("collapsed: the toggle's tooltip says Expand", async ({ page }) => {
@@ -174,7 +175,7 @@ for (const width of [768, 1440]) {
       await page.getByRole("link", { name: "Overview", exact: true }).focus();
       await page.keyboard.press("Tab");
 
-      const ranking = page.getByRole("link", { name: "Ranking" });
+      const ranking = page.getByRole("link", { name: "My usage" });
       await expect(ranking).toBeFocused();
       await expect(ranking).toHaveAttribute("data-state", /-open$/);
       await expect(tooltip(page, "Ranking")).toBeHidden();

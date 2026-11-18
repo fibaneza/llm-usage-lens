@@ -238,7 +238,7 @@ describe("settingsTabsFor - LiteLLM tab follows litellmPanelCapabilities", () =>
 });
 
 // Unit A2. Source: Design System "Settings Page" - LiteLLM sub-tabs (D-A2-1,
-// D-A2-3): the LiteLLM tab carries the four sub-tabs as route segments, in
+// D-A2-3): the LiteLLM tab carries the three sub-tabs as route segments, in
 // order, for exactly the roles whose litellmPanelCapabilities(...).visible is
 // true (LD24: admin, org-admin, auditor); no other role has the tab at all, so
 // its sub-tab URLs are the same 404. Security matrix: complete (Rule 60.24a).
@@ -246,8 +246,6 @@ describe("settingsTabsFor - LiteLLM sub-tabs (unit A2)", () => {
   const SUB = [
     ["connection", "Connection", `${BASE}/litellm/connection`],
     ["guardrails", "Guardrails", `${BASE}/litellm/guardrails`],
-    ["team-links", "Team links", `${BASE}/litellm/team-links`],
-    ["users", "Users", `${BASE}/litellm/users`],
     // L6 (Design System "Settings Page", 2026-11-17): Gateway is the fifth,
     // last sub-tab, for the same three roles.
     ["gateway", "Gateway", `${BASE}/litellm/gateway`],
@@ -263,9 +261,12 @@ describe("settingsTabsFor - LiteLLM sub-tabs (unit A2)", () => {
     ["internal-org-admin", ORG_ADMIN],
     ["internal-auditor", AUDITOR],
   ] as const)(
-    "%s sees Connection, Guardrails, Team links, Users and Gateway, in order, as routes",
+    "%s sees Connection, Guardrails and Gateway only, in order, as routes (M1 D3: Team links and Users moved to Management -> LiteLLM)",
     (_name, viewer) => {
       expect(litellmSubTabs(viewer)).toEqual(SUB);
+      const ids = (litellmSubTabs(viewer) ?? []).map(([id]) => id);
+      expect(ids).not.toContain("team-links");
+      expect(ids).not.toContain("users");
     },
   );
 

@@ -9,7 +9,8 @@ import { describe, expect, it, vi } from "vitest";
 // matching Management route (other query parameters carried)"; slice B2 brief
 // B2-3 (server `redirect()`, reversible, never `permanentRedirect`: `team` ->
 // /dashboard/manage/team, `organisation`, `users`, `audit` likewise, anything
-// else or none -> /dashboard/me; "a redirect target the caller may not see
+// else or none -> /dashboard/me; M1 D3: `organisation` ->
+// /dashboard/manage/litellm/organisation; "a redirect target the caller may not see
 // 404s there" is the target page's gate, asserted in the manage-routes
 // integration matrix, not here); Access Control - Hidden means absent and 404;
 // Rule 60.7. The page is the redirect only: the LiteLLM tab row
@@ -53,7 +54,7 @@ describe("LiteLLMPage (/dashboard/litellm) redirect (B2-3)", () => {
 
   it.each([
     ["team", "/dashboard/manage/team"],
-    ["organisation", "/dashboard/manage/organisation"],
+    ["organisation", "/dashboard/manage/litellm/organisation"],
     ["users", "/dashboard/manage/users"],
     ["audit", "/dashboard/manage/audit"],
   ])("?tab=%s redirects to %s", async (tab, target) => {

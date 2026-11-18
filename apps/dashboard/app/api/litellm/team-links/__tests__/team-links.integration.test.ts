@@ -1,4 +1,4 @@
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ApiErrorBodySchema } from "@llm-usage-lens/shared";
 import {
   afterEach,
@@ -486,7 +486,7 @@ describe("PUT /api/litellm/team-links/[teamId] (linkTeam)", () => {
 });
 
 describe("GET /api/litellm/team-links and /[teamId]", () => {
-  it("lists links ordered by teamId, from GSI1, with no LiteLLM call", async () => {
+  it("lists links ordered by teamId, from GSI1, reading LiteLLM only for the picker list (GET /team/list)", async () => {
     const h = await load();
     await link(h, "team-b", OTHER_TEAM_ID);
     await link(h, "team-a", TEAM_ID);
@@ -499,7 +499,9 @@ describe("GET /api/litellm/team-links and /[teamId]", () => {
     >;
     expect(items.map((i) => i.teamId)).toEqual(["team-a", "team-b"]);
     expect(items[0]).toMatchObject({ litellmTeamId: TEAM_ID, version: 1 });
-    expect(fake.calls).toHaveLength(0);
+    expect(fake.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "GET /team/list",
+    ]);
   });
 
   // App Teams spec - UI ("Settings -> LiteLLM -> Team links: a 'Spend source'
@@ -521,7 +523,6 @@ describe("GET /api/litellm/team-links and /[teamId]", () => {
       { teamId: "team-a", teamName: "Team A", spendSource: "litellm-team" },
       { teamId: "team-b", teamName: "Team B", spendSource: "member-sum" },
     ]);
-    expect(fake.calls).toHaveLength(0);
   });
 
   it("an empty list is an empty array, not an error", async () => {
@@ -650,5 +651,113 @@ describe("internal-org-admin on /api/litellm/team-links (LD24, LT22)", () => {
     expect(denied).toHaveLength(2);
     expect(await linkItem("team-a")).toBeDefined();
     expect(await linkItem("team-b")).toBeUndefined();
+  });
+});
+
+// M1 (MI-D4a, LD37, LT-MI3; Design System D4a): `GET /api/litellm/team-links`
+// gains the optional `litellmTeams` ({ litellmTeamId, alias }[], from
+// listProxyTeams) for the pickers. Same audience as before (no wider read);
+// the listProxyTeams toggle is respected; not configured is `configured: false`
+// with no list and never 503; an outage of that read keeps the links list and
+// marks the list unavailable. Writes and their refusals (unknown id 400/404,
+// duplicate 409, auditor and lead 403) are asserted above and unchanged.
+describe("GET /api/litellm/team-links - litellmTeams for the pickers (MI-D4a)", () => {
+  const callsOf = () => fake.calls.map((c) => `${c.method} ${c.path}`);
+
+  it.each([
+    ["internal-admin", ADMIN],
+    ["internal-org-admin", ORG_ADMIN],
+    ["internal-auditor", AUDITOR],
+  ])(
+    "%s gets 200 with every LiteLLM team, linked or not, beside the links",
+    async (_role, s) => {
+      const h = await load();
+      await link(h, "team-a", TEAM_ID);
+      authMock.mockResolvedValue(s);
+      const res = await h.LIST(get(LIST_URL), ctxFor());
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control")).toBe("private, no-store");
+      const data = (await res.json()).data;
+      expect(data.litellmTeams).toEqual([
+        { litellmTeamId: TEAM_ID, alias: "Alpha" },
+      ]);
+      expect(data.litellmTeamsUnavailable).toBeUndefined();
+      expect(data.items.map((i: { teamId: string }) => i.teamId)).toEqual([
+        "team-a",
+      ]);
+    },
+  );
+
+  it.each([
+    ["a viewer", VIEWER],
+    ["a team lead", LEAD],
+  ])(
+    "%s gets 403 with no litellmTeams and no LiteLLM call (audience unchanged)",
+    async (_n, s) => {
+      authMock.mockResolvedValue(s);
+      const h = await load();
+      const res = await h.LIST(get(LIST_URL), ctxFor());
+      await expectError(res, 403, "FORBIDDEN");
+      expect(JSON.stringify(await res.json())).not.toContain("litellmTeams");
+      expect(fake.calls).toHaveLength(0);
+    },
+  );
+
+  it("the listProxyTeams toggle off keeps the links, marks the list unavailable and makes no LiteLLM call", async () => {
+    await storeToggles({ listProxyTeams: false });
+    const h = await load();
+    await link(h, "team-a", TEAM_ID);
+    fake.calls.length = 0;
+    const res = await h.LIST(get(LIST_URL), ctxFor());
+    expect(res.status).toBe(200);
+    const data = (await res.json()).data;
+    expect(data.litellmTeamsUnavailable).toBe(true);
+    expect(data.litellmTeams).toBeUndefined();
+    expect(data.items).toHaveLength(1);
+    expect(callsOf()).toEqual([]);
+  });
+
+  it("LiteLLM not configured (LD37) is 200 with configured:false, no litellmTeams and no LiteLLM call, never 503", async () => {
+    await testDoc().send(
+      new DeleteCommand({
+        TableName: TEST_TABLE_NAME,
+        Key: { PK: "LITELLM#CONFIG", SK: "CONNECTION" },
+      }),
+    );
+    const h = await load();
+    const res = await h.LIST(get(LIST_URL), ctxFor());
+    expect(res.status).toBe(200);
+    const data = (await res.json()).data;
+    expect(data.configured).toBe(false);
+    expect(data.litellmTeams).toBeUndefined();
+    expect(data.items).toEqual([]);
+    expect(data.appTeams).toHaveLength(2);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("an outage of the team list keeps the links and appTeams and marks the list unavailable, never 503, upstream body not echoed", async () => {
+    const h = await load();
+    await link(h, "team-a", TEAM_ID);
+    fake.setHandler((call, n) =>
+      call.path === "/team/list"
+        ? { status: 500, body: { detail: "SENTINEL-UPSTREAM-BODY" } }
+        : gatewayHandler()(call, n),
+    );
+    const res = await h.LIST(get(LIST_URL), ctxFor());
+    expect(res.status).toBe(200);
+    const raw = await res.json();
+    expect(JSON.stringify(raw)).not.toContain("SENTINEL-UPSTREAM-BODY");
+    expect(raw.data.litellmTeamsUnavailable).toBe(true);
+    expect(raw.data.litellmTeams).toBeUndefined();
+    expect(raw.data.items).toHaveLength(1);
+    expect(raw.data.appTeams).toHaveLength(2);
+  });
+
+  it("open access mode stays 403 OPERATION_UNAVAILABLE with no litellmTeams and no LiteLLM call", async () => {
+    const h = await load({ AUTH_ACCESS_MODE: "open" });
+    const res = await h.LIST(get(LIST_URL), ctxFor());
+    await expectError(res, 403, "OPERATION_UNAVAILABLE");
+    expect(JSON.stringify(await res.json())).not.toContain("litellmTeams");
+    expect(fake.calls).toHaveLength(0);
   });
 });

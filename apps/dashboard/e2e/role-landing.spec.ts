@@ -59,6 +59,7 @@ const USAGE: Group = {
   label: "Usage",
   items: [
     { title: "Overview", pageTitle: "Cost overview", path: "/dashboard" },
+    { title: "My usage", pageTitle: "My usage", path: "/dashboard/me" },
     { title: "Ranking", pageTitle: "Cost ranking", path: "/dashboard/ranking" },
     {
       title: "Cost by department",
@@ -80,10 +81,11 @@ const USAGE: Group = {
       pageTitle: "Cost by user",
       path: "/dashboard/users",
     },
-    { title: "My usage", pageTitle: "My usage", path: "/dashboard/me" },
   ],
 };
-// B1-14 (2026-11-17): a non-global caller's Usage group holds only My usage.
+// M1 (MI-D1): My usage is second. Team usage (third) is hidden for every role
+// until unit M2 builds its page (coordinator ruling, M1), so no journey here
+// expects it. A non-global caller's Usage group holds only My usage meanwhile.
 const USAGE_MY_USAGE_ONLY: Group = {
   label: "Usage",
   items: [{ title: "My usage", pageTitle: "My usage", path: "/dashboard/me" }],
@@ -95,17 +97,20 @@ const ORG_USAGE_TITLES = USAGE.items
 // Management group is the four pages, each by capability.
 const TEAM_ITEM: Item = {
   title: "Team",
-  pageTitle: "Team usage & management",
+  pageTitle: "Team management",
   path: "/dashboard/manage/team",
 };
-const ORGANISATION_ITEM: Item = {
-  title: "Organisation",
-  pageTitle: "Organisation usage",
-  path: "/dashboard/manage/organisation",
+// MI-D2: the LiteLLM area replaces Organisation; the index redirects to the
+// first visible tab (route tabs), so the walk accepts a tab route.
+const LITELLM_ITEM: Item = {
+  title: "LiteLLM",
+  pageTitle: "LiteLLM",
+  path: "/dashboard/manage/litellm",
+  tabRoutes: true,
 };
 const USERS_ITEM: Item = {
   title: "Users",
-  pageTitle: "User lookup",
+  pageTitle: "Users",
   path: "/dashboard/manage/users",
 };
 const AUDIT_ITEM: Item = {
@@ -115,22 +120,18 @@ const AUDIT_ITEM: Item = {
 };
 const MANAGEMENT_ALL: Group = {
   label: "Management",
-  items: [TEAM_ITEM, ORGANISATION_ITEM, USERS_ITEM, AUDIT_ITEM],
+  items: [USERS_ITEM, TEAM_ITEM, LITELLM_ITEM, AUDIT_ITEM],
 };
 // An org admin reads neither audit source (Access Control, Audit for org admin).
 const MANAGEMENT_NO_AUDIT: Group = {
   label: "Management",
-  items: [TEAM_ITEM, ORGANISATION_ITEM, USERS_ITEM],
+  items: [USERS_ITEM, TEAM_ITEM, LITELLM_ITEM],
 };
 const MANAGEMENT_TEAM_ONLY: Group = {
   label: "Management",
   items: [TEAM_ITEM],
 };
-const MANAGEMENT_PATHS = [
-  ORGANISATION_ITEM.path,
-  USERS_ITEM.path,
-  AUDIT_ITEM.path,
-];
+const MANAGEMENT_PATHS = [LITELLM_ITEM.path, USERS_ITEM.path, AUDIT_ITEM.path];
 const SETTINGS_PATHS = [
   "/dashboard/settings",
   "/dashboard/settings/accounts",
@@ -434,7 +435,7 @@ test.describe("My usage (/dashboard/me)", () => {
       page.getByText(/ask your team lead for access/i),
     ).toBeVisible();
     await expect(sidebarLink(page, "My usage")).toBeVisible();
-    for (const gone of ORG_USAGE_TITLES) {
+    for (const gone of [...ORG_USAGE_TITLES, "Team usage", "LiteLLM"]) {
       await expect(sidebarLink(page, gone)).toHaveCount(0);
     }
   });

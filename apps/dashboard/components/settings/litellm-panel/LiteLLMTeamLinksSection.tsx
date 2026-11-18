@@ -1,5 +1,6 @@
 "use client";
 
+import { OrgUnitsSchema } from "@llm-usage-lens/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 
@@ -9,17 +10,36 @@ import {
 } from "@/components/settings/litellm-panel/keys";
 import { PanelSkeleton } from "@/components/settings/litellm-panel/PanelSkeleton";
 import { SpendSourceTable } from "@/components/settings/litellm-panel/SpendSourceTable";
-import { TeamLinkForm } from "@/components/settings/litellm-panel/TeamLinkForm";
+import {
+  TeamLinkForm,
+  type AppTeamChoices,
+  type LiteLLMTeamList,
+} from "@/components/settings/litellm-panel/TeamLinkForm";
+import { TeamLinkNewTeamForm } from "@/components/settings/litellm-panel/TeamLinkNewTeamForm";
 import { TeamLinkRow } from "@/components/settings/litellm-panel/TeamLinkRow";
 import { Input } from "@/components/ui/input";
 import { fetchApi } from "@/lib/query/fetch-api";
 
-export function LiteLLMTeamLinksSection({ canEdit }: { canEdit: boolean }) {
+// Moved from Settings to Management -> LiteLLM -> LiteLLM teams (D3, 2026-11-17).
+// `canCreateTeam` is Admin only (LD24); `canEdit` is Admin and org-admin.
+export function LiteLLMTeamLinksSection({
+  canEdit,
+  canCreateTeam = false,
+}: {
+  canEdit: boolean;
+  canCreateTeam?: boolean;
+}) {
   const searchId = useId();
   const [term, setTerm] = useState("");
   const query = useQuery({
     queryKey: TEAM_LINKS_KEY,
     queryFn: () => fetchApi("/api/litellm/team-links", TeamLinksSchema),
+  });
+
+  const orgUnits = useQuery({
+    queryKey: ["access", "org-units"],
+    queryFn: () => fetchApi("/api/access/org-units", OrgUnitsSchema),
+    enabled: canEdit || canCreateTeam,
   });
 
   if (query.isError) {
@@ -31,6 +51,15 @@ export function LiteLLMTeamLinksSection({ canEdit }: { canEdit: boolean }) {
   }
   if (query.data === undefined) return <PanelSkeleton />;
 
+  const appTeams: AppTeamChoices = orgUnits.data
+    ? { state: "ready", teams: orgUnits.data.teams }
+    : { state: "unavailable" };
+  const litellmTeams: LiteLLMTeamList =
+    query.data.litellmTeams !== undefined
+      ? { state: "ready", teams: query.data.litellmTeams }
+      : query.data.configured === false
+        ? { state: "not-configured" }
+        : { state: "unavailable" };
   const needle = term.trim().toLowerCase();
   const items = query.data.items.filter(
     (link) =>
@@ -70,7 +99,17 @@ export function LiteLLMTeamLinksSection({ canEdit }: { canEdit: boolean }) {
         </ul>
       )}
       <SpendSourceTable appTeams={query.data.appTeams} />
-      {canEdit ? <TeamLinkForm links={query.data.items} /> : null}
+      {canEdit && orgUnits.isPending ? <PanelSkeleton /> : null}
+      {canEdit && !orgUnits.isPending ? (
+        <TeamLinkForm
+          links={query.data.items}
+          appTeams={appTeams}
+          litellmTeams={litellmTeams}
+        />
+      ) : null}
+      {canCreateTeam && !orgUnits.isPending ? (
+        <TeamLinkNewTeamForm links={query.data.items} appTeams={appTeams} />
+      ) : null}
     </div>
   );
 }

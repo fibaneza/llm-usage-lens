@@ -40,7 +40,8 @@ async function navScopeOrUndefined(): Promise<NavScope | undefined> {
       departmentScopes: full.departmentScopes,
       management: {
         team: access.team,
-        organisation: access.organisation,
+        teamUsage: access.teamUsage,
+        litellm: access.litellm,
         users: access.users,
         audit: access.audit.app || access.audit.gateway,
         settings: access.settings,
@@ -59,7 +60,8 @@ async function navScopeOrUndefined(): Promise<NavScope | undefined> {
       departmentScopes: new Set<string>(),
       management: {
         team: false,
-        organisation: false,
+        teamUsage: false,
+        litellm: false,
         users: false,
         audit: false,
         settings: false,

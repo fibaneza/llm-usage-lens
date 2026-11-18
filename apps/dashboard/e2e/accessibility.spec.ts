@@ -218,9 +218,9 @@ test.describe("accessibility (axe) - slice B1 surfaces", () => {
 // adds every width as an admin (write controls rendered) for the pages whose
 // layout is new, and the Settings page frame.
 const B2_PAGES: readonly [string, string][] = [
-  ["/dashboard/manage/team", "Team usage & management"],
-  ["/dashboard/manage/organisation", "Organisation usage"],
-  ["/dashboard/manage/users", "User lookup"],
+  ["/dashboard/manage/team", "Team management"],
+  ["/dashboard/manage/litellm/organisation", "LiteLLM"],
+  ["/dashboard/manage/users", "Users"],
   ["/dashboard/manage/audit", "Audit log"],
   ["/dashboard/me", "My usage"],
   ["/dashboard/settings/accounts", "Settings"],

@@ -30,16 +30,18 @@ vi.mock("@/lib/manage-access", () => ({
 const FLAGS_NONE = {
   global: false,
   team: false,
-  organisation: false,
+  teamUsage: false,
+  litellm: false,
   users: false,
   audit: { app: false, gateway: false },
   settings: false,
 };
-const FLAGS_LEAD = { ...FLAGS_NONE, team: true };
+const FLAGS_LEAD = { ...FLAGS_NONE, team: true, teamUsage: true };
 const FLAGS_ADMIN = {
   global: true,
   team: true,
-  organisation: true,
+  teamUsage: true,
+  litellm: true,
   users: true,
   audit: { app: true, gateway: true },
   settings: true,
@@ -100,10 +102,10 @@ const GATED = [
   "Cost by service",
   "Cost by user",
 ];
-const MANAGEMENT_LINKS = ["Team", "Organisation", "Users", "Audit", "Settings"];
+const MANAGEMENT_LINKS = ["Users", "Team", "LiteLLM", "Audit", "Settings"];
 function expectNoTeamRail() {
   expect(link("My usage")).toBeInTheDocument();
-  for (const name of [...GATED, ...MANAGEMENT_LINKS, "LiteLLM"]) {
+  for (const name of [...GATED, ...MANAGEMENT_LINKS, "Team usage"]) {
     expect(link(name), name).not.toBeInTheDocument();
   }
   expect(screen.getByTestId("header")).toHaveAttribute(
@@ -132,7 +134,9 @@ describe("DashboardLayout management navigation (B2-1, B2-2)", () => {
     for (const name of ["Overview", ...MANAGEMENT_LINKS]) {
       expect(link(name), name).toBeInTheDocument();
     }
-    expect(link("LiteLLM")).not.toBeInTheDocument();
+    // Coordinator ruling (M1): Team usage stays hidden until M2, flag or not.
+    expect(link("Team usage")).not.toBeInTheDocument();
+    expect(link("Organisation")).not.toBeInTheDocument();
   });
 
   it("a lead's rail lists My usage and Team, with no Settings", async () => {
@@ -148,7 +152,13 @@ describe("DashboardLayout management navigation (B2-1, B2-2)", () => {
 
     expect(link("My usage")).toBeInTheDocument();
     expect(link("Team")).toBeInTheDocument();
-    for (const name of ["Organisation", "Users", "Audit", "Settings"]) {
+    for (const name of [
+      "LiteLLM",
+      "Users",
+      "Audit",
+      "Settings",
+      "Team usage",
+    ]) {
       expect(link(name), name).not.toBeInTheDocument();
     }
   });

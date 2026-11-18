@@ -335,7 +335,7 @@ const pageBody = (page: Page) =>
 
 async function teamPageReady(page: Page, view: TeamView = "members") {
   await expect(
-    page.getByRole("heading", { level: 1, name: "Team usage & management" }),
+    page.getByRole("heading", { level: 1, name: "Team management" }),
   ).toBeVisible();
   if (view === "members") {
     await expect(
@@ -385,7 +385,7 @@ async function walkDialog(
 test.describe("axe per role and dialog state (L5 Accessibility floor)", () => {
   const LEAD_PAGES: readonly [string, string][] = [
     [TEAM_URL, "Team"],
-    ["/dashboard/manage/organisation", "Organisation"],
+    ["/dashboard/manage/litellm/organisation", "Organisation"],
     ["/dashboard/me", "My usage"],
   ];
 
@@ -871,7 +871,11 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
 
   const UNAVAILABLE: readonly [string, string, string][] = [
     ["Team", TEAM_URL, "/api/litellm/me"],
-    ["Organisation", "/dashboard/manage/organisation", "/api/litellm/org"],
+    [
+      "Organisation",
+      "/dashboard/manage/litellm/organisation",
+      "/api/litellm/org",
+    ],
     ["My usage", "/dashboard/me", "/api/litellm/me"],
   ];
   for (const [label, path, endpoint] of UNAVAILABLE) {
@@ -952,7 +956,7 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
 
   const PAGES: readonly [string, string][] = [
     ["Team", TEAM_URL],
-    ["Organisation", "/dashboard/manage/organisation"],
+    ["Organisation", "/dashboard/manage/litellm/organisation"],
     ["Users", "/dashboard/manage/users"],
     ["Audit", "/dashboard/manage/audit?source=gateway"],
     ["My usage", "/dashboard/me"],
@@ -992,7 +996,7 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
 test.describe("responsive (L5 Responsive; Design System: Responsive Tables)", () => {
   const WIDE: readonly [string, string][] = [
     ["Team", TEAM_URL],
-    ["Organisation", "/dashboard/manage/organisation"],
+    ["Organisation", "/dashboard/manage/litellm/organisation"],
     ["Users", "/dashboard/manage/users"],
     ["Audit", "/dashboard/manage/audit"],
     ["My usage", "/dashboard/me"],
@@ -1076,7 +1080,7 @@ test.describe("responsive (L5 Responsive; Design System: Responsive Tables)", ()
       roles: ["internal-admin"],
       rows: 1,
       prepare: async (page) => {
-        await open(page, "/dashboard/manage/organisation");
+        await open(page, "/dashboard/manage/litellm/organisation");
         await expect(page.getByText("Payments LLM").first()).toBeVisible();
       },
     },
@@ -1086,7 +1090,7 @@ test.describe("responsive (L5 Responsive; Design System: Responsive Tables)", ()
       roles: ["internal-admin"],
       rows: 1,
       prepare: async (page) => {
-        await open(page, "/dashboard/manage/organisation");
+        await open(page, "/dashboard/manage/litellm/organisation");
         await expect(page.getByText("Payments").first()).toBeVisible();
       },
     },

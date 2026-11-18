@@ -19,12 +19,7 @@ export type AccessSubTabId =
   | "roles"
   | "identities"
   | "sign-in";
-export type LiteLLMSubTabId =
-  | "connection"
-  | "guardrails"
-  | "team-links"
-  | "users"
-  | "gateway";
+export type LiteLLMSubTabId = "connection" | "guardrails" | "gateway";
 export type AccessSectionSlug =
   | "members"
   | "team-admins"
@@ -122,12 +117,11 @@ export function isSectionVisible(
 }
 
 // Design System "Settings Page" - LiteLLM sub-tabs (unit A2, 2026-11-17): each
-// is a route segment; visibility follows litellmPanelCapabilities.
+// is a route segment; visibility follows litellmPanelCapabilities. Team links
+// and Users moved to Management -> LiteLLM (D3, 2026-11-17, unit M1).
 const LITELLM_SUB_TABS: readonly { id: LiteLLMSubTabId; label: string }[] = [
   { id: "connection", label: "Connection" },
   { id: "guardrails", label: "Guardrails" },
-  { id: "team-links", label: "Team links" },
-  { id: "users", label: "Users" },
   { id: "gateway", label: "Gateway" },
 ];
 

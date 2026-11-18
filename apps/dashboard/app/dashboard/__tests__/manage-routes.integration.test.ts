@@ -9,13 +9,19 @@ import { clearTable, ensureTestTable } from "@/test/support/test-support";
 
 import LiteLLMPage from "../litellm/page";
 import AuditPage from "../manage/audit/page";
+import LiteLLMAreaLayout from "../manage/litellm/layout";
+import LiteLLMAreaIndexPage from "../manage/litellm/page";
+import LiteLLMAreaTabPage from "../manage/litellm/[tab]/page";
 import OrganisationPage from "../manage/organisation/page";
 import TeamPage from "../manage/team/page";
 import UsersManagePage from "../manage/users/page";
 import SettingsAccessGroupPage from "../settings/access/[group]/page";
 import SettingsAccessIndexPage from "../settings/access/page";
 import SettingsAccountsPage from "../settings/accounts/page";
+import SettingsLiteLLMSectionPage from "../settings/litellm/[section]/page";
 import SettingsLiteLLMPage from "../settings/litellm/page";
+import SettingsTeamLinksMovedPage from "../settings/litellm/team-links/page";
+import SettingsUsersMovedPage from "../settings/litellm/users/page";
 import SettingsIndexPage from "../settings/page";
 import SettingsSyncPage from "../settings/sync/page";
 
@@ -63,6 +69,24 @@ vi.mock("@/components/litellm/OrganisationSection", () => ({
   OrganisationSection: () => null,
 }));
 vi.mock("@/components/litellm/UserSearch", () => ({ UserSearch: () => null }));
+vi.mock("@/components/litellm/LiteLLMSection", () => ({
+  LiteLLMSection: () => null,
+}));
+vi.mock("@/components/settings/litellm-panel/LiteLLMTeamLinksSection", () => ({
+  LiteLLMTeamLinksSection: () => null,
+}));
+vi.mock("@/components/settings/litellm-panel/LiteLLMUsersSection", () => ({
+  LiteLLMUsersSection: () => null,
+}));
+vi.mock("@/components/settings/litellm-panel/LiteLLMConnectionSection", () => ({
+  LiteLLMConnectionSection: () => null,
+}));
+vi.mock("@/components/settings/litellm-panel/LiteLLMGuardrailsSection", () => ({
+  LiteLLMGuardrailsSection: () => null,
+}));
+vi.mock("@/components/settings/litellm-panel/LiteLLMGatewaySection", () => ({
+  LiteLLMGatewaySection: () => null,
+}));
 vi.mock("@/components/settings/AccountsTab", () => ({
   AccountsTab: () => null,
 }));
@@ -127,10 +151,32 @@ const ROUTES: readonly Route[] = [
     render: () => TeamPage({ searchParams: Promise.resolve({}) }),
     allowed: [...GLOBAL_READERS, ...LEADS],
   },
+  // M1 (MI-D2, D2): the LiteLLM area - the layout, the index and each tab
+  // page gate on the `litellm` flag (admin, org-admin, auditor); lead and
+  // user get the 404 on every one, since a layout alone is not re-run on soft
+  // navigation.
   {
-    path: "/dashboard/manage/organisation",
-    render: () => OrganisationPage(),
+    path: "/dashboard/manage/litellm (layout)",
+    render: () => LiteLLMAreaLayout({ children: null }),
     allowed: GLOBAL_READERS,
+  },
+  {
+    path: "/dashboard/manage/litellm",
+    render: () => LiteLLMAreaIndexPage({ searchParams: Promise.resolve({}) }),
+    allowed: GLOBAL_READERS,
+  },
+  ...(["organisation", "teams", "users"] as const).map(
+    (tab): Route => ({
+      path: `/dashboard/manage/litellm/${tab}`,
+      render: () => LiteLLMAreaTabPage({ params: Promise.resolve({ tab }) }),
+      allowed: GLOBAL_READERS,
+    }),
+  ),
+  {
+    path: "/dashboard/manage/litellm/nope",
+    render: () =>
+      LiteLLMAreaTabPage({ params: Promise.resolve({ tab: "nope" }) }),
+    allowed: [],
   },
   {
     path: "/dashboard/manage/users",
@@ -165,6 +211,14 @@ const ROUTES: readonly Route[] = [
     render: () => SettingsLiteLLMPage(),
     allowed: GLOBAL_READERS,
   },
+  ...(["connection", "guardrails", "gateway"] as const).map(
+    (section): Route => ({
+      path: `/dashboard/settings/litellm/${section}`,
+      render: () =>
+        SettingsLiteLLMSectionPage({ params: Promise.resolve({ section }) }),
+      allowed: GLOBAL_READERS,
+    }),
+  ),
   {
     path: "/dashboard/settings/access",
     render: () => SettingsAccessIndexPage(),
@@ -201,22 +255,23 @@ describe.each(ROUTES)("$path (B2 route gate)", ({ render, allowed }) => {
 });
 
 // B2-3 + Access Control (Hidden means absent): "any redirect that lands on it
-// returns the same 404". The retired LiteLLM routes redirect for everyone; the
-// Management target then applies its own gate.
-describe("redirect targets keep their gate (B2-3)", () => {
+// returns the same 404". The retired routes redirect for everyone; the target
+// then applies its own gate. M1 (D3): every old URL, not only the LiteLLM tabs.
+describe("redirect targets keep their gate (B2-3, M1 D3)", () => {
   const follow = async (url: string) => {
     const path = new URL(url, "http://localhost").pathname;
     const route = ROUTES.find((r) => r.path === path);
     if (!route) throw new Error(`no route for redirect target ${url}`);
     return outcomeOf(route.render);
   };
-  const redirectTarget = async (tab: string) => {
-    const outcome = await outcomeOf(() =>
-      LiteLLMPage({ searchParams: Promise.resolve({ tab }) }),
-    );
+  const targetOf = async (render: () => unknown) => {
+    const outcome = await outcomeOf(render);
     if (typeof outcome !== "object") throw new Error("expected a redirect");
     return outcome.redirectedTo;
   };
+  const query = Promise.resolve({ dateFrom: "2026-10-01" });
+  const litellmTab = (tab: string) =>
+    targetOf(() => LiteLLMPage({ searchParams: Promise.resolve({ tab }) }));
 
   it.each([
     ["organisation", "teamAdminA"],
@@ -227,12 +282,58 @@ describe("redirect targets keep their gate (B2-3)", () => {
     "/dashboard/litellm?tab=%s lands on a 404 for %s",
     async (tab, name) => {
       signInAs(name);
-      expect(await follow(await redirectTarget(tab))).toBe("not-found");
+      expect(await follow(await litellmTab(tab))).toBe("not-found");
     },
   );
 
   it("/dashboard/litellm?tab=team lands on the Team page for a lead", async () => {
     signInAs("teamAdminA");
-    expect(admitted(await follow(await redirectTarget("team")))).toBe(true);
+    expect(admitted(await follow(await litellmTab("team")))).toBe(true);
+  });
+
+  const OLD_URLS: readonly [string, () => Promise<string>, string][] = [
+    [
+      "/dashboard/manage/organisation",
+      () => targetOf(() => OrganisationPage({ searchParams: query })),
+      "/dashboard/manage/litellm/organisation",
+    ],
+    [
+      "/dashboard/litellm?tab=organisation",
+      () => litellmTab("organisation"),
+      "/dashboard/manage/litellm/organisation",
+    ],
+    [
+      "/dashboard/settings/litellm/team-links",
+      () => targetOf(() => SettingsTeamLinksMovedPage({ searchParams: query })),
+      "/dashboard/manage/litellm/teams",
+    ],
+    [
+      "/dashboard/settings/litellm/users",
+      () => targetOf(() => SettingsUsersMovedPage({ searchParams: query })),
+      "/dashboard/manage/litellm/users",
+    ],
+  ];
+
+  describe.each(OLD_URLS)("%s", (_old, redirectOf, expected) => {
+    it("redirects to the new area route for every caller", async () => {
+      for (const name of ALL) {
+        signInAs(name);
+        const url = new URL(await redirectOf(), "http://localhost");
+        expect(url.pathname).toBe(expected);
+      }
+    });
+
+    it.each(GLOBAL_READERS)("lands on the page for %s", async (name) => {
+      signInAs(name);
+      expect(admitted(await follow(await redirectOf()))).toBe(true);
+    });
+
+    it.each(ALL.filter((n) => !GLOBAL_READERS.includes(n)))(
+      "lands on a 404 for %s (hidden means absent)",
+      async (name) => {
+        signInAs(name);
+        expect(await follow(await redirectOf())).toBe("not-found");
+      },
+    );
   });
 });

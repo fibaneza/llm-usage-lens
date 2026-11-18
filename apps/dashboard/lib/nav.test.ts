@@ -21,15 +21,24 @@ import type { ManagementNav, NavGroup, NavScope } from "./nav";
 // B2-2 (the input gains the management flags, the LiteLLM item is gone,
 // Management holds Team / Organisation / Users / Audit, Settings follows
 // `settings`, a group with no item is not rendered), B2-1 (flags per role).
+// Management improvements M1 (Design System - Navigation (Sidebar); Access
+// Control MI-D1 order, MI-D2 LiteLLM item replaces Organisation, MI-D7
+// teamUsage flag): Usage = Overview, My usage, Team usage, Ranking, Cost by
+// department, Cost by team, Cost by service, Cost by user; Management = Users,
+// Team, LiteLLM, Audit. Coordinator ruling (M1): the Team usage item stays
+// HIDDEN for every role until unit M2 builds its page (a constant in nav.ts,
+// flipped by M2), so no case below expects it; the `teamUsage` flag itself is
+// asserted in lib/manage-access*.test.ts.
 // Pure functions of the caller's resolved scope: no IO, so a unit test is the
 // lowest layer that sees them.
 //
 // Contract: lib/nav.ts exports `ManagementNav` =
-//   { team; organisation; users; audit; settings: boolean } and `NavScope`
+//   { team; teamUsage; litellm; users; audit; settings: boolean } and `NavScope`
 //   gains an optional `management?: ManagementNav`. Absent flags mean false.
 const NO_MANAGEMENT: ManagementNav = {
   team: false,
-  organisation: false,
+  teamUsage: false,
+  litellm: false,
   users: false,
   audit: false,
   settings: false,
@@ -48,17 +57,26 @@ const scope = (over: Partial<NavScope> = {}): NavScope => ({
 // Team; user nothing.
 const ADMIN_FLAGS: ManagementNav = {
   team: true,
-  organisation: true,
+  teamUsage: true,
+  litellm: true,
   users: true,
   audit: true,
   settings: true,
 };
 const ORG_ADMIN_FLAGS: ManagementNav = { ...ADMIN_FLAGS, audit: false };
-const LEAD_FLAGS: ManagementNav = { ...NO_MANAGEMENT, team: true };
+// Auditor: every read view incl. Audit (Access Control matrix).
+const AUDITOR_FLAGS: ManagementNav = { ...ADMIN_FLAGS };
+// MI-D7: a lead with a live scope has teamUsage true (the item is still hidden).
+const LEAD_FLAGS: ManagementNav = {
+  ...NO_MANAGEMENT,
+  team: true,
+  teamUsage: true,
+};
 
 // admin, org admin and auditor all resolve to a global scope (B1-1).
 const GLOBAL = scope({ global: true, management: ADMIN_FLAGS });
 const ORG_ADMIN = scope({ global: true, management: ORG_ADMIN_FLAGS });
+const AUDITOR = scope({ global: true, management: AUDITOR_FLAGS });
 const GLOBAL_WITH_ADMIN_SCOPES = scope({
   global: true,
   management: ADMIN_FLAGS,
@@ -100,6 +118,7 @@ const USAGE = {
   label: "Usage",
   items: [
     { title: "Overview", pageTitle: "Cost overview", href: "/dashboard" },
+    { title: "My usage", pageTitle: "My usage", href: "/dashboard/me" },
     {
       title: "Ranking",
       pageTitle: "Cost ranking",
@@ -125,10 +144,10 @@ const USAGE = {
       pageTitle: "Cost by user",
       href: "/dashboard/users",
     },
-    { title: "My usage", pageTitle: "My usage", href: "/dashboard/me" },
   ],
 };
-// Access Control B1-14 (2026-11-17): My usage is the last Usage item.
+// MI-D1: My usage is second, after Overview. A lead's Usage group is My usage
+// only while Team usage is hidden (coordinator ruling, M1).
 const USAGE_MY_USAGE_ONLY = {
   label: "Usage",
   items: [{ title: "My usage", pageTitle: "My usage", href: "/dashboard/me" }],
@@ -136,17 +155,17 @@ const USAGE_MY_USAGE_ONLY = {
 // Design System - Navigation (Sidebar), routes table (titles and hrefs).
 const MGMT_TEAM = {
   title: "Team",
-  pageTitle: "Team usage & management",
+  pageTitle: "Team management",
   href: "/dashboard/manage/team",
 };
-const MGMT_ORGANISATION = {
-  title: "Organisation",
-  pageTitle: "Organisation usage",
-  href: "/dashboard/manage/organisation",
+const MGMT_LITELLM = {
+  title: "LiteLLM",
+  pageTitle: "LiteLLM",
+  href: "/dashboard/manage/litellm",
 };
 const MGMT_USERS = {
   title: "Users",
-  pageTitle: "User lookup",
+  pageTitle: "Users",
   href: "/dashboard/manage/users",
 };
 const MGMT_AUDIT = {
@@ -156,11 +175,11 @@ const MGMT_AUDIT = {
 };
 const MANAGEMENT_ALL = {
   label: "Management",
-  items: [MGMT_TEAM, MGMT_ORGANISATION, MGMT_USERS, MGMT_AUDIT],
+  items: [MGMT_USERS, MGMT_TEAM, MGMT_LITELLM, MGMT_AUDIT],
 };
 const MANAGEMENT_NO_AUDIT = {
   label: "Management",
-  items: [MGMT_TEAM, MGMT_ORGANISATION, MGMT_USERS],
+  items: [MGMT_USERS, MGMT_TEAM, MGMT_LITELLM],
 };
 const MANAGEMENT_TEAM_ONLY = { label: "Management", items: [MGMT_TEAM] };
 const ADMINISTRATION = {
@@ -171,10 +190,14 @@ const ADMINISTRATION = {
 };
 
 const FULL_NAV: Projected = [USAGE, MANAGEMENT_ALL, ADMINISTRATION];
+const TEAM_USAGE_HREF = "/dashboard/team-usage";
+const hrefsOf = (s: NavScope) =>
+  navGroupsFor(s).flatMap((g) => g.items.map((i) => i.href));
 
 describe("navGroupsFor: per-role navigation (Access Control - Navigation and landing by role; B2-2)", () => {
   it.each([
-    ["admin / auditor (every flag)", GLOBAL, FULL_NAV],
+    ["admin (every flag)", GLOBAL, FULL_NAV],
+    ["auditor (every flag, read-only)", AUDITOR, FULL_NAV],
     [
       "a global reader who also holds admin scopes",
       GLOBAL_WITH_ADMIN_SCOPES,
@@ -187,6 +210,23 @@ describe("navGroupsFor: per-role navigation (Access Control - Navigation and lan
     ],
   ])("%s sees the groups the matrix gives it, in order", (_n, s, expected) => {
     expect(project(navGroupsFor(s))).toEqual(expected);
+  });
+
+  // Coordinator ruling (M1): hidden for every role until M2 builds the page.
+  it("renders no Team usage item for any role while its page is unbuilt (coordinator ruling, M1)", () => {
+    for (const s of [
+      GLOBAL,
+      ORG_ADMIN,
+      AUDITOR,
+      GLOBAL_WITH_ADMIN_SCOPES,
+      LEAD_TEAMS,
+      LEAD_DEPARTMENTS,
+      LEAD_BOTH,
+      MEMBER,
+      NO_TEAM,
+    ]) {
+      expect(hrefsOf(s)).not.toContain(TEAM_USAGE_HREF);
+    }
   });
 
   // B2-2: a lead sees My usage and Team only; no Administration (B1-7
@@ -229,11 +269,11 @@ describe("navGroupsFor: per-role navigation (Access Control - Navigation and lan
       ).flatMap((g) => g.items.map((i) => i.href));
     const manage = (name: string) => `/dashboard/manage/${name}`;
     expect(only("team")).toContain(manage("team"));
-    expect(only("organisation")).toContain(manage("organisation"));
+    expect(only("litellm")).toContain(manage("litellm"));
     expect(only("users")).toContain(manage("users"));
     expect(only("audit")).toContain(manage("audit"));
     expect(only("settings")).toContain("/dashboard/settings");
-    for (const key of ["team", "organisation", "users", "audit"] as const) {
+    for (const key of ["team", "litellm", "users", "audit"] as const) {
       expect(only(key)).not.toContain("/dashboard/settings");
     }
     expect(only("settings")).not.toContain(manage("team"));
@@ -248,12 +288,44 @@ describe("navGroupsFor: per-role navigation (Access Control - Navigation and lan
     }
   });
 
-  it("no caller is offered the retired LiteLLM item", () => {
-    for (const s of [GLOBAL, ORG_ADMIN, LEAD_TEAMS, MEMBER, NO_TEAM]) {
-      const hrefs = navGroupsFor(s).flatMap((g) => g.items.map((i) => i.href));
-      expect(hrefs).not.toContain("/dashboard/litellm");
+  // MI-D2: the LiteLLM item (area) is for global readers; absent for a lead
+  // and a user. The Organisation item is gone for everyone.
+  it("offers the LiteLLM item to admin, org admin and auditor only, and no Organisation item to anyone (MI-D2)", () => {
+    for (const s of [GLOBAL, ORG_ADMIN, AUDITOR]) {
+      expect(hrefsOf(s)).toContain("/dashboard/manage/litellm");
     }
-    expect(NAV_ITEMS.map((i) => i.title)).not.toContain("LiteLLM");
+    for (const s of [LEAD_TEAMS, LEAD_DEPARTMENTS, MEMBER, NO_TEAM]) {
+      expect(hrefsOf(s)).not.toContain("/dashboard/manage/litellm");
+    }
+    for (const s of [GLOBAL, ORG_ADMIN, AUDITOR, LEAD_TEAMS, MEMBER]) {
+      expect(hrefsOf(s)).not.toContain("/dashboard/manage/organisation");
+      expect(hrefsOf(s)).not.toContain("/dashboard/litellm");
+    }
+    expect(NAV_ITEMS.map((i) => i.title)).not.toContain("Organisation");
+  });
+
+  it("the Usage and Management order is MI-D1 for every flagged role (position, not just membership)", () => {
+    const titles = (s: NavScope, label: string) =>
+      navGroupsFor(s)
+        .find((g) => g.label === label)
+        ?.items.map((i) => i.title);
+    for (const s of [GLOBAL, AUDITOR, GLOBAL_WITH_ADMIN_SCOPES]) {
+      expect(titles(s, "Usage")).toEqual([
+        "Overview",
+        "My usage",
+        "Ranking",
+        "Cost by department",
+        "Cost by team",
+        "Cost by service",
+        "Cost by user",
+      ]);
+      expect(titles(s, "Management")).toEqual([
+        "Users",
+        "Team",
+        "LiteLLM",
+        "Audit",
+      ]);
+    }
   });
 
   it("never offers a group with no item for the caller (Design System: a group renders only when it has an item)", () => {
@@ -313,8 +385,24 @@ describe("navGroupsFor: per-role navigation (Access Control - Navigation and lan
 });
 
 describe("NAV_GROUPS / NAV_ITEMS: the unfiltered full set (B1-8: no scope shows everything)", () => {
+  // The unfiltered list may or may not carry the hidden Team usage item
+  // (implementation detail of the constant); compare without it.
   it("is the full projection, so a bare render and an admin agree", () => {
-    expect(project(NAV_GROUPS)).toEqual(FULL_NAV);
+    const withoutTeamUsage = project(NAV_GROUPS).map((g) => ({
+      ...g,
+      items: g.items.filter((i) => i.href !== TEAM_USAGE_HREF),
+    }));
+    expect(withoutTeamUsage).toEqual(FULL_NAV);
+  });
+
+  it("the unfiltered order puts My usage second and Team usage third when present (MI-D1)", () => {
+    const usage = NAV_GROUPS.find((g) => g.label === "Usage")?.items.map(
+      (i) => i.href,
+    );
+    expect(usage?.slice(0, 2)).toEqual(["/dashboard", "/dashboard/me"]);
+    if (usage?.includes(TEAM_USAGE_HREF)) {
+      expect(usage[2]).toBe(TEAM_USAGE_HREF);
+    }
   });
 
   it("NAV_ITEMS flattens NAV_GROUPS, Settings and the Management pages included (PageTitle resolves every page from it)", () => {
@@ -347,6 +435,7 @@ describe("NAV_GROUPS / NAV_ITEMS: the unfiltered full set (B1-8: no scope shows 
 describe("landingPathFor: role-aware landing (Access Control; B1-4)", () => {
   it.each([
     ["admin / org admin / auditor (global)", GLOBAL, "/dashboard"],
+    ["an auditor", AUDITOR, "/dashboard"],
     [
       "a global reader who also holds admin scopes",
       GLOBAL_WITH_ADMIN_SCOPES,
@@ -375,6 +464,7 @@ describe("landingPathFor: role-aware landing (Access Control; B1-4)", () => {
     for (const s of [
       GLOBAL,
       ORG_ADMIN,
+      AUDITOR,
       LEAD_TEAMS,
       LEAD_DEPARTMENTS,
       MEMBER,

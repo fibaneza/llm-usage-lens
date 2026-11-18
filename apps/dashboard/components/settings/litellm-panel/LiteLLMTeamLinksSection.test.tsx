@@ -7,18 +7,17 @@ import { renderWithProviders } from "@/test/support/render-providers";
 
 import { LiteLLMTeamLinksSection } from "./LiteLLMTeamLinksSection";
 
-// Source: Design System "Settings Page" - LiteLLM sub-tabs, agent decision (3)
-// (unit A2, 2026-11-17; gap G7 of the L3b acceptance review: an unexplained
-// empty state when no team is linked); LiteLLM spec LD24 (Admin and org-admin
-// link teams; Auditor read-only). Module under test:
-// `components/settings/litellm-panel/LiteLLMTeamLinksSection.tsx`
-//   <LiteLLMTeamLinksSection canEdit={boolean} />
-// (the Team links body of the former LiteLLMPanel tab, behaviour unchanged).
-// Copy fixed here (the developer matches it):
+// Source: Design System "Management pages" - LiteLLM area, LiteLLM teams tab
+// (D2/D3/D4a, 2026-11-17); LiteLLM spec LD24 (Admin and org-admin link teams;
+// Auditor read-only), LD37, MI-D4a, LT-MI3; App Teams spec - UI (spend source).
+// Module under test:
+//   <LiteLLMTeamLinksSection canEdit canCreateTeam? />
+// It reads GET /api/litellm/team-links ({ items, appTeams?, litellmTeams?,
+// litellmTeamsUnavailable?, configured? }) and, for an editor or creator,
+// GET /api/access/org-units (the app teams of the Team picker).
+// Copy fixed by the empty-state tests (unit A2 / G7):
 //   no links, all roles:  role="status" containing "No LiteLLM team is linked yet."
-//   no links, canEdit:    + "Linking a dashboard team to a LiteLLM team shows
-//                          that team's LiteLLM spend, budget and members in the
-//                          dashboard. The form below links one."
+//   no links, canEdit:    + "... The form below links one."
 //   no links, read-only:  + "An Admin or org-admin links teams."
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -30,34 +29,127 @@ const LINK = {
   version: 1,
   updatedAt: "2026-11-01T00:00:00Z",
 };
+const link = (teamId: string, litellmTeamId: string, version = 1) => ({
+  teamId,
+  litellmTeamId,
+  version,
+  updatedAt: "2026-11-01T00:00:00Z",
+});
+const ORG_UNITS = {
+  teams: [
+    { id: "growth", name: "Growth", departmentId: "eng" },
+    { id: "payments", name: "Payments", departmentId: "eng" },
+    { id: "search", name: "Search", departmentId: "eng" },
+  ],
+  departments: [{ id: "eng", name: "Engineering" }],
+};
+const LITELLM_TEAMS = [
+  { litellmTeamId: "ll-111", alias: "Alpha" },
+  { litellmTeamId: "ll-222", alias: "Beta" },
+  { litellmTeamId: "ll-333", alias: "Gamma" },
+];
 
-function stubLinks(items: unknown[]) {
+type Call = { path: string; method: string; body: unknown };
+type Body = Record<string, unknown>;
+
+// Stateful stub: GET /team-links reflects earlier writes; /api/access/org-units
+// answers the app teams. `extra` is merged into the team-links answer.
+function stub(
+  opts: {
+    links?: ReturnType<typeof link>[];
+    extra?: Body;
+    put?: Response;
+    del?: Response;
+    post?: Response;
+  } = {},
+) {
+  let links = opts.links ?? [
+    link("payments", "ll-111"),
+    link("search", "ll-222", 2),
+  ];
+  const calls: Call[] = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(() => Promise.resolve(apiResponse({ data: { items } }))),
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      const method = (init?.method ?? "GET").toUpperCase();
+      calls.push({
+        path,
+        method,
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      if (path === "/api/access/org-units") {
+        return Promise.resolve(apiResponse({ data: ORG_UNITS }));
+      }
+      if (path === "/api/litellm/teams" && method === "POST") {
+        return Promise.resolve(
+          opts.post ??
+            apiResponse({
+              data: { teamId: "growth", litellmTeamId: "ll-444" },
+            }),
+        );
+      }
+      if (path.startsWith("/api/litellm/team-links/")) {
+        const teamId = decodeURIComponent(path.split("/").pop() ?? "");
+        if (method === "DELETE") {
+          if (opts.del) return Promise.resolve(opts.del);
+          links = links.filter((l) => l.teamId !== teamId);
+          return Promise.resolve(apiResponse({ data: { teamId } }));
+        }
+        if (method === "PUT") {
+          if (opts.put) return Promise.resolve(opts.put);
+          const body = JSON.parse(String(init?.body)) as {
+            litellmTeamId: string;
+            version: number | null;
+          };
+          const saved = link(
+            teamId,
+            body.litellmTeamId,
+            (body.version ?? 0) + 1,
+          );
+          links = [...links.filter((l) => l.teamId !== teamId), saved];
+          return Promise.resolve(apiResponse({ data: saved }));
+        }
+      }
+      return Promise.resolve(
+        apiResponse({
+          data: {
+            items: links,
+            configured: true,
+            litellmTeams: LITELLM_TEAMS,
+            ...opts.extra,
+          },
+        }),
+      );
+    }),
   );
+  return calls;
 }
+
+const writesOf = (calls: Call[]) => calls.filter((c) => c.method !== "GET");
 
 describe("LiteLLMTeamLinksSection - empty state when no team is linked (G7)", () => {
   it("an editor is told what linking does and where to link", async () => {
-    stubLinks([]);
+    stub({ links: [] });
     renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
     const status = await screen.findByRole("status");
     expect(status).toHaveTextContent("No LiteLLM team is linked yet.");
     expect(status).toHaveTextContent(/spend, budget and members/i);
     expect(status).toHaveTextContent(/the form below links one/i);
     expect(status).not.toHaveTextContent(/admin or org-admin links teams/i);
-    expect(screen.getByLabelText("Dashboard team ID")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("combobox", { name: "Team" }),
+    ).toBeInTheDocument();
   });
 
   it("a read-only caller is told who links teams, and has no form", async () => {
-    stubLinks([]);
+    stub({ links: [] });
     renderWithProviders(<LiteLLMTeamLinksSection canEdit={false} />);
     const status = await screen.findByRole("status");
     expect(status).toHaveTextContent("No LiteLLM team is linked yet.");
     expect(status).toHaveTextContent(/an admin or org-admin links teams/i);
     expect(status).not.toHaveTextContent(/form below/i);
-    expect(screen.queryByLabelText("Dashboard team ID")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Team" })).toBeNull();
   });
 
   it("shows the explanation only when no team is linked: not with links, not while loading", async () => {
@@ -70,42 +162,26 @@ describe("LiteLLMTeamLinksSection - empty state when no team is linked (G7)", ()
     pending.unmount();
     vi.unstubAllGlobals();
 
-    stubLinks([LINK]);
+    stub({ links: [LINK] });
     renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
     expect(await screen.findByText("ll-111")).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull();
   });
 });
-// L4b - docs/specs/2026-11-17-app-teams.md, UI: "Settings -> LiteLLM -> Team
-// links: a 'Spend source' column for every app team". Assumed (the spec names
-// no data source): GET /api/litellm/team-links answers
-// { items, appTeams: [{ teamId, teamName, spendSource }] }. The section
-// renders a table named "Spend source by app team" (columns App team, Spend
-// source) with one row per app team: "LiteLLM team" when linked, "Sum of
+
+// L4b - docs/specs/2026-11-17-app-teams.md, UI: a 'Spend source' column for
+// every app team. The section renders a table named "Spend source by app team"
+// (columns App team, Spend source), "LiteLLM team" when linked, "Sum of
 // members" when not. `appTeams` is optional: an answer without it renders the
 // link list as before and no such table.
 describe("LiteLLMTeamLinksSection - spend source column (App Teams: UI)", () => {
-  const body = {
-    items: [LINK],
-    appTeams: [
-      { teamId: "growth", teamName: "Growth", spendSource: "member-sum" },
-      {
-        teamId: "payments",
-        teamName: "Payments",
-        spendSource: "litellm-team",
-      },
-    ],
-  };
-
-  function stubBody(data: unknown) {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => Promise.resolve(apiResponse({ data }))),
-    );
-  }
+  const appTeams = [
+    { teamId: "growth", teamName: "Growth", spendSource: "member-sum" },
+    { teamId: "payments", teamName: "Payments", spendSource: "litellm-team" },
+  ];
 
   it("shows a 'Spend source' column with one row for every app team, linked or not", async () => {
-    stubBody(body);
+    stub({ links: [LINK], extra: { appTeams } });
     renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
     const table = await screen.findByRole("table", {
       name: "Spend source by app team",
@@ -119,17 +195,8 @@ describe("LiteLLMTeamLinksSection - spend source column (App Teams: UI)", () => 
     expect(within(growth).getByText("Sum of members")).toBeInTheDocument();
   });
 
-  it("the link list and its Unlink control are unchanged beside it", async () => {
-    stubBody(body);
-    renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
-    expect(await screen.findByText("ll-111")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Unlink payments" }),
-    ).toBeInTheDocument();
-  });
-
   it("without appTeams in the answer the section renders as before and shows no spend-source table", async () => {
-    stubBody({ items: body.items });
+    stub({ links: [LINK] });
     renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
     expect(await screen.findByText("ll-111")).toBeInTheDocument();
     expect(
@@ -138,65 +205,9 @@ describe("LiteLLMTeamLinksSection - spend source column (App Teams: UI)", () => 
   });
 });
 
-// Moved from the deleted LiteLLMPanel.test.tsx (team search) and
-// LiteLLMPanel.roles.test.tsx (team-link writes, editTeamLinks) - unit A2
-// part 2. LD24 (Admin + org-admin link teams; Auditor read-only); L3d2: the
-// DELETE route reads no body, PUT takes { litellmTeamId, version } with
-// version null to create (PutBodySchema).
-describe("LiteLLMTeamLinksSection list, search and writes", () => {
-  const link = (teamId: string, litellmTeamId: string, version = 1) => ({
-    teamId,
-    litellmTeamId,
-    version,
-    updatedAt: "2026-11-01T00:00:00Z",
-  });
-
-  type Call = { path: string; method: string; body: unknown };
-
-  // Stateful stub: GET /team-links reflects earlier writes.
-  function stub(opts: { put?: Response; del?: Response } = {}) {
-    let links = [link("payments", "ll-111"), link("search", "ll-222", 2)];
-    const calls: Call[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const path = new URL(String(input), "http://localhost").pathname;
-        const method = (init?.method ?? "GET").toUpperCase();
-        calls.push({
-          path,
-          method,
-          body: init?.body ? JSON.parse(String(init.body)) : undefined,
-        });
-        if (path.startsWith("/api/litellm/team-links/")) {
-          const teamId = decodeURIComponent(path.split("/").pop() ?? "");
-          if (method === "DELETE") {
-            if (opts.del) return Promise.resolve(opts.del);
-            links = links.filter((l) => l.teamId !== teamId);
-            return Promise.resolve(apiResponse({ data: { teamId } }));
-          }
-          if (method === "PUT") {
-            if (opts.put) return Promise.resolve(opts.put);
-            const body = JSON.parse(String(init?.body)) as {
-              litellmTeamId: string;
-              version: number | null;
-            };
-            const saved = link(
-              teamId,
-              body.litellmTeamId,
-              (body.version ?? 0) + 1,
-            );
-            links = [...links.filter((l) => l.teamId !== teamId), saved];
-            return Promise.resolve(apiResponse({ data: saved }));
-          }
-        }
-        return Promise.resolve(apiResponse({ data: { items: links } }));
-      }),
-    );
-    return calls;
-  }
-
-  const writesOf = (calls: Call[]) => calls.filter((c) => c.method !== "GET");
-
+// LD24: Admin + org-admin link teams, Auditor read-only; the DELETE route reads
+// no body; PUT takes { litellmTeamId, version } with version null to create.
+describe("LiteLLMTeamLinksSection list, search and unlink", () => {
   async function open(canEdit = true) {
     renderWithProviders(<LiteLLMTeamLinksSection canEdit={canEdit} />);
     await screen.findByText("ll-111");
@@ -214,7 +225,7 @@ describe("LiteLLMTeamLinksSection list, search and writes", () => {
     expect(screen.getByText(/no matching teams/i)).toBeInTheDocument();
   });
 
-  it("an editor sees Unlink per link and the Link form (LD24)", async () => {
+  it("an editor sees Unlink per link (LD24)", async () => {
     stub();
     await open();
     expect(
@@ -222,9 +233,6 @@ describe("LiteLLMTeamLinksSection list, search and writes", () => {
         .getAllByRole("button", { name: /^unlink /i })
         .map((b) => b.getAttribute("aria-label") ?? b.textContent),
     ).toEqual(["Unlink payments", "Unlink search"]);
-    expect(screen.getByLabelText("Dashboard team ID")).toBeInTheDocument();
-    expect(screen.getByLabelText("LiteLLM team ID")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^link$/i })).toBeInTheDocument();
   });
 
   it("a read-only caller sees the list and search, no Unlink or form, and sends only GET (LD24)", async () => {
@@ -236,9 +244,9 @@ describe("LiteLLMTeamLinksSection list, search and writes", () => {
     expect(screen.queryAllByRole("button", { name: /^unlink /i })).toHaveLength(
       0,
     );
-    expect(screen.queryByLabelText("Dashboard team ID")).toBeNull();
-    expect(screen.queryByLabelText("LiteLLM team ID")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.queryByRole("button", { name: /^link$/i })).toBeNull();
+    expect(screen.queryByRole("form", { name: "New LiteLLM team" })).toBeNull();
     expect(writesOf(calls)).toEqual([]);
   });
 
@@ -303,20 +311,68 @@ describe("LiteLLMTeamLinksSection list, search and writes", () => {
     );
     expect(screen.getByText("ll-111")).toBeInTheDocument();
   });
+});
 
-  async function fillLink(team: string, llm: string) {
-    if (team) {
-      await userEvent.type(screen.getByLabelText("Dashboard team ID"), team);
-    }
-    if (llm) {
-      await userEvent.type(screen.getByLabelText("LiteLLM team ID"), llm);
-    }
+// D4a / MI-D4a / LT-MI3: the link form is two searchable lists. The id of
+// either team is never typed; the server still validates (400/404/409).
+describe("LiteLLMTeamLinksSection link form (D4a, LT-MI3)", () => {
+  async function openForm(canCreateTeam = false) {
+    renderWithProviders(
+      <LiteLLMTeamLinksSection canEdit canCreateTeam={canCreateTeam} />,
+    );
+    await screen.findByText("ll-111");
+    return screen.findByRole("combobox", { name: "Team" });
+  }
+  async function choose(label: string, option: RegExp) {
+    await userEvent.click(screen.getByRole("combobox", { name: label }));
+    await userEvent.click(screen.getByRole("option", { name: option }));
   }
 
-  it("the Link form sends PUT /api/litellm/team-links/<teamId> with version null and the list shows the new link", async () => {
+  it("offers every app team and every LiteLLM team, linked ones shown as linked and not selectable", async () => {
+    stub();
+    await userEvent.click(await openForm());
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
+      expect.stringContaining("Growth"),
+      expect.stringContaining("Payments"),
+      expect.stringContaining("Search"),
+    ]);
+    const linked = screen
+      .getAllByRole("option")
+      .filter((o) => o.getAttribute("aria-disabled") === "true")
+      .map((o) => o.textContent ?? "");
+    expect(linked).toHaveLength(2);
+    expect(linked[0]).toContain("Payments");
+    expect(linked[1]).toContain("Search");
+    await userEvent.keyboard("{Escape}");
+
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "LiteLLM team" }),
+    );
+    const llm = screen.getAllByRole("option");
+    expect(llm.map((o) => o.textContent)).toEqual([
+      expect.stringMatching(/Alpha.*ll-111/),
+      expect.stringMatching(/Beta.*ll-222/),
+      expect.stringMatching(/Gamma.*ll-333/),
+    ]);
+    expect(llm.map((o) => o.getAttribute("aria-disabled") === "true")).toEqual([
+      true,
+      true,
+      false,
+    ]);
+  });
+
+  it("has no text input that accepts an id anywhere in the section", async () => {
+    stub();
+    await openForm();
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryByLabelText(/team id/i)).toBeNull();
+  });
+
+  it("choosing an app team and a LiteLLM team sends PUT with version null, and the list shows the new link", async () => {
     const calls = stub();
-    await open();
-    await fillLink("growth", "ll-333");
+    await openForm();
+    await choose("Team", /Growth/);
+    await choose("LiteLLM team", /Gamma/);
     await userEvent.click(screen.getByRole("button", { name: /^link$/i }));
     expect(await screen.findByText("ll-333")).toBeInTheDocument();
     expect(writesOf(calls)).toEqual([
@@ -328,15 +384,16 @@ describe("LiteLLMTeamLinksSection list, search and writes", () => {
     ]);
   });
 
-  it("re-linking an already linked team sends that link's current version", async () => {
+  it("Link is disabled until both lists have a choice, and nothing is sent", async () => {
     const calls = stub();
-    await open();
-    await fillLink("search", "ll-999");
-    await userEvent.click(screen.getByRole("button", { name: /^link$/i }));
-    expect(await screen.findByText("ll-999")).toBeInTheDocument();
-    expect(writesOf(calls).map((c) => c.body)).toEqual([
-      { litellmTeamId: "ll-999", version: 2 },
-    ]);
+    await openForm();
+    const button = screen.getByRole("button", { name: /^link$/i });
+    expect(button).toBeDisabled();
+    await choose("Team", /Growth/);
+    expect(button).toBeDisabled();
+    await choose("LiteLLM team", /Gamma/);
+    expect(button).toBeEnabled();
+    expect(writesOf(calls)).toEqual([]);
   });
 
   it.each([
@@ -346,37 +403,98 @@ describe("LiteLLMTeamLinksSection list, search and writes", () => {
     "a %i from the server shows inline (role=alert)",
     async (status, code, message) => {
       stub({ put: apiResponse({ error: { code, message } }, status) });
-      await open();
-      await fillLink("growth", "ll-333");
+      await openForm();
+      await choose("Team", /Growth/);
+      await choose("LiteLLM team", /Gamma/);
       await userEvent.click(screen.getByRole("button", { name: /^link$/i }));
       expect(await screen.findByRole("alert")).toHaveTextContent(message);
-      expect(screen.queryByText("ll-333")).toBeNull();
     },
   );
 
-  // PUT body schema (app/api/litellm/team-links/[teamId]/route.ts) requires both fields.
-  it.each([
-    ["both empty", "", ""],
-    ["only the dashboard team ID", "growth", ""],
-    ["only the LiteLLM team ID", "", "ll-333"],
-    ["whitespace-only dashboard team ID", "   ", "ll-333"],
-    ["whitespace-only LiteLLM team ID", "growth", "   "],
-  ])("Link is disabled with %s", async (_n, team, llm) => {
-    stub();
-    await open();
-    await fillLink(team, llm);
+  it("LiteLLM teams unavailable (outage or toggle off): the section says so, the links still list, and there is no LiteLLM picker or typed fallback", async () => {
+    stub({ extra: { litellmTeams: undefined, litellmTeamsUnavailable: true } });
+    await openForm();
+    expect(
+      screen.getByText("LiteLLM teams could not be loaded"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ll-222")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "LiteLLM team" })).toBeNull();
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
     expect(screen.getByRole("button", { name: /^link$/i })).toBeDisabled();
   });
 
-  it("Link is enabled once both fields are filled; Enter with a field empty sends no PUT", async () => {
-    const calls = stub();
-    await open();
-    await userEvent.type(
-      screen.getByLabelText("Dashboard team ID"),
-      "growth{Enter}",
+  it("LiteLLM not configured (LD37, configured:false): the section says LiteLLM is not connected, with no LiteLLM picker or typed fallback", async () => {
+    stub({
+      links: [],
+      extra: { configured: false, litellmTeams: undefined },
+    });
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
+    expect(
+      await screen.findByText(/litellm.*not (connected|configured)/i, {
+        selector: "p",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "LiteLLM team" })).toBeNull();
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+  });
+
+  it("an app team list that cannot be read says so and offers no typed fallback", async () => {
+    stub();
+    const base = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+        String(input).includes("/api/access/org-units")
+          ? Promise.resolve(
+              apiResponse({ error: { code: "FORBIDDEN", message: "no" } }, 403),
+            )
+          : base(input, init),
+      ),
     );
-    expect(writesOf(calls)).toEqual([]);
-    await userEvent.type(screen.getByLabelText("LiteLLM team ID"), "ll-333");
-    expect(screen.getByRole("button", { name: /^link$/i })).toBeEnabled();
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
+    expect(
+      await screen.findByText("Teams could not be loaded"),
+    ).toBeInTheDocument();
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+  });
+});
+
+// D2 / LD24: "New LiteLLM team" is for internal-admin only (canCreateTeam); the
+// route stays internal-admin only and answers 403 to anyone else (Rule 10.3).
+describe("LiteLLMTeamLinksSection - New LiteLLM team (internal-admin only)", () => {
+  it("is absent for an editor who may not create a team, and absent for a read-only caller", async () => {
+    stub();
+    const { unmount } = renderWithProviders(
+      <LiteLLMTeamLinksSection canEdit />,
+    );
+    await screen.findByRole("combobox", { name: "Team" });
+    expect(screen.queryByRole("form", { name: "New LiteLLM team" })).toBeNull();
+    unmount();
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit={false} />);
+    await screen.findByText("ll-111");
+    expect(screen.queryByRole("form", { name: "New LiteLLM team" })).toBeNull();
+  });
+
+  it("renders for canCreateTeam and posts to POST /api/litellm/teams with the chosen app team and the alias", async () => {
+    const calls = stub();
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit canCreateTeam />);
+    const form = await screen.findByRole("form", { name: "New LiteLLM team" });
+    await userEvent.click(
+      within(form).getByRole("combobox", { name: "Team to create it for" }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: /Growth/ }));
+    await userEvent.type(
+      within(form).getByLabelText("LiteLLM team alias"),
+      "Growth",
+    );
+    await userEvent.click(
+      within(form).getByRole("button", { name: "New LiteLLM team" }),
+    );
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(writesOf(calls)[0]).toEqual({
+      path: "/api/litellm/teams",
+      method: "POST",
+      body: { teamId: "growth", teamAlias: "Growth" },
+    });
   });
 });

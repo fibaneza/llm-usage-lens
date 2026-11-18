@@ -5,8 +5,6 @@ import { auth } from "@/auth";
 import { LiteLLMConnectionSection } from "@/components/settings/litellm-panel/LiteLLMConnectionSection";
 import { LiteLLMGatewaySection } from "@/components/settings/litellm-panel/LiteLLMGatewaySection";
 import { LiteLLMGuardrailsSection } from "@/components/settings/litellm-panel/LiteLLMGuardrailsSection";
-import { LiteLLMTeamLinksSection } from "@/components/settings/litellm-panel/LiteLLMTeamLinksSection";
-import { LiteLLMUsersSection } from "@/components/settings/litellm-panel/LiteLLMUsersSection";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { litellmPanelCapabilities } from "@/lib/auth/litellm-panel";
 import { loadSettingsAccessViewer } from "@/lib/auth/settings-access";
@@ -40,12 +38,6 @@ export default async function LiteLLMSectionPage({
       break;
     case "guardrails":
       body = <LiteLLMGuardrailsSection canEdit={capabilities.editGuardrails} />;
-      break;
-    case "team-links":
-      body = <LiteLLMTeamLinksSection canEdit={capabilities.editTeamLinks} />;
-      break;
-    case "users":
-      body = <LiteLLMUsersSection />;
       break;
     case "gateway":
       body = <LiteLLMGatewaySection canEdit={capabilities.editConnection} />;

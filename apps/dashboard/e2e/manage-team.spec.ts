@@ -150,7 +150,7 @@ test.describe("Management -> Team page", () => {
     await waitForHydration(page);
     await expect(page).toHaveURL(/\/dashboard\/manage\/team\?team=t1/);
     await expect(
-      page.getByRole("heading", { level: 1, name: "Team usage & management" }),
+      page.getByRole("heading", { level: 1, name: "Team management" }),
     ).toBeVisible();
 
     // B2b: each view holds its sections (Members opens first).
@@ -409,7 +409,7 @@ test.describe("Management -> Team page", () => {
     const response = await page.goto(TEAM_URL);
     expect(response?.status()).toBe(200);
     await expect(
-      page.getByRole("heading", { level: 1, name: "Team usage & management" }),
+      page.getByRole("heading", { level: 1, name: "Team management" }),
     ).toBeVisible();
   });
 });

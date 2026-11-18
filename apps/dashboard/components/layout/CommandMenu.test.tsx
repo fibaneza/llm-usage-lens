@@ -158,8 +158,12 @@ describe("CommandMenu", () => {
       departmentScopes: new Set<string>(),
       ...over,
     });
+    // MI-D1: Overview, My usage, then the organisation-level items. Team usage
+    // is hidden for every role until unit M2 builds its page (coordinator
+    // ruling, M1).
     const USAGE = [
       "Overview",
+      "My usage",
       "Ranking",
       "Cost by department",
       "Cost by team",
@@ -183,7 +187,8 @@ describe("CommandMenu", () => {
 
     const ADMIN_FLAGS = {
       team: true,
-      organisation: true,
+      teamUsage: true,
+      litellm: true,
       users: true,
       audit: true,
       settings: true,
@@ -192,15 +197,7 @@ describe("CommandMenu", () => {
     it("lists the same destinations as the sidebar for an admin (B2-2)", async () => {
       expect(
         await optionNames(scope({ global: true, management: ADMIN_FLAGS })),
-      ).toEqual([
-        ...USAGE,
-        "My usage",
-        "Team",
-        "Organisation",
-        "Users",
-        "Audit",
-        "Settings",
-      ]);
+      ).toEqual([...USAGE, "Users", "Team", "LiteLLM", "Audit", "Settings"]);
     });
 
     it("omits Audit for an org admin (B2-2)", async () => {
@@ -211,14 +208,7 @@ describe("CommandMenu", () => {
             management: { ...ADMIN_FLAGS, audit: false },
           }),
         ),
-      ).toEqual([
-        ...USAGE,
-        "My usage",
-        "Team",
-        "Organisation",
-        "Users",
-        "Settings",
-      ]);
+      ).toEqual([...USAGE, "Users", "Team", "LiteLLM", "Settings"]);
     });
 
     it("lists only My usage for a user (B1-14, B2-2)", async () => {
@@ -234,7 +224,8 @@ describe("CommandMenu", () => {
             teamScopes: new Set(["team-a"]),
             management: {
               team: true,
-              organisation: false,
+              teamUsage: true,
+              litellm: false,
               users: false,
               audit: false,
               settings: false,

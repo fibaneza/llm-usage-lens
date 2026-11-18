@@ -272,6 +272,13 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ## LiteLLM
 
+### A LiteLLM team list view on Management → LiteLLM → LiteLLM teams
+
+- **Status:** Deferred (coordinator decision, 2026-11-18, M1 review; Design System D2 amended).
+- **What:** a list of every LiteLLM team (alias, `team_id`, spend, budget, link state) on the *LiteLLM teams* tab.
+- **Why deferred:** the Organisation tab's LiteLLM teams table and the links table already cover it.
+- **Trigger:** a user asks for LiteLLM team details beyond those two tables.
+
 ### Combined usage on the Users list
 
 - **Status:** Deferred (agent decision, 2026-11-17, LiteLLM unit L6; LiteLLM

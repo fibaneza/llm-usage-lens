@@ -23,7 +23,8 @@ const FULL_SCOPE: NavScope = {
   departmentScopes: new Set<string>(),
   management: {
     team: true,
-    organisation: true,
+    teamUsage: true,
+    litellm: true,
     users: true,
     audit: true,
     settings: true,
@@ -66,17 +67,20 @@ function renderRail(defaultOpen: boolean) {
 
 // Design System - Navigation (Sidebar): the full set a bare render (no scope)
 // shows; the Usage breakdowns read "Cost by ..." (unique labels, B1-5).
+// Management improvements M1 (MI-D1): My usage second; Management = Users,
+// Team, LiteLLM, Audit. Team usage stays hidden for every role until unit M2
+// builds its page (coordinator ruling, M1), so it is not in this set.
 const NAV_TITLES = [
   "Overview",
+  "My usage",
   "Ranking",
   "Cost by department",
   "Cost by team",
   "Cost by service",
   "Cost by user",
-  "My usage",
-  "Team",
-  "Organisation",
   "Users",
+  "Team",
+  "LiteLLM",
   "Audit",
   "Settings",
 ];
@@ -228,7 +232,7 @@ describe("AppSidebar - groups (Usage / Management / Administration)", () => {
     }
   });
 
-  it("places the Usage items (My usage last), the four Management pages, and Settings in their groups (B1-14, B2-2)", () => {
+  it("places the Usage items (My usage second), the four Management pages (Users, Team, LiteLLM, Audit), and Settings in their groups (MI-D1)", () => {
     const { container } = renderSidebar("/dashboard");
 
     expect(
@@ -237,21 +241,21 @@ describe("AppSidebar - groups (Usage / Management / Administration)", () => {
         .map((a) => a.textContent),
     ).toEqual([
       "Overview",
+      "My usage",
       "Ranking",
       "Cost by department",
       "Cost by team",
       "Cost by service",
       "Cost by user",
-      "My usage",
     ]);
     expect(
       within(group(container, "Management"))
         .getAllByRole("link")
         .map((a) => [a.textContent, a.getAttribute("href")]),
     ).toEqual([
-      ["Team", "/dashboard/manage/team"],
-      ["Organisation", "/dashboard/manage/organisation"],
       ["Users", "/dashboard/manage/users"],
+      ["Team", "/dashboard/manage/team"],
+      ["LiteLLM", "/dashboard/manage/litellm"],
       ["Audit", "/dashboard/manage/audit"],
     ]);
     expect(
@@ -325,9 +329,9 @@ describe("AppSidebar - rail tooltips", () => {
 
     await user.tab();
 
-    expect(screen.getByRole("link", { name: "Ranking" })).toHaveFocus();
+    expect(screen.getByRole("link", { name: "My usage" })).toHaveFocus();
     expect(
-      await screen.findByRole("tooltip", { name: "Ranking" }),
+      await screen.findByRole("tooltip", { name: "My usage" }),
     ).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
@@ -357,7 +361,7 @@ describe("AppSidebar - rail tooltips", () => {
 
     await user.tab();
 
-    expect(screen.getByRole("link", { name: "Ranking" })).toHaveFocus();
+    expect(screen.getByRole("link", { name: "My usage" })).toHaveFocus();
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });
@@ -462,15 +466,40 @@ describe("AppSidebar - rail toggle accessible name (desktop, 1440px)", () => {
   });
 });
 
-// Source: Design System - Navigation (Sidebar), routes table, and
-// docs/specs/2026-11-10-litellm.md (LD9; Views as Management routes; slice B2
-// B2-2): the LiteLLM rail item is retired; its views are the Management pages.
-describe("AppSidebar - no LiteLLM item", () => {
-  it("renders no LiteLLM link, whatever the scope", () => {
+// Source: Design System - Navigation (Sidebar); Access Control MI-D2: the
+// LiteLLM item opens the LiteLLM area; the Organisation item is gone. Team
+// usage is hidden for every role while its page is unbuilt (coordinator
+// ruling, M1; the flag is asserted in lib/manage-access*.test.ts).
+describe("AppSidebar - LiteLLM item, no Organisation item, no Team usage yet", () => {
+  it("links LiteLLM to the area and renders no Organisation link (MI-D2)", () => {
     renderSidebar("/dashboard");
 
-    expect(screen.queryByRole("link", { name: "LiteLLM" })).toBeNull();
-    expect(document.querySelector('a[href^="/dashboard/litellm"]')).toBeNull();
+    expect(screen.getByRole("link", { name: "LiteLLM" })).toHaveAttribute(
+      "href",
+      "/dashboard/manage/litellm",
+    );
+    expect(screen.queryByRole("link", { name: "Organisation" })).toBeNull();
+    expect(
+      document.querySelector('a[href^="/dashboard/manage/organisation"]'),
+    ).toBeNull();
+  });
+
+  it("lights LiteLLM on its nested tab routes", () => {
+    renderSidebar("/dashboard/manage/litellm/teams");
+
+    expect(screen.getByRole("link", { name: "LiteLLM" })).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+  });
+
+  it("renders no Team usage link even for a caller whose teamUsage flag is true", () => {
+    renderSidebar("/dashboard");
+
+    expect(screen.queryByRole("link", { name: "Team usage" })).toBeNull();
+    expect(
+      document.querySelector('a[href^="/dashboard/team-usage"]'),
+    ).toBeNull();
   });
 });
 
@@ -482,7 +511,8 @@ describe("AppSidebar - no LiteLLM item", () => {
 describe("AppSidebar - scope-filtered navigation", () => {
   const NONE = {
     team: false,
-    organisation: false,
+    teamUsage: false,
+    litellm: false,
     users: false,
     audit: false,
     settings: false,
@@ -532,7 +562,8 @@ describe("AppSidebar - scope-filtered navigation", () => {
     for (const gone of [
       ...USAGE_LINKS,
       "Team",
-      "Organisation",
+      "Team usage",
+      "LiteLLM",
       "Users",
       "Audit",
       "Settings",
@@ -547,14 +578,14 @@ describe("AppSidebar - scope-filtered navigation", () => {
       "a team lead",
       scoped({
         teamScopes: new Set(["team-a"]),
-        management: { ...NONE, team: true },
+        management: { ...NONE, team: true, teamUsage: true },
       }),
     ],
     [
       "a department lead",
       scoped({
         departmentScopes: new Set(["dept-eng"]),
-        management: { ...NONE, team: true },
+        management: { ...NONE, team: true, teamUsage: true },
       }),
     ],
   ])("%s sees My usage and Team only (B2-2)", (_n, scope) => {
@@ -565,7 +596,7 @@ describe("AppSidebar - scope-filtered navigation", () => {
       "href",
       "/dashboard/manage/team",
     );
-    for (const gone of ["Organisation", "Users", "Audit", "Settings"]) {
+    for (const gone of ["LiteLLM", "Users", "Audit", "Settings"]) {
       expect(screen.queryByRole("link", { name: gone })).toBeNull();
     }
   });
@@ -576,7 +607,8 @@ describe("AppSidebar - scope-filtered navigation", () => {
         global: true,
         management: {
           team: true,
-          organisation: true,
+          teamUsage: true,
+          litellm: true,
           users: true,
           audit: false,
           settings: true,
@@ -610,7 +642,8 @@ describe("AppSidebar - scope-filtered navigation", () => {
         global: true,
         management: {
           team: true,
-          organisation: true,
+          teamUsage: true,
+          litellm: true,
           users: true,
           audit: true,
           settings: true,
@@ -635,7 +668,8 @@ describe("AppSidebar - scope-filtered navigation", () => {
         global: true,
         management: {
           team: true,
-          organisation: true,
+          teamUsage: true,
+          litellm: true,
           users: true,
           audit: true,
           settings: true,

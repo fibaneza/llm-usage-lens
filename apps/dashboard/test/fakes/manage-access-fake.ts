@@ -6,13 +6,16 @@
 //   vi.mock("@/lib/manage-access", async () =>
 //     (await import("@/test/fakes/manage-access-fake")).fakeManageAccess);
 //
+// M1 (Access Control MI-D2, MI-D7): `organisation` is replaced by `litellm`;
+// `teamUsage` is new.
 // The default is an admin: every flag true. Call `setManageAccess({...})` to
 // narrow a case and `resetManageAccess()` in `afterEach`. Not imported by
 // production code.
 export type FakeManagementAccess = {
   global: boolean;
   team: boolean;
-  organisation: boolean;
+  teamUsage: boolean;
+  litellm: boolean;
   users: boolean;
   audit: { app: boolean; gateway: boolean };
   settings: boolean;
@@ -21,7 +24,8 @@ export type FakeManagementAccess = {
 const ADMIN: FakeManagementAccess = {
   global: true,
   team: true,
-  organisation: true,
+  teamUsage: true,
+  litellm: true,
   users: true,
   audit: { app: true, gateway: true },
   settings: true,
