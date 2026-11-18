@@ -91,6 +91,9 @@ export const LITELLM_OPERATIONS = {
     post("/key/block"),
     post(REGENERATE, true),
   ),
+  // MG-D11a: a dashboard-only operation (no LiteLLM route); a request alone
+  // changes nothing in LiteLLM, hence on by default.
+  requestBudgetReset: write(true),
 } as const satisfies Record<LiteLLMOperationName, OperationDefinition>;
 
 const ROUTE_INDEX: ReadonlyMap<string, AllowlistedRoute> = new Map(

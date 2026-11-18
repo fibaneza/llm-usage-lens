@@ -33,6 +33,14 @@ Phase 4.9 Settings shell. L3 and later keep their dependencies (L3 needs
 4R.3; L4 needs 4R.3 and 4R.4). Parallel runs use separate worktrees with
 disjoint file ownership (implementation-phases — *LiteLLM units*).
 
+The management-improvements units M0–M5 (sixteen user requests, unit M4 —
+budget reset requests — first) run before L7, L8 and the rest of Phase 5 at
+the user's direction (decided 2026-11-17: "all sixteen items run now";
+implementation-phases — *Management improvements (units M0–M5)*, run
+directions). They keep one branch and one squash commit per unit; M4 lands
+next and every later unit merges `main` (amended 2026-11-18: "land M4
+first" is superseded because M0 and M1 had already landed).
+
 ## Rules
 
 1. **Do not start a phase whose dependencies are unmet.** Run `/phase-status`

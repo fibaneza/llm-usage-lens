@@ -3,6 +3,7 @@
 import { CircleDollarSign } from "lucide-react";
 import Link from "next/link";
 
+import { OrgResetCell } from "@/components/budget-resets/BudgetResetCount";
 import { formatUsd } from "@/components/charts/chart-data";
 import { MetricCard } from "@/components/display/MetricCard";
 import { coverageText } from "@/components/manage/MemberSumDetail";
@@ -70,6 +71,7 @@ function AppTeamSpend({
 export function OrganisationSection() {
   const isMobile = useIsMobile();
   const { keyParts, query } = useUrlRange();
+  const range = { dateFrom: keyParts[0], dateTo: keyParts[1] };
   const result = useLiteLLMQuery(
     ["org", ...keyParts],
     `/api/litellm/org?${query}`,
@@ -208,6 +210,14 @@ export function OrganisationSection() {
                     <dt className="text-muted-foreground text-xs">Coverage</dt>
                     <dd>{team.coverage ? coverageText(team.coverage) : "-"}</dd>
                   </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground text-xs">
+                      Budget resets
+                    </dt>
+                    <dd>
+                      <OrgResetCell teamId={team.teamId} range={range} />
+                    </dd>
+                  </div>
                 </dl>
               </li>
             ))}
@@ -223,6 +233,7 @@ export function OrganisationSection() {
                 <TableHead>Spend source</TableHead>
                 <TableHead className="text-right">Spend</TableHead>
                 <TableHead>Coverage</TableHead>
+                <TableHead>Budget resets</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -237,6 +248,9 @@ export function OrganisationSection() {
                   </TableCell>
                   <TableCell>
                     {team.coverage ? coverageText(team.coverage) : "-"}
+                  </TableCell>
+                  <TableCell>
+                    <OrgResetCell teamId={team.teamId} range={range} />
                   </TableCell>
                 </TableRow>
               ))}

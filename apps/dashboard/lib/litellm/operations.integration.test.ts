@@ -14,6 +14,7 @@ import {
   vi,
 } from "vitest";
 
+import { LITELLM_OPERATIONS } from "@/lib/litellm/allowlist";
 import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
 import type { FakeCall } from "@/test/fakes/fake-litellm";
 import {
@@ -153,6 +154,11 @@ describe("the operations module", () => {
   it("exports one function per allowlisted operation", async () => {
     const { ops } = await load();
     for (const name of LITELLM_OPERATION_NAMES) {
+      // MG-D11a: requestBudgetReset has no LiteLLM route, hence no gateway function.
+      if (LITELLM_OPERATIONS[name].routes.length === 0) {
+        expect(ops, name).not.toHaveProperty(name);
+        continue;
+      }
       expect(typeof ops[name], name).toBe("function");
     }
   });

@@ -232,12 +232,36 @@ review = quality-reviewer + spec-guardian + ecc reviewers
 ## Workflows (pilot, decided 2026-11-15, user)
 
 A Claude Code workflow may run a unit's work or the coordinator's merge
-review only where the implementation-phases spec lists it (*Workflow
-pilots*), with the user's opt-in per run. Its agents keep the roles in
+review where the implementation-phases spec allows it (*Workflow
+pilots*: from 2026-11-18 every worker runs its plan units as a workflow,
+`prompts/coordinator_prompt.md` §3a), with the user's opt-in per run. Its agents keep the roles in
 rule 8, the unit keeps one branch and one squash commit (Rule 30.4), it
-runs at most 5 agents, and it stops at the usage freeze (`prompts/coordinator_prompt.md` §3: 5-hour,
+draws its agents from the one shared pool: at most 80 agents running at
+once, summed across all sessions, distributed dynamically by the
+coordinator (user, 2026-11-18; `prompts/coordinator_prompt.md` §3a,
+`docs/guides/session-roles.md` — *Limits*; implementation-phases —
+*Workflow pilots*; supersedes the 5-agent cap and its M0–M5-only raise,
+2026-11-18, because the user gave the pool as the general rule), and it stops at the usage freeze (`prompts/coordinator_prompt.md` §3: 5-hour,
 and weekly caution 85 % / freeze 95 %, user, 2026-11-18). It never merges
 or skips the review.
+
+## Tests near the end (exception, decided 2026-11-17, user)
+
+For the management-improvements units **M1–M5 (M4 first)** only, the user
+directed "avoid to add tests on each step, add test near to the end"
+(implementation-phases — *Management improvements (units M0–M5)*, run
+directions). Inside
+such a unit the order is *Build → Test pass → Fix → Gate*: the
+`typescript-developer` builds the slices from the spec first (`pnpm
+typecheck` and `pnpm lint` after each, no test written or run per slice, no
+test edited — rule 8); then the `tdd-test-engineer` writes the unit's tests
+in one pass from the spec lines and the unit's test table, not from the
+code, and updates the tests the change breaks on purpose; a failing new test
+is a defect or a spec gap, fixed by the developer or disputed back to the
+test engineer (rule 4). This changes the **order** of rules 2 and 3, never
+the bar: every test-table row is proved, no test is weakened, roles (rule
+8), the branch gate and the review (rule 12) are unchanged. Every other
+unit keeps tests first.
 
 ## When to use
 

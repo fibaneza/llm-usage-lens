@@ -40,6 +40,7 @@ export const LITELLM_OPERATION_NAMES = [
   "unblockKey",
   "deleteKey",
   "rotateKey",
+  "requestBudgetReset",
 ] as const;
 
 export const LiteLLMOperationNameSchema = z.enum(LITELLM_OPERATION_NAMES);

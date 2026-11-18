@@ -35,6 +35,7 @@ All data is stored in a single DynamoDB table (`bedrock-usage`) with one GSI. Th
 | Migration marker (PERF-1b) | `SYSTEM` | `MIGRATION#ACCOUNT_REGISTRY` | — | — |
 | AppTeam (management improvements D5, 2026-11-17) | `APPTEAM#{teamId}` | `META` | `APPTEAMS` | `APPTEAM#{teamId}` |
 | AppTeamNameClaim | `APPTEAMNAME#{lower(trim(name))}` | `OWNER` | — | — |
+| BudgetResetRequest, OpenResetRequestClaim, BudgetReset, Notification (unit M4, 2026-11-17) | `BRREQ#…`, `BRREQOPEN#…`, `BRESET#TEAM#…`, `NOTIF#…` | see *Budget reset entities (unit M4)* | `BRREQS#TEAM#…`, `BRESETS#IDENT#…` | see that section |
 
 The `SYSTEM` partition holds one-off system items: the sync status and, from PERF-1b, the account-registry migration marker that the backfill writes (*Access Patterns* — PERF-1b *Migration*). Neither item is on GSI1.
 
@@ -405,6 +406,89 @@ Attributes:
 
 Before the Lambda's first run, no SyncStatus item exists. Consumers must treat a missing item as a valid "never synced" state, not an error.
 
+## Budget reset entities (unit M4)
+
+*Added 2026-11-17 (unit M4, user request items 6–8; decisions MG-D8 to
+MG-D13 in the [LiteLLM spec](2026-11-10-litellm.md) — *Decisions* and
+*Budget reset requests*).* Same table, no new GSI; the new prefixes collide
+with no existing `PK` or `gsi1pk` prefix. Zod schemas in
+`packages/shared/src/schemas/budget-reset.ts` (types via `z.infer`). Key
+builders live in the pure modules `apps/dashboard/lib/data/budget-resets-keys.ts`
+(requests, claims, ledger) and `apps/dashboard/lib/data/notifications-keys.ts`
+(no `server-only`, no I/O), not in `lib/data/access/keys.ts`, because the
+access structure test allows imports of the access keys only from
+`lib/data/access/**` and `scripts/**` (agent decision, 2026-11-17: the
+Storage boundary's rule is kept and the new storage modules sit outside
+`access/`). Every timestamp is UTC ISO 8601 (Rule 20.1); every amount is
+USD (Rule 20.2). The TTL attribute is the table's `expiresAt` (epoch
+seconds).
+
+| Entity | PK | SK | GSI1pk | GSI1sk | TTL (`expiresAt`) |
+|---|---|---|---|---|---|
+| BudgetResetRequest | `BRREQ#{requestId}` | `META` | `BRREQS#TEAM#{teamId}` | `{status}#{createdAt}#{requestId}` | `createdAt` + 90 days |
+| OpenResetRequestClaim (one open request per person per team) | `BRREQOPEN#{teamId}#{oid}` | `OWNER` | — | — | `requestExpiresAt` |
+| BudgetReset (ledger) | `BRESET#TEAM#{teamId}` | `{timestamp}#{resetId}` | `BRESETS#IDENT#{oid}` | `{timestamp}#{resetId}` | `timestamp` + 400 days |
+| Notification | `NOTIF#{recipientOid}` | `{createdAt}#{notificationId}` | — | — | `createdAt` + 90 days |
+
+**BudgetResetRequest** — `requestId` (UUID, server-generated), `teamId`,
+`departmentId` and `litellmTeamId` (snapshots at creation, for display; the
+decision re-reads the registry and the team link), `requesterOid`, `reason`
+(optional, plain text, 1–280 characters after trimming; C0 control
+characters U+0000–U+001F except line feed, and U+007F, are rejected),
+`status` (`open` \| `approving` \| `approved` \| `denied` \| `expired`),
+`createdAt`, `requestExpiresAt` (`createdAt` + 7 days), `decidedBy`,
+`decidedAt`, `resetId` (on `approved`), `version`. An **open** request
+whose `requestExpiresAt` has passed reads as expired: the first read that
+sees it moves it `open → expired` with a conditional write, deletes its
+claim and notifies the requester once (the condition makes it once). Every
+status change rewrites `gsi1sk` with the new status. Item expiry (90 days)
+is not the request expiry (7 days): the decided request stays readable as
+long as the notifications that point at it.
+
+**OpenResetRequestClaim** — `requestId`, `requestExpiresAt`. Created in the
+same `TransactWriteItems` as the request with
+`attribute_not_exists(PK) OR requestExpiresAt < :now` (a stale claim of an
+expired request does not block a new one); deleted when the request is
+approved, denied or expired. A second open request fails the condition →
+`409 CONFLICT`.
+
+**BudgetReset** (MG-D8) — `resetId` (UUID), `oid` (the member), `teamId`,
+`departmentId`, `litellmTeamId`, `litellmUserId`, `operation` (`spend` \|
+`budget`), `amount` (USD ≥ 0, the member's membership spend read from
+`getTeam` just before the reset), `budget` (the member's `max_budget_in_team`
+at that time, USD, or `null` when unset), `trigger` (`direct` \| `request`;
+set by the server from the route, never from the client; a bulk reset is a UI
+convenience over direct resets and is recorded as `direct` — MG-D8 amended
+2026-11-18, coordinator decision), `actorOid`, `requestId` (the budget reset request for
+`trigger: "request"`, else the HTTP request id), `timestamp`. Append-only:
+the `Put` carries `attribute_not_exists(SK)`; it is written in the same
+transaction as the audit record, after LiteLLM confirmed; no update, no
+delete except TTL.
+
+**Notification** (MG-D13) — `notificationId` (UUID), `recipientOid`,
+`kind` (`budget-reset.requested` \| `budget-reset.approved` \|
+`budget-reset.denied` \| `budget-reset.expired`), `requestId`, `teamId`,
+`createdAt`, `readAt` (absent until read). It holds no name, email, reason
+or amount: the list route joins the request and shows its details only to a
+caller who may still read it (Access Control BR8). The API id is the item's
+`SK` value (`{createdAt}#{notificationId}`), so a mark-read is a `GetItem`/
+`UpdateItem` on `PK = NOTIF#{session oid}` and can never reach another
+person's partition. The kind list is open for L7 (key requests) to append
+its own kinds; nothing in slice A is key-specific.
+
+### Access patterns (unit M4)
+
+| Pattern | Operation |
+|---|---|
+| Create a request | `TransactWriteItems`: `Put` request (`attribute_not_exists(PK)`), `Put` claim (condition above), audit `Put` (`budgetreset.request.create`); then the notifications `BatchWriteItem` (a failure is thrown, not swallowed; the request stands and stays listed on the Team page) |
+| A team's requests (Team page; deciders) | `Query GSI1 gsi1pk = BRREQS#TEAM#{teamId}`, `begins_with(gsi1sk, "open#")` for the open list, newest first; paginated on `LastEvaluatedKey` (Rule 20.6) |
+| The caller's own requests (*My usage*) | `GetItem` the claim `BRREQOPEN#{memberTeamId}#{oid}` for the open one, then `GetItem` the request; recent decided ones: `Query GSI1 BRREQS#TEAM#{memberTeamId}` with `FilterExpression requesterOid = :oid`, at most 10, paginated |
+| Decide (approve / deny) | `GetItem BRREQ#{id}`; `UpdateItem` `status = open → approving` (approve) or `open → denied` (deny) with `ConditionExpression status = :open AND version = :v`; approve then ends with one `TransactWriteItems`: ledger `Put`, request `approving → approved`, claim `Delete`, two audit `Put`s; on a LiteLLM failure `UpdateItem approving → open` |
+| A person's notifications | `Query PK = NOTIF#{oid}`, `ScanIndexForward: false`, `Limit` 20, opaque signed cursor (Access Control — *Storage boundary* item 4) |
+| Unread count | `Query PK = NOTIF#{oid}`, `FilterExpression attribute_not_exists(readAt)`, `Select: COUNT`, paginated; the bell shows `99+` above 99 |
+| Mark read | `UpdateItem PK = NOTIF#{session oid}, SK = {id}` `SET readAt` with `attribute_exists(PK)` (a foreign or missing id changes nothing and is not an error per id); "all" pages the unread items and updates each |
+| Reset counts (slice B) | Per team: `Query PK = BRESET#TEAM#{teamId}`, `SK BETWEEN {from}T00:00:00.000Z AND {to}T23:59:59.999Z~`; per person: `Query GSI1 BRESETS#IDENT#{oid}` with the same bound; both paginated; filtered by scope after the read, never cached (Rule 60.10) |
+
 ## Zod Validation Schemas
 
 All data written to DynamoDB and returned from Next.js Route Handlers is validated with Zod v4. One schema per entity and per API query:
@@ -454,8 +538,16 @@ All routes live under `apps/dashboard/app/api/`, require an Auth.js session, val
 | `/api/accounts/[id]` | PATCH | `UpdateAccountPatchSchema` | Settings CRUD (`Admin`); from 2026-11-17 a `teamName` equal to a created team's name is `409` (*Entity: AppTeam*) |
 | `/api/accounts/[id]` | DELETE | — | Soft-deactivate (`active: false`; `Admin`) |
 | `/api/teams` | POST | `{ name, departmentId }` (management improvements D5, D6, 2026-11-17) | Create an `AppTeam` (`internal-admin`, `internal-org-admin`; Access Control — *Created app teams*); `201`, audited, revalidates the team-list tags |
+| `/api/budget-reset-requests` | POST | `CreateBudgetResetRequestInputSchema` (`{ reason? }`; the team is the caller's member team, never a body field) | Create a request for the caller's own member budget (unit M4; Access Control — *Permission matrix*): `201 { data: BudgetResetRequestView }`; no member team → `403` before parsing; team not linked → `409 CONFLICT`; `requestBudgetReset` or `resetMemberSpend` off → `403 OPERATION_DISABLED`; an open request exists → `409 CONFLICT`. Notifies the deciders (MG-D13) |
+| `/api/budget-reset-requests` | GET | `BudgetResetRequestListQuerySchema` (`teamId`, `status` = `open` \| `all`, default `open`; `cursor`) | A team's requests for a Lead in scope, org-admin, Admin and Auditor (read-only); out-of-scope and missing teams the same `404`; `{ data: { items: BudgetResetRequestView[], cursor? } }`. Requester names follow the management-list rule (D37); in `prod` before the per-user approval only the team's deciders see the requester's name, email and reason, and the Auditor sees counts only (LiteLLM spec MG-D12, amended 2026-11-18, Q-W2) |
+| `/api/budget-reset-requests/mine` | GET | — | Any signed-in role, own data only: `{ data: MyBudgetResetRequestsSchema }` — `eligibility` (`{ canRequest, reason }`, `reason` ∈ `no-team`, `not-linked`, `disabled`, `open-request`, `null`), `open` (a view or `null`), `recent[]` (≤ 10) |
+| `/api/budget-reset-requests/[id]/approve` | POST | path `id` (UUID); no body | Lead in scope, org-admin, Admin (the `member` matrix write), never the requester (`403`); out-of-scope and missing the same `404`; not `open` → `409 CONFLICT`; runs `resetMemberSpend` and writes the ledger (MG-D11, MG-D12a): `200 { data: { request: BudgetResetRequestView, resetId, amount } }`; LiteLLM failure → its error code, request open again |
+| `/api/budget-reset-requests/[id]/deny` | POST | path `id`; no body | As approve; `open → denied`, no LiteLLM call: `200 { data: { request: BudgetResetRequestView } }` |
+| `/api/notifications` | GET | `NotificationListQuerySchema` (`cursor`) | Any signed-in role, own notifications only: `{ data: { items: NotificationView[], unreadCount, cursor? } }`; each `budget-reset.requested` item embeds the request view and `canDecide` only while the caller may still read and decide it (re-checked per request) |
+| `/api/notifications/read` | POST | `MarkNotificationsReadInputSchema` (`{ ids: string[1..50] }` or `{ all: true }`) | Own notifications only (keys from the session): `200 { data: { updated } }`; not audited (own state) |
+| `/api/budget-resets` | GET | `BudgetResetCountsQuerySchema` (`DateRangeQuerySchema` + optional `teamId`) | Slice B (MG-D10): `{ data: { teams: [{ teamId, count, amount, members?: [{ oid, count, amount }] }], own: { count, amount } } }`, scoped per role; `members` only when per-user data is allowed |
 
-The access-control routes (`/api/health`, `/api/me`, members, admins, moves, role grants, group mappings, visibility, identities, password users, the password sign-in switch, the per-user approval, audit, access review) and their permissions are listed in [Access Control spec](2026-11-10-access-control.md) — *API routes*. The LiteLLM routes (`/api/litellm/**`, `/api/finance/statement`) and the error codes `OPERATION_DISABLED` (403), `OPERATION_UNAVAILABLE` (403), `LITELLM_UNAVAILABLE` (503) and `PRIVILEGED_TARGET` (409) are in the [LiteLLM spec](2026-11-10-litellm.md) — *API routes*. `Admin` above reads `internal-admin` from Phase 4R.
+The access-control routes (`/api/health`, `/api/me`, members, admins, moves, role grants, group mappings, visibility, identities, password users, the password sign-in switch, the per-user approval, audit, access review) and their permissions are listed in [Access Control spec](2026-11-10-access-control.md) — *API routes*. The budget reset and notification routes above (unit M4) follow Rule 10.3, set `Cache-Control: private, no-store`, register in `test/route-registry.ts`, and are never cached (Rule 60.10). The LiteLLM routes (`/api/litellm/**`, `/api/finance/statement`) and the error codes `OPERATION_DISABLED` (403), `OPERATION_UNAVAILABLE` (403), `LITELLM_UNAVAILABLE` (503) and `PRIVILEGED_TARGET` (409) are in the [LiteLLM spec](2026-11-10-litellm.md) — *API routes*. `Admin` above reads `internal-admin` from Phase 4R.
 
 ## Design Decisions
 

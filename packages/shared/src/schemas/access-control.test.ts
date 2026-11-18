@@ -254,7 +254,11 @@ describe("audit schemas", () => {
     // L4 slice 1 adds the eight member-write actions (LiteLLM spec - Writes).
     // L4 slices 2 and 3 add six key actions and four team actions.
     // L6 adds litellm.gateway.update (LiteLLM spec - Combined usage, Gateway configuration).
-    expect(AUDIT_ACTIONS).toHaveLength(66);
+    // M4 adds the three budgetreset.request.* actions (Access Control - Budget reset requests).
+    expect(AUDIT_ACTIONS).toHaveLength(69);
+    for (const op of ["create", "approve", "deny"]) {
+      expect(AUDIT_ACTIONS).toContain(`budgetreset.request.${op}`);
+    }
     for (const op of [
       "add",
       "remove",

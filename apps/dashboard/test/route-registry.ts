@@ -31,6 +31,7 @@ import {
   seedMember,
 } from "@/test/support/matrix-route-support";
 import { accounts } from "@/test/fixtures/scope-fixtures";
+import { SESSIONS } from "@/test/support/governance-route-support";
 import { putRaw } from "@/test/support/test-support";
 
 export type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -39,7 +40,9 @@ export type RouteKind =
   | "read"
   | "admin-write"
   | "matrix-write"
-  | "self-write";
+  | "self-write"
+  // Any signed-in role, own state only, keys from the session (unit M4).
+  | "own-write";
 export type RouteFamily = "core" | "litellm";
 // Session shapes the suite knows how to sign in as (see the suite's CALLERS).
 export type CallerName =
@@ -227,6 +230,72 @@ function matrixWrite(
 }
 
 const alice = PEOPLE.alice;
+
+// ---- unit M4 seeds: keys and fields as the Data Model spec names them ----
+const RESET_REQUEST_ID = "00000000-0000-4000-8000-0000000000b1";
+const RESET_TOGGLES = {
+  PK: "LITELLM#CONFIG",
+  SK: "TOGGLES",
+  version: 1,
+  toggles: { resetMemberSpend: true },
+  updatedAt: "2026-01-02T03:04:05.000Z",
+};
+
+async function linkTeam(teamId: string): Promise<void> {
+  ok(
+    await putTeamLink(
+      { teamId, litellmTeamId: `lt-${teamId}`, version: null },
+      seedCtx(),
+    ),
+  );
+}
+
+// The permitted callers of the request route are members of linked teams
+// (Admin of team-a, org-admin of team-b) with the reset toggle on.
+async function seedRequesters(): Promise<void> {
+  await putRaw(RESET_TOGGLES);
+  await linkTeam("team-a");
+  await linkTeam("team-b");
+  await seedMember(SESSIONS.admin.oid, "team-a");
+  await seedMember(SESSIONS.orgAdmin.oid, "team-b");
+}
+
+// An open request by Alice (a member of the linked team-a) for approve/deny.
+async function seedOpenRequest(): Promise<void> {
+  await putRaw(RESET_TOGGLES);
+  await linkTeam("team-a");
+  await seedMember(alice.oid, "team-a");
+  const createdAt = new Date().toISOString();
+  const requestExpiresAt = new Date(Date.now() + 7 * 86_400_000).toISOString();
+  await putRaw({
+    PK: `BRREQ#${RESET_REQUEST_ID}`,
+    SK: "META",
+    gsi1pk: "BRREQS#TEAM#team-a",
+    gsi1sk: `open#${createdAt}#${RESET_REQUEST_ID}`,
+    requestId: RESET_REQUEST_ID,
+    teamId: "team-a",
+    departmentId: "dept-eng",
+    litellmTeamId: "lt-team-a",
+    requesterOid: alice.oid,
+    reason: null,
+    status: "open",
+    createdAt,
+    requestExpiresAt,
+    decidedBy: null,
+    decidedAt: null,
+    resetId: null,
+    version: 1,
+    expiresAt: Math.floor(Date.now() / 1000) + 90 * 86_400,
+  });
+  await putRaw({
+    PK: `BRREQOPEN#team-a#${alice.oid}`,
+    SK: "OWNER",
+    requestId: RESET_REQUEST_ID,
+    requestExpiresAt,
+    expiresAt: Math.floor(Date.now() / 1000) + 7 * 86_400,
+  });
+}
+
 const TEAM = { id: "team-a" };
 const DEPT = { id: "dept-eng" };
 const teamAccount = accounts[0];
@@ -297,6 +366,15 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   read("access/stale/route.ts", { frozen: true }),
   read("accounts/route.ts"),
   read("audit/route.ts", { badQuery: "day=not-a-day" }),
+  // Unit M4 (Data Model - API Routes): every role may call these; the rows they
+  // return are scoped, so a caller without scope gets 404 or an empty list.
+  read("budget-reset-requests/route.ts", {
+    query: "teamId=team-a&status=open",
+    badQuery: "teamId=team-a&status=bogus",
+  }),
+  read("budget-reset-requests/mine/route.ts"),
+  read("budget-resets/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
+  read("notifications/route.ts"),
   read("departments/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
   read("departments/[id]/route.ts", {
     validParams: { id: "dept-eng" },
@@ -860,6 +938,44 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     validBody: { fromTeamId: "team-a", toTeamId: "team-b", version: 1 },
     successStatuses: [200],
   }),
+
+  // ---- unit M4: budget reset requests (Access Control - Permission matrix ->
+  // Budget reset requests). The request is the caller's own member-team write;
+  // approve and deny are the `member` matrix write of the reset routes. ----
+  matrixWrite("POST", "budget-reset-requests/route.ts", {
+    family: "litellm",
+    action: "budgetreset.request.create",
+    seed: seedRequesters,
+    validBody: { reason: "I ran out of budget" },
+    successStatuses: [201],
+  }),
+  matrixWrite("POST", "budget-reset-requests/[id]/approve/route.ts", {
+    family: "litellm",
+    action: "budgetreset.request.approve",
+    validParams: { id: RESET_REQUEST_ID },
+    seed: seedOpenRequest,
+    validBody: {},
+    badInput: { params: { id: LONG } },
+  }),
+  matrixWrite("POST", "budget-reset-requests/[id]/deny/route.ts", {
+    family: "litellm",
+    action: "budgetreset.request.deny",
+    validParams: { id: RESET_REQUEST_ID },
+    seed: seedOpenRequest,
+    validBody: {},
+    badInput: { params: { id: LONG } },
+    successStatuses: [200],
+  }),
+  // Own state only, any signed-in role, not audited (Data Model - API Routes).
+  {
+    ...base({ method: "POST", file: "notifications/read/route.ts" }),
+    kind: "own-write",
+    family: "core" as RouteFamily,
+    validBody: { all: true },
+    successStatuses: [200],
+    refusedCallers: [],
+    permittedCallers: ["viewer", "admin"],
+  },
 
   // ---- self-service write: a password user's own password ----
   {

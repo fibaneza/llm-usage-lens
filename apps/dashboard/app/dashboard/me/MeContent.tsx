@@ -12,6 +12,8 @@ import {
   LazyDailyCostBarChart,
   LazyModelBreakdownChart,
 } from "@/components/charts/LazyCharts";
+import { OwnResetCount } from "@/components/budget-resets/BudgetResetCount";
+import { RequestBudgetReset } from "@/components/budget-resets/RequestBudgetReset";
 import { EmptyState } from "@/components/display/EmptyState";
 import { MetricCard } from "@/components/display/MetricCard";
 import { Panel } from "@/components/display/Panel";
@@ -45,6 +47,8 @@ export function MeContent() {
       <SectionBoundary title="your access" resetKeys={[]}>
         <AccessNotice />
         <BudgetIncreaseLink />
+        <RequestBudgetReset />
+        <OwnResetCount range={range} />
       </SectionBoundary>
       <CombinedMeCard range={range} />
       <section className="flex flex-col gap-4">

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { defineResetLedgerContract } from "@/test/support/budget-reset-support";
 import {
   CALLERS,
   LTEAM,
@@ -55,6 +56,14 @@ defineMemberWriteContract(state, {
   okStatus: 200,
   load,
   path: url,
+});
+
+defineResetLedgerContract(state, {
+  operation: "spend",
+  action: "litellm.member.reset-spend",
+  writePath: /\/reset_spend$/,
+  load,
+  url,
 });
 
 describe("POST /api/litellm/teams/[teamId]/members/[oid]/reset-spend", () => {

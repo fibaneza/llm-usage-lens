@@ -223,3 +223,63 @@ describe("the service key is read only inside lib/litellm and env.ts (LT1, Rule 
     expect(offenders.map(rel)).toEqual([]);
   });
 });
+
+// Source: docs/specs/2026-11-10-litellm.md - MG-D11a (`requestBudgetReset` is a
+// route-less dashboard operation, default on, in both lists; no LiteLLM call
+// exists for it) and MG-D8 (the BudgetReset ledger is append-only: written
+// only through `budgetResetPutItem`, never updated or deleted except by TTL).
+describe("the route-less requestBudgetReset operation (MG-D11a)", () => {
+  it("is the only operation without a LiteLLM route, a default-on write, and has no gateway function", async () => {
+    const { LITELLM_OPERATIONS } = await import("./allowlist");
+    const { LITELLM_OPERATION_NAMES } = await import("@llm-usage-lens/shared");
+    const routeless = LITELLM_OPERATION_NAMES.filter(
+      (n) => LITELLM_OPERATIONS[n].routes.length === 0,
+    );
+    expect(routeless).toEqual(["requestBudgetReset"]);
+    expect(LITELLM_OPERATIONS.requestBudgetReset).toMatchObject({
+      kind: "write",
+      defaultEnabled: true,
+    });
+    expect(read(join(litellmDir, "operations.ts"))).not.toMatch(
+      /\brequestBudgetReset\b/,
+    );
+  });
+});
+
+describe("the BudgetReset ledger is append-only (MG-D8)", () => {
+  const dataDir = join(ROOT, "apps/dashboard/lib/data");
+  const ledgerModules = [
+    "budget-resets.ts",
+    "budget-resets-record.ts",
+    "budget-reset-counts.ts",
+    "budget-resets-keys.ts",
+  ];
+
+  it("no ledger module issues an Update or Delete (only TTL removes an item)", () => {
+    for (const name of ledgerModules) {
+      expect(read(join(dataDir, name)), name).not.toMatch(
+        /\b(UpdateCommand|DeleteCommand|UpdateItem|DeleteItem)\b/,
+      );
+    }
+  });
+
+  it("only the ledger modules build BRESET keys, and no route or component writes the ledger directly", () => {
+    const files = walk(join(ROOT, "apps/dashboard"))
+      .filter((f) => isCode(f) && !isTest(rel(f)))
+      .map(rel);
+    const keyUsers = files.filter((p) =>
+      /\b(bResetPk|bResetSk|bResetsGsi1pk)\b|BRESET#/.test(read(join(ROOT, p))),
+    );
+    expect(keyUsers.sort()).toEqual(
+      ["budget-reset-counts.ts", "budget-resets-keys.ts", "budget-resets.ts"]
+        .map((m) => `apps/dashboard/lib/data/${m}`)
+        .sort(),
+    );
+    const writers = files.filter(
+      (p) =>
+        /^apps\/dashboard\/(app|components)\//.test(p) &&
+        /\b(budgetResetPutItem|recordMemberReset)\b/.test(read(join(ROOT, p))),
+    );
+    expect(writers).toEqual([]);
+  });
+});

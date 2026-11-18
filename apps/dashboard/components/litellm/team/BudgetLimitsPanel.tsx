@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { TeamResetCount } from "@/components/budget-resets/BudgetResetCount";
+import { OpenResetRequests } from "@/components/budget-resets/OpenResetRequests";
 import { KeyValueList } from "@/components/display/KeyValueList";
 import { formatUsd } from "@/components/charts/chart-data";
 import { Button } from "@/components/ui/button";
@@ -10,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { NotConnected, Unavailable } from "../LiteLLMSection";
 import type { TeamPanelProps } from "./panel-props";
 import { WriteError } from "./write-parts";
+import { useUrlRange } from "../use-litellm-query";
 import { useTeamDetail } from "../use-team-detail";
 import { teamPath, useTeamWrite } from "./use-team-write";
 
@@ -57,14 +60,18 @@ function BudgetAndLimits({
   canSetBudget,
   canSetLimits,
   canRaiseLimits,
+  canApprove,
 }: {
   teamId: string;
   current: Current;
   canSetBudget: boolean;
   canSetLimits: boolean;
   canRaiseLimits: boolean;
+  canApprove: boolean;
 }) {
   const { write, pending, error } = useTeamWrite(teamId);
+  const { keyParts } = useUrlRange();
+  const range = { dateFrom: keyParts[0], dateTo: keyParts[1] };
   const [budget, setBudget] = useState(text(current.maxBudget));
   const [rpm, setRpm] = useState(text(current.rpmLimit));
   const [tpm, setTpm] = useState(text(current.tpmLimit));
@@ -165,6 +172,8 @@ function BudgetAndLimits({
           </Button>
         </form>
       ) : null}
+      <TeamResetCount teamId={teamId} range={range} />
+      <OpenResetRequests teamId={teamId} canApprove={canApprove} />
     </div>
   );
 }
@@ -188,6 +197,7 @@ export function BudgetLimitsPanel({
       canSetBudget={enabledOperations.includes("setTeamBudget")}
       canSetLimits={enabledOperations.includes("setTeamLimits")}
       canRaiseLimits={canRaiseLimits}
+      canApprove={enabledOperations.includes("resetMemberSpend")}
     />
   );
 }

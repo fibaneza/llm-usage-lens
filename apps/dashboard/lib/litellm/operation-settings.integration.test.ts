@@ -39,6 +39,20 @@ describe("resolveOperationSettings", () => {
     expect(r.createTeam).toEqual({ enabled: true, source: "spec" });
   });
 
+  // MG-D11 / MG-D11a: a request alone changes nothing in LiteLLM, so the
+  // toggle defaults on; the file can still switch it off (narrow only).
+  it("requestBudgetReset defaults on (source 'spec') and the file can switch it off", () => {
+    expect(
+      resolveOperationSettings({ file: null, saved: null }).requestBudgetReset,
+    ).toEqual({ enabled: true, source: "spec" });
+    expect(
+      resolveOperationSettings({
+        file: file({ requestBudgetReset: { enabled: false } }),
+        saved: null,
+      }).requestBudgetReset,
+    ).toEqual({ enabled: false, source: "file" });
+  });
+
   it("reads default on (source 'spec')", () => {
     const r = resolveOperationSettings({ file: null, saved: null });
     for (const name of [

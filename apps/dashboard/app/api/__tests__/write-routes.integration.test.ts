@@ -396,8 +396,20 @@ describe("4R.4 slice 1 and 2 write routes are enumerated with their permission",
 // Access Control spec - "Permission matrix"), so the admin-only sweeps below
 // skip them; the block at the end of this file enumerates them with their own
 // permission checks.
+// Unit M4 (Data Model - API Routes): two writes act on the caller's own state or
+// own member team, not on a role: notifications/read (any signed-in role, own
+// notifications) and the budget reset request (the caller's member team; a
+// caller with none gets 403 before parsing). The generic admin and matrix
+// sweeps cannot sign in as such a caller, so their cross-cutting contract (401,
+// 403 before parsing, Origin, 400, no-store, denied audit) is asserted by
+// route-contract.integration.test.ts (Rule 60.23), over registry seeds.
+const OWN_SCOPE_WRITE_ROUTES: string[] = ROUTE_REGISTRY.filter(
+  (e) =>
+    e.kind === "own-write" || e.key === "POST budget-reset-requests/route.ts",
+).map((e) => e.key);
+
 const MATRIX_WRITE_ROUTES: string[] = ROUTE_REGISTRY.filter(
-  (e) => e.kind === "matrix-write",
+  (e) => e.kind === "matrix-write" && !OWN_SCOPE_WRITE_ROUTES.includes(e.key),
 ).map((e) => e.key);
 
 // 4R.5 step 5: the one write route that is not an admin or matrix write is a
@@ -414,6 +426,7 @@ const eachWriteRoute = writeRoutes
   .filter(
     (route) =>
       !MATRIX_WRITE_ROUTES.includes(label(route)) &&
+      !OWN_SCOPE_WRITE_ROUTES.includes(label(route)) &&
       !SELF_SERVICE_WRITE_ROUTES.includes(label(route)),
   )
   .map((route) => [label(route), route] as const);

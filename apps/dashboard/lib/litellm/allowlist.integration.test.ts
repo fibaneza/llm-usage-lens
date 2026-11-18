@@ -70,6 +70,9 @@ const EXPECTED: Record<string, [Kind, boolean, string[]]> = {
     true,
     ["POST /key/block", "POST /key/generate", "POST /key/{key}/regenerate"],
   ],
+  // M4, MG-D11a: dashboard-only, no LiteLLM route; on by default (a request
+  // alone changes nothing in LiteLLM).
+  requestBudgetReset: ["write", true, []],
 };
 
 const routeKey = (r: { method: string; template: string }) =>

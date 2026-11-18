@@ -62,7 +62,11 @@ export async function enabledOperations(): Promise<LiteLLMOperationName[]> {
   return LITELLM_OPERATION_NAMES.filter(
     (name) =>
       settings[name].enabled &&
-      !(oss && LITELLM_OPERATIONS[name].routes.every((r) => r.enterpriseOnly)),
+      !(
+        oss &&
+        LITELLM_OPERATIONS[name].routes.length > 0 &&
+        LITELLM_OPERATIONS[name].routes.every((r) => r.enterpriseOnly)
+      ),
   );
 }
 

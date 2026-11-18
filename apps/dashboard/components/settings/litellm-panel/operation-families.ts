@@ -97,6 +97,10 @@ export const OPERATION_INFO: Record<
     family: "member-writes",
     description: "POST /key/unblock for each of the member's keys in the team",
   },
+  requestBudgetReset: {
+    family: "member-writes",
+    description: "Dashboard only: records a budget reset request",
+  },
   generateMemberKey: {
     family: "key-writes",
     description: "POST /key/generate",

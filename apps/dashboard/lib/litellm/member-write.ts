@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
+import { auditCategory } from "@llm-usage-lens/shared";
 import type {
   AuditAction,
   AuditSnapshot,
@@ -10,6 +11,7 @@ import type {
 import type { Session } from "next-auth";
 import type { ZodType } from "zod";
 
+import { auditContext } from "@/lib/api/access-route";
 import { IdParamSchema } from "@/lib/api/id-param";
 import { matrixWrite } from "@/lib/api/matrix-route";
 import type { MatrixArgs } from "@/lib/api/matrix-route";
@@ -27,6 +29,7 @@ import {
   getIdentityRecord,
   listAllTeamMemberOids,
 } from "@/lib/data/access/team-member-lookup";
+import { recordMemberReset } from "@/lib/data/budget-resets-record";
 import { getTeamLink } from "@/lib/data/litellm/team-links";
 
 import { LiteLLMOperationRefused } from "./gateway";
@@ -76,6 +79,10 @@ export type MemberWriteConfig<B> = {
   // The person acted on: the [oid] path parameter, or a field of the body.
   oidFrom: "path" | ((body: B) => string);
   body?: ZodType<B>;
+  // A reset route: a BudgetReset ledger item is written with the audit record
+  // (MG-D8). The ledger trigger is set by the server and a
+  // client `?trigger=` is never read (review m4-r1 Q-W5).
+  ledger?: "spend" | "budget";
 };
 
 // Thrown by an operation's execute when the LiteLLM user holds a proxy role
@@ -174,6 +181,53 @@ export async function audit(
   });
 }
 
+// The amount is the member's spend read by the frame just before `execute`;
+// a failed ledger write throws (Rule 60.17).
+async function recordLedger(args: {
+  session: Session;
+  config: { action: AuditAction };
+  operation: "spend" | "budget";
+  meta: { teamId: string; departmentId: string };
+  litellmTeamId: string;
+  oid: string;
+  member: MemberRow;
+  result: MemberWriteResult;
+}): Promise<void> {
+  const { session, config, operation, meta, member, result } = args;
+  const ctx = auditContext(session);
+  const requestId = ctx.requestId;
+  const timestamp = ctx.now.toISOString();
+  await recordMemberReset(
+    {
+      resetId: randomUUID(),
+      oid: args.oid,
+      teamId: meta.teamId,
+      departmentId: meta.departmentId,
+      litellmTeamId: args.litellmTeamId,
+      litellmUserId: member.userId,
+      operation,
+      amount: member.spend,
+      budget: member.maxBudget,
+      trigger: "direct",
+      actorOid: session.user.oid,
+      requestId,
+      timestamp,
+    },
+    {
+      actor: session.user.oid,
+      action: config.action,
+      category: auditCategory(config.action, "success"),
+      result: "success",
+      timestamp,
+      requestId,
+      teamId: meta.teamId,
+      target: { type: "litellm-user", id: member.userId },
+      ...(result.before ? { before: result.before } : {}),
+      ...(result.after ? { after: result.after } : {}),
+    },
+  );
+}
+
 async function runMemberWrite<B>(
   config: MemberWriteConfig<B>,
   { request, params, session, refuse }: MatrixArgs,
@@ -252,13 +306,26 @@ async function runMemberWrite<B>(
       member,
     });
     const finalId = result.targetId ?? targetId;
-    await audit(session, config, {
-      result: "success",
-      teamId,
-      target: { type: "litellm-user", id: finalId },
-      before: result.before,
-      after: result.after,
-    });
+    if (config.ledger && member) {
+      await recordLedger({
+        session,
+        config,
+        operation: config.ledger,
+        meta,
+        litellmTeamId,
+        oid,
+        member,
+        result,
+      });
+    } else {
+      await audit(session, config, {
+        result: "success",
+        teamId,
+        target: { type: "litellm-user", id: finalId },
+        before: result.before,
+        after: result.after,
+      });
+    }
     return jsonData(result.data, { status: config.status });
   } catch (error) {
     if (error instanceof PrivilegedTargetError) {

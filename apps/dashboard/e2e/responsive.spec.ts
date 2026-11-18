@@ -478,6 +478,34 @@ test.describe("top bar layout", () => {
   });
 });
 
+// M4 fix (top bar stays one row at 768px with the bell): the page title h1 must
+// not be squeezed to nothing by the controls beside it (design-system - Layout;
+// Rule 40.6, 768px breakpoint). Visits the same NAV_ITEMS pages as the
+// breakpoint loop above.
+test.describe("top bar title at 768px", () => {
+  test.beforeEach(async ({ context }) => {
+    await signInAsTestUser(context);
+    await stubCombined(context);
+  });
+
+  test("the page title h1 is visible with a non-zero width on every nav page", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    for (const item of NAV_ITEMS) {
+      await page.goto(item.href);
+      await waitForHydration(page);
+      const title = page
+        .locator("header")
+        .getByRole("heading", { level: 1, name: item.pageTitle });
+      await expect(title, `${item.href} title`).toBeVisible();
+      const box = await title.boundingBox();
+      if (!box) throw new Error(`no layout box for ${item.href} title`);
+      expect(box.width, `${item.href} title width`).toBeGreaterThan(0);
+    }
+  });
+});
+
 // Sync status, date filter, search and account menu stay reachable in the top
 // bar from `md` up; tight widths may use compact forms but never drop them
 // (design-system — Layout → Structure, Status & Feedback; Rule 40.6).

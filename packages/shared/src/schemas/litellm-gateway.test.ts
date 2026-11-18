@@ -56,6 +56,8 @@ describe("LITELLM_OPERATION_NAMES", () => {
         "unblockKey",
         "deleteKey",
         "rotateKey",
+        // M4 (LiteLLM spec - MG-D11a): the route-less dashboard operation.
+        "requestBudgetReset",
       ].sort(),
     );
   });

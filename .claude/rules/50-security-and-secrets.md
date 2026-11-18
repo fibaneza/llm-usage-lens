@@ -37,7 +37,10 @@
    team creation and the LiteLLM user links (create-and-link on OSS only),
    never on one's own identity,
    management improvements D6 and D16, 2026-11-17; the LiteLLM team writes
-   follow the LiteLLM spec's *Allowlist → Writes* roles;
+   follow the LiteLLM spec's *Allowlist → Writes* roles; unit M4: `POST
+   /api/budget-reset-requests` for a member of a linked team on their own
+   budget, and `POST /api/notifications/read` for the owner's own
+   notifications, Access Control — *Permission matrix*, 2026-11-18;
    the Access Control spec's permission matrix from Phase 4R), before any
    DynamoDB call. Global roles are never granted by group mappings; only an
    `internal-admin` grants `internal-admin` or `internal-org-admin` in the

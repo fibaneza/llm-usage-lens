@@ -1,4 +1,4 @@
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { useQueryStates } from "nuqs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -353,11 +353,84 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     expect(await screen.findByText(/LiteLLM unavailable/i)).toBeInTheDocument();
   });
 
-  it("requests GET /api/litellm/org only", async () => {
+  // M4 slice B (MG-D10: the Organisation tab has one reset-count column per
+  // team) adds exactly one more read, the scoped GET /api/budget-resets.
+  it("requests GET /api/litellm/org and the scoped GET /api/budget-resets only", async () => {
     const calls = stub(() => apiResponse({ data: ORG }));
     renderSection();
     await screen.findByRole("table", { name: "LiteLLM teams" });
-    expect(new Set(calls)).toEqual(new Set(["/api/litellm/org"]));
+    expect(new Set(calls)).toEqual(
+      new Set(["/api/litellm/org", "/api/budget-resets"]),
+    );
+  });
+
+  describe("Budget resets column (M4, MG-D9, MG-D10)", () => {
+    const RESETS = {
+      teams: [
+        { teamId: "t1", count: 3, amount: 120 },
+        { teamId: "t2", count: 1, amount: 40.5 },
+      ],
+      own: { count: 0, amount: 0 },
+    };
+    function stubOrgAndResets(resets: () => Response) {
+      const urls: URL[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: RequestInfo | URL) => {
+          const url = new URL(String(input), "http://localhost");
+          urls.push(url);
+          return Promise.resolve(
+            url.pathname === "/api/budget-resets"
+              ? resets()
+              : apiResponse({ data: ORG }),
+          );
+        }),
+      );
+      return urls;
+    }
+
+    it("the App teams table has a 'Budget resets' column with each team's count and amount; a team with no row shows no figure", async () => {
+      stubOrgAndResets(() => apiResponse({ data: RESETS }));
+      renderSection();
+      const table = await screen.findByRole("table", { name: "App teams" });
+      expect(
+        within(table).getByRole("columnheader", { name: "Budget resets" }),
+      ).toBeInTheDocument();
+      const payments = within(table).getByRole("row", { name: /Payments/ });
+      await waitFor(() => expect(payments.textContent).toMatch(/3 resets/));
+      expect(payments.textContent).toContain("$120.00");
+      const risk = within(table).getByRole("row", { name: /Risk/ });
+      expect(risk.textContent).toMatch(/1 reset\b/);
+      expect(risk.textContent).toContain("$40.50");
+      const ops = within(table).getByRole("row", { name: /Ops/ });
+      expect(ops.textContent).not.toMatch(/reset/i);
+    });
+
+    it("the count read carries the URL date range (90-day cap is the route's, Rule 20.8)", async () => {
+      const urls = stubOrgAndResets(() => apiResponse({ data: RESETS }));
+      renderSection();
+      await screen.findByRole("table", { name: "App teams" });
+      await waitFor(() =>
+        expect(urls.some((u) => u.pathname === "/api/budget-resets")).toBe(
+          true,
+        ),
+      );
+      const q = urls.find(
+        (u) => u.pathname === "/api/budget-resets",
+      )!.searchParams;
+      expect(q.get("dateFrom")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(q.get("dateTo")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it("a failed count read leaves the table up, without figures (supplementary)", async () => {
+      stubOrgAndResets(() => apiError(500, "INTERNAL_ERROR", "boom"));
+      renderSection();
+      const table = await screen.findByRole("table", { name: "App teams" });
+      expect(
+        within(table).getByRole("row", { name: /Payments/ }),
+      ).toBeInTheDocument();
+      expect(within(table).queryByText(/\d resets?/)).toBeNull();
+    });
   });
 
   // Design System -- Management pages ("the global date range applies to every

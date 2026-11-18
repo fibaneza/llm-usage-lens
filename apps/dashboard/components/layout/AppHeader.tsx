@@ -4,6 +4,7 @@ import { auth, signOut } from "@/auth";
 import { DateRangePicker } from "@/components/filters/DateRangePicker";
 import { CommandMenu } from "@/components/layout/CommandMenu";
 import { PageTitle } from "@/components/layout/PageTitle";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { SyncCountdown } from "@/components/status/SyncCountdown";
 import { SyncStatusBadge } from "@/components/status/SyncStatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,7 +29,7 @@ export async function AppHeader({ scope }: { scope?: NavScope } = {}) {
   }
 
   return (
-    <header className="bg-card border-border sticky top-0 z-30 flex min-h-(--header-height) shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2 md:flex-nowrap md:px-6">
+    <header className="bg-card border-border sticky top-0 z-30 flex min-h-(--header-height) shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2 md:flex-nowrap md:gap-x-2 md:px-6 lg:gap-x-3">
       {/* Desktop collapses via the sidebar's own footer control; on mobile the
           sidebar is an overlay, so the trigger is the only way in. */}
       <SidebarTrigger className="-ml-1 md:hidden" />
@@ -36,12 +37,12 @@ export async function AppHeader({ scope }: { scope?: NavScope } = {}) {
           status sits next to the page heading, not across the bar). CommandMenu
           is a client component embedded in this server header — fine, the
           boundary stays as deep as possible (Rule 60.7). */}
-      <div className="flex min-w-0 items-center gap-3 md:flex-1">
-        <PageTitle className="min-w-0 md:truncate" />
+      <div className="flex min-w-0 items-center gap-3 md:flex-1 md:gap-2 lg:gap-3">
+        <PageTitle />
         {showSync ? <SyncStatusBadge /> : null}
       </div>
 
-      <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2 md:shrink-0 md:flex-nowrap">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2 md:shrink-0 md:flex-nowrap md:gap-x-2 lg:gap-x-3">
         {/* Global date filter lives in the top bar (design reference — the
             7D/30D/90D toggle sits beside the account controls). It reads the URL
             via nuqs (useSearchParams), so it sits under a Suspense boundary for
@@ -56,6 +57,7 @@ export async function AppHeader({ scope }: { scope?: NavScope } = {}) {
           <CommandMenu scope={scope} />
         </Suspense>
         {showSync ? <SyncCountdown /> : null}
+        <NotificationBell />
         <UserMenu user={session?.user ?? null} signOutAction={signOutAction} />
       </div>
     </header>

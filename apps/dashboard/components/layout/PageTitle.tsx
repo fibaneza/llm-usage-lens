@@ -27,7 +27,9 @@ export function PageTitle({ className }: { className?: string }) {
     <h1
       title={title}
       className={cn(
-        "text-foreground text-lg font-semibold tracking-tight",
+        // Wraps below md; from md, min-w keeps the title from being squeezed to
+        // zero by top-bar controls and it truncates.
+        "text-foreground text-lg font-semibold tracking-tight md:min-w-[8ch] md:truncate",
         className,
       )}
     >

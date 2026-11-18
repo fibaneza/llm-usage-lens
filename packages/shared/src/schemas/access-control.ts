@@ -285,6 +285,9 @@ export const AUDIT_ACTIONS = [
   "litellm.team.limits",
   "litellm.team.models",
   "litellm.gateway.update",
+  "budgetreset.request.create",
+  "budgetreset.request.approve",
+  "budgetreset.request.deny",
 ] as const;
 export const AuditActionSchema = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditActionSchema>;

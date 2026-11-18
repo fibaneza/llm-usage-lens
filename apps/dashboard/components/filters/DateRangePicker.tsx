@@ -134,7 +134,14 @@ export function DateRangePicker() {
             )}
           >
             <CalendarIcon className="size-3.5 shrink-0" />
-            <span className="whitespace-nowrap">
+            <span
+              className={cn(
+                "whitespace-nowrap",
+                // Visually icon-only between md and lg: the top bar has no room
+                // for the bell otherwise; sr-only keeps the accessible name.
+                !customActive && "md:max-xl:sr-only",
+              )}
+            >
               {customActive ? formatRangeLabel(range) : "Custom"}
             </span>
           </button>

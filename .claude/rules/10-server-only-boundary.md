@@ -55,7 +55,14 @@ credentials must never reach the browser.
      own identity is `403`; the usage-identity and alias writes
      (`PUT /api/identities/[oid]/links`) stay `internal-admin` only (user,
      2026-11-17; management improvements D6, D16; Access Control —
-     *Created app teams*, *LiteLLM user links*).
+     *Created app teams*, *LiteLLM user links*). Unit M4 (2026-11-18,
+     Access Control — *Permission matrix*, budget reset requests): `POST
+     /api/budget-reset-requests` is open to a **member** of a linked team
+     for their own member budget (no member team → `403` before parsing);
+     `POST /api/notifications/read` is open to every signed-in role for the
+     **owner**'s own notifications only (keys built from the session
+     `oid`); approve and deny reuse the reset routes' `member` matrix write,
+     never the requester.
    - Validate query/body with Zod (`400` on failure).
    - Return `{ data: T }` on success, `{ error: { code, message } }` on failure.
    - Use the `DateRangeQuerySchema` 90-day cap on custom ranges.

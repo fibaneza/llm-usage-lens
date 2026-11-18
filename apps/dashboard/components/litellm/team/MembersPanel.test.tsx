@@ -88,7 +88,7 @@ const detail = (ops: string[]) => ({
   enabledOperations: ops,
 });
 
-type Call = { method: string; path: string };
+type Call = { method: string; path: string; search: string };
 
 function stub(
   ops: string[] = ALL_OPS,
@@ -103,9 +103,10 @@ function stub(
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = new URL(String(input), "http://localhost").pathname;
+      const url = new URL(String(input), "http://localhost");
+      const path = url.pathname;
       const method = init?.method ?? "GET";
-      calls.push({ method, path });
+      calls.push({ method, path, search: url.search });
       const route = routes[`${method} ${path}`];
       if (!route) throw new Error(`unexpected ${method} ${path}`);
       return route();
@@ -250,6 +251,52 @@ describe("MembersPanel bulk reset (Bulk reset, agent decision B2)", () => {
     ).toEqual(
       ["ada", "bob", "cy", "dee"].map((oid) => `POST ${resetUrl(oid)}`),
     );
+  });
+
+  // MG-D8 (amended 2026-11-18): no bulk trigger; the bulk reset is a UI loop
+  // over the per-member direct route, so no call carries a trigger parameter.
+  it("bulk reset calls the per-member direct route once per member with no trigger parameter (MG-D8, amended 2026-11-18)", async () => {
+    const reply = () => apiResponse({ data: { ok: true } });
+    const api = stub(ALL_OPS, {
+      [`POST ${resetUrl("ada")}`]: reply,
+      [`POST ${resetUrl("bob")}`]: reply,
+      [`POST ${resetUrl("cy")}`]: reply,
+      [`POST ${resetUrl("dee")}`]: reply,
+    });
+    const u = user();
+    renderPanel();
+    await u.click(
+      await screen.findByRole("button", {
+        name: "Reset spend for all members",
+      }),
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    await u.click(within(dialog).getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(api.writes()).toHaveLength(4));
+    expect(
+      api
+        .writes()
+        .map((c) => c.path)
+        .sort(),
+    ).toEqual(["ada", "bob", "cy", "dee"].map((oid) => resetUrl(oid)));
+    for (const call of api.writes()) expect(call.search).toBe("");
+  });
+
+  it("a single member's reset carries no trigger (recorded as direct; MG-D8)", async () => {
+    const api = stub(ALL_OPS, {
+      [`POST ${resetUrl("ada")}`]: () => apiResponse({ data: { ok: true } }),
+    });
+    const u = user();
+    renderPanel();
+    await u.click(
+      await screen.findByRole("button", {
+        name: "Reset spend for Ada Lovelace",
+      }),
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    await u.click(within(dialog).getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(api.writes()).toHaveLength(1));
+    expect(api.writes()[0]?.search).toBe("");
   });
 
   it("Cancel closes the dialog and calls no route", async () => {

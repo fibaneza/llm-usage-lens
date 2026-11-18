@@ -840,7 +840,28 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ## Management improvements (units M0–M5; user-directed 2026-11-17)
 
-*Added 2026-11-17 at the user's direction: sixteen requests about the LiteLLM area, app teams, users, the source of each cost figure and on-demand budget resets, run now, before L7, L8 and the rest of Phase 5 (prompt: `prompts/management_improvements_prompt.md`). Decisions D1–D7 and D14–D19 (with D4a and D16a) are recorded in the specs below with their reasons (MI-D… in Access Control and the LiteLLM spec); user decisions are marked, the answers Q1–Q4 are user decisions, and Q7 (a LiteLLM "service" dimension) was answered no by the user on 2026-11-17 (D19). Unit **M4** (budget reset requests, the reset ledger and notifications, D8–D13) records its own block, its spec sections and the run directions (order, tests near the end, workflow) itself. One branch and one squash commit per unit (Rule 30.4); M1, M2, M3 and M5 branch from `main` once M0 is on it, or from M0's tip at the coordinator's word.*
+*Added 2026-11-17 at the user's direction: sixteen requests about the LiteLLM area, app teams, users, the source of each cost figure and on-demand budget resets, run now, before L7, L8 and the rest of Phase 5 (prompt: `prompts/management_improvements_prompt.md`). Decisions D1–D7 and D14–D19 (with D4a and D16a) are recorded in the specs below with their reasons (MI-D… in Access Control and the LiteLLM spec); user decisions are marked, the answers Q1–Q4 are user decisions, and Q7 (a LiteLLM "service" dimension) was answered no by the user on 2026-11-17 (D19). Unit **M4** (budget reset requests, the reset ledger and notifications, D8–D13) records its own block and its spec sections; the run directions (order, tests near the end, workflow) are below. One branch and one squash commit per unit (Rule 30.4); M1, M2, M3 and M5 branch from `main` once M0 is on it, or from M0's tip at the coordinator's word.*
+
+**Run directions (user, 2026-11-17)**, for the management-improvements run
+(units M0–M5; M0 records the other units):
+
+1. **Priority.** All sixteen items of the run (units M0–M5) run now, before
+   L7, L8 and the rest of Phase 5 (Rule 30 — *Build order*, exception).
+2. **Parallel agents and workflows.** "multiple subagent in parallel and
+   workflows" — the user's opt-in for the workflows of the run (*Workflow
+   pilots*).
+3. **Tests near the end.** "avoid to add tests on each step, add test near
+   to the end." For units M1–M5 and M4, each unit is built first and tested
+   in one pass at its end (Rule 70, exception). It changes the order, not
+   the bar: every row of the test table below is still proved.
+4. **The coordinator reviews.** "coordinator will run quality and security
+   checks." The worker runs no review agent and stops at a green branch
+   gate (Rule 70.12 — *Batched under a coordinator*).
+5. **The budget reset button first.** "I want the budget reset button as
+   top priority." M4 starts at once, gets agents first and is handed over
+   first; it lands next, and a unit that lands after it merges `main`.
+   Amended 2026-11-18 (coordinator): "landed first" is superseded because
+   M0 and M1 had already landed before M4 was ready.
 
 ### M0 — Spec for the management items (`docs/management-improvements`)
 
@@ -888,6 +909,78 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [ ] `createUser` allowlist row, toggle (default on), builder and structural test entry; `POST /api/litellm/users` (create and link, OSS only); `/user/new` confirmed in `allowed_routes`
 - [ ] `searchUsers` with optional search text; `GET /api/litellm/users` without `q` and with `team=`; the *LiteLLM users* tab list (All users / Members of one team) with link states
 - [ ] Verify (one test pass at the end; Access Control — *Dev login*, *LiteLLM user links*, *API routes*, T-MI1, T-MI2; LiteLLM spec — `createUser`, *Views as Management routes*, LT-MI1, LT-MI2; Design System — *Management improvements*): dev lead sign-in gets a real scope from the store and none from typed text; off in production and with Entra configured (T-MI2); Add user shows only the steps the caller may do; link: admin and org-admin may link, auditor and lead `403`, nobody links their own identity (on `POST /api/litellm/users` the own-`oid` `403` comes after parsing and is tested by the route's own file), usage aliases stay admin-only, no automatic link, approval needed, manual link needs a reason, duplicate `409`, a privileged target (`proxy_admin`, `proxy_admin_viewer`, the service user) `409 PRIVILEGED_TARGET` with no link written, the audit record of a set and a remove carries the mode, both ids and the reason, no user creation on Enterprise, body has `auto_create_key: false` (T-MI1, LT-MI1); the LiteLLM users list: all users pages on the server (25 a page) with no search text, the team filter shows exactly that team's members, "not in LiteLLM" is never `$0`, per-user cost is hidden under the cap, and a lead or a user gets `404` (LT-MI2); full e2e once at the green gate (shared files); branch gate green with `main` merged in
+
+### M4 — budget reset requests (`feature/budget-reset-requests`)
+
+*Added 2026-11-17 at the user's direction, from
+`prompts/management_improvements_prompt.md` (items 6, 7 and 8). Spec:
+[LiteLLM — *Budget reset requests*](2026-11-10-litellm.md) and decisions
+MG-D8 to MG-D13 (with MG-D11a, MG-D12a); [Data Model — *Budget reset
+entities (unit M4)*](2026-05-15-data-model.md) and its *API Routes* rows;
+[Access Control — *Permission matrix* → *Budget reset requests* and threat
+items BR1–BR10](2026-11-10-access-control.md). The user's answers Q5 (the
+reset that lets the member spend again; no limit) and Q6 (per-member counts
+follow the per-user approval; 400-day ledger) are recorded there as user
+decisions.*
+
+One branch, one squash commit (Rule 30.4). Owned files: `prompts/management_improvements_prompt.md` §4.
+Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
+`main`, so slice A edits no file there; the approve route calls the existing
+`resetMemberSpend` and helpers by import, and writes the ledger from
+`lib/data/budget-resets.ts`.
+
+- [x] Spec: LiteLLM *Budget reset requests*, the `requestBudgetReset` row in
+  *Writes*, MG-D8–MG-D13; Data Model entities, access patterns and routes;
+  Access Control permission rows, role × operation table, audit actions and
+  BR1–BR10; Rule 30 order exception; Rule 70 "tests near the end"
+  exception; *Workflow pilots* row; this block
+- [x] **Slice A — the button's path:** "Request a budget reset" on *My
+  usage* (beside "Request a budget increase", which stays) → the request →
+  the deciders' notifications → Approve or Deny from the bell and from the
+  Team page's Budgets view (`AlertDialog` naming the person and the effect)
+  → `resetMemberSpend` → the `BudgetReset` ledger item (`trigger:
+  "request"`) → the requester's notification. Schemas in
+  `packages/shared/src/schemas/budget-reset.ts`; storage in
+  `lib/data/budget-reset-requests*`, `lib/data/budget-resets*`,
+  `lib/data/notifications*`; routes `app/api/budget-reset-requests/**`,
+  `app/api/notifications/**`, registered in `test/route-registry.ts`; UI in
+  `components/budget-resets/**`, `components/notifications/**` (the bell in
+  `components/layout/AppHeader`)
+- [x] **Slice B — ledger everywhere and counts** (built in this run after L6 landed; no M4b):
+  the ledger on the direct reset paths, which the bulk reset also uses
+  (recorded as `direct`, MG-D8 amended 2026-11-18)
+  (`lib/litellm/member-write.ts`, the two reset routes); `requestBudgetReset`
+  registered as a route-less operation (MG-D11a); `GET /api/budget-resets`
+  and the counts on *My usage*, the Team page's Budgets view and the
+  Organisation tab (MG-D10). ~~If it does not fit this run it becomes **M4b**
+  (`feature/budget-reset-counts`), recorded here and in the run report~~
+  (superseded 2026-11-18: built in M4, no M4b)
+- [x] Verify (slice A): the full role × operation matrix for request,
+  approve, deny and the reads (Access Control — *Budget reset requests*;
+  complete, it is security); self-approval refused (BR2); an out-of-scope
+  request id is the same `404` as a missing one (BR5); two approvals give
+  one `reset_spend` call and one ledger item (BR3); permission, membership,
+  link or toggle lost between request and decision is refused (BR4); a
+  LiteLLM failure leaves the request open, writes no ledger item and
+  notifies nobody (BR9); expiry after 7 days and the requester's "expired"
+  notification; one open request per person per team (BR6); the control is
+  absent on an unlinked team and while `requestBudgetReset` or
+  `resetMemberSpend` is off; the approval sends exactly
+  `POST /team/{team_id}/member/{user_id}/reset_spend` with
+  `{ "reset_to": 0 }` and never `reset_budget` (MG-D11); a notification
+  reaches only its recipients, only its owner can list or mark it, and it
+  hides the request after its recipient lost access (BR5, BR8); the reason
+  renders as text and is length-capped (BR7)
+- [x] Verify (slice B): one ledger item per reset on all three paths, with
+  the amount read before the reset; no item when LiteLLM fails; the 400-day
+  expiry; count and amount per role scope — a user never sees another
+  person's, a Lead never another team's (BR10 leak tests); only team totals
+  before the per-user approval; the 90-day range cap
+- [x] Verify: branch gate green with `main` merged in (Rule 70.12),
+  including the full e2e once (`components/layout/AppHeader*` is a shared
+  file, *E2E budget*)
+- [ ] Verify: the coordinator's review approved, including the security pass
+  on BR1–BR10
 
 ### M5 — Source panels on the Usage pages (`feature/usage-source-panels`)
 
@@ -951,21 +1044,31 @@ before L4, never during a unit that edits the same files (Rule 60.24a).
 ## Workflow pilots (decided 2026-11-15, user)
 
 Claude Code workflows (multi-agent orchestration; [Dynamic workflows guide](../guides/dynamic-workflows.md))
-are planned only where a unit has many independent pieces against one test
-bar. Every pilot keeps the rules: one branch and one squash commit per unit
-(Rule 30.4), Rule 70 roles (tdd-test-engineer writes tests, typescript-developer
-writes code, reviewers read only), at most 5 agents, the user's opt-in per run,
-and the 5-hour freeze (`prompts/coordinator_prompt.md` §3). A workflow speeds
+were first planned only where a unit has many independent pieces against one
+test bar (the table below). From 2026-11-18 every worker runs its plan units
+as a workflow, a small one when a unit has nothing to fan out
+(`prompts/coordinator_prompt.md` §3a; user, 2026-11-18). Every workflow keeps
+the rules: one branch and one squash commit per unit (Rule 30.4), Rule 70
+roles (tdd-test-engineer writes tests, typescript-developer writes code,
+reviewers read only), the one shared agent pool — at most 80 agents running at
+once, summed across all sessions, distributed dynamically by the coordinator
+(user, 2026-11-18; `prompts/coordinator_prompt.md` §3a,
+[session roles](../guides/session-roles.md) — *Limits*), so the sessions running
+parallel units share it — the user's opt-in per run, and the usage freeze
+(`prompts/coordinator_prompt.md` §3). Superseded 2026-11-18: the 5-agent cap
+and its raise for M0–M5 only; reason: the user gave the pool as the general
+rule, not one run's exception. A workflow speeds
 up building inside a unit; it never merges or skips the review.
 
 | Where | Fan-out | Fit |
 |---|---|---|
-| Coordinator merge review (every merge, from the next one) | the reviewers Rule 70.12 calls for, in parallel, then adversarial checks of the BLOCKERs batched within the 5-agent cap | high — first pilot |
+| Coordinator merge review (every merge, from the next one) | the reviewers Rule 70.12 calls for, in parallel, then adversarial checks of the BLOCKERs batched within the coordinator's allocation of the pool | high — first pilot |
 | L4 write routes | one slice per route group (members, budgets/limits, keys, team), all against the structural write-route test and the write matrix | high |
 | L5 role × operation matrix | one agent per role row against the fake LiteLLM | high |
 | Phase 5 polish | one agent per page: ErrorBoundary per section, axe fixes, breakpoints, empty states | high (guide §4.1) |
 | 4R.4 Settings access sections, L3 page sections | one agent per section once its routes exist | medium — only if a run is short of time |
 | Phase 6 collector | the three source adapters (Cost Explorer, CloudTrail Lake, CloudWatch) against fixtures; the merge stays serial | medium |
+| Management improvements M0–M5 (user opt-in, 2026-11-17: "multiple subagent in parallel and workflows") | M4 slice A: up to three build agents (request and decision routes with the ledger write; notification routes and the bell; the *My usage* and Team page controls), then *Test pass → Fix → Gate*; wave 1: one *Build → Test pass → Fix → Gate* pipeline per unit (M1, M2, M3, M5) with M4 slice B in the fifth place; the coordinator reviews | high — user-directed run (*Budget reset requests* — run directions) |
 | 4R.5, L6–L8, Phase 1-style bootstraps | — | none: small or sequential |
 
 ---

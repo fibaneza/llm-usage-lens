@@ -490,3 +490,67 @@ describe("MePage - Your combined usage card mount (L6)", () => {
     expect(await screen.findByText("$12.50")).toBeInTheDocument();
   });
 });
+
+// Unit M4: the request control and the caller's own reset count live on My
+// usage. Sources: LiteLLM spec - MG-D11 (the control is on My usage; hidden,
+// never dead, when the team is unlinked or an operation is off), MG-D10 (a user
+// sees their own reset count). The components' own behaviour is tested next to
+// them; this block only proves the page mounts them.
+describe("MePage budget reset control (MG-D10, MG-D11)", () => {
+  function withResetRoutes(canRequest: boolean) {
+    const base = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = new URL(String(input), "http://localhost").pathname;
+        if (path === "/api/budget-reset-requests/mine") {
+          return Promise.resolve(
+            apiResponse({
+              data: {
+                teamId: "team-a",
+                eligibility: {
+                  canRequest,
+                  reason: canRequest ? null : "not-linked",
+                },
+                open: null,
+                recent: [],
+              },
+            }),
+          );
+        }
+        if (path === "/api/budget-resets") {
+          return Promise.resolve(
+            apiResponse({
+              data: { teams: [], own: { count: 2, amount: 7.25 } },
+            }),
+          );
+        }
+        return base(input, init);
+      }),
+    );
+  }
+
+  it("shows the request control and the caller's own reset count when the caller may ask", async () => {
+    stub(ok(ME), ok(USAGE));
+    withResetRoutes(true);
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+    expect(
+      await screen.findByRole("button", { name: "Request a budget reset" }),
+    ).toBeVisible();
+    expect(await screen.findByText(/2 resets, \$7\.25/)).toBeVisible();
+  });
+
+  it("shows no request control, and no dead button, when the server says the caller cannot ask", async () => {
+    stub(ok(ME), ok(USAGE));
+    withResetRoutes(false);
+    renderWithProviders(await Promise.resolve(MePage()), {
+      searchParams: RANGE,
+    });
+    await screen.findByText(/2 resets, \$7\.25/);
+    expect(
+      screen.queryByRole("button", { name: "Request a budget reset" }),
+    ).toBeNull();
+  });
+});

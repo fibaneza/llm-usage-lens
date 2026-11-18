@@ -15,6 +15,7 @@ export const POST = memberWriteRoute(
     status: 200,
     target: "existing",
     oidFrom: "path",
+    ledger: "spend",
   },
   async ({ actor, litellmTeamId, oid, litellmUserId, member }) => {
     await resetMemberSpend({ litellmTeamId, litellmUserId }, { actor });

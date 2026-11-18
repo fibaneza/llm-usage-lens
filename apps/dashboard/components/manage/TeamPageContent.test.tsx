@@ -46,6 +46,7 @@ const ALL_OPS = [
   "setMemberBudget",
   "setMemberLimits",
   "resetMemberSpend",
+  "requestBudgetReset",
   "resetMemberBudget",
   "disableMember",
   "enableMember",
@@ -141,6 +142,13 @@ function stub(overrides: Record<string, Handler> = {}, ops = ALL_OPS) {
     "GET /api/litellm/teams/t2/keys": ok({ connected: true, items: [] }),
     "GET /api/litellm/models": ok({
       items: ["claude-sonnet", "claude-haiku", "claude-opus"],
+    }),
+    // M4: the Budgets view also reads the open reset requests of the team and
+    // the scoped reset counts (LiteLLM spec - Budget reset requests, MG-D10).
+    "GET /api/budget-reset-requests": ok({ items: [] }),
+    "GET /api/budget-resets": ok({
+      teams: [],
+      own: { count: 0, amount: 0 },
     }),
     ...overrides,
   };
@@ -1835,5 +1843,183 @@ describe("TeamSpendPanel empty state (shared EmptyState; C1 item 9)", () => {
       await region("Team spend & budgets"),
     ).findByText("LiteLLM not configured");
     expect(message).toHaveClass("font-semibold");
+  });
+});
+
+// Unit M4 (LiteLLM spec - Budget reset requests, Flow 3 and MG-D12: "Open
+// requests are also listed on the Team page's Budgets view, so a decision never
+// depends on the bell"; the Approve AlertDialog names the person and the
+// effect; MG-D10 team count; BR7: the reason renders as text; hidden, never
+// dead: both resetMemberSpend and requestBudgetReset must be on).
+describe("TeamPageContent open budget reset requests (M4; MG-D12)", () => {
+  const REQUEST = {
+    id: "11111111-1111-4111-8111-111111111111",
+    teamId: "t1",
+    teamName: "Payments",
+    requester: {
+      oid: "oid-ada",
+      displayName: "Ada Lovelace",
+      email: "ada@example.test",
+    },
+    reason: "Launch week <b>spike</b>",
+    status: "open",
+    createdAt: "2026-11-14T09:00:00.000Z",
+    requestExpiresAt: "2026-11-21T09:00:00.000Z",
+    decidedAt: null,
+    decidedBy: null,
+  };
+  const withRequest = {
+    "GET /api/budget-reset-requests": () =>
+      apiResponse({ data: { items: [REQUEST] } }),
+  };
+  const listReads = (api: ReturnType<typeof stub>) =>
+    api.gets("/api/budget-reset-requests");
+
+  it("lists the open requests of the team with the requester and the reason as plain text (BR7)", async () => {
+    stub(withRequest);
+    renderView("budgets");
+    const section = await screen.findByRole("region", {
+      name: /budget reset requests/i,
+    });
+    expect(within(section).getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(
+      within(section).getByText("Launch week <b>spike</b>"),
+    ).toBeInTheDocument();
+    expect(section.querySelector("b")).toBeNull();
+  });
+
+  it("an empty list says there are no open requests", async () => {
+    stub();
+    renderView("budgets");
+    expect(await screen.findByText("No open requests.")).toBeInTheDocument();
+  });
+
+  it("Approve opens an AlertDialog naming the person, the team and the effect, and sends nothing until confirmed (Flow 3)", async () => {
+    const api = stub({
+      ...withRequest,
+      [`POST /api/budget-reset-requests/${REQUEST.id}/approve`]: () =>
+        apiResponse({
+          data: {
+            request: { ...REQUEST, status: "approved" },
+            resetId: "22222222-2222-4222-8222-222222222222",
+            amount: 77.1,
+          },
+        }),
+    });
+    const u = user();
+    renderView("budgets");
+    await u.click(await screen.findByRole("button", { name: "Approve" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent(
+      "Reset Ada Lovelace's spend in Payments to $0. They can spend again at once.",
+    );
+    expect(api.writes()).toHaveLength(0);
+    await u.click(within(dialog).getByRole("button", { name: /approve/i }));
+    await waitFor(() => expect(api.writes()).toHaveLength(1));
+    expect(api.writes()[0]).toMatchObject({
+      method: "POST",
+      path: `/api/budget-reset-requests/${REQUEST.id}/approve`,
+    });
+    expect(api.writes()[0]?.body).toBeUndefined();
+  });
+
+  it("the list is read again after a decision", async () => {
+    const api = stub({
+      ...withRequest,
+      [`POST /api/budget-reset-requests/${REQUEST.id}/deny`]: () =>
+        apiResponse({ data: { request: { ...REQUEST, status: "denied" } } }),
+    });
+    const u = user();
+    renderView("budgets");
+    await u.click(await screen.findByRole("button", { name: "Deny" }));
+    const dialog = await screen.findByRole("alertdialog");
+    const before = listReads(api);
+    await u.click(within(dialog).getByRole("button", { name: /deny/i }));
+    await waitFor(() => expect(listReads(api)).toBeGreaterThan(before));
+    expect(api.writes()[0]).toMatchObject({
+      method: "POST",
+      path: `/api/budget-reset-requests/${REQUEST.id}/deny`,
+    });
+  });
+
+  it("a refused approval (409 CONFLICT, 403, LiteLLM failure) shows the server's message in the dialog and keeps the request listed (BR3, BR9)", async () => {
+    stub({
+      ...withRequest,
+      [`POST /api/budget-reset-requests/${REQUEST.id}/approve`]: () =>
+        apiError(409, "CONFLICT", "This request was already decided"),
+    });
+    const u = user();
+    renderView("budgets");
+    await u.click(await screen.findByRole("button", { name: "Approve" }));
+    const dialog = await screen.findByRole("alertdialog");
+    await u.click(within(dialog).getByRole("button", { name: /approve/i }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "This request was already decided",
+    );
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+  });
+
+  it("a caller with no scope on the team (404 from the list) sees no section and no error", async () => {
+    stub({
+      "GET /api/budget-reset-requests": () =>
+        apiError(404, "NOT_FOUND", "Not found"),
+    });
+    renderView("budgets");
+    await region("Budget and limits");
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: /budget reset requests/i }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["resetMemberSpend", ALL_OPS.filter((o) => o !== "resetMemberSpend")],
+    ["requestBudgetReset", ALL_OPS.filter((o) => o !== "requestBudgetReset")],
+  ])(
+    "while %s is off the list is hidden and not read (hidden, never dead; MG-D11, MG-D12)",
+    async (_off, ops) => {
+      const api = stub(withRequest, ops);
+      renderView("budgets");
+      await region("Budget and limits");
+      expect(screen.queryByText("Ada Lovelace")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+      expect(listReads(api)).toBe(0);
+    },
+  );
+
+  it("shows this team's reset count and amount in the range, never another team's (MG-D9, MG-D10, BR10)", async () => {
+    stub({
+      "GET /api/budget-resets": () =>
+        apiResponse({
+          data: {
+            teams: [
+              { teamId: "t1", count: 3, amount: 120 },
+              { teamId: "t2", count: 9, amount: 999 },
+            ],
+            own: { count: 0, amount: 0 },
+          },
+        }),
+    });
+    renderView("budgets");
+    const budgets = await region("Budget and limits");
+    expect(await within(budgets).findByText(/3 resets/)).toHaveTextContent(
+      "$120.00",
+    );
+    expect(within(budgets).queryByText(/9 resets/)).toBeNull();
+    expect(within(budgets).queryByText(/\$999/)).toBeNull();
+  });
+
+  it("a failed count read hides the count and never breaks the page (MG-D10: supplementary)", async () => {
+    stub({
+      "GET /api/budget-resets": () => apiError(500, "INTERNAL_ERROR", "boom"),
+    });
+    renderView("budgets");
+    const budgets = await region("Budget and limits");
+    expect(
+      await screen.findByLabelText("Max budget (USD)"),
+    ).toBeInTheDocument();
+    expect(within(budgets).queryByText(/resets/i)).toBeNull();
   });
 });

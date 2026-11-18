@@ -39,6 +39,11 @@ vi.mock("@/components/layout/PageTitle", () => ({
 vi.mock("./UserMenu", () => ({
   UserMenu: () => <div data-testid="user-menu" />,
 }));
+// M4 (LiteLLM spec - MG-D13): the bell is composed here; its own behaviour is
+// tested in components/notifications/NotificationBell.test.tsx.
+vi.mock("@/components/notifications/NotificationBell", () => ({
+  NotificationBell: () => <button type="button">Notifications</button>,
+}));
 
 const scope = (over: Partial<NavScope> = {}): NavScope => ({
   global: false,
@@ -96,4 +101,24 @@ describe("AppHeader sync badges by role", () => {
       expect(screen.getByTestId("user-menu")).toBeInTheDocument();
     },
   );
+
+  // MG-D13: "A bell in the top bar"; notifications are for any signed-in role
+  // (Access Control - role x operation, GET /api/notifications), so the bell is
+  // not scope-gated like the sync badges.
+  it.each([
+    ["a global caller", scope({ global: true })],
+    ["a team lead", scope({ teamScopes: new Set(["team-a"]) })],
+    ["a member", scope({ memberTeamId: "team-a" })],
+    ["a viewer with no team", scope()],
+  ])("shows the notification bell to %s", async (_n, s) => {
+    await renderHeader(s);
+
+    expect(screen.getByRole("button", { name: "Notifications" })).toBeVisible();
+  });
+
+  it("shows the notification bell when no scope is given", async () => {
+    render(<SidebarProvider>{await AppHeader()}</SidebarProvider>);
+
+    expect(screen.getByRole("button", { name: "Notifications" })).toBeVisible();
+  });
 });

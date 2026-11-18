@@ -649,6 +649,45 @@ the user 2026-11-15; Design System — *Settings Page*).
 | Create an app team (`POST /api/teams`; management improvements D6, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Create, approve or remove a person's LiteLLM user link (`litellmUserId`; never on their own identity; D16, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Configuration (everything else in *Configuration* above) | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Request a budget reset for **one's own** member budget (unit M4; MG-D11; user, 2026-11-17) | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | member of a linked team: ✓ own; `internal-auditor` ✗; no member team ✗ |
+| Approve or deny a budget reset request (unit M4; MG-D12) — never one's own request | ✓ | ✓ any team | ✓ teams in scope | ✓ teams in scope | ✗ |
+
+**Budget reset requests (unit M4; added 2026-11-17; MG-D11 to MG-D13 in the
+[LiteLLM spec](2026-11-10-litellm.md)).** A request is a new write for a
+role that writes nothing today, so it has its own row and its own toggle
+(`requestBudgetReset`, default on; a request alone changes nothing in
+LiteLLM). The requester is the caller's own member affiliation, never a
+body field; a caller with no member team gets `403` before parsing with one
+`denied` record. `internal-auditor` stays read-only and cannot request
+(*Roles*). Approve and deny reuse the `member` matrix write of the reset
+routes (`lib/api/matrix-route.ts`, `decideWrite`), so a request or a
+notification never widens who may reset (BR1); the requester is refused
+`403` even when in scope (BR2). Every check runs **at the decision** (BR4).
+In `prod`, before the per-user approval, the team list read shows the
+requester's name, email and reason only to the deciders; the Auditor sees
+counts only (LiteLLM spec MG-D12, amended 2026-11-18, Q-W2).
+Role × operation, signed in (`401` everywhere unsigned, asserted by the
+route-contract suite); "Lead" has a team or department scope on the
+request's team, "member" is a plain affiliation to that team:
+
+| Route | Admin | org-admin | Auditor | Lead | Lead, other team | member | Viewer, no team |
+|---|---|---|---|---|---|---|---|
+| `POST /api/budget-reset-requests` (own member team) | ✓ if a member of a linked team, else `403` | as Admin | 403 | as Admin | as Admin | ✓ | 403 |
+| `GET /api/budget-reset-requests?teamId=` | ✓ | ✓ | ✓ | ✓ | 404 | 404 | 404 |
+| `GET /api/budget-reset-requests/mine` | ✓ own | ✓ own | ✓ own | ✓ own | ✓ own | ✓ own | ✓ own (`eligibility.reason: "no-team"`) |
+| `POST /api/budget-reset-requests/[id]/approve`, `/deny` | ✓ | ✓ | 403 | ✓ | 404 | 403 | 403 |
+| the requester, whatever the role, on their own request | 403 | 403 | 403 | 403 | — | 403 | — |
+| `GET /api/notifications`, `POST /api/notifications/read` | ✓ own | ✓ own | ✓ own | ✓ own | ✓ own | ✓ own | ✓ own |
+| `GET /api/budget-resets` (slice B, MG-D10) | ✓ every team | ✓ every team | ✓ every team | ✓ teams in scope | other teams absent | own only | own only |
+
+New audit actions (appended to `AUDIT_ACTIONS`, `packages/shared`):
+`budgetreset.request.create`, `budgetreset.request.approve`,
+`budgetreset.request.deny`. An approval also writes the existing
+`litellm.member.reset-spend` record (the LiteLLM change, actor = the
+approver). Expiry and mark-read are not audited (no person acts; own state).
+No new error code: `409 CONFLICT` (an open request exists, the request is
+not open, the team is not linked, the person is not a member of the LiteLLM
+team), `403 FORBIDDEN`, `403 OPERATION_DISABLED`, `404 NOT_FOUND`.
 
 **Identity links** (shared contract): `usageIdentities[]`, `aliases[]`,
 `litellmUserId`, per `oid`, `internal-admin` only. An alias or usage
@@ -1107,6 +1146,7 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/governance/password-sign-in` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin`, **re-auth** |
 | `/api/governance/per-user-approval` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` |
 | `/api/audit`, `/api/access-review` | GET | `internal-admin`, `internal-auditor` (audited) |
+| `/api/budget-reset-requests`, `/api/budget-reset-requests/mine`, `/api/budget-reset-requests/[id]/approve`, `/deny`, `/api/notifications`, `/api/notifications/read`, `/api/budget-resets` (unit M4, 2026-11-17) | GET, POST | Per *Budget reset requests* under *Permission matrix*; shapes in the [Data Model spec](2026-05-15-data-model.md) — *API Routes* |
 
 **`/api/me` scope fields (agent decision D-R5-3, 2026-11-16).** `GET
 /api/me` also returns the caller's own resolved scope: `global` (boolean),
@@ -1272,8 +1312,26 @@ organisation administrators and auditors. Usage rollups are kept for
 | T-MI3 | Tampering: a created app team takes a registry team's id or name, inheriting its members, scopes or spend (D5) | Server-generated `appteam-<uuid>` id; the registry refuses the reserved prefix; name claim and registry name check (`409`), both ways: the account routes refuse a created team's name (`409`) | M2: id never equals a registry team; duplicate name `409` (against created and registry teams); body id ignored; `POST /api/accounts` and `PATCH /api/accounts/[id]` with a created team's name `409`, no write |
 | T-MI4 | Disclosure: Team usage shows a lead another team's spend (D7) | `teamUsage` and the team list come from `resolveScope` per request; a team outside the scope is the missing-page `404`; only a global reader gets every team (MI-D7, coordinator decision) | M2: leak test (a lead sees only teams in scope; another team's id `404`); a global reader without a scope sees every team; a user with no scope `404` |
 
+**Budget reset requests (unit M4; added 2026-11-17).** Each item has its
+test in the M4 Verify list (implementation-phases — *M4*).
+
+| # | Threat | Mitigation | Test (unit) |
+|---|---|---|---|
+| BR1 | Elevation: a request or a notification widens who may reset (a notified person, or the request itself, is taken as permission) | Approve and deny are the `member` matrix write of the reset routes; recipients are never read for authorization | M4 slice A role × operation matrix, including a recipient who lost scope (`404`, no LiteLLM call) |
+| BR2 | Elevation: self-approval — a Lead, org-admin or Admin approves their own request | `requesterOid === session oid` → `403 FORBIDDEN` with one `denied` record, before any LiteLLM call | M4 slice A (each deciding role on its own request) |
+| BR3 | Tampering: replay or double approval resets twice | Conditional `open → approving` with `version`; the loser gets `409 CONFLICT` | M4 slice A (two concurrent approvals: one `reset_spend` call, one ledger item, one `409`) |
+| BR4 | Elevation: a decision after the decider's scope, the requester's membership, the team link or a toggle changed | Every check re-runs at the decision from uncached authorization data (Rule 60.10) | M4 slice A (each of the four changed between request and decision) |
+| BR5 | Disclosure: probing request ids or notification ids of another team or person | Out-of-scope and missing requests give the same `404` body; notification keys are built from the session `oid`, so a foreign id is never read or changed | M4 slice A (foreign request id → identical `404`; foreign notification id → unchanged and not listed) |
+| BR6 | Denial / nuisance: request spam; an expired request revived and approved | One open request per person per team (claim item), 7-day expiry, 280-character reason; the ledger and the count are the record (no limit on approved resets, user Q5). A claim owned by another request counts as released on expiry, and `beginApproval` requires `requestExpiresAt > now` (LiteLLM spec MG-D12a, amended 2026-11-18) | M4 slice A (second open request → `409`; after expiry a new one is accepted; R1 expires unread, R2 is created: R1 reads `expired`, the open list holds only R2, approving R1 → `409` with no `reset_spend` call) |
+| BR7 | Injection: the request reason as stored text (markup in the bell, the Team page, the dialog or an audit view) | Zod: plain text, 1–280 characters, control characters rejected; rendered as React text only, never as HTML, a URL or a `mailto:`; not copied into notifications or audit records | M4 slice A (a reason with `<script>` and `<img onerror>` renders literally; 281 characters → `400`) |
+| BR8 | Disclosure: a notification shows a request after its recipient lost access | A notification stores ids only; the list joins the request and shows details and buttons only while the caller may still read and decide it | M4 slice A (recipient loses scope → the item shows no name, reason or buttons) |
+| BR9 | Integrity: a LiteLLM failure is reported as approved | `approving → open` on failure, the reset audited `failed`, no notification, no ledger item | M4 slice A (fake LiteLLM `500`: request open, no notification, no ledger) |
+| BR10 | Disclosure: reset counts and amounts reveal another person's or another team's usage | One scoped read, filtered after the read; per-member figures only with the per-user approval in `prod`; visibility rules apply | M4 slice B leak tests (a user never sees another person's, a Lead never another team's; only team totals before the approval) |
+
 ## Residual risks
 
+- **Budget reset stuck in `approving` (unit M4, MG-D12a; added 2026-11-17):** if the process stops after LiteLLM reset the spend and before the ledger transaction, the request stays `approving`, the reset is in LiteLLM's records and the dashboard audit has no `success` record for it. It is not reopened automatically (a second approval would reset spend accrued since). An Admin resolves it from the Team page list and LiteLLM's own audit. Accepted for v1.
+- **Notification fallback recipients (unit M4, MG-D13):** an Entra-only `internal-admin` or `internal-org-admin` who has never signed in has no last-seen role and is not notified when a team has no lead; the request still shows on the Team page. Accepted for v1.
 - **TOTP replay window:** a TOTP code stays valid for its ±1-step window (about 90 s) and used steps are not recorded, so a code observed in that window could be replayed together with the password. Accepted for v1 (break-glass only, password and lockout still required); recording the last used step on the master identity item is the follow-up.
 - **Master user before 4R.2:** R1 emits only id-only telemetry for master-user sign-ins; the persistent audit record and alarm arrive in 4R.2. Do not set `masterUsername` in `prod` before 4R.2 is deployed.
 - `dynamodb:LeadingKeys` cannot separate `AccountMeta` (`ACCT#…/META`) from

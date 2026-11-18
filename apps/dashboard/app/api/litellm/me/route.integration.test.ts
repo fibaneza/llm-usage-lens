@@ -210,6 +210,29 @@ describe("GET /api/litellm/me", () => {
     expect(body.data.enabledOperations).toContain("getUser");
   });
 
+  // MG-D11a (slice B): requestBudgetReset is a route-less operation, default
+  // on; on OSS (APP_ENV is not prod here) it must not be treated as
+  // Enterprise-only because it has no routes (`[].every(...)` is true).
+  it("lists the route-less requestBudgetReset on OSS by default, and not once it is switched off (MG-D11a; Toggles narrow only)", async () => {
+    signInAs("memberA");
+    expect((await me()).body.data.enabledOperations).toContain(
+      "requestBudgetReset",
+    );
+    await setToggles({ requestBudgetReset: false });
+    expect((await me()).body.data.enabledOperations).not.toContain(
+      "requestBudgetReset",
+    );
+  });
+
+  // MG-D11a: the fix is narrow - an operation whose every route is
+  // Enterprise-only is still unavailable on OSS.
+  it("still omits an Enterprise-only operation (getGlobalSpendReport) on OSS (MG-D11a, LD10 edition gate)", async () => {
+    signInAs("memberA");
+    expect((await me()).body.data.enabledOperations).not.toContain(
+      "getGlobalSpendReport",
+    );
+  });
+
   it("a disabled getUser is 403 OPERATION_DISABLED before any LiteLLM call (LD19)", async () => {
     await setToggles({ getUser: false });
     signInAs("memberA");

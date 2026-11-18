@@ -103,6 +103,9 @@ const WRITES = [
   "unblockKey",
   "deleteKey",
   "rotateKey",
+  // M4, MG-D11a: the route-less request toggle, default on (listed under
+  // Member writes with the resets it asks for).
+  "requestBudgetReset",
 ];
 const OFF_BY_DEFAULT = new Set(["resetMemberSpend", "deleteKey"]);
 
@@ -346,6 +349,7 @@ const FAMILIES: Array<[string, string[]]> = [
       "resetMemberBudget",
       "disableMember",
       "enableMember",
+      "requestBudgetReset",
     ],
   ],
   [
