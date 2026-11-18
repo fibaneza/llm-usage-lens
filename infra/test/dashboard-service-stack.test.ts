@@ -21,6 +21,7 @@ import {
   HOST,
   LISTENER_ARN,
   REGION,
+  TASK_WRITE_PREFIXES,
   TOPIC_ARN,
   actionsOf,
   contextFor,
@@ -256,8 +257,12 @@ describe.each(["import", "create"] as Mode[])(
     describe("task role (Task role policy)", () => {
       const stmts = policyStatementsFor(t, roleIdFromTaskDef(t, "TaskRoleArn"));
 
-      it("has exactly the read, scoped-write, audit-put, audit-log and CMK statements", () => {
-        expect(stmts).toHaveLength(5);
+      // Platform spec — Task role policy, Budget-reset ledger row (PutItem only,
+      // BRESET#*; added 2026-11-18, unit TRK1) and NOTIF#* BatchWriteItem
+      // (createNotifications throws on a failed batch, Data Model - Notifications;
+      // TRK1 review round 1, Q-B1).
+      it("has exactly the read, scoped-write, audit-put, ledger-put, notif-batch-write, table-only scan, audit-log and CMK statements", () => {
+        expect(stmts).toHaveLength(8);
         for (const s of stmts) expect(s.Effect).toBe("Allow");
       });
 
@@ -290,10 +295,28 @@ describe.each(["import", "create"] as Mode[])(
         expect(read?.Condition).toBeUndefined();
       });
 
+      // Platform spec - Task role policy, Reads row (decided 2026-11-18): Scan on
+      // the TABLE only, never index/GSI1, for getAllAccounts until PERF-1b
+      // (Data Model ~:158-172). A statement with the GSI1 resource cannot also
+      // carry Scan, so it is its own statement (count 8, not 7).
+      it("scan: dynamodb:Scan is granted by exactly one statement, on the table ARN only, never the index, no condition", () => {
+        const scan = stmts.filter((s) =>
+          actionsOf(s).includes("dynamodb:Scan"),
+        );
+        expect(scan).toHaveLength(1);
+        const res = resourcesOf(scan[0] ?? {});
+        expect(res).toHaveLength(1);
+        expect(str(res[0])).toContain("tablearn");
+        expect(str(res[0])).not.toContain("/index/");
+        expect(scan[0]?.Effect).toBe("Allow");
+        expect(scan[0]?.Condition).toBeUndefined();
+        expect(actionsOf(scan[0] ?? {}).every((a) => !/\*/.test(a))).toBe(true);
+      });
+
       // Platform spec — Ownership: ACCT# (account CRUD) and IDENT# (the identity
       // record and master-user lockout counter written on every sign-in, Phase
       // 4R.1; added 2026-11-11, security review H2). Nothing else until 4R.2/L2.
-      it("writes: only on the table, restricted to the twelve Platform write prefixes", () => {
+      it("writes: only on the table, restricted to the eighteen Platform write prefixes", () => {
         const write = stmts.find(
           (s) =>
             actionsOf(s).includes("dynamodb:PutItem") &&
@@ -307,24 +330,14 @@ describe.each(["import", "create"] as Mode[])(
             "dynamodb:ConditionCheckItem",
           ]),
         );
-        expect(write?.Condition).toEqual({
-          "ForAllValues:StringLike": {
-            "dynamodb:LeadingKeys": [
-              "ACCT#*",
-              "GOVERNANCE",
-              "GROUPMAP#*",
-              "IDENT#*",
-              "LITELLM#*",
-              "LOCALUSER#*",
-              "PENDING#*",
-              "SETUPLINK#*",
-              "SSOEXPECT#*",
-              "SSOREF#*",
-              "USAGEKEY#*",
-              "VIS#*",
-            ],
-          },
-        });
+        const stringLike = write?.Condition?.["ForAllValues:StringLike"];
+        expect(Object.keys(write?.Condition ?? {})).toEqual([
+          "ForAllValues:StringLike",
+        ]);
+        expect(Object.keys(stringLike ?? {})).toEqual(["dynamodb:LeadingKeys"]);
+        expect(sorted(stringLike?.["dynamodb:LeadingKeys"] ?? [])).toEqual(
+          TASK_WRITE_PREFIXES,
+        );
         const keys: string[] =
           write?.Condition?.["ForAllValues:StringLike"]?.[
             "dynamodb:LeadingKeys"
@@ -347,9 +360,12 @@ describe.each(["import", "create"] as Mode[])(
         expect(str(kms?.Resource)).toContain("kmskeyarn");
       });
 
-      it("grants nothing else: no wildcards, Scan, TransactWriteItems, ssm or secretsmanager", () => {
+      it("grants nothing else: no wildcards, Scan outside its table-only statement, TransactWriteItems, ssm or secretsmanager", () => {
         const all = stmts.flatMap(actionsOf);
-        expect(all).not.toContain("dynamodb:Scan");
+        // Scan only in the one table-only Scan statement (see "scan" above).
+        expect(
+          stmts.filter((s) => actionsOf(s).includes("dynamodb:Scan")),
+        ).toHaveLength(1);
         expect(all).not.toContain("dynamodb:TransactWriteItems");
         for (const a of all) {
           expect(a).not.toMatch(/\*/);

@@ -4,25 +4,11 @@
 // Contract R2 decisions 12-14 and §6. Placeholder ids only (Rule 50.9).
 import { describe, expect, it } from "vitest";
 
-import { actionsOf, synthApp } from "./support";
+import { TASK_WRITE_PREFIXES, actionsOf, synthApp } from "./support";
 import type { Mode } from "./support";
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- CFN template JSON is untyped
 
-const WRITE_PREFIXES = [
-  "ACCT#*",
-  "GOVERNANCE",
-  "GROUPMAP#*",
-  "IDENT#*",
-  "LITELLM#*",
-  "LOCALUSER#*",
-  "PENDING#*",
-  "SETUPLINK#*",
-  "SSOEXPECT#*",
-  "SSOREF#*",
-  "USAGEKEY#*",
-  "VIS#*",
-];
 const DDB_WRITES = [
   "dynamodb:PutItem",
   "dynamodb:UpdateItem",
@@ -44,16 +30,21 @@ const writeStatements = (t: ReturnType<typeof synthApp>) =>
     actionsOf(st).some((a) => DDB_WRITES.includes(a)),
   );
 const isAudit = (st: Json) => leadingKeys(st).includes("AUDIT#*");
+const isLedger = (st: Json) => leadingKeys(st).includes("BRESET#*");
 
 describe.each<Mode>(["import", "create"])(
   "DashboardServiceStack audit (%s)",
   (mode) => {
     const t = synthApp(mode, "dev");
 
-    it("T19: the write statement is limited to exactly the twelve key prefixes (Platform — Task role policy)", () => {
-      const write = writeStatements(t).filter((st) => !isAudit(st));
+    it("T19: the write statement is limited to exactly the eighteen key prefixes (Platform — Task role policy)", () => {
+      const write = writeStatements(t).filter(
+        (st) => !isAudit(st) && !isLedger(st),
+      );
       expect(write).toHaveLength(1);
-      expect([...leadingKeys(write[0] as Json)].sort()).toEqual(WRITE_PREFIXES);
+      expect([...leadingKeys(write[0] as Json)].sort()).toEqual(
+        TASK_WRITE_PREFIXES,
+      );
       expect(actionsOf(write[0] as Json).sort()).toEqual(
         [...DDB_WRITES].sort(),
       );
@@ -65,6 +56,51 @@ describe.each<Mode>(["import", "create"])(
         for (const key of leadingKeys(st)) {
           expect(key).not.toMatch(/^(SYSTEM|\*)/);
         }
+      }
+    });
+
+    it("TRK1: BRESET#* is PutItem only, append-only like the audit log (Platform - Budget-reset ledger row, MG-D8)", () => {
+      const ledger = writeStatements(t).filter(isLedger);
+      expect(ledger).toHaveLength(1);
+      expect(actionsOf(ledger[0] as Json)).toEqual(["dynamodb:PutItem"]);
+      expect(leadingKeys(ledger[0] as Json)).toEqual(["BRESET#*"]);
+    });
+
+    it("TRK1: no statement allowing UpdateItem or DeleteItem names AUDIT#* or BRESET#* (Platform - Audit and Budget-reset ledger rows)", () => {
+      for (const st of writeStatements(t)) {
+        const mutates = actionsOf(st).some(
+          (a) => a === "dynamodb:UpdateItem" || a === "dynamodb:DeleteItem",
+        );
+        if (!mutates) continue;
+        expect(leadingKeys(st)).not.toContain("AUDIT#*");
+        expect(leadingKeys(st)).not.toContain("BRESET#*");
+      }
+    });
+
+    // Q-B1: lib/data/notifications.ts createNotifications sends a
+    // BatchWriteCommand and throws on a failed batch (Data Model - Notifications),
+    // so budget-reset request/approve/deny fail without this grant. Update
+    // infra/lib/dashboard-service/task.ts and the Platform Task role policy row together.
+    it("TRK1 Q-B1: exactly one statement allows dynamodb:BatchWriteItem, only that action, LeadingKeys NOTIF#* (Platform - Task role policy)", () => {
+      const batch = statements(t).filter((st) =>
+        actionsOf(st).includes("dynamodb:BatchWriteItem"),
+      );
+      expect(batch).toHaveLength(1);
+      expect(actionsOf(batch[0] as Json)).toEqual(["dynamodb:BatchWriteItem"]);
+      expect((batch[0] as Json).Condition?.["ForAllValues:StringLike"]).toEqual(
+        { "dynamodb:LeadingKeys": ["NOTIF#*"] },
+      );
+      expect(Object.keys((batch[0] as Json).Condition ?? {})).toEqual([
+        "ForAllValues:StringLike",
+      ]);
+    });
+
+    it("TRK1 Q-B1: no BatchWriteItem statement names AUDIT#* or BRESET#* (append-only, DeleteRequest would break it)", () => {
+      for (const st of statements(t)) {
+        if (!actionsOf(st).includes("dynamodb:BatchWriteItem")) continue;
+        expect(leadingKeys(st)).not.toContain("AUDIT#*");
+        expect(leadingKeys(st)).not.toContain("BRESET#*");
+        expect(JSON.stringify(st)).not.toMatch(/AUDIT#|BRESET#|SYSTEM/);
       }
     });
 

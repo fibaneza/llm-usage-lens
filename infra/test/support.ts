@@ -118,3 +118,28 @@ export function statementsOfPolicies(
   }
   return out;
 }
+
+// The exact task-role write partition list, sorted. Source: Platform spec -
+// "Task role policy (least privilege)", Writes row (amended 2026-11-18, TRK1).
+// Never SYSTEM (the collector's SyncStatus), AUDIT#* or BRESET#* (append-only
+// statements of their own) or a broader wildcard.
+export const TASK_WRITE_PREFIXES = [
+  "ACCT#*",
+  "APPTEAM#*",
+  "APPTEAMNAME#*",
+  "BRREQ#*",
+  "BRREQOPEN#*",
+  "GOVERNANCE",
+  "GROUPMAP#*",
+  "IDENT#*",
+  "LITELLM#*",
+  "LITELLMUSER#*",
+  "LOCALUSER#*",
+  "NOTIF#*",
+  "PENDING#*",
+  "SETUPLINK#*",
+  "SSOEXPECT#*",
+  "SSOREF#*",
+  "USAGEKEY#*",
+  "VIS#*",
+].sort();

@@ -26,11 +26,21 @@ export function executionRoleName(env: AppInputs["env"]): string {
 // Platform spec — "Task role policy"; never SYSTEM (the collector's SyncStatus).
 const WRITE_LEADING_KEYS = [
   "ACCT#*",
+  // M2 app teams and their name claims (Writes row, TRK1)
+  "APPTEAM#*",
+  "APPTEAMNAME#*",
+  // M4 budget-reset requests and the one-open claim
+  "BRREQ#*",
+  "BRREQOPEN#*",
   "GOVERNANCE",
   "GROUPMAP#*",
   "IDENT#*",
   "LITELLM#*",
+  // M3 LiteLLM user claims
+  "LITELLMUSER#*",
   "LOCALUSER#*",
+  // M4 notifications
+  "NOTIF#*",
   "PENDING#*",
   "SETUPLINK#*",
   "SSOEXPECT#*",
@@ -146,6 +156,24 @@ export function addDashboardTask(
       },
     }),
   );
+  // createNotifications uses BatchWriteCommand (Notification batch row).
+  taskRole.addToPolicy(
+    new iam.PolicyStatement({
+      actions: ["dynamodb:BatchWriteItem"],
+      resources: [tableArn],
+      conditions: {
+        "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["NOTIF#*"] },
+      },
+    }),
+  );
+  // getAllAccounts scans the table until PERF-1b (Table scan row); the table
+  // only, never the GSI1 index.
+  taskRole.addToPolicy(
+    new iam.PolicyStatement({
+      actions: ["dynamodb:Scan"],
+      resources: [tableArn],
+    }),
+  );
   // Append-only: PutItem alone on AUDIT#* (Access Control spec — T19).
   taskRole.addToPolicy(
     new iam.PolicyStatement({
@@ -153,6 +181,16 @@ export function addDashboardTask(
       resources: [tableArn],
       conditions: {
         "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["AUDIT#*"] },
+      },
+    }),
+  );
+  // Append-only budget-reset ledger (Budget-reset ledger row, MG-D8).
+  taskRole.addToPolicy(
+    new iam.PolicyStatement({
+      actions: ["dynamodb:PutItem"],
+      resources: [tableArn],
+      conditions: {
+        "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["BRESET#*"] },
       },
     }),
   );
