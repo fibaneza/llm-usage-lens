@@ -369,4 +369,4 @@ commit with `main` merged in; the targeted e2e ran once (the full e2e if a
 shared file changed); the ready self-check passed; the handover and the
 report are written; the `ready` line is sent.
 
-`/goal docs/plans/management_round2.md §8 completion criteria met for unit <LF1|ST1|TM1|US1|US2|SRT1>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.`
+`/goal docs/plans/teams_users_and_litellm_sync.md §8 completion criteria met for unit <LF1|ST1|TM1|US1|US2|SRT1>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.`
