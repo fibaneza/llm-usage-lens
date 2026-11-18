@@ -1,7 +1,10 @@
 import { MemberSumSchema } from "@llm-usage-lens/shared";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { grantAdminScope } from "@/lib/data/access/admin-scopes";
+import { createAppTeam } from "@/lib/data/access/app-teams";
 import { getIdentityLink } from "@/lib/data/access/identity-links";
+import { ctxAt, ok } from "@/test/support/access-test-support";
 import { holdFetch, macrotask, trackSettled } from "@/test/support/fetch-hold";
 import { clearTable } from "@/test/support/test-support";
 import {
@@ -522,4 +525,87 @@ describe("GET /api/litellm/teams/[teamId] - LiteLLM not configured (LD37)", () =
     const { body } = await get("team-a");
     expect(body.data.configured).not.toBe(false);
   });
+});
+
+// Source: docs/specs/2026-11-17-app-teams.md - "Teams without an AWS account"
+// (a created team is an unlinked app team until a LiteLLM team is linked) and
+// "Spend source" (an unlinked team's figure is the member sum, AT1); Access
+// Control MI-D7, T-MI4 (out of scope = missing = the same 404). resolveLiteLLMTeam
+// reads the team directory, so a created team resolves (M2 design 1, M2-b).
+// The Lead-gets-no-memberSum-with-or-without-include rule (LT28, ATT6) is
+// proved above for a linked team ("a Lead gets the LiteLLM team figures and no
+// memberSum"); the resolution is the same for a created team, so it is not
+// repeated here.
+describe("GET /api/litellm/teams/[teamId] - a created team (App Teams; MI-D7; T-MI4)", () => {
+  const get = async (team: string, query = `?${DATES}`) =>
+    call(await load(), `/api/litellm/teams/${team}${query}`, { teamId: team });
+  let created: string;
+  beforeEach(async () => {
+    created = ok(
+      await createAppTeam(
+        {
+          name: "Guild",
+          departmentId: "dept-eng",
+          departmentName: "Engineering",
+        },
+        ctxAt(undefined, "req-created-spend"),
+      ),
+    ).teamId;
+    await seedBoundMember(created, {
+      oid: "oid-guild-1",
+      litellmUserId: SCENARIO.luserU1,
+    });
+    installMemberSumFake(state, SCENARIO_FAKE);
+  });
+
+  it.each(["admin", "orgAdmin", "auditor", "deptAdminEng"] as CallerName[])(
+    "%s reads an unlinked created team as the member sum, not a LiteLLM team figure (Spend source; Teams without an AWS account)",
+    async (who) => {
+      signInAs(who);
+      const { res, body } = await get(created);
+      expect(res.status).toBe(200);
+      expect(body.data).toMatchObject({
+        connected: false,
+        spendSource: "member-sum",
+      });
+      expect(body.data).not.toHaveProperty("team");
+      expect(body.data.memberSum.total).toBe(3.5);
+      expect(userIdsRead(state)).toEqual([SCENARIO.luserU1]);
+      expect(state.fake.calls.some((c) => c.path.startsWith("/team/"))).toBe(
+        false,
+      );
+    },
+  );
+
+  it("a team-scope Lead of the created team reads it (a scope on the created id counts)", async () => {
+    ok(
+      await grantAdminScope(
+        { oid: CALLERS.viewerNone.oid, scopeType: "team", scopeId: created },
+        ctxAt(undefined, "req-created-scope"),
+      ),
+    );
+    signInAs("viewerNone");
+    const { res, body } = await get(created);
+    expect(res.status).toBe(200);
+    expect(body.data.spendSource).toBe("member-sum");
+  });
+
+  it("a Lead of another team gets the same 404 as for a missing team and no member is read (T-MI4; Enforcement 2)", async () => {
+    signInAs("teamAdminA");
+    const outOfScope = await get(created);
+    const missing = await get("appteam-00000000-0000-4000-8000-00000000dead");
+    expect(outOfScope.res.status).toBe(404);
+    expect(outOfScope.text).toBe(missing.text);
+    expect(state.fake.calls).toHaveLength(0);
+  });
+
+  it.each(["memberA", "viewerNone"] as CallerName[])(
+    "%s (a Viewer) gets 404 for a created team and no LiteLLM call (Roles and rights)",
+    async (who) => {
+      signInAs(who);
+      const { res } = await get(created);
+      await expectError(res, 404, "NOT_FOUND");
+      expect(state.fake.calls).toHaveLength(0);
+    },
+  );
 });

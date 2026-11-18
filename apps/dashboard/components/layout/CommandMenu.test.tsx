@@ -158,12 +158,12 @@ describe("CommandMenu", () => {
       departmentScopes: new Set<string>(),
       ...over,
     });
-    // MI-D1: Overview, My usage, then the organisation-level items. Team usage
-    // is hidden for every role until unit M2 builds its page (coordinator
-    // ruling, M1).
+    // MI-D1: Overview, My usage, Team usage (per the teamUsage flag, MI-D7),
+    // then the organisation-level items.
     const USAGE = [
       "Overview",
       "My usage",
+      "Team usage",
       "Ranking",
       "Cost by department",
       "Cost by team",
@@ -217,7 +217,7 @@ describe("CommandMenu", () => {
       ]);
     });
 
-    it("lists My usage and Team for a lead (B2-2)", async () => {
+    it("lists My usage, Team usage and Team for a lead (B2-2, MI-D7)", async () => {
       expect(
         await optionNames(
           scope({
@@ -232,7 +232,7 @@ describe("CommandMenu", () => {
             },
           }),
         ),
-      ).toEqual(["My usage", "Team"]);
+      ).toEqual(["My usage", "Team usage", "Team"]);
     });
 
     it("opens a destination from the filtered list with the date range carried", async () => {

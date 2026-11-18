@@ -255,8 +255,10 @@ describe("audit schemas", () => {
     // L4 slices 2 and 3 add six key actions and four team actions.
     // L6 adds litellm.gateway.update (LiteLLM spec - Combined usage, Gateway configuration).
     // M4 adds the three budgetreset.request.* actions; M3 adds identity.litellm-link.set / .remove and litellm.user.create (Access Control - Budget reset requests, LiteLLM user links, Audit log).
-    expect(AUDIT_ACTIONS).toHaveLength(72);
+    // M2 adds appteam.create (Access Control - Created app teams).
+    expect(AUDIT_ACTIONS).toHaveLength(73);
     for (const action of [
+      "appteam.create",
       "budgetreset.request.create",
       "budgetreset.request.approve",
       "budgetreset.request.deny",

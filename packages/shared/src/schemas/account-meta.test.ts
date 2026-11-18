@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { COLLECTOR_REGION } from "../region";
-import { AccountMetaSchema, CreateAccountInputSchema } from "./account-meta";
+import {
+  AccountMetaSchema,
+  CreateAccountInputSchema,
+  UpdateAccountPatchSchema,
+} from "./account-meta";
 
 const VALID_ACCOUNT_META = {
   accountId: "000000000000",
@@ -80,5 +84,44 @@ describe("AccountMetaSchema", () => {
     const withoutTeamName: Record<string, unknown> = { ...VALID_ACCOUNT_META };
     delete withoutTeamName.teamName;
     expect(AccountMetaSchema.safeParse(withoutTeamName).success).toBe(false);
+  });
+});
+
+// Source: docs/specs/2026-05-15-data-model.md — "Entity: AppTeam" (Ids never
+// collide: the reserved `appteam-` prefix is refused for `teamId` in the two
+// input schemas, amended 2026-11-17); Access Control — T-MI3.
+describe("reserved appteam- teamId (T-MI3)", () => {
+  const CREATE_BODY: Record<string, unknown> = { ...VALID_ACCOUNT_META };
+  for (const key of ["active", "createdAt", "updatedAt"])
+    delete CREATE_BODY[key];
+  const RESERVED = "appteam-3f0c1a52-8b7e-4c1d-9a2f-0123456789ab";
+
+  it("CreateAccountInputSchema accepts a registry teamId and refuses the reserved prefix", () => {
+    expect(CreateAccountInputSchema.safeParse(CREATE_BODY).success).toBe(true);
+    expect(
+      CreateAccountInputSchema.safeParse({ ...CREATE_BODY, teamId: RESERVED })
+        .success,
+    ).toBe(false);
+    expect(
+      CreateAccountInputSchema.safeParse({ ...CREATE_BODY, teamId: "appteam-" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("UpdateAccountPatchSchema accepts a registry teamId, an absent teamId, and refuses the reserved prefix", () => {
+    expect(
+      UpdateAccountPatchSchema.safeParse({ teamId: "team-payments" }).success,
+    ).toBe(true);
+    expect(UpdateAccountPatchSchema.safeParse({}).success).toBe(true);
+    expect(
+      UpdateAccountPatchSchema.safeParse({ teamId: RESERVED }).success,
+    ).toBe(false);
+  });
+
+  it("AccountMetaSchema (read path) is unchanged: it does not apply the prefix check", () => {
+    expect(
+      AccountMetaSchema.safeParse({ ...VALID_ACCOUNT_META, teamId: RESERVED })
+        .success,
+    ).toBe(true);
   });
 });

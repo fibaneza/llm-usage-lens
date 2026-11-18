@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ctxAt } from "@/test/support/access-test-support";
+import { createAppTeam } from "@/lib/data/access/app-teams";
+import { ctxAt, ok } from "@/test/support/access-test-support";
 import { getTeamLink, putTeamLink } from "@/lib/data/litellm/team-links";
 import {
   CALLERS,
@@ -141,6 +142,45 @@ describe("POST /api/litellm/teams", () => {
     signInAs("admin");
     await expectError(
       (await create({ teamId: "team-zzz", teamAlias: "X" })).res,
+      404,
+      "NOT_FOUND",
+    );
+    expect(writeCalls(state)).toHaveLength(0);
+  });
+
+  // Source: docs/specs/2026-11-17-app-teams.md - "Teams without an AWS account"
+  // (a created team takes a link); Access Control T-MI3 (an unknown team id is
+  // refused). The "known team" check reads the team directory (M2 design 1, M2-b).
+  it("a created team is accepted as the dashboard team: the new LiteLLM team is created and linked to it (App Teams; Writes: createTeam)", async () => {
+    const created = ok(
+      await createAppTeam(
+        {
+          name: "Guild",
+          departmentId: "dept-eng",
+          departmentName: "Engineering",
+        },
+        ctxAt(undefined, "req-created-team"),
+      ),
+    ).teamId;
+    signInAs("admin");
+    const { res, body } = await create({ teamId: created, teamAlias: "Guild" });
+    expect(res.status).toBe(201);
+    expect(body.data).toEqual({ teamId: created, litellmTeamId: NEW_LTEAM });
+    expect(bodyOf(writeCalls(state)[0])).toMatchObject({
+      metadata: { source: "llm-usage-lens", dashboardTeamId: created },
+    });
+    expect((await getTeamLink(created))?.litellmTeamId).toBe(NEW_LTEAM);
+  });
+
+  it("an unknown appteam- id is still 404 NOT_FOUND with no LiteLLM write (T-MI3)", async () => {
+    signInAs("admin");
+    await expectError(
+      (
+        await create({
+          teamId: "appteam-00000000-0000-4000-8000-00000000dead",
+          teamAlias: "X",
+        })
+      ).res,
       404,
       "NOT_FOUND",
     );

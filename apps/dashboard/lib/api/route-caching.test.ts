@@ -25,6 +25,8 @@ const data = vi.hoisted(() => ({
   updateAccount: vi.fn(),
   deactivateAccount: vi.fn(),
   getSyncStatus: vi.fn(),
+  hasAppTeamName: vi.fn(),
+  listAppTeams: vi.fn(),
 }));
 vi.mock("@/lib/data/daily-rollups", () => ({
   getRollupsByDate: data.getRollupsByDate,
@@ -35,6 +37,12 @@ vi.mock("@/lib/data/account-meta", () => ({
   createAccount: data.createAccount,
   updateAccount: data.updateAccount,
   deactivateAccount: data.deactivateAccount,
+}));
+// The account writes read the created-team name claim (Access Control - Created
+// app teams, T-MI3); this file pins caching, not that check.
+vi.mock("@/lib/data/access/app-teams", () => ({
+  hasAppTeamName: data.hasAppTeamName,
+  listAppTeams: data.listAppTeams,
 }));
 vi.mock("@/lib/data/sync-status", () => ({
   getSyncStatus: data.getSyncStatus,
@@ -139,6 +147,8 @@ beforeEach(() => {
   ]);
   data.getAllAccounts.mockResolvedValue([ACCOUNT]);
   data.getSyncStatus.mockResolvedValue({ state: "never-synced" });
+  data.hasAppTeamName.mockResolvedValue(false);
+  data.listAppTeams.mockResolvedValue([]);
   data.createAccount.mockResolvedValue(ACCOUNT);
   data.updateAccount.mockResolvedValue(ACCOUNT);
   data.deactivateAccount.mockResolvedValue({ ...ACCOUNT, active: false });

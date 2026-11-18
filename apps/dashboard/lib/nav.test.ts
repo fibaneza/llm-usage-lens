@@ -25,9 +25,9 @@ import type { ManagementNav, NavGroup, NavScope } from "./nav";
 // Control MI-D1 order, MI-D2 LiteLLM item replaces Organisation, MI-D7
 // teamUsage flag): Usage = Overview, My usage, Team usage, Ranking, Cost by
 // department, Cost by team, Cost by service, Cost by user; Management = Users,
-// Team, LiteLLM, Audit. Coordinator ruling (M1): the Team usage item stays
-// HIDDEN for every role until unit M2 builds its page (a constant in nav.ts,
-// flipped by M2), so no case below expects it; the `teamUsage` flag itself is
+// Team, LiteLLM, Audit. M2 built /dashboard/team-usage, so the Team usage
+// item shows exactly where management.teamUsage is true (MI-D1, MI-D7;
+// implementation-phases M1/M2 - TEAM_USAGE_ROUTE = true); the flag itself is
 // asserted in lib/manage-access*.test.ts.
 // Pure functions of the caller's resolved scope: no IO, so a unit test is the
 // lowest layer that sees them.
@@ -66,7 +66,7 @@ const ADMIN_FLAGS: ManagementNav = {
 const ORG_ADMIN_FLAGS: ManagementNav = { ...ADMIN_FLAGS, audit: false };
 // Auditor: every read view incl. Audit (Access Control matrix).
 const AUDITOR_FLAGS: ManagementNav = { ...ADMIN_FLAGS };
-// MI-D7: a lead with a live scope has teamUsage true (the item is still hidden).
+// MI-D7: a lead with a live scope has teamUsage true (the item shows).
 const LEAD_FLAGS: ManagementNav = {
   ...NO_MANAGEMENT,
   team: true,
@@ -114,11 +114,17 @@ const project = (groups: readonly NavGroup[]): Projected =>
     })),
   }));
 
+const TEAM_USAGE_ITEM = {
+  title: "Team usage",
+  pageTitle: "Team usage",
+  href: "/dashboard/team-usage",
+};
 const USAGE = {
   label: "Usage",
   items: [
     { title: "Overview", pageTitle: "Cost overview", href: "/dashboard" },
     { title: "My usage", pageTitle: "My usage", href: "/dashboard/me" },
+    TEAM_USAGE_ITEM,
     {
       title: "Ranking",
       pageTitle: "Cost ranking",
@@ -146,11 +152,18 @@ const USAGE = {
     },
   ],
 };
-// MI-D1: My usage is second, after Overview. A lead's Usage group is My usage
-// only while Team usage is hidden (coordinator ruling, M1).
+// MI-D1: My usage is second, after Overview. A lead (teamUsage true, not
+// global) sees My usage and Team usage, in that order (MI-D1, MI-D7).
 const USAGE_MY_USAGE_ONLY = {
   label: "Usage",
   items: [{ title: "My usage", pageTitle: "My usage", href: "/dashboard/me" }],
+};
+const USAGE_LEAD = {
+  label: "Usage",
+  items: [
+    { title: "My usage", pageTitle: "My usage", href: "/dashboard/me" },
+    TEAM_USAGE_ITEM,
+  ],
 };
 // Design System - Navigation (Sidebar), routes table (titles and hrefs).
 const MGMT_TEAM = {
@@ -212,8 +225,8 @@ describe("navGroupsFor: per-role navigation (Access Control - Navigation and lan
     expect(project(navGroupsFor(s))).toEqual(expected);
   });
 
-  // Coordinator ruling (M1): hidden for every role until M2 builds the page.
-  it("renders no Team usage item for any role while its page is unbuilt (coordinator ruling, M1)", () => {
+  // MI-D1 / MI-D7: the item follows the teamUsage flag, per role.
+  it("shows the Team usage item exactly where management.teamUsage is true (MI-D7)", () => {
     for (const s of [
       GLOBAL,
       ORG_ADMIN,
@@ -222,11 +235,20 @@ describe("navGroupsFor: per-role navigation (Access Control - Navigation and lan
       LEAD_TEAMS,
       LEAD_DEPARTMENTS,
       LEAD_BOTH,
-      MEMBER,
-      NO_TEAM,
     ]) {
+      expect(hrefsOf(s)).toContain(TEAM_USAGE_HREF);
+    }
+    for (const s of [MEMBER, NO_TEAM]) {
       expect(hrefsOf(s)).not.toContain(TEAM_USAGE_HREF);
     }
+  });
+
+  it("hides Team usage when the flag is false, even for a global scope (fail closed, MI-D7)", () => {
+    const s = scope({
+      global: true,
+      management: { ...ADMIN_FLAGS, teamUsage: false },
+    });
+    expect(hrefsOf(s)).not.toContain(TEAM_USAGE_HREF);
   });
 
   // B2-2: a lead sees My usage and Team only; no Administration (B1-7
@@ -237,7 +259,7 @@ describe("navGroupsFor: per-role navigation (Access Control - Navigation and lan
     ["a lead of both", LEAD_BOTH],
   ])("%s sees My usage and Team, and no Administration group", (_n, s) => {
     expect(project(navGroupsFor(s))).toEqual([
-      USAGE_MY_USAGE_ONLY,
+      USAGE_LEAD,
       MANAGEMENT_TEAM_ONLY,
     ]);
   });
@@ -259,7 +281,13 @@ describe("navGroupsFor: per-role navigation (Access Control - Navigation and lan
       teamScopes: new Set<string>(),
       departmentScopes: new Set<string>(),
     };
-    expect(project(navGroupsFor(bare))).toEqual([USAGE]);
+    // Team usage follows its own flag (MI-D7), so it is absent here too.
+    expect(project(navGroupsFor(bare))).toEqual([
+      {
+        ...USAGE,
+        items: USAGE.items.filter((i) => i.href !== TEAM_USAGE_ITEM.href),
+      },
+    ]);
   });
 
   it("each management flag controls exactly its own item", () => {
@@ -313,6 +341,7 @@ describe("navGroupsFor: per-role navigation (Access Control - Navigation and lan
       expect(titles(s, "Usage")).toEqual([
         "Overview",
         "My usage",
+        "Team usage",
         "Ranking",
         "Cost by department",
         "Cost by team",
@@ -385,24 +414,16 @@ describe("navGroupsFor: per-role navigation (Access Control - Navigation and lan
 });
 
 describe("NAV_GROUPS / NAV_ITEMS: the unfiltered full set (B1-8: no scope shows everything)", () => {
-  // The unfiltered list may or may not carry the hidden Team usage item
-  // (implementation detail of the constant); compare without it.
   it("is the full projection, so a bare render and an admin agree", () => {
-    const withoutTeamUsage = project(NAV_GROUPS).map((g) => ({
-      ...g,
-      items: g.items.filter((i) => i.href !== TEAM_USAGE_HREF),
-    }));
-    expect(withoutTeamUsage).toEqual(FULL_NAV);
+    expect(project(NAV_GROUPS)).toEqual(FULL_NAV);
   });
 
-  it("the unfiltered order puts My usage second and Team usage third when present (MI-D1)", () => {
+  it("the unfiltered order puts My usage second and Team usage third (MI-D1)", () => {
     const usage = NAV_GROUPS.find((g) => g.label === "Usage")?.items.map(
       (i) => i.href,
     );
     expect(usage?.slice(0, 2)).toEqual(["/dashboard", "/dashboard/me"]);
-    if (usage?.includes(TEAM_USAGE_HREF)) {
-      expect(usage[2]).toBe(TEAM_USAGE_HREF);
-    }
+    expect(usage?.[2]).toBe(TEAM_USAGE_HREF);
   });
 
   it("NAV_ITEMS flattens NAV_GROUPS, Settings and the Management pages included (PageTitle resolves every page from it)", () => {

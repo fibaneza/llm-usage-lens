@@ -9,7 +9,9 @@ import {
   parseSearchParams,
   withRoute,
 } from "@/lib/api/respond";
+import { buildTeamDirectory } from "@/lib/api/team-directory";
 import { getAllAccounts } from "@/lib/data/account-meta";
+import { listAppTeams } from "@/lib/data/access/app-teams";
 import { listAllTeamMemberOids } from "@/lib/data/access/team-member-lookup";
 import { listTeamLinks } from "@/lib/data/litellm/team-links";
 import {
@@ -59,7 +61,9 @@ export const GET = withRoute(async (request, _ctx, session) => {
   return liteLLMResponse(async () => {
     const [enabled, accounts, links] = await Promise.all([
       enabledOperations(),
-      getAllAccounts(),
+      Promise.all([getAllAccounts(), listAppTeams()]).then(([a, t]) =>
+        buildTeamDirectory(a, t),
+      ),
       listTeamLinks(),
     ]);
     const linkOf = new Map(links.map((l) => [l.teamId, l.litellmTeamId]));

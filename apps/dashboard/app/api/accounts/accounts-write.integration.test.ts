@@ -7,6 +7,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { auth } from "@/auth";
 import { getAccountMeta } from "@/lib/data/account-meta";
+import { createAppTeam } from "@/lib/data/access/app-teams";
+import { ctxAt, ok } from "@/test/support/access-test-support";
+import { nonAuditItems } from "@/test/support/governance-route-support";
 import {
   clearTable,
   ensureTestTable,
@@ -276,5 +279,100 @@ describe("account writes are same-origin only", () => {
     expect((await res.json()).error.message).toBe(
       "internal-admin role required",
     );
+  });
+});
+
+// Source: docs/specs/2026-11-10-access-control.md - "Created app teams" (the
+// clash is refused both ways: POST /api/accounts and PATCH /api/accounts/[id]
+// refuse a teamName equal to a created team's name, case-insensitively after
+// trimming, 409 CONFLICT, no write; a registry account that keeps its teamId
+// and current teamName is not refused; the registry refuses the reserved
+// `appteam-` teamId prefix), Data Model spec - "Entity: AppTeam"; threat T-MI3.
+describe("account writes and created teams (M2; T-MI3)", () => {
+  const RESERVED_ID = "appteam-00000000-0000-4000-8000-000000000001";
+
+  async function seedCreatedTeam(name = "Platform Guild") {
+    return ok(
+      await createAppTeam(
+        { name, departmentId: "dept-eng", departmentName: "Engineering" },
+        ctxAt(undefined, "req-seed"),
+      ),
+    );
+  }
+
+  async function expectConflict(res: Response) {
+    expect(res.status).toBe(409);
+    const parsed = ApiErrorBodySchema.parse(await res.json());
+    expect(ApiErrorCodeSchema.parse(parsed.error.code)).toBe("CONFLICT");
+  }
+
+  it.each([
+    ["exactly", "Platform Guild"],
+    ["in another case and padded", "  platform GUILD "],
+  ])(
+    "POST with a teamName equal to a created team's name (%s) is 409 and creates nothing",
+    async (_label, teamName) => {
+      await seedCreatedTeam();
+      const before = await nonAuditItems();
+      await expectConflict(await POST(json("POST", { ...body, teamName })));
+      expect(await getAccountMeta(body.accountId)).toBeNull();
+      expect(await nonAuditItems()).toEqual(before);
+    },
+  );
+
+  it("POST with a teamId starting with appteam- is 400 and creates nothing", async () => {
+    const res = await POST(json("POST", { ...body, teamId: RESERVED_ID }));
+    expect(res.status).toBe(400);
+    expect(ApiErrorBodySchema.parse(await res.json()).error.code).toBe(
+      "BAD_REQUEST",
+    );
+    expect(await getAccountMeta(body.accountId)).toBeNull();
+  });
+
+  describe("PATCH /api/accounts/[id]", () => {
+    const patch = (payload: unknown) =>
+      PATCH(json("PATCH", payload), withId(existing.accountId));
+
+    it.each([
+      ["exactly", "Platform Guild"],
+      ["in another case and padded", "  platform GUILD "],
+    ])(
+      "with a teamName equal to a created team's name (%s) is 409 and the account is unchanged",
+      async (_label, teamName) => {
+        await seedCreatedTeam();
+        const before = await getAccountMeta(existing.accountId);
+        await expectConflict(await patch({ teamName }));
+        expect(await getAccountMeta(existing.accountId)).toEqual(before);
+      },
+    );
+
+    it("an account that keeps its teamId and current teamName is not refused, even when a created team holds that name", async () => {
+      await seedCreatedTeam(existing.teamName);
+      const res = await patch({
+        teamId: existing.teamId,
+        teamName: existing.teamName.toUpperCase(),
+        accountName: "renamed",
+      });
+      expect(res.status).toBe(200);
+      expect(await getAccountMeta(existing.accountId)).toMatchObject({
+        accountName: "renamed",
+        teamId: existing.teamId,
+      });
+    });
+
+    it("moving to another teamId with a created team's name is 409 (only keeping both teamId and teamName is exempt)", async () => {
+      await seedCreatedTeam(existing.teamName);
+      const before = await getAccountMeta(existing.accountId);
+      await expectConflict(
+        await patch({ teamId: "team-other", teamName: existing.teamName }),
+      );
+      expect(await getAccountMeta(existing.accountId)).toEqual(before);
+    });
+
+    it("a teamId starting with appteam- is 400 and the account is unchanged", async () => {
+      const before = await getAccountMeta(existing.accountId);
+      expect((await patch({ teamId: RESERVED_ID })).status).toBe(400);
+      expect(await getAccountMeta(existing.accountId)).toEqual(before);
+    });
   });
 });

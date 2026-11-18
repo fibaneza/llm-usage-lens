@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   LUSER,
@@ -20,6 +20,8 @@ import {
   useEnv,
 } from "@/test/fakes/fake-litellm-views";
 import { ctxAt, ok } from "@/test/support/access-test-support";
+import { grantAdminScope } from "@/lib/data/access/admin-scopes";
+import { createAppTeam } from "@/lib/data/access/app-teams";
 import { grantRole } from "@/lib/data/access/role-grants";
 import { installFakeOtel, recordedSpans } from "@/test/fakes/otel-fake";
 import { CALLERS, signInAs } from "@/test/fixtures/scope-fixtures";
@@ -401,5 +403,91 @@ describe("GET /api/litellm/me teams[].configurable (Team configuration page: Who
     signInAs("memberA");
     const rows = await teamsOf();
     expect(rows.some((t) => t.configurable === true)).toBe(false);
+  });
+});
+
+// Source: docs/specs/2026-11-17-app-teams.md - "Teams without an AWS account"
+// (a created team is an app team: it takes admin scopes, visibility and a
+// link); docs/specs/2026-11-10-access-control.md - MI-D7 (a department scope
+// covers a created team by its stored departmentId), threat T-MI4 (a scope
+// never reaches a team outside it). `teams` is the team list of the Team page
+// picker and Team usage (M2 design 1, group M2-b: viewableTeams reads the
+// team directory).
+describe("GET /api/litellm/me teams: created teams (App Teams; MI-D7; T-MI4)", () => {
+  const idsOf = async (): Promise<string[]> => {
+    const { res, body } = await me();
+    expect(res.status).toBe(200);
+    return body.data.teams.map((t: { teamId: string }) => t.teamId);
+  };
+  let eng: string;
+  let ops: string;
+  beforeEach(async () => {
+    const ctx = ctxAt(undefined, "req-created-teams");
+    eng = ok(
+      await createAppTeam(
+        {
+          name: "Eng Guild",
+          departmentId: "dept-eng",
+          departmentName: "Engineering",
+        },
+        ctx,
+      ),
+    ).teamId;
+    ops = ok(
+      await createAppTeam(
+        { name: "Ops Guild", departmentId: "dept-ops", departmentName: "Ops" },
+        ctxAt(undefined, "req-created-teams-2"),
+      ),
+    ).teamId;
+  });
+
+  it.each(["admin", "orgAdmin", "auditor"] as const)(
+    "%s (a global reader) sees every created team, with its stored name and no link",
+    async (who) => {
+      signInAs(who);
+      const { body } = await me();
+      const rows = body.data.teams as Array<{
+        teamId: string;
+        teamName: string;
+        linked: boolean;
+      }>;
+      expect(rows.find((t) => t.teamId === eng)).toMatchObject({
+        teamName: "Eng Guild",
+        linked: false,
+      });
+      expect(rows.map((t) => t.teamId)).toContain(ops);
+    },
+  );
+
+  it("a team-scope Lead of the created team sees it and only it (Created app teams; T-MI4)", async () => {
+    ok(
+      await grantAdminScope(
+        { oid: CALLERS.viewerNone.oid, scopeType: "team", scopeId: eng },
+        ctxAt(undefined, "req-scope-eng"),
+      ),
+    );
+    signInAs("viewerNone");
+    expect(await idsOf()).toEqual([eng]);
+  });
+
+  it("a department-scope Lead sees the created teams of its department by the stored departmentId, not another department's (MI-D7; T-MI4)", async () => {
+    signInAs("deptAdminEng");
+    const ids = await idsOf();
+    expect(ids).toContain(eng);
+    expect(ids).not.toContain(ops);
+  });
+
+  it("a Lead of another team does not see the created team (T-MI4: no leak across scopes)", async () => {
+    signInAs("teamAdminA");
+    const ids = await idsOf();
+    expect(ids).not.toContain(eng);
+    expect(ids).not.toContain(ops);
+  });
+
+  it("a plain member (a Viewer) sees no created team, not even in their department (Roles and rights)", async () => {
+    signInAs("memberA");
+    const ids = await idsOf();
+    expect(ids).not.toContain(eng);
+    expect(ids).not.toContain(ops);
   });
 });

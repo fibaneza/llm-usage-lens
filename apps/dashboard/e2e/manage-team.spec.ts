@@ -31,7 +31,7 @@ const TEAM_URL = "/dashboard/manage/team?team=t1";
 // the page is three views, ?view= in the URL, only the active one rendered.
 const VIEW_REGIONS = {
   members: "LiteLLM members",
-  budgets: "Team spend & budgets",
+  budgets: "Budget and limits",
   keys: "Models",
 } as const;
 const VIEWS = ["members", "budgets", "keys"] as const;
@@ -158,15 +158,14 @@ test.describe("Management -> Team page", () => {
       page.getByRole("region", { name: "LiteLLM members" }),
     ).toBeVisible();
     await page.getByRole("tab", { name: "Budgets" }).click();
-    for (const name of ["Team spend & budgets", "Budget and limits"]) {
-      await expect(page.getByRole("region", { name })).toBeVisible();
-    }
-    // Budget as a bar: the team budget carries a bar with text.
+    // M2 (MI-D7): the Budgets view holds only Budget and limits; the spend and
+    // its budget bar moved to Team usage (e2e/team-usage.spec.ts).
     await expect(
-      page
-        .getByRole("region", { name: "Team spend & budgets" })
-        .getByRole("progressbar"),
+      page.getByRole("region", { name: "Budget and limits" }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Team spend", exact: true }),
+    ).toHaveCount(0);
     await page.getByRole("tab", { name: "Keys" }).click();
     for (const name of ["Keys", "Models"]) {
       await expect(page.getByRole("region", { name })).toBeVisible();
@@ -486,32 +485,30 @@ async function mockSpendSources(page: Page) {
 }
 
 test.describe("Management -> Team: spend source (App Teams)", () => {
-  test("a linked team shows the LiteLLM team figure, and an org-admin also the member sum with why they differ", async ({
+  test("a linked team's Budgets view has no spend panel and no member-sum request; the spend moved to Team usage (MI-D7)", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-org-admin"] });
     await mockSpendSources(page);
-    const asked = page.waitForRequest(
-      (request) =>
-        new URL(request.url()).pathname === "/api/litellm/teams/t1" &&
-        new URL(request.url()).searchParams.get("include") === "memberSum",
-    );
+    const asked: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.searchParams.get("include") === "memberSum") asked.push(url.href);
+    });
     await page.goto("/dashboard/manage/team?team=t1&view=budgets");
     await waitForHydration(page);
-    await asked;
-    const spend = page.getByRole("region", { name: "Team spend & budgets" });
-    await expect(spend).toContainText("$321.75");
-    await expect(spend).toContainText("LiteLLM team");
-    await expect(spend).toContainText("Sum of members");
-    await expect(spend).toContainText("$250.00");
-    await expect(spend).toContainText(
-      "each app member spent through the gateway",
-    );
+    await expect(
+      page.getByRole("region", { name: "Budget and limits" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Team spend", exact: true }),
+    ).toHaveCount(0);
+    expect(asked).toEqual([]);
     await expect(page.getByRole("tab", { name: "Keys" })).toBeVisible();
   });
 
-  test("an unlinked team shows the member sum with coverage and 'not in LiteLLM', and no LiteLLM control", async ({
+  test("an unlinked team shows the no-LiteLLM-team note, no spend panel and no LiteLLM control (MI-D7)", async ({
     page,
     context,
   }) => {
@@ -519,21 +516,14 @@ test.describe("Management -> Team: spend source (App Teams)", () => {
     await mockSpendSources(page);
     await page.goto("/dashboard/manage/team?team=t2");
     await waitForHydration(page);
-    const spend = page.getByRole("region", { name: "Team spend", exact: true });
-    await expect(spend).toContainText("$4.00");
-    await expect(spend).toContainText("Sum of members");
-    await expect(spend).toContainText("3 matched");
-    await expect(spend.getByRole("row", { name: /Tres Three/ })).toContainText(
-      "not in LiteLLM",
-    );
+    await expect(
+      page.getByRole("region", { name: "Team spend", exact: true }),
+    ).toHaveCount(0);
     await expect(
       page.getByText(
         "This team has no LiteLLM team of its own. Budgets, limits and keys are managed in LiteLLM.",
       ),
     ).toBeVisible();
-    await expect(spend.getByRole("row", { name: /Cuatro Four/ })).toContainText(
-      "Hidden until per-user reporting is approved",
-    );
     // B2b (Unlinked rule): only the Members view, so no Budgets or Keys tab.
     await expect(page.getByRole("tab", { name: "Budgets" })).toHaveCount(0);
     await expect(page.getByRole("tab", { name: "Keys" })).toHaveCount(0);
@@ -549,7 +539,7 @@ test.describe("Management -> Team: spend source (App Teams)", () => {
     await expect(
       page.getByRole("button", { name: "Generate key" }),
     ).toHaveCount(0);
-    // L4b review round 1: axe on the populated Team spend panel.
+    // L4b review round 1: axe on the unlinked page.
     await expectNoBlockingViolations(page);
   });
 });

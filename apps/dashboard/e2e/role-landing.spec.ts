@@ -55,11 +55,17 @@ type Item = {
 };
 type Group = { label: string; items: Item[] };
 
+const TEAM_USAGE_ITEM: Item = {
+  title: "Team usage",
+  pageTitle: "Team usage",
+  path: "/dashboard/team-usage",
+};
 const USAGE: Group = {
   label: "Usage",
   items: [
     { title: "Overview", pageTitle: "Cost overview", path: "/dashboard" },
     { title: "My usage", pageTitle: "My usage", path: "/dashboard/me" },
+    TEAM_USAGE_ITEM,
     { title: "Ranking", pageTitle: "Cost ranking", path: "/dashboard/ranking" },
     {
       title: "Cost by department",
@@ -83,12 +89,19 @@ const USAGE: Group = {
     },
   ],
 };
-// M1 (MI-D1): My usage is second. Team usage (third) is hidden for every role
-// until unit M2 builds its page (coordinator ruling, M1), so no journey here
-// expects it. A non-global caller's Usage group holds only My usage meanwhile.
+// MI-D1 / MI-D7: My usage is second, Team usage third where the teamUsage flag
+// is true (every global reader, and a lead with a live scope). A caller with no
+// scope holds only My usage.
 const USAGE_MY_USAGE_ONLY: Group = {
   label: "Usage",
   items: [{ title: "My usage", pageTitle: "My usage", path: "/dashboard/me" }],
+};
+const USAGE_LEAD: Group = {
+  label: "Usage",
+  items: [
+    { title: "My usage", pageTitle: "My usage", path: "/dashboard/me" },
+    TEAM_USAGE_ITEM,
+  ],
 };
 const ORG_USAGE_TITLES = USAGE.items
   .filter((i) => i.path !== "/dashboard/me")
@@ -287,10 +300,7 @@ test.describe("journey: lead (team admin)", () => {
       topBar(page).getByRole("button", { name: "Last 30 days" }),
     ).toBeVisible();
 
-    await expectSidebarAndWalk(page, [
-      USAGE_MY_USAGE_ONLY,
-      MANAGEMENT_TEAM_ONLY,
-    ]);
+    await expectSidebarAndWalk(page, [USAGE_LEAD, MANAGEMENT_TEAM_ONLY]);
   });
 
   test("every Usage route, the other Management pages and every Settings route are a 404 (B1-2, B2-1, B2-10)", async ({
@@ -466,6 +476,119 @@ test.describe("My usage (/dashboard/me)", () => {
     ).toHaveCount(0);
     await expect(
       page.getByRole("link", { name: "Request a budget increase" }),
+    ).toHaveCount(0);
+  });
+});
+
+// Unit M2 (Design System -- Management pages, Team usage and New team; Access
+// Control -- Created app teams, T-MI4): the lead and user cases that need the
+// probe identities. A global reader's Team usage and the admin's New team
+// journey are in team-usage.spec.ts and team-create.spec.ts. The server gate
+// reads only DynamoDB; the browser's LiteLLM calls are fulfilled from fixtures.
+const GUILD_ID = "appteam-00000000-0000-4000-8000-000000000001";
+
+async function stubTeamSpend(page: Page) {
+  await page.route(/\/api\/litellm\/teams\/[^/?]+(\?|$)/, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          connected: false,
+          spendSource: "member-sum",
+          daily: [],
+          memberSum: {
+            total: 0,
+            daily: [],
+            coverage: { members: 0, matched: 0, unmatched: 0, pending: 0 },
+            members: [],
+          },
+        },
+      },
+    }),
+  );
+}
+
+test.describe("journey: Team usage and New team by scope (unit M2, T-MI4)", () => {
+  test("a team lead sees only the team it leads on Team usage; another team, even one in the same department, is a 404", async ({
+    context,
+    page,
+  }) => {
+    await open(page, context, byName("team-admin"), "/dashboard/me");
+    await stubTeamSpend(page);
+
+    const own = await page.goto(`/dashboard/team-usage?team=${PROBE_TEAM}`);
+    expect(own?.status()).toBe(200);
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("region", { name: "Team spend", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: "Team", exact: true }),
+    ).toHaveCount(0);
+
+    await expectNotFound(page, "/dashboard/team-usage?team=team-platform");
+    await expectNotFound(page, `/dashboard/team-usage?team=${GUILD_ID}`);
+    await expectNotFound(page, "/dashboard/team-usage?team=team-analytics");
+  });
+
+  test("a department lead's picker lists the teams of its department, including the created team, and no other", async ({
+    context,
+    page,
+  }) => {
+    await open(page, context, byName("department-admin"), "/dashboard/me");
+    await stubTeamSpend(page);
+    await page.goto(`/dashboard/team-usage?team=${PROBE_TEAM}`);
+    await waitForHydration(page);
+
+    const picker = page.getByRole("combobox", { name: "Team", exact: true });
+    await expect(picker.getByRole("option")).toHaveText([
+      "Payments",
+      "Platform",
+      "Platform Guild",
+    ]);
+  });
+
+  for (const name of ["member", "viewer-no-team"]) {
+    test(`${name}: Team usage is a 404`, async ({ context, page }) => {
+      await open(page, context, byName(name), "/dashboard/me");
+      await expectNotFound(page, "/dashboard/team-usage");
+      await expectNotFound(page, `/dashboard/team-usage?team=${PROBE_TEAM}`);
+    });
+  }
+
+  test("a team lead's Team page has no New team button (D5)", async ({
+    context,
+    page,
+  }) => {
+    await open(page, context, byName("team-admin"), "/dashboard/me");
+    await page.route(/\/api\/litellm\/me(\?|$)/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            linked: false,
+            enabledOperations: [],
+            teams: [
+              {
+                teamId: PROBE_TEAM,
+                teamName: "Payments",
+                linked: false,
+                configurable: true,
+              },
+            ],
+          },
+        },
+      }),
+    );
+    await page.goto(`${TEAM_ITEM.path}?team=${PROBE_TEAM}`);
+    await waitForHydration(page);
+    // The page-level team picker is the first "Team" select; the Members
+    // region carries a second one (strict-mode locator, merge with main).
+    await expect(
+      page.getByRole("combobox", { name: "Team", exact: true }).first(),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "New team" })).toHaveCount(0);
+    // m2-r1 UI WARN: Team spend belongs to Team usage, not the Team page.
+    await expect(
+      page.getByRole("region", { name: "Team spend", exact: true }),
     ).toHaveCount(0);
   });
 });

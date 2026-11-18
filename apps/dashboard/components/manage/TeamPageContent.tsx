@@ -1,8 +1,10 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
 import { Fragment, useId, type ReactNode } from "react";
 
+import { formatUsd } from "@/components/charts/chart-data";
 import { Panel } from "@/components/display/Panel";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageTabs } from "@/components/layout/PageTabs";
@@ -16,11 +18,11 @@ import { useMeQuery } from "@/components/litellm/use-me-query";
 import { useTeamDetailState } from "@/components/litellm/use-team-detail";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { TeamSpendPanel } from "./TeamSpendPanel";
+import { TeamCreateDialog } from "./TeamCreateDialog";
 
 const PANEL_SKELETON = <Skeleton className="h-40 w-full" />;
 const DESCRIPTION =
-  "Spend, budgets, members, keys and models for your teams, as LiteLLM reports them.";
+  "Budgets, members, keys and models for your teams, as LiteLLM reports them.";
 
 const VIEWS = ["members", "budgets", "keys"] as const;
 const VIEW_ITEMS = [
@@ -40,6 +42,8 @@ type TeamPageContentProps = {
   canRaiseLimits: boolean;
   // The ScopeLine label for a non-global caller (scopeLabelFor), else null.
   scopeLabel: string | null;
+  // True for internal-admin and internal-org-admin: shows New team.
+  canCreateTeam: boolean;
   // Server-rendered team-level access sections, when the caller has any.
   access?: ReactNode;
 };
@@ -51,11 +55,25 @@ type TeamPageContentProps = {
 export function TeamPageContent({
   canRaiseLimits,
   scopeLabel,
+  canCreateTeam,
   access,
 }: TeamPageContentProps) {
   const selectId = useId();
   const [picked, setPicked] = useQueryState("team", parseAsString);
+  const queryClient = useQueryClient();
   const me = useMeQuery();
+
+  const createTrigger = canCreateTeam ? (
+    <TeamCreateDialog
+      onCreated={(created) => {
+        void setPicked(created.teamId);
+        void queryClient.invalidateQueries({ queryKey: ["litellm", "me"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["access", "org-units"],
+        });
+      }}
+    />
+  ) : undefined;
 
   if (me.isPending) return <Skeleton className="h-40 w-full" />;
   if (me.data?.status !== "ok") {
@@ -70,7 +88,7 @@ export function TeamPageContent({
   if (!team) {
     return (
       <div className="flex flex-col gap-4">
-        <PageHeader description={DESCRIPTION} />
+        <PageHeader description={DESCRIPTION} actions={createTrigger} />
         <p className="text-muted-foreground text-sm">
           You have no teams to manage.
         </p>
@@ -83,6 +101,7 @@ export function TeamPageContent({
     <div className="flex flex-col gap-4">
       <PageHeader
         description={DESCRIPTION}
+        actions={createTrigger}
         scopeLine={
           scopeLabel
             ? { label: scopeLabel, names: teams.map((t) => t.teamName) }
@@ -115,7 +134,10 @@ export function TeamPageContent({
         />
       ) : (
         <>
-          <SpendPanel teamId={team.teamId} withBudgets={false} />
+          <p className="text-muted-foreground text-sm">
+            This team has no LiteLLM team of its own. Budgets, limits and keys
+            are managed in LiteLLM.
+          </p>
           {access}
         </>
       )}
@@ -131,28 +153,10 @@ const panelProps = (teamId: string, title: string, reported = false) => ({
   badge: reported ? <LiteLLMReportedBadge /> : undefined,
 });
 
-function SpendPanel({
-  teamId,
-  withBudgets,
-}: {
-  teamId: string;
-  withBudgets: boolean;
-}) {
-  const title = withBudgets ? "Team spend & budgets" : "Team spend";
-  return (
-    <Panel
-      {...panelProps(teamId, title, true)}
-      description={withBudgets ? "Daily figures are UTC days." : undefined}
-    >
-      <TeamSpendPanel teamId={teamId} />
-    </Panel>
-  );
-}
-
 // Linked team: the Members, Budgets and Keys views on the one Tabs component,
 // only the active view mounted (Design System - Management pages, Team page
-// views and links). LiteLLM not configured (LD37) leaves Members alone, with
-// the spend panel saying so above it and no tabs. An outage does not hide a
+// views and links). LiteLLM not configured (LD37) leaves the access slot
+// alone and no tabs. An outage does not hide a
 // view, and the tabs show while the detail loads.
 //
 // The views sit in PageTabs; the not-configured state renders no tabs at all.
@@ -181,11 +185,8 @@ function LinkedTeamViews({
     detail.isPending ? PANEL_SKELETON : children;
 
   const accessSlot = <Fragment key="access">{access}</Fragment>;
-  // Mounted at once, beside the detail read, so the member-sum read does not
-  // wait on it (Design System - Performance patterns, no request waterfalls).
-  const spend = <SpendPanel key="spend" teamId={teamId} withBudgets />;
   const content = !showTabs
-    ? [spend, accessSlot]
+    ? [accessSlot]
     : view === "members"
       ? [
           <Panel key="members" {...panel("LiteLLM members", true)}>
@@ -197,13 +198,25 @@ function LinkedTeamViews({
         ]
       : view === "budgets"
         ? [
-            spend,
             <Panel key="budget" {...panel("Budget and limits")}>
               {gated(
-                <BudgetLimitsPanel
-                  teamId={teamId}
-                  capabilities={capabilities}
-                />,
+                <>
+                  {detail.data?.status === "ok" &&
+                  "team" in detail.data.data ? (
+                    <dl className="text-cell mb-4 flex items-center gap-x-4">
+                      <dt className="text-muted-foreground">
+                        Spent this budget period
+                      </dt>
+                      <dd className="font-mono tabular-nums">
+                        {formatUsd(detail.data.data.team.spend)}
+                      </dd>
+                    </dl>
+                  ) : null}
+                  <BudgetLimitsPanel
+                    teamId={teamId}
+                    capabilities={capabilities}
+                  />
+                </>,
               )}
             </Panel>,
           ]
@@ -218,8 +231,8 @@ function LinkedTeamViews({
             </Panel>,
           ];
 
-  // One tree for both states: the spend panel (and its in-flight read) is not
-  // remounted when the detail answers "not configured" and the tab list goes.
+  // One tree for both states, so the panels are not remounted when the detail
+  // answers "not configured" and the tab list goes.
   return (
     <PageTabs
       hideList={!showTabs}

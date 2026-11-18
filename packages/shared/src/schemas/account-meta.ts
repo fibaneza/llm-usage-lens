@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { COLLECTOR_REGION } from "../region";
+import { isReservedTeamId } from "./app-team";
 import { AccountIdSchema, Iso8601Schema } from "./primitives";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Entity: AccountMeta".
@@ -20,11 +21,16 @@ export const AccountMetaSchema = z.object({
 export type AccountMeta = z.infer<typeof AccountMetaSchema>;
 
 // Settings CRUD bodies — docs/specs/2026-05-15-data-model.md "API Routes".
+const RegistryTeamIdSchema = z
+  .string()
+  .min(1)
+  .refine((id) => !isReservedTeamId(id), "teamId may not start with appteam-");
+
 export const CreateAccountInputSchema = AccountMetaSchema.omit({
   active: true,
   createdAt: true,
   updatedAt: true,
-});
+}).extend({ teamId: RegistryTeamIdSchema });
 
 export type CreateAccountInput = z.infer<typeof CreateAccountInputSchema>;
 
@@ -33,6 +39,8 @@ export const UpdateAccountPatchSchema = AccountMetaSchema.omit({
   active: true,
   createdAt: true,
   updatedAt: true,
-}).partial();
+})
+  .extend({ teamId: RegistryTeamIdSchema })
+  .partial();
 
 export type UpdateAccountPatch = z.infer<typeof UpdateAccountPatchSchema>;

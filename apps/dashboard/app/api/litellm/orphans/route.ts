@@ -1,5 +1,7 @@
 import { jsonData, withRoute } from "@/lib/api/respond";
+import { buildTeamDirectory } from "@/lib/api/team-directory";
 import { getAllAccounts } from "@/lib/data/account-meta";
+import { listAppTeams } from "@/lib/data/access/app-teams";
 import { listTeamLinks } from "@/lib/data/litellm/team-links";
 import { mapTeamMembers } from "@/lib/data/litellm/team-members";
 import { getTeam } from "@/lib/litellm/operations";
@@ -35,7 +37,9 @@ export const GET = withRoute(async (_request, _ctx, session) => {
   return liteLLMResponse(async () => {
     requireEnabled(await enabledOperations(), ["getTeam"]);
     const [accounts, links] = await Promise.all([
-      getAllAccounts(),
+      Promise.all([getAllAccounts(), listAppTeams()]).then(([a, t]) =>
+        buildTeamDirectory(a, t),
+      ),
       listTeamLinks(),
     ]);
     const names = new Map<string, string>();

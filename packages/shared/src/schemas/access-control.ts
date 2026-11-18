@@ -288,6 +288,7 @@ export const AUDIT_ACTIONS = [
   "litellm.team.limits",
   "litellm.team.models",
   "litellm.gateway.update",
+  "appteam.create",
   "budgetreset.request.create",
   "budgetreset.request.approve",
   "budgetreset.request.deny",

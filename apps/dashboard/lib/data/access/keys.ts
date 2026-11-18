@@ -49,6 +49,13 @@ export const ssoRefPk = (tid: string, oid: string): string =>
 // Setup-link lookup by token hash (the token is the only input at setup).
 export const setupLinkPk = (tokenHash: string): string =>
   `SETUPLINK#${tokenHash}`;
+
+// Source: docs/specs/2026-05-15-data-model.md — "Entity: AppTeam".
+export const APPTEAMS_GSI1PK = "APPTEAMS";
+export const appTeamPk = (teamId: string): string => `APPTEAM#${teamId}`;
+export const appTeamGsi1sk = (teamId: string): string => `APPTEAM#${teamId}`;
+export const appTeamNamePk = (name: string): string =>
+  `APPTEAMNAME#${name.trim().toLowerCase()}`;
 // One-to-one claim of a LiteLLM user by an identity (management improvements
 // D16; Access Control - Data model additions, LiteLLMUserClaim).
 export const litellmUserPk = (litellmUserId: string): string =>

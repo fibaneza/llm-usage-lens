@@ -1,7 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createAppTeam } from "@/lib/data/access/app-teams";
 import { resetDeniedAudit } from "@/lib/data/access/audit";
-import { seedSsoAffiliation } from "@/test/support/access-test-support";
+import {
+  ctxAt,
+  ok,
+  seedSsoAffiliation,
+} from "@/test/support/access-test-support";
 import { createPendingItem, listPendingFor } from "@/lib/data/access/pending";
 import {
   CALLERS,
@@ -310,6 +315,65 @@ describe("POST /api/teams/[id]/members", () => {
     await expectError(await add(MISSING, { oid: alice.oid }), 404, "NOT_FOUND");
     expect(await auditToday()).toEqual([]);
     expect(await deniedToday()).toEqual([]);
+  });
+
+  // Source: Access Control spec - "Created app teams" (a created team can take
+  // members; covered by a department scope through its stored departmentId);
+  // the team lookup is lib/api/org-lookup.ts findTeam (M2).
+  describe("a created app team (M2)", () => {
+    const seedCreated = async (departmentId: string) =>
+      ok(
+        await createAppTeam(
+          {
+            name: `Guild ${departmentId}`,
+            departmentId,
+            departmentName: departmentId === "dept-eng" ? "Engineering" : "Ops",
+          },
+          ctxAt(undefined, `req-seed-${departmentId}`),
+        ),
+      );
+    const UNKNOWN_APPTEAM = "appteam-00000000-0000-4000-8000-0000000000aa";
+
+    it("takes a member: 201, the affiliation points at the created team", async () => {
+      const team = await seedCreated("dept-eng");
+      const data = await expectData<Member>(
+        await add(team.teamId, { oid: alice.oid }),
+        [200, 201],
+      );
+      expect(data).toMatchObject({ oid: alice.oid, teamId: team.teamId });
+      expect(await affiliationOf(alice.oid)).toMatchObject({
+        teamId: team.teamId,
+      });
+    });
+
+    it("a department-scope admin adds to a created team of its department, and gets the missing-team 404 for another department's", async () => {
+      const mine = await seedCreated("dept-eng");
+      const foreign = await seedCreated("dept-ops");
+      signInAs("deptAdminEng");
+      await expectData(await add(mine.teamId, { oid: alice.oid }), [200, 201]);
+      const outOfScope = await expectError(
+        await add(foreign.teamId, { oid: bob.oid }),
+        404,
+        "NOT_FOUND",
+      );
+      expect(await affiliationOf(bob.oid)).toBeNull();
+      signInAs("admin");
+      const missing = await expectError(
+        await add(UNKNOWN_APPTEAM, { oid: bob.oid }),
+        404,
+        "NOT_FOUND",
+      );
+      expectSameBody(outOfScope, missing, foreign.teamId, UNKNOWN_APPTEAM);
+    });
+
+    it("an unknown appteam- id is still the missing-team 404, with no record", async () => {
+      await expectError(
+        await add(UNKNOWN_APPTEAM, { oid: alice.oid }),
+        404,
+        "NOT_FOUND",
+      );
+      expect(await auditToday()).toEqual([]);
+    });
   });
 
   describe.each(CANNOT_WRITE)("as %s (no write permission)", (caller) => {

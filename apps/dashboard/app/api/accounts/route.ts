@@ -16,6 +16,7 @@ import { getAllAccountsCached } from "@/lib/api/cached-reads";
 import { scopeFor } from "@/lib/api/scoped-rollups";
 import { can } from "@/lib/auth/policy";
 import { createAccount } from "@/lib/data/account-meta";
+import { hasAppTeamName } from "@/lib/data/access/app-teams";
 
 export const revalidate = 3600;
 
@@ -37,6 +38,9 @@ export const GET = withRoute(async (_request, _ctx, session) => {
 const createHandler = withRoute(
   async (request) => {
     const input = await parseJsonBody(request, CreateAccountInputSchema);
+    if (await hasAppTeamName(input.teamName)) {
+      return jsonError(409, "CONFLICT", "A created team already has this name");
+    }
     try {
       const created = AccountMetaSchema.parse(await createAccount(input));
       revalidateAccounts();

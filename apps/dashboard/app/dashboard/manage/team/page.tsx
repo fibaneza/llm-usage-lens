@@ -7,7 +7,8 @@ import { TeamPageContent } from "@/components/manage/TeamPageContent";
 import { globalRolesOf, resolveScope } from "@/lib/auth/policy";
 import { INTERNAL_ADMIN_ROLE } from "@/lib/auth/roles";
 import { loadSettingsAccessViewer } from "@/lib/auth/settings-access";
-import { getAllAccounts } from "@/lib/data/account-meta";
+import { isMatrixWriter } from "@/lib/auth/write-policy";
+import { findTeamEntry } from "@/lib/api/team-directory";
 import { authorizationFor } from "@/lib/litellm/route-guard";
 import { managementAccessFor } from "@/lib/manage-access";
 import { scopeLabelFor } from "@/lib/scope-labels";
@@ -54,7 +55,7 @@ export default async function TeamManagePage({
   if (!access.global && team !== undefined) {
     let inScope = scope.teamScopes.has(team);
     if (!inScope && scope.departmentScopes.size > 0) {
-      const meta = (await getAllAccounts()).find((a) => a.teamId === team);
+      const meta = await findTeamEntry(team);
       inScope = !!meta && scope.departmentScopes.has(meta.departmentId);
     }
     if (!inScope) notFound();
@@ -70,6 +71,7 @@ export default async function TeamManagePage({
   return (
     <TeamPageContent
       canRaiseLimits={roles.includes(INTERNAL_ADMIN_ROLE)}
+      canCreateTeam={isMatrixWriter(roles)}
       scopeLabel={access.global ? null : scopeLabelFor(scope)}
       access={
         hasAccessSections ? (

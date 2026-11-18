@@ -16,7 +16,9 @@ import {
   getIdentityRecord,
   listAllTeamMemberOids,
 } from "@/lib/data/access/team-member-lookup";
+import { buildTeamDirectory } from "@/lib/api/team-directory";
 import { getAllAccounts } from "@/lib/data/account-meta";
+import { listAppTeams } from "@/lib/data/access/app-teams";
 import { mapTeamMembers } from "@/lib/data/litellm/team-members";
 import {
   NON_PRIVILEGED_ROLES,
@@ -94,7 +96,9 @@ async function addCandidates(
 ): Promise<Array<{ oid: string; name: string; email: string }> | null> {
   const actor = await loadManager(session);
   if (!actor) return null;
-  const meta = (await getAllAccounts()).find((a) => a.teamId === teamId);
+  const meta = buildTeamDirectory(
+    ...(await Promise.all([getAllAccounts(), listAppTeams()])),
+  ).find((a) => a.teamId === teamId);
   if (
     !meta ||
     decideWrite(actor, {

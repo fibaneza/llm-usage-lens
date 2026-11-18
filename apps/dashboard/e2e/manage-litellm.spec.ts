@@ -240,6 +240,75 @@ test.describe("Management -> LiteLLM area (M1)", () => {
     expect(hits).toEqual([]);
   });
 
+  // Review m2-r1 U-B1: Design System -- Management pages (Organisation view:
+  // an app team without a LiteLLM-reported spend links to its Team usage page).
+  for (const role of ["internal-admin", "internal-org-admin"]) {
+    test(`${role}: "Open the team page" on Organisation lands on Team usage for that team (U-B1)`, async ({
+      page,
+      context,
+    }) => {
+      await signInAsTestUser(context, { roles: [role] });
+      await mockApi(page);
+      // Registered after mockApi, so these win over its catch-all.
+      await page.route(/\/api\/litellm\/org(\?|$)/, (route) =>
+        route.fulfill({
+          json: {
+            data: {
+              configured: true,
+              totals: { spend: 0 },
+              enabledOperations: [],
+              daily: [],
+              litellmTeams: [],
+              appTeams: [
+                {
+                  teamId: "team-payments",
+                  teamName: "Payments",
+                  spendSource: "member-sum",
+                  spend: null,
+                },
+              ],
+            },
+          },
+        }),
+      );
+      await page.route(/\/api\/litellm\/teams\/[^/?]+(\?|$)/, (route) =>
+        route.fulfill({
+          json: {
+            data: {
+              connected: false,
+              spendSource: "member-sum",
+              daily: [],
+              memberSum: {
+                total: 0,
+                daily: [],
+                coverage: { members: 0, matched: 0, unmatched: 0, pending: 0 },
+                members: [],
+              },
+            },
+          },
+        }),
+      );
+      await page.goto(`${AREA}/organisation`);
+      await waitForHydration(page);
+
+      const [response] = await Promise.all([
+        page.waitForResponse(
+          // A Link click is a client navigation: the page arrives as an RSC fetch.
+          (r) => new URL(r.url()).pathname === "/dashboard/team-usage",
+        ),
+        page.getByRole("link", { name: "Open the team page" }).click(),
+      ]);
+      expect(response.status()).toBe(200);
+      await expect(page).toHaveURL(
+        /\/dashboard\/team-usage\?.*team=team-payments/,
+      );
+      await waitForHydration(page);
+      await expect(
+        page.getByRole("region", { name: "Team spend", exact: true }),
+      ).toBeVisible();
+    });
+  }
+
   test("an unknown tab is the 404 even for an admin", async ({
     page,
     context,

@@ -134,8 +134,8 @@ describe("DashboardLayout management navigation (B2-1, B2-2)", () => {
     for (const name of ["Overview", ...MANAGEMENT_LINKS]) {
       expect(link(name), name).toBeInTheDocument();
     }
-    // Coordinator ruling (M1): Team usage stays hidden until M2, flag or not.
-    expect(link("Team usage")).not.toBeInTheDocument();
+    // MI-D1 / MI-D7: Team usage shows where the teamUsage flag is true.
+    expect(link("Team usage")).toBeInTheDocument();
     expect(link("Organisation")).not.toBeInTheDocument();
   });
 
@@ -152,13 +152,8 @@ describe("DashboardLayout management navigation (B2-1, B2-2)", () => {
 
     expect(link("My usage")).toBeInTheDocument();
     expect(link("Team")).toBeInTheDocument();
-    for (const name of [
-      "LiteLLM",
-      "Users",
-      "Audit",
-      "Settings",
-      "Team usage",
-    ]) {
+    expect(link("Team usage")).toBeInTheDocument();
+    for (const name of ["LiteLLM", "Users", "Audit", "Settings"]) {
       expect(link(name), name).not.toBeInTheDocument();
     }
   });

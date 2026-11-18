@@ -10,7 +10,9 @@ import {
   parseJsonBody,
   withRoute,
 } from "@/lib/api/respond";
+import { buildTeamDirectory } from "@/lib/api/team-directory";
 import { getAllAccounts } from "@/lib/data/account-meta";
+import { listAppTeams } from "@/lib/data/access/app-teams";
 import { getTeamLink, putTeamLink } from "@/lib/data/litellm/team-links";
 import { LiteLLMOperationRefused } from "@/lib/litellm/gateway";
 import { audit, badRequest, snapshot } from "@/lib/litellm/member-write";
@@ -53,7 +55,11 @@ export const POST = withRoute(
     const refused = openModeRefusal();
     if (refused) return refused;
     const { teamId, ...fields } = await parseJsonBody(request, BodySchema);
-    if (!(await getAllAccounts()).some((a) => a.teamId === teamId)) {
+    if (
+      !buildTeamDirectory(
+        ...(await Promise.all([getAllAccounts(), listAppTeams()])),
+      ).some((a) => a.teamId === teamId)
+    ) {
       return jsonError(404, "NOT_FOUND", NOT_FOUND_MESSAGE);
     }
     if (await getTeamLink(teamId)) {

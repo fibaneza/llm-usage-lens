@@ -68,11 +68,12 @@ function renderRail(defaultOpen: boolean) {
 // Design System - Navigation (Sidebar): the full set a bare render (no scope)
 // shows; the Usage breakdowns read "Cost by ..." (unique labels, B1-5).
 // Management improvements M1 (MI-D1): My usage second; Management = Users,
-// Team, LiteLLM, Audit. Team usage stays hidden for every role until unit M2
-// builds its page (coordinator ruling, M1), so it is not in this set.
+// Team, LiteLLM, Audit. Team usage shows per management.teamUsage (MI-D7)
+// now that M2 built its page.
 const NAV_TITLES = [
   "Overview",
   "My usage",
+  "Team usage",
   "Ranking",
   "Cost by department",
   "Cost by team",
@@ -242,6 +243,7 @@ describe("AppSidebar - groups (Usage / Management / Administration)", () => {
     ).toEqual([
       "Overview",
       "My usage",
+      "Team usage",
       "Ranking",
       "Cost by department",
       "Cost by team",
@@ -468,9 +470,9 @@ describe("AppSidebar - rail toggle accessible name (desktop, 1440px)", () => {
 
 // Source: Design System - Navigation (Sidebar); Access Control MI-D2: the
 // LiteLLM item opens the LiteLLM area; the Organisation item is gone. Team
-// usage is hidden for every role while its page is unbuilt (coordinator
-// ruling, M1; the flag is asserted in lib/manage-access*.test.ts).
-describe("AppSidebar - LiteLLM item, no Organisation item, no Team usage yet", () => {
+// usage links to its page where teamUsage is true (MI-D1, MI-D7; the flag is
+// asserted in lib/manage-access*.test.ts).
+describe("AppSidebar - LiteLLM item, no Organisation item, Team usage item", () => {
   it("links LiteLLM to the area and renders no Organisation link (MI-D2)", () => {
     renderSidebar("/dashboard");
 
@@ -493,13 +495,13 @@ describe("AppSidebar - LiteLLM item, no Organisation item, no Team usage yet", (
     );
   });
 
-  it("renders no Team usage link even for a caller whose teamUsage flag is true", () => {
+  it("links Team usage to its page for a caller whose teamUsage flag is true (MI-D7)", () => {
     renderSidebar("/dashboard");
 
-    expect(screen.queryByRole("link", { name: "Team usage" })).toBeNull();
-    expect(
-      document.querySelector('a[href^="/dashboard/team-usage"]'),
-    ).toBeNull();
+    expect(screen.getByRole("link", { name: "Team usage" })).toHaveAttribute(
+      "href",
+      "/dashboard/team-usage",
+    );
   });
 });
 
@@ -595,6 +597,10 @@ describe("AppSidebar - scope-filtered navigation", () => {
     expect(screen.getByRole("link", { name: "Team" })).toHaveAttribute(
       "href",
       "/dashboard/manage/team",
+    );
+    expect(screen.getByRole("link", { name: "Team usage" })).toHaveAttribute(
+      "href",
+      "/dashboard/team-usage",
     );
     for (const gone of ["LiteLLM", "Users", "Audit", "Settings"]) {
       expect(screen.queryByRole("link", { name: gone })).toBeNull();

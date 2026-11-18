@@ -138,7 +138,7 @@ test.describe("Team page view tabs (Team page views and links)", () => {
     await budgets.click();
     await expect(page).toHaveURL(/[?&]view=budgets(&|$)/);
     await expect(
-      page.getByRole("region", { name: "Team spend & budgets" }),
+      page.getByRole("region", { name: "Budget and limits" }),
     ).toBeVisible();
     await expect(
       page.getByRole("region", { name: "LiteLLM members" }),
@@ -152,7 +152,7 @@ test.describe("Team page view tabs (Team page views and links)", () => {
     await expect(page).toHaveURL(/[?&]view=budgets(&|$)/);
     await expect(budgets).toHaveAttribute("aria-selected", "true");
     await expect(
-      page.getByRole("region", { name: "Team spend & budgets" }),
+      page.getByRole("region", { name: "Budget and limits" }),
     ).toBeVisible();
 
     await page.goBack();

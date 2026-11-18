@@ -1,11 +1,14 @@
 import { vi, describe, expect, it, beforeEach } from "vitest";
 
 import { ctxAt, ok } from "@/test/support/access-test-support";
+import { createAppTeam } from "@/lib/data/access/app-teams";
+import { putTeamLink } from "@/lib/data/litellm/team-links";
 import { putIdentityLink } from "@/lib/data/access/identity-links";
 import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
 import type { FakeCall } from "@/test/fakes/fake-litellm";
 import {
   LTEAM,
+  UNLINKED_LTEAM,
   call,
   enterProd,
   expectError,
@@ -78,14 +81,17 @@ const LITELLM_MEMBERS: Record<string, LMember[]> = {
 
 const state = setupViewsSuite();
 
-function installOrphanFake(opts: { outage?: boolean } = {}) {
+function installOrphanFake(
+  opts: { outage?: boolean; byLiteLLMTeam?: Record<string, LMember[]> } = {},
+) {
   const base = viewsHandler({ outage: opts.outage });
-  const byLiteLLMId = new Map(
-    Object.entries(LITELLM_MEMBERS).map(([team, rows]) => [
-      LTEAM[team as keyof typeof LTEAM] as string,
-      rows,
-    ]),
-  );
+  const byLiteLLMId = new Map<string, LMember[]>([
+    ...Object.entries(LITELLM_MEMBERS).map(
+      ([team, rows]) =>
+        [LTEAM[team as keyof typeof LTEAM] as string, rows] as const,
+    ),
+    ...Object.entries(opts.byLiteLLMTeam ?? {}),
+  ]);
   state.fake = createFakeLiteLLM((c: FakeCall, attempt: number) => {
     const reply = base(c, attempt);
     if (typeof reply === "string") return reply;
@@ -170,6 +176,45 @@ describe("GET /api/litellm/orphans", () => {
       (r: { teamId: string }) => r.teamId === "team-m",
     );
     expect(carol.litellmUserId).toBe("uid-carol");
+  });
+
+  // Source: docs/specs/2026-11-17-app-teams.md - "Teams without an AWS account"
+  // (a created team takes a link); LiteLLM spec - "Identity mapping and
+  // members" (teamName is the dashboard team's name). The route takes team names
+  // from the team directory (M2 design 1, group M2-b); without it a linked
+  // created team would be named by its raw id.
+  it("a linked created team is listed under its stored name, with its LiteLLM-only members as orphans (Teams without an AWS account)", async () => {
+    const created = ok(
+      await createAppTeam(
+        {
+          name: "Guild",
+          departmentId: "dept-eng",
+          departmentName: "Engineering",
+        },
+        ctxAt(undefined, "req-orphan-created"),
+      ),
+    ).teamId;
+    ok(
+      await putTeamLink(
+        { teamId: created, litellmTeamId: UNLINKED_LTEAM, version: null },
+        ctxAt(undefined, "req-orphan-created-link"),
+      ),
+    );
+    installOrphanFake({
+      byLiteLLMTeam: {
+        [UNLINKED_LTEAM]: [{ id: "gus@company.com", email: "gus@company.com" }],
+      },
+    });
+    signInAs("admin");
+    const { res, body } = await get();
+    expect(res.status).toBe(200);
+    const row = body.data.items.find(
+      (r: { teamId: string }) => r.teamId === created,
+    );
+    expect(row).toMatchObject({
+      teamName: "Guild",
+      email: "gus@company.com",
+    });
   });
 
   it("matches a dashboard member by stored litellmUserId, else by lower-cased email: Carol (link) and Dave (email) in their own teams are not orphans", async () => {

@@ -1,5 +1,5 @@
 import { jsonData, withRoute } from "@/lib/api/respond";
-import { getAllAccounts } from "@/lib/data/account-meta";
+import { listTeamDirectory } from "@/lib/api/team-directory";
 import { listTeamLinks } from "@/lib/data/litellm/team-links";
 import { LiteLLMError, isLiteLLMConfigured } from "@/lib/litellm/client";
 import { LiteLLMOperationRefused } from "@/lib/litellm/gateway";
@@ -57,13 +57,13 @@ async function readLiteLLMTeams(): Promise<LiteLLMTeamsRead> {
 export const GET = withRoute(async (_request, _ctx, session) => {
   const refused = openModeRefusal() ?? (await litellmReadRefusal(session));
   if (refused) return refused;
-  const [items, accounts, litellm] = await Promise.all([
+  const [items, directory, litellm] = await Promise.all([
     listTeamLinks(),
-    getAllAccounts(),
+    listTeamDirectory(),
     readLiteLLMTeams(),
   ]);
   const linked = new Set(items.map((l) => l.teamId));
-  const names = new Map(accounts.map((a) => [a.teamId, a.teamName]));
+  const names = new Map(directory.map((e) => [e.teamId, e.teamName]));
   const appTeams = [...names]
     .map(([teamId, teamName]) => ({
       teamId,

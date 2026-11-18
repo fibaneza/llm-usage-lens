@@ -416,7 +416,7 @@ and members, **auditor** = `internal-auditor`.
 |---|---|---|---|---|---|
 | **Usage** — Overview, Ranking, Cost by department, Cost by team, Cost by service, Cost by user | ✓ | ✓ | ✓ read-only | ✗ (no AWS cost view, decided 2026-11-17) | ✗ |
 | Usage — My usage (moved from Management 2026-11-17, user; second in the group, D1) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Usage — Team usage (D7, user, 2026-11-17; global readers: coordinator decision, 2026-11-17, MI-D7; *hidden until M2 lands the page — `TEAM_USAGE_ROUTE = false`, Design System — D7*) | ✓ every team | ✓ every team | ✓ every team, read-only | ✓ teams in scope (a live admin scope) | ✗ |
+| Usage — Team usage (D7, user, 2026-11-17; global readers: coordinator decision, 2026-11-17, MI-D7; *shown from the M2 merge, 2026-11-18 (`TEAM_USAGE_ROUTE = true`, Design System — D7)*) | ✓ every team | ✓ every team | ✓ every team, read-only | ✓ teams in scope (a live admin scope) | ✗ |
 | **Management** — Team | ✓ every team | ✓ every team | ✓ read-only | ✓ teams it leads | ✗ |
 | Management — Users | ✓ | ✓ | ✓ read-only | ✗ | ✗ |
 | Management — LiteLLM: tabs Organisation, LiteLLM teams, LiteLLM users (D2, agent decision, 2026-11-17; replaces the Organisation item) | ✓ | ✓ | ✓ read-only | ✗ | ✗ |
@@ -501,8 +501,7 @@ and members, **auditor** = `internal-auditor`.
     improvements MI-D1): My usage is second, after Overview, and Team
     usage third. "A lead or a user sees only My usage" superseded
     2026-11-17 (user, MI-D7: "Team lead is also a user"): a lead with a
-    live admin scope sees My usage and Team usage (Team usage hidden until M2
-    lands its page: `TEAM_USAGE_ROUTE = false`, Design System — D7); a user sees only My
+    live admin scope sees My usage and Team usage (Team usage was hidden until M2 landed its page; shown from 2026-11-18, `TEAM_USAGE_ROUTE = true`, Design System — D7); a user sees only My
     usage; a global reader sees all eight items (Team usage included,
     MI-D7). The rest of B1-14 holds.*
 - **Slice B2 decisions (agent decisions, 2026-11-17; implementation-phases
@@ -842,7 +841,10 @@ remains). The export is audited.
    invalidation is relied on. The cached account list is not authorization
    data, but it places accounts in teams and departments, so a moved account
    stays visible to its old team's Lead on the other task for up to 1 hour
-   (Data Model — *Access Patterns*, PERF-1 residual risk; 2026-11-17).
+   (Data Model — *Access Patterns*, PERF-1 residual risk; 2026-11-17). The
+   cached created-team list (tag `app-teams`) carries the same residual
+   risk: a created team's name or department seen on another task can be up
+   to 1 hour stale (organisation data only; M2, 2026-11-18).
    Every Route Handler response under `/api/*`
    sets `Cache-Control: private, no-store` (delivered 2026-11-11 with the
    security-review fixes, ahead of R3). Auth.js's own handler sets its own
@@ -1339,7 +1341,7 @@ organisation administrators and auditors. Usage rollups are kept for
 | T43 | Bypass: an unauthenticated API call under the prefix is redirected to an unprefixed page instead of the JSON `401` (added 2026-11-17, unit BP) | `authorized` strips the prefix itself and returns an explicit prefixed sign-in redirect for pages; API paths keep the `401` JSON shape (BP-D10) | BP T6 (API route `401` JSON; page redirect to `<prefix>/sign-in`; with and without `AUTH_URL`) |
 | T-MI1 | Disclosure: a wrong LiteLLM user link shows one person another person's LiteLLM spend and key metadata (management improvements D16, 2026-11-17) — more likely now that org-admin may link | Verified canonical email for a match; approval click in a dialog naming both sides; a required reason for a manual link; one-to-one `LiteLLMUserClaim`; no self-link; privileged targets refused; admin and org-admin only; audited with the reason | M3: org-admin and admin may link, auditor and lead `403`; own `oid` `403` with one `denied`; no automatic link; match with another email `409`; manual without reason `400`; duplicate `409`; a `proxy_admin`, `proxy_admin_viewer` or service-user target `409 PRIVILEGED_TARGET` with no link written; the audit record carries the mode, both ids and the reason (manual) for set and remove; usage aliases stay admin-only |
 | T-MI2 | Elevation: the team lead sign-in (D14; was "dev lead sign-in", renamed at the user's direction, 2026-11-18) exists outside dev, or a typed value supplies a scope or role | The option is part of the dev login: env-rejected in `prod` and with Entra configured (T7); the scope comes only from the stored identity's admin-scope item, per request | M3: the option signs in with the stored scope and none from typed text; refused in `prod` and with Entra configured |
-| T-MI3 | Tampering: a created app team takes a registry team's id or name, inheriting its members, scopes or spend (D5) | Server-generated `appteam-<uuid>` id; the registry refuses the reserved prefix; name claim and registry name check (`409`), both ways: the account routes refuse a created team's name (`409`) | M2: id never equals a registry team; duplicate name `409` (against created and registry teams); body id ignored; `POST /api/accounts` and `PATCH /api/accounts/[id]` with a created team's name `409`, no write |
+| T-MI3 | Tampering: a created app team takes a registry team's id or name, inheriting its members, scopes or spend (D5) | Server-generated `appteam-<uuid>` id; the registry refuses the reserved prefix; name claim and registry name check (`409`), both ways: the account routes refuse a created team's name (`409`) | M2: id never equals a registry team; duplicate name `409` (against created and registry teams); body id refused (`400`, strict body; agent decision, 2026-11-18, M2 build — stronger than "ignored"); `POST /api/accounts` and `PATCH /api/accounts/[id]` with a created team's name `409`, no write |
 | T-MI4 | Disclosure: Team usage shows a lead another team's spend (D7) | `teamUsage` and the team list come from `resolveScope` per request; a team outside the scope is the missing-page `404`; only a global reader gets every team (MI-D7, coordinator decision) | M2: leak test (a lead sees only teams in scope; another team's id `404`); a global reader without a scope sees every team; a user with no scope `404` |
 
 **Budget reset requests (unit M4; added 2026-11-17).** Each item has its

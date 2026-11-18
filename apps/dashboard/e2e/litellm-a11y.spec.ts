@@ -343,8 +343,8 @@ async function teamPageReady(page: Page, view: TeamView = "members") {
     ).toContainText("Ada Lovelace");
   } else if (view === "budgets") {
     await expect(
-      page.getByRole("region", { name: "Team spend & budgets" }),
-    ).toContainText("$321.75");
+      page.getByRole("region", { name: "Budget and limits" }),
+    ).toBeVisible();
   } else {
     await expect(page.getByRole("region", { name: "Keys" })).toContainText(
       "ci-key",
@@ -584,8 +584,8 @@ test.describe("keyboard walk (L5 Accessibility floor)", () => {
     await expect(page).toHaveURL(/[?&]team=t2(&|$)/);
     await expect(select).toHaveValue("t2");
     await expect(
-      page.getByRole("region", { name: "Team spend & budgets" }),
-    ).toContainText("$10.00");
+      page.getByRole("region", { name: "Budget and limits" }),
+    ).toBeVisible();
   });
 
   // Design System -- Management pages, Team: PageHeader holds "the view tabs
@@ -612,7 +612,7 @@ test.describe("keyboard walk (L5 Accessibility floor)", () => {
     await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
     await expect(page).toHaveURL(/[?&]view=budgets(&|$)/);
     await expect(
-      page.getByRole("region", { name: "Team spend & budgets" }),
+      page.getByRole("region", { name: "Budget and limits" }),
     ).toBeVisible();
 
     await page.keyboard.press("End");
@@ -850,9 +850,10 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
     ).toContainText("Blocked");
   });
 
-  // App Teams spec AT4: an unlinked team has no "not connected" empty state;
-  // it shows the member sum, and a member absent from LiteLLM is named in text.
-  test("an unlinked team shows its member sum and names a member not in LiteLLM in text (AT4)", async ({
+  // App Teams spec AT4 + MI-D7: an unlinked team has no "not connected" empty
+  // state and no spend panel on the Team page; its member sum lives on Team
+  // usage (e2e/team-usage.spec.ts).
+  test("an unlinked team shows the no-LiteLLM-team note and no spend panel (AT4, MI-D7)", async ({
     page,
     context,
   }) => {
@@ -862,11 +863,12 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
       teams: [{ teamId: "t1", teamName: "Payments", linked: false }],
     });
     await open(page, TEAM_URL);
-    const spend = page.getByRole("region", { name: "Team spend", exact: true });
-    await expect(spend).toContainText("Sum of members");
-    await expect(spend.getByRole("row", { name: /Bob Byte/ })).toContainText(
-      "not in LiteLLM",
-    );
+    await expect(
+      page.getByText("This team has no LiteLLM team of its own."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Team spend", exact: true }),
+    ).toHaveCount(0);
   });
 
   const UNAVAILABLE: readonly [string, string, string][] = [
@@ -931,20 +933,17 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
     );
   });
 
-  test("the budget bar carries its percentage (or No limit) as text next to the bar", async ({
+  // The team-level bar moved to Team usage with the spend (MI-D7;
+  // e2e/team-usage.spec.ts); the member rows keep theirs here.
+  test("the member budget bar carries its percentage (or No limit) as text next to the bar", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
-    await open(page, teamUrl("budgets"));
-    await teamPageReady(page, "budgets");
+    await open(page, teamUrl("members"));
+    await teamPageReady(page, "members");
 
-    const team = page.getByRole("region", { name: "Team spend & budgets" });
-    await expect(team.getByRole("progressbar")).toBeVisible();
-    await expect(team).toContainText("64%");
-
-    await page.getByRole("tab", { name: "Members" }).click();
     const members = page.getByRole("region", { name: "LiteLLM members" });
     const over = members.getByRole("row", { name: /Ada Lovelace/ });
     await expect(over.getByRole("progressbar")).toBeVisible();

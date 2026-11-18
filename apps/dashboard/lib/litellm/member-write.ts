@@ -22,7 +22,7 @@ import {
   parseInput,
   parseJsonBody,
 } from "@/lib/api/respond";
-import { getAllAccounts } from "@/lib/data/account-meta";
+import { findTeamEntry } from "@/lib/api/team-directory";
 import { appendAuditRecord, appendDeniedAudit } from "@/lib/data/access/audit";
 import { getIdentityLink } from "@/lib/data/access/identity-links";
 import {
@@ -237,7 +237,7 @@ async function runMemberWrite<B>(
   if (refused) return refused;
 
   const teamId = parseInput(params.teamId, IdParamSchema);
-  const meta = (await getAllAccounts()).find((a) => a.teamId === teamId);
+  const meta = await findTeamEntry(teamId);
   const scopeRefusal = await refuse({
     operation: "member",
     team: meta ? { teamId, departmentId: meta.departmentId } : null,

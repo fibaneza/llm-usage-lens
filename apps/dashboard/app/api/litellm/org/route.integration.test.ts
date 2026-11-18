@@ -16,6 +16,9 @@ import {
   stubLiteLLMEnv,
   useEnv,
 } from "@/test/fakes/fake-litellm-views";
+import { createAppTeam } from "@/lib/data/access/app-teams";
+import { putTeamLink } from "@/lib/data/litellm/team-links";
+import { ctxAt, ok } from "@/test/support/access-test-support";
 import { signInAs } from "@/test/fixtures/scope-fixtures";
 import { clearTable } from "@/test/support/test-support";
 import type { CallerName } from "@/test/fixtures/scope-fixtures";
@@ -264,6 +267,94 @@ describe("GET /api/litellm/org", () => {
       coverage: SCENARIO.coverage,
     });
     expect(u).not.toHaveProperty("reason");
+  });
+
+  // Source: docs/specs/2026-11-17-app-teams.md - "Teams without an AWS account"
+  // and "Organisation view" (the app teams table lists every app team; an
+  // unlinked one shows the member sum, source "Sum of members"; a team with no
+  // AWS account has no Bedrock figure). The route builds appTeams from the team
+  // directory (M2 design 1, group M2-b).
+  describe("a created team (App Teams; Organisation view)", () => {
+    const makeCreated = async () =>
+      ok(
+        await createAppTeam(
+          {
+            name: "Guild",
+            departmentId: "dept-eng",
+            departmentName: "Engineering",
+          },
+          ctxAt(undefined, "req-org-created"),
+        ),
+      ).teamId;
+
+    it("an unlinked created team is listed with the member-sum source and its members' spend, and only the app-team fields (no Bedrock figure)", async () => {
+      const created = await makeCreated();
+      await seedBoundMember(created, {
+        oid: "oid-guild-1",
+        litellmUserId: SCENARIO.luserU1,
+      });
+      installMemberSumFake(state, {
+        ...SCENARIO_FAKE,
+        teamDaily: TEAM_DAILY_SPEND,
+      });
+      signInAs("admin");
+      const { res, body } = await get();
+      expect(res.status).toBe(200);
+      const row = (body.data.appTeams as Array<Record<string, unknown>>).find(
+        (r) => r.teamId === created,
+      )!;
+      expect(row).toMatchObject({
+        teamName: "Guild",
+        spendSource: "member-sum",
+        spend: 3.5,
+      });
+      expect(Object.keys(row).sort()).toEqual([
+        "coverage",
+        "spend",
+        "spendSource",
+        "teamId",
+        "teamName",
+      ]);
+      expect(body.data.totals.spend).toBe(TEAM_DAILY_TOTAL);
+    });
+
+    it("a created team linked to a LiteLLM team shows that team's range spend, and the LiteLLM row names the created team (Organisation view)", async () => {
+      const created = await makeCreated();
+      ok(
+        await putTeamLink(
+          {
+            teamId: created,
+            litellmTeamId: UNLINKED_LTEAM,
+            version: null,
+          },
+          ctxAt(undefined, "req-org-created-link"),
+        ),
+      );
+      installMemberSumFake(state, {
+        ...SCENARIO_FAKE,
+        teamDaily: TEAM_DAILY_SPEND,
+      });
+      signInAs("orgAdmin");
+      const { body } = await get();
+      const row = (body.data.appTeams as Array<Record<string, unknown>>).find(
+        (r) => r.teamId === created,
+      );
+      expect(row).toMatchObject({
+        teamName: "Guild",
+        spendSource: "litellm-team",
+        spend: TEAM_DAILY_SPEND[UNLINKED_LTEAM],
+      });
+      const lrow = (
+        body.data.litellmTeams as Array<{
+          litellmTeamId: string;
+          linkedAppTeam: unknown;
+        }>
+      ).find((t) => t.litellmTeamId === UNLINKED_LTEAM);
+      expect(lrow?.linkedAppTeam).toEqual({
+        teamId: created,
+        teamName: "Guild",
+      });
+    });
   });
 
   it("the headline total never includes the app teams' member sums: an unlinked team with spend leaves it unchanged (AT5, ATT5)", async () => {

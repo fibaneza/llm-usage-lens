@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   LTEAM,
+  UNLINKED_LTEAM,
   enterProd,
   call,
   defineTeamReadContract,
@@ -23,6 +24,10 @@ import {
   setupMemberWritesSuite,
   writeCalls,
 } from "@/test/support/litellm-member-writes-support";
+import { createAppTeam } from "@/lib/data/access/app-teams";
+import { putTeamLink } from "@/lib/data/litellm/team-links";
+import { ctxAt, ok } from "@/test/support/access-test-support";
+import { seedMember } from "@/test/support/matrix-route-support";
 import { CALLERS, signInAs } from "@/test/fixtures/scope-fixtures";
 
 // Source: docs/specs/2026-11-10-litellm.md — "API routes" (/api/litellm/teams/
@@ -154,6 +159,63 @@ describe("GET /api/litellm/teams/[teamId]/members - candidates (add-member picke
     for (const c of body.data.candidates) {
       expect(Object.keys(c).sort()).toEqual(["email", "name", "oid"]);
     }
+  });
+});
+
+// Source: docs/specs/2026-11-17-app-teams.md - "Teams without an AWS account"
+// (a created team takes members and a link); Access Control MI-D7 (a department
+// scope covers a created team by its stored departmentId), T-MI4. The add
+// candidates are offered only when the team is known and the caller may write
+// its members; that lookup reads the team directory (M2 design 1, group M2-b).
+describe("GET /api/litellm/teams/[teamId]/members - candidates of a linked created team (App Teams; MI-D7)", () => {
+  let created: string;
+  const get = async () =>
+    call(await load(), `/api/litellm/teams/${created}/members`, {
+      teamId: created,
+    });
+  beforeEach(async () => {
+    created = ok(
+      await createAppTeam(
+        {
+          name: "Guild",
+          departmentId: "dept-eng",
+          departmentName: "Engineering",
+        },
+        ctxAt(undefined, "req-members-created"),
+      ),
+    ).teamId;
+    ok(
+      await putTeamLink(
+        { teamId: created, litellmTeamId: UNLINKED_LTEAM, version: null },
+        ctxAt(undefined, "req-members-created-link"),
+      ),
+    );
+    await seedMember(PEOPLE.carol.oid, created);
+  });
+
+  it.each(["admin", "orgAdmin", "deptAdminEng"] as const)(
+    "%s gets the created team's dashboard member as an add candidate, identities only",
+    async (who) => {
+      signInAs(who);
+      const { res, body } = await get();
+      expect(res.status).toBe(200);
+      expect(body.data.candidates).toEqual([
+        {
+          oid: PEOPLE.carol.oid,
+          name: PEOPLE.carol.name,
+          email: PEOPLE.carol.email,
+        },
+      ]);
+    },
+  );
+
+  it("the Auditor reads the team but gets no candidates key; a Lead of another team gets 404 (T-MI4)", async () => {
+    signInAs("auditor");
+    const audit = await get();
+    expect(audit.res.status).toBe(200);
+    expect(audit.body.data).not.toHaveProperty("candidates");
+    signInAs("teamAdminA");
+    expect((await get()).res.status).toBe(404);
   });
 });
 

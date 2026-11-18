@@ -174,7 +174,11 @@ function stub(overrides: Record<string, Handler> = {}, ops = ALL_OPS) {
 
 function renderConfig(canRaiseLimits = false, searchParams = {}) {
   return renderWithProviders(
-    <TeamPageContent canRaiseLimits={canRaiseLimits} scopeLabel={null} />,
+    <TeamPageContent
+      canRaiseLimits={canRaiseLimits}
+      canCreateTeam={false}
+      scopeLabel={null}
+    />,
     { searchParams },
   );
 }
@@ -230,22 +234,6 @@ describe("TeamPageContent team picker (Team configuration page)", () => {
 // Moved from the retired LiteLLMContent.test.tsx (LD20, LT8; Keys metadata
 // only): the live behaviour of the deleted Keys / Team spend sections.
 describe("TeamPageContent time rendering and key metadata (LD20, Keys metadata only)", () => {
-  it("labels the team's daily buckets as UTC days (LD20)", async () => {
-    stub({
-      "GET /api/litellm/teams/t1": () =>
-        apiResponse({
-          data: {
-            ...detailWith(ALL_OPS),
-            daily: [{ date: "2026-11-14", spend: 40 }],
-          },
-        }),
-    });
-    renderView("budgets");
-    expect(
-      within(await region("Team spend & budgets")).getByText(/UTC days?/i),
-    ).toBeInTheDocument();
-  });
-
   it("renders key expiry in Australia/Sydney with the zone label (LD20)", async () => {
     stub();
     renderView("keys");
@@ -277,7 +265,7 @@ describe("TeamPageContent time rendering and key metadata (LD20, Keys metadata o
 describe("TeamPageContent sections (Design System -- LiteLLM Page)", () => {
   it.each([
     ["members", ["LiteLLM members"]],
-    ["budgets", ["Team spend & budgets", "Budget and limits"]],
+    ["budgets", ["Budget and limits"]],
     ["keys", ["Keys", "Models"]],
   ] as const)(
     "the %s view renders its sections, each its own region (the L4 panel is titled LiteLLM members; the mounted Access sections keep Members)",
@@ -870,6 +858,7 @@ describe("TeamPageContent page frame (Management pages - Team)", () => {
     renderWithProviders(
       <TeamPageContent
         canRaiseLimits={false}
+        canCreateTeam={false}
         scopeLabel="Showing teams you lead"
       />,
     );
@@ -891,6 +880,7 @@ describe("TeamPageContent page frame (Management pages - Team)", () => {
     renderWithProviders(
       <TeamPageContent
         canRaiseLimits={false}
+        canCreateTeam={false}
         scopeLabel={null}
         access={<div data-testid="access-slot" />}
       />,
@@ -907,58 +897,17 @@ describe("TeamPageContent page frame (Management pages - Team)", () => {
   });
 });
 
-describe("TeamPageContent team spend and budget (Management pages - Team usage)", () => {
-  it("has a 'Team spend & budgets' region with the LiteLLM-reported label, USD, UTC-day label and a BudgetBar", async () => {
+describe("TeamPageContent Budgets view (Design System - Management pages, Team page views and links; D7)", () => {
+  // Design System - Team page views and links: Budgets holds "Budget and
+  // limits" and "Spent this budget period" stays beside the budget (LD36);
+  // the Where-each-role-reads-team-spend table keeps "Team budget and Spent
+  // this budget period" on Team -> Budgets.
+  it("the Budgets view holds the Budget and limits panel alone, with the budget-period spend beside the budget (LD36)", async () => {
     stub();
     renderView("budgets");
-    const spend = await region("Team spend & budgets");
+    const budget = await region("Budget and limits");
 
-    expect(
-      within(spend).getAllByText("LiteLLM-reported").length,
-    ).toBeGreaterThan(0);
-    expect(await within(spend).findByText("$321.75")).toBeInTheDocument();
-    expect(within(spend).getByText("$500.00")).toBeInTheDocument();
-    expect(within(spend).getByText("$400.00")).toBeInTheDocument();
-    expect(within(spend).getByText(/UTC days?/i)).toBeInTheDocument();
-    expect(within(spend).getByRole("progressbar")).toHaveAttribute(
-      "data-state",
-      "neutral",
-    );
-    expect(within(spend).getByText("64%")).toBeInTheDocument();
-  });
-
-  // Q1 (LiteLLM spec LD36): "Spend" is the selected range, i.e. the sum of the
-  // daily rows; team_info.spend (budget period) shows only beside the budget.
-  it("Q1: the 'Spend' figure is the range spend (sum of the daily rows); the budget-period spend appears only as 'Spent this budget period' (LD36)", async () => {
-    stub({
-      "GET /api/litellm/teams/t1": okData({
-        ...detailWith(ALL_OPS),
-        daily: [
-          { date: "2026-11-02", spend: 1.5 },
-          { date: "2026-11-03", spend: 2 },
-        ],
-      }),
-    });
-    renderView("budgets");
-    const spend = await region("Team spend & budgets");
-
-    const card = await within(spend).findByRole("group", { name: "Spend" });
-    expect(within(card).getByText("$3.50")).toBeInTheDocument();
-    expect(card.textContent).not.toContain("$321.75");
-    expect(
-      within(spend).getByText("Spent this budget period"),
-    ).toBeInTheDocument();
-    expect(within(spend).getByText("$321.75")).toBeInTheDocument();
-  });
-
-  // C1 item 9 (B2b review): Design System - Layout, Key-value lists: a label
-  // and its value are a term and its definition.
-  it("pairs 'Spent this budget period' with its figure as a term and a definition (Key-value lists; B2b review)", async () => {
-    stub();
-    renderView("budgets");
-    const term = await within(await region("Team spend & budgets")).findByText(
-      "Spent this budget period",
-    );
+    const term = await within(budget).findByText("Spent this budget period");
     expect(term.tagName).toBe("DT");
     expect(term.nextElementSibling?.tagName).toBe("DD");
     expect(term.nextElementSibling).toHaveTextContent("$321.75");
@@ -976,24 +925,6 @@ describe("TeamPageContent team spend and budget (Management pages - Team usage)"
     expect(
       within(await region("Keys")).getAllByText("LiteLLM-reported").length,
     ).toBeGreaterThan(0);
-  });
-
-  it("switching the team selector re-reads the team spend for the picked team", async () => {
-    stub({
-      "GET /api/litellm/teams/t2": okData({
-        ...detailWith(ALL_OPS),
-        team: { ...detailWith(ALL_OPS).team, alias: "Risk", spend: 9.99 },
-      }),
-    });
-    renderView("budgets");
-    await userEvent.selectOptions(
-      await screen.findByRole("combobox", { name: "Team" }),
-      "Risk",
-    );
-
-    expect(
-      await within(await region("Team spend & budgets")).findByText("$9.99"),
-    ).toBeInTheDocument();
   });
 });
 
@@ -1017,19 +948,6 @@ describe("TeamPageContent keys and time (LD20, LT8)", () => {
 });
 
 describe("TeamPageContent states (Design System - LiteLLM Page: States)", () => {
-  // Superseded 2026-11-17 (App Teams - Spend source): an unlinked team no
-  // longer shows "not connected to LiteLLM" as an empty state; it shows the
-  // member sum (see "TeamPageContent spend source" below).
-  it("an unlinked team no longer shows the 'not connected to LiteLLM' empty state (App Teams - Spend source)", async () => {
-    stub({
-      "GET /api/litellm/me": okData(unlinkedMe),
-      "GET /api/litellm/teams/t1": okData(unlinkedDetail),
-    });
-    renderConfig();
-    await region("Team spend");
-    expect(screen.queryByText(/not connected to LiteLLM/i)).toBeNull();
-  });
-
   it("shows 'LiteLLM unavailable' in each team section when the team routes return 503, keeping the page up", async () => {
     stub({
       "GET /api/litellm/teams/t1": unavailable,
@@ -1043,7 +961,7 @@ describe("TeamPageContent states (Design System - LiteLLM Page: States)", () => 
     // only (B2b), so each view shows its own "LiteLLM unavailable".
     for (const [tab, name] of [
       ["Members", "LiteLLM members"],
-      ["Budgets", "Team spend & budgets"],
+      ["Budgets", "Budget and limits"],
       ["Keys", "Keys"],
     ]) {
       await openTab(u, tab as string);
@@ -1167,25 +1085,14 @@ describe("TeamPageContent /api/litellm/me date range (Rule 20.8, Rule 20.1)", ()
   });
 });
 
-// ---- L4b: app-team spend (docs/specs/2026-11-17-app-teams.md - UI) ------------
+// ---- Unlinked teams, LiteLLM not configured, and the removed spend panel ----
 //
-// Contract for the developer (TeamPageContent / TeamSpendPanel):
-//   GET /api/litellm/teams/[id] is read with include=memberSum (the server
-//   ignores it for a Lead, ATT6). The panel renders from the response:
-//   - connected: the "Team spend & budgets" region as today, plus a source
-//     badge "LiteLLM team" beside the headline. Only when `memberSum` is in the
-//     response (Admin, org-admin, Auditor) a second figure titled "Sum of
-//     members" and the "Why the figures differ" text.
-//   - not connected (spendSource "member-sum"): a region named "Team spend"
-//     (no budgets), source badge "Sum of members", headline = memberSum.total,
-//     the coverage line "<members> members: <matched> matched, <unmatched> not
-//     in LiteLLM, <pending> pending", the daily table, a member table (name,
-//     spend; "not in LiteLLM" instead of a spend for an unmatched member; no
-//     spend cell value when the Organisation cap omits it) and the one-line
-//     text "This team has no LiteLLM team of its own. Budgets, limits and keys
-//     are managed in LiteLLM.". No LiteLLM panel (members, keys, budget and
-//     limits, models) and no call to those routes. The server-rendered `access`
-//     slot (app membership add/remove) still mounts.
+// Team spend left the Team page for every role and every team state (Design
+// System - Management pages, *Team usage (D7)* and *Where each role reads team
+// spend*; decided 2026-11-17, user). The page keeps one line for an unlinked
+// team (App Teams - Spend source, UI), the access slot, and no LiteLLM panel
+// or call for it (AT4); LiteLLM not configured (LD37) leaves the access slot
+// alone and no tabs. The figures themselves are tested with TeamSpendPanel.
 const unlinkedMe = {
   linked: false,
   enabledOperations: ["getUserDailySpend"],
@@ -1193,24 +1100,18 @@ const unlinkedMe = {
     { teamId: "t1", teamName: "Payments", linked: false, configurable: true },
   ],
 };
-const MEMBER_SUM = {
-  total: 4,
-  daily: [
-    { date: "2026-11-02", spend: 2 },
-    { date: "2026-11-03", spend: 2 },
-  ],
-  coverage: { members: 3, matched: 2, unmatched: 1, pending: 1 },
-  members: [
-    { oid: "oid-u1", name: "Una One", matched: true, spend: 3.5 },
-    { oid: "oid-u2", name: "Dos Two", matched: true, spend: 0.5 },
-    { oid: "oid-u3", name: "Tres Three", matched: false },
+const notConfiguredMe = {
+  linked: false,
+  enabledOperations: [],
+  teams: [
+    { teamId: "t1", teamName: "Payments", linked: true, configurable: true },
   ],
 };
-const unlinkedDetail = {
-  connected: false,
-  spendSource: "member-sum",
-  daily: MEMBER_SUM.daily,
-  memberSum: MEMBER_SUM,
+const NOT_CONFIGURED = {
+  configured: false,
+  connected: true,
+  spendSource: "litellm-team",
+  daily: [],
 };
 const SENTENCE =
   "This team has no LiteLLM team of its own. Budgets, limits and keys are managed in LiteLLM.";
@@ -1220,264 +1121,126 @@ const LITELLM_PANELS = [
   "Budget and limits",
   "Models",
 ];
+const L4_WRITE_BUTTONS = [
+  "Add member",
+  "Generate key",
+  "Save budget",
+  "Save limits",
+  "Save models",
+  "Reset spend for all members",
+];
 
-function stubUnlinked(detail: unknown = unlinkedDetail) {
+function stubUnlinked() {
+  return stub({ "GET /api/litellm/me": okData(unlinkedMe) });
+}
+
+function stubNotConfigured() {
   return stub({
-    "GET /api/litellm/me": okData(unlinkedMe),
-    "GET /api/litellm/teams/t1": okData(detail),
+    "GET /api/litellm/me": okData(notConfiguredMe),
+    "GET /api/litellm/teams/t1": okData(NOT_CONFIGURED),
   });
 }
 
-describe("TeamPageContent spend source - unlinked team (App Teams: Spend source, UI)", () => {
-  it("shows the member sum as the headline with the 'Sum of members' badge, the LiteLLM-reported label and the UTC days", async () => {
-    stubUnlinked();
-    renderConfig();
-    const spend = await region("Team spend");
-    expect(await within(spend).findByText("$4.00")).toBeInTheDocument();
-    expect(within(spend).getAllByText("Sum of members").length).toBeGreaterThan(
-      0,
-    );
-    expect(
-      within(spend).getAllByText("LiteLLM-reported").length,
-    ).toBeGreaterThan(0);
-    expect(within(spend).getByText("2026-11-02")).toBeInTheDocument();
-    expect(within(spend).getByText(/UTC days?/i)).toBeInTheDocument();
-  });
+// The tabs show while the detail loads and go once it says configured:false.
+const settleNotConfigured = async () => {
+  await screen.findByRole("combobox", { name: "Team" });
+  await waitFor(() => expect(screen.queryByRole("tablist")).toBeNull());
+};
 
-  it("states the coverage: members, matched, not in LiteLLM and pending", async () => {
-    stubUnlinked();
-    renderConfig();
-    const spend = await region("Team spend");
-    const line = await within(spend).findByText(/2 matched/);
-    for (const part of [/3 members/, /1 not in LiteLLM/, /1 pending/]) {
-      expect(line.textContent).toMatch(part);
-    }
-  });
+describe("TeamPageContent has no Team spend panel for any role or team state (Design System - Team usage D7; Where each role reads team spend)", () => {
+  const ROLES = [
+    ["internal-admin", { canRaiseLimits: true, canCreateTeam: true }],
+    ["internal-org-admin", { canRaiseLimits: false, canCreateTeam: true }],
+    [
+      "internal-auditor or a lead",
+      { canRaiseLimits: false, canCreateTeam: false },
+    ],
+  ] as const;
+  const STATES = [
+    ["a linked team", () => stub(), () => region("LiteLLM members")],
+    ["an unlinked team", stubUnlinked, () => screen.findByText(SENTENCE)],
+    ["LiteLLM not configured", stubNotConfigured, settleNotConfigured],
+  ] as const;
 
-  it("lists each member with spend; an unmatched member reads 'not in LiteLLM', never $0 (Member sum step 4)", async () => {
-    stubUnlinked();
-    renderConfig();
-    const spend = await region("Team spend");
-    const una = await within(spend).findByRole("row", { name: /Una One/ });
-    expect(within(una).getByText("$3.50")).toBeInTheDocument();
-    expect(
-      within(within(spend).getByRole("row", { name: /Dos Two/ })).getByText(
-        "$0.50",
-      ),
-    ).toBeInTheDocument();
-    const lost = within(spend).getByRole("row", { name: /Tres Three/ });
-    expect(within(lost).getByText(/not in LiteLLM/i)).toBeInTheDocument();
-    expect(lost.textContent).not.toContain("$");
-  });
+  it.each(
+    ROLES.flatMap(([role, flags]) =>
+      STATES.map(([state, arrange, settle]) => ({
+        label: `${role} on ${state}`,
+        flags,
+        arrange,
+        settle,
+      })),
+    ),
+  )(
+    "$label: no region named Team spend, no member sum, no include=memberSum read",
+    async ({ flags, arrange, settle }) => {
+      const api = arrange();
+      renderWithProviders(
+        <TeamPageContent
+          {...flags}
+          scopeLabel={null}
+          access={<section aria-label="Members">app members</section>}
+        />,
+      );
+      await settle();
 
-  it("shows no per-member spend while the Organisation cap omits it, but still the total (AT3)", async () => {
-    stubUnlinked({
-      ...unlinkedDetail,
-      memberSum: {
-        ...MEMBER_SUM,
-        members: MEMBER_SUM.members.map(({ oid, name, matched }) => ({
-          oid,
-          name,
-          matched,
-        })),
-      },
-    });
-    renderConfig();
-    const spend = await region("Team spend");
-    expect(await within(spend).findByText("$4.00")).toBeInTheDocument();
-    const una = within(spend).getByRole("row", { name: /Una One/ });
-    expect(una.textContent).not.toContain("$");
-  });
+      expect(screen.queryByRole("region", { name: /team spend/i })).toBeNull();
+      expect(screen.queryByText("Sum of members")).toBeNull();
+      expect(screen.queryByText(/figures? differ/i)).toBeNull();
+      expect(
+        api.calls.filter((c) => c.search.includes("include=memberSum")),
+      ).toEqual([]);
+    },
+  );
+});
 
+describe("TeamPageContent unlinked team (App Teams: Spend source, UI; AT4)", () => {
   it("says in one line that the team has no LiteLLM team of its own", async () => {
     stubUnlinked();
     renderConfig();
     expect(await screen.findByText(SENTENCE)).toBeInTheDocument();
   });
 
-  it("renders no LiteLLM panel or control and calls none of the team's L4 routes (AT4)", async () => {
+  it("renders no LiteLLM panel or control, mounts the access slot, and reads nothing for the team beyond the me route (AT4)", async () => {
     const api = stubUnlinked();
     renderWithProviders(
       <TeamPageContent
         canRaiseLimits
+        canCreateTeam={false}
         scopeLabel={null}
         access={<section aria-label="Members">app members</section>}
       />,
     );
-    await region("Team spend");
+    await screen.findByText(SENTENCE);
     for (const name of LITELLM_PANELS) {
       expect(screen.queryByRole("region", { name }), name).toBeNull();
     }
-    for (const name of [
-      "Add member",
-      "Generate key",
-      "Save budget",
-      "Save limits",
-      "Save models",
-      "Reset spend for all members",
-    ]) {
+    for (const name of L4_WRITE_BUTTONS) {
       expect(screen.queryByRole("button", { name }), name).toBeNull();
     }
-    const l4 = api.calls.filter(
-      (c) => c.path !== "/api/litellm/me" && c.path !== "/api/litellm/teams/t1",
-    );
-    expect(l4).toEqual([]);
+    expect(api.calls.filter((c) => c.path !== "/api/litellm/me")).toEqual([]);
     expect(screen.getByRole("region", { name: "Members" })).toHaveTextContent(
       "app members",
     );
   });
-
-  it("shows 'LiteLLM unavailable' in the spend region when the member reads fail with 503, keeping the page up (AT7)", async () => {
-    stub({
-      "GET /api/litellm/me": okData(unlinkedMe),
-      "GET /api/litellm/teams/t1": unavailable,
-    });
-    renderConfig();
-    expect(
-      await within(await region("Team spend")).findByText(
-        /LiteLLM unavailable/i,
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Team" })).toBeInTheDocument();
-  });
-
-  it("a team above the member cap shows the route's message in the spend region, not a crash (AT6)", async () => {
-    stub({
-      "GET /api/litellm/me": okData(unlinkedMe),
-      "GET /api/litellm/teams/t1": () =>
-        apiError(
-          422,
-          "TOO_MANY_MEMBERS",
-          "This team has more than 200 members",
-        ),
-    });
-    renderConfig();
-    const spend = await region("Team spend");
-    expect(
-      await within(spend).findByText(/more than 200 members/i),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Team" })).toBeInTheDocument();
-  });
 });
 
-describe("TeamPageContent spend source - linked team (App Teams: Spend source, UI; AT1, ATT6)", () => {
-  const withMemberSum = {
-    ...detailWith(ALL_OPS),
-    memberSum: { ...MEMBER_SUM, total: 2.25, daily: [] },
-  };
-
-  it("only the spend section's team read sends include=memberSum; the L4 panels' reads do not; the server decides who gets it (ATT6, AT6)", async () => {
-    const api = stub();
-    renderView("budgets");
-    await region("Team spend & budgets");
-    const includes = api.calls
-      .filter((c) => c.path === "/api/litellm/teams/t1")
-      .map((c) => new URLSearchParams(c.search).get("include"));
-    expect(includes).toContain("memberSum");
-    expect(includes).toContain(null);
-    for (const include of includes) {
-      expect([null, "memberSum"]).toContain(include);
-    }
-  });
-
-  it("a Lead's response has no member sum: the 'LiteLLM team' badge, the team figure and no second figure", async () => {
-    stub();
-    renderView("budgets");
-    const spend = await region("Team spend & budgets");
-    expect(await within(spend).findByText("$321.75")).toBeInTheDocument();
-    expect(within(spend).getByText("LiteLLM team")).toBeInTheDocument();
-    expect(within(spend).queryByText("Sum of members")).toBeNull();
-    expect(within(spend).queryByText(/figures? differ/i)).toBeNull();
-  });
-
-  it("with a member sum in the response (Admin, org-admin, Auditor) a second figure 'Sum of members' appears next to the team figure with the 'Why the figures differ' text", async () => {
-    stub({ "GET /api/litellm/teams/t1": okData(withMemberSum) });
-    renderView("budgets");
-    const spend = await region("Team spend & budgets");
-    expect(await within(spend).findByText("$321.75")).toBeInTheDocument();
-    expect(within(spend).getByText("LiteLLM team")).toBeInTheDocument();
-    expect(within(spend).getByText("Sum of members")).toBeInTheDocument();
-    expect(within(spend).getByText("$2.25")).toBeInTheDocument();
-    const text = spend.textContent ?? "";
-    expect(text).toMatch(/spent through that LiteLLM team's keys/i);
-    expect(text).toMatch(/each app member spent through the gateway/i);
-    expect(text).toMatch(/personal keys/i);
-  });
-});
-
-// ---- LD37: LiteLLM not configured (docs/specs/2026-11-10-litellm.md, Decisions;
-// Design System - LiteLLM Page, States). Contract: the team response
-// `{ configured: false, connected, spendSource, daily: [] }` makes the spend
-// panel show "LiteLLM not configured" (no figures, no error) and the page
-// render none of the LiteLLM panels or controls, linked team or not; the
-// server-rendered `access` slot still mounts.
 describe("TeamPageContent LiteLLM not configured (LD37; Design System - LiteLLM Page, States)", () => {
-  const unconfigured = (connected: boolean) => ({
-    configured: false,
-    connected,
-    spendSource: connected ? "litellm-team" : "member-sum",
-    daily: [],
-  });
-  const meFor = (linked: boolean) => () =>
-    apiResponse({
-      data: {
-        linked: false,
-        enabledOperations: [],
-        teams: [
-          { teamId: "t1", teamName: "Payments", linked, configurable: true },
-        ],
-      },
-    });
-
-  it.each([
-    ["an unlinked team", "Team spend", false],
-    ["a linked team", "Team spend & budgets", true],
-  ] as const)(
-    "%s: the spend panel says 'LiteLLM not configured', with no figures and no error",
-    async (_n, regionName, linked) => {
-      stub({
-        "GET /api/litellm/me": meFor(linked),
-        "GET /api/litellm/teams/t1": () =>
-          apiResponse({ data: unconfigured(linked) }),
-      });
-      renderConfig();
-      const spend = await region(regionName);
-      expect(
-        await within(spend).findByText(/LiteLLM not configured/i),
-      ).toBeInTheDocument();
-      expect(within(spend).queryByText(/LiteLLM unavailable/i)).toBeNull();
-      expect(spend.textContent).not.toContain("$");
-      expect(screen.queryByRole("alert")).toBeNull();
-    },
-  );
-
-  it("renders no LiteLLM panel or control and calls none of the team's L4 routes, linked or not", async () => {
-    const api = stub({
-      "GET /api/litellm/me": meFor(true),
-      "GET /api/litellm/teams/t1": () =>
-        apiResponse({ data: unconfigured(true) }),
-    });
+  it("renders no LiteLLM panel or control and calls none of the team's L4 routes, but still mounts the access slot", async () => {
+    const api = stubNotConfigured();
     renderWithProviders(
       <TeamPageContent
         canRaiseLimits
+        canCreateTeam={false}
         scopeLabel={null}
         access={<section aria-label="Members">app members</section>}
       />,
     );
-    await within(await region("Team spend & budgets")).findByText(
-      /LiteLLM not configured/i,
-    );
+    await settleNotConfigured();
     for (const name of LITELLM_PANELS) {
       expect(screen.queryByRole("region", { name }), name).toBeNull();
     }
-    for (const name of [
-      "Add member",
-      "Generate key",
-      "Save budget",
-      "Save limits",
-      "Save models",
-      "Reset spend for all members",
-    ]) {
+    for (const name of L4_WRITE_BUTTONS) {
       expect(screen.queryByRole("button", { name }), name).toBeNull();
     }
     const l4 = api.calls.filter(
@@ -1497,8 +1260,8 @@ describe("TeamPageContent LiteLLM not configured (LD37; Design System - LiteLLM 
 //     (values members | budgets | keys; default members) with history "push"
 //     so Back steps through the views;
 //   - only the ACTIVE view is rendered (its sections, its reads): Members =
-//     "LiteLLM members" + the `access` slot; Budgets = "Team spend & budgets" +
-//     "Budget and limits"; Keys = "Keys" + "Models";
+//     "LiteLLM members" + the `access` slot; Budgets = "Budget and limits"
+//     alone (team spend moved to Team usage, D7); Keys = "Keys" + "Models";
 //   - the tabs show for a linked team unless its detail says configured:false
 //     (LD37) - an outage (503) does not hide a tab; an unlinked team or
 //     configured:false has only Members: no Budgets/Keys tab, the team spend
@@ -1514,15 +1277,16 @@ describe("TeamPageContent view tabs (Team page views and links)", () => {
     renderWithProviders(
       <TeamPageContent
         canRaiseLimits={false}
+        canCreateTeam={false}
         scopeLabel={null}
         access={accessSlot}
       />,
       { searchParams },
     );
   const OTHER_REGIONS = {
-    members: ["Team spend & budgets", "Budget and limits", "Keys", "Models"],
+    members: ["Budget and limits", "Keys", "Models"],
     budgets: ["LiteLLM members", "Keys", "Models"],
-    keys: ["LiteLLM members", "Team spend & budgets", "Budget and limits"],
+    keys: ["LiteLLM members", "Budget and limits"],
   } as const;
 
   it("a linked team offers the tabs Members, Budgets, Keys, in that order", async () => {
@@ -1549,7 +1313,7 @@ describe("TeamPageContent view tabs (Team page views and links)", () => {
   });
 
   it.each([
-    ["budgets", "Budgets", ["Team spend & budgets", "Budget and limits"]],
+    ["budgets", "Budgets", ["Budget and limits"]],
     ["keys", "Keys", ["Keys", "Models"]],
   ] as const)(
     "?view=%s opens that view alone: its sections, not the Members view or the access slot",
@@ -1573,7 +1337,11 @@ describe("TeamPageContent view tabs (Team page views and links)", () => {
     const onUrlUpdate = vi.fn();
     const u = user();
     renderWithProviders(
-      <TeamPageContent canRaiseLimits={false} scopeLabel={null} />,
+      <TeamPageContent
+        canRaiseLimits={false}
+        canCreateTeam={false}
+        scopeLabel={null}
+      />,
       { onUrlUpdate },
     );
     await region("LiteLLM members");
@@ -1630,52 +1398,25 @@ describe("TeamPageContent view tabs (Team page views and links)", () => {
   it("an unlinked team renders no tablist and no tabpanel (review B1)", async () => {
     stubUnlinked();
     renderWithAccess();
-    await region("Team spend");
+    await screen.findByText(SENTENCE);
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("tabpanel")).toBeNull();
   });
 
   it("LiteLLM not configured (LD37) renders no tablist and no tabpanel (review B1)", async () => {
-    stub({
-      "GET /api/litellm/me": () =>
-        apiResponse({
-          data: {
-            linked: false,
-            enabledOperations: [],
-            teams: [
-              {
-                teamId: "t1",
-                teamName: "Payments",
-                linked: true,
-                configurable: true,
-              },
-            ],
-          },
-        }),
-      "GET /api/litellm/teams/t1": () =>
-        apiResponse({
-          data: {
-            configured: false,
-            connected: true,
-            spendSource: "litellm-team",
-            daily: [],
-          },
-        }),
-    });
+    stubNotConfigured();
     renderWithAccess();
-    await within(await region("Team spend & budgets")).findByText(
-      /LiteLLM not configured/i,
-    );
+    await settleNotConfigured();
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("tabpanel")).toBeNull();
   });
 
   it.each(["budgets", "keys"])(
-    "an unlinked team has no Budgets or Keys tab and ?view=%s falls back to Members: the member-sum spend above, the access slot, no LiteLLM region (Unlinked rule)",
+    "an unlinked team has no Budgets or Keys tab and ?view=%s falls back to Members: the one-line text, the access slot, no LiteLLM region (Unlinked rule)",
     async (view) => {
       stubUnlinked();
       renderWithAccess({ view });
-      expect(await region("Team spend")).toBeInTheDocument();
+      expect(await screen.findByText(SENTENCE)).toBeInTheDocument();
       expect(screen.getByTestId("access-slot")).toBeInTheDocument();
       expect(screen.queryByRole("tab", { name: "Budgets" })).toBeNull();
       expect(screen.queryByRole("tab", { name: "Keys" })).toBeNull();
@@ -1686,38 +1427,11 @@ describe("TeamPageContent view tabs (Team page views and links)", () => {
   );
 
   it.each(["budgets", "keys"])(
-    "LiteLLM not configured (LD37) leaves only Members for a linked team too: ?view=%s falls back, the spend panel keeps saying so above, no Budgets or Keys tab",
+    "LiteLLM not configured (LD37) leaves only Members for a linked team too: ?view=%s falls back, the access slot stays, no Budgets or Keys tab",
     async (view) => {
-      stub({
-        "GET /api/litellm/me": () =>
-          apiResponse({
-            data: {
-              linked: false,
-              enabledOperations: [],
-              teams: [
-                {
-                  teamId: "t1",
-                  teamName: "Payments",
-                  linked: true,
-                  configurable: true,
-                },
-              ],
-            },
-          }),
-        "GET /api/litellm/teams/t1": () =>
-          apiResponse({
-            data: {
-              configured: false,
-              connected: true,
-              spendSource: "litellm-team",
-              daily: [],
-            },
-          }),
-      });
+      stubNotConfigured();
       renderWithAccess({ view });
-      await within(await region("Team spend & budgets")).findByText(
-        /LiteLLM not configured/i,
-      );
+      await settleNotConfigured();
       expect(screen.getByTestId("access-slot")).toBeInTheDocument();
       expect(screen.queryByRole("tab", { name: "Budgets" })).toBeNull();
       expect(screen.queryByRole("tab", { name: "Keys" })).toBeNull();
@@ -1727,20 +1441,6 @@ describe("TeamPageContent view tabs (Team page views and links)", () => {
       ).toBeNull();
     },
   );
-});
-
-// ---- Slice B2b, G1: an unlinked team's member-sum rows have no Daily spend
-// action (Team page views and links - G1: that route scopes a Lead by linked
-// LiteLLM team membership; widening it is left to unit C). The linked team's
-// action is tested in MembersPanel.test.tsx.
-describe("TeamPageContent unlinked member-sum rows (G1)", () => {
-  it("offers no Daily spend action on a member-sum row", async () => {
-    stubUnlinked();
-    renderConfig();
-    const spend = await region("Team spend");
-    await within(spend).findByRole("row", { name: /Una One/ });
-    expect(screen.queryByRole("button", { name: /daily spend/i })).toBeNull();
-  });
 });
 
 // ---- Slice B2b, L5b review warning: the shown-once dialog returns focus to the
@@ -1799,50 +1499,153 @@ describe("TeamPageContent shown-once key dialog focus (L5b review warning)", () 
   });
 });
 
-// C1 item 6 (B2b review; Design System - Performance patterns, no request
-// waterfalls): the memberSum spend read and the team detail read start together.
-// The spend panel used to mount only after the detail answered, so its request
-// waited on the first.
-describe("TeamPageContent spend panel requests (no waterfall; C1 item 6)", () => {
-  const pending = () => new Promise<Response>(() => {});
+// ---- New team (Design System - Management pages, *New team (D5, D6; unit
+// M2)*: a New team button for admin and org-admin, absent for everyone else,
+// also when the caller has no teams; on success the new team is selected in
+// the team picker). The dialog's own behaviour is in TeamCreateDialog.test.tsx.
+describe("TeamPageContent New team (D5, D6; unit M2)", () => {
+  const CREATED = {
+    teamId: "appteam-00000000-0000-4000-8000-000000000001",
+    name: "Platform Guild",
+    departmentId: "dept-eng",
+    departmentName: "Engineering",
+    createdBy: "oid-admin",
+    createdAt: "2026-11-18T01:00:00.000Z",
+    version: 1,
+  };
+  const noTeams = {
+    linked: false,
+    enabledOperations: [],
+    teams: [],
+  };
+  const newTeamButton = () =>
+    screen.queryByRole("button", { name: "New team" });
 
-  it("the detail and the include=memberSum reads are both issued while neither has answered", async () => {
-    const api = stub({
-      "GET /api/litellm/teams/t1": pending as unknown as Handler,
-    });
-    renderView("budgets");
-    const teamReads = (withMemberSum: boolean) =>
-      api.calls.filter(
-        (c) =>
-          c.path === "/api/litellm/teams/t1" &&
-          c.search.includes("include=memberSum") === withMemberSum,
-      ).length;
-    await waitFor(() => expect(teamReads(false)).toBeGreaterThan(0));
-    await waitFor(() => expect(teamReads(true)).toBeGreaterThan(0));
-  });
-});
+  it.each([
+    [true, "shows"],
+    [false, "does not show"],
+  ])(
+    "canCreateTeam=%s %s the New team button on a team's page",
+    async (can) => {
+      stub();
+      renderWithProviders(
+        <TeamPageContent
+          canRaiseLimits={false}
+          canCreateTeam={can}
+          scopeLabel={null}
+        />,
+      );
+      await screen.findByRole("combobox", { name: "Team" });
+      expect(newTeamButton() !== null).toBe(can);
+    },
+  );
 
-// C1 item 9 (B2b review): the not-configured empty state is the shared
-// EmptyState (Design System - Component Inventory, `EmptyState`), whose title
-// is the semibold message, not a bare muted paragraph.
-describe("TeamSpendPanel empty state (shared EmptyState; C1 item 9)", () => {
-  it("LiteLLM not configured renders the EmptyState title", async () => {
+  it.each([
+    [true, "shows"],
+    [false, "does not show"],
+  ])(
+    "canCreateTeam=%s %s the New team button when the caller has no teams",
+    async (can) => {
+      stub({ "GET /api/litellm/me": okData(noTeams) });
+      renderWithProviders(
+        <TeamPageContent
+          canRaiseLimits={false}
+          canCreateTeam={can}
+          scopeLabel={null}
+        />,
+      );
+      expect(
+        await screen.findByText("You have no teams to manage."),
+      ).toBeInTheDocument();
+      expect(newTeamButton() !== null).toBe(can);
+    },
+  );
+
+  it("the New team button opens the New team dialog", async () => {
     stub({
-      "GET /api/litellm/teams/t1": () =>
+      "GET /api/access/org-units": okData({ teams: [], departments: [] }),
+    });
+    const u = user();
+    renderWithProviders(
+      <TeamPageContent
+        canRaiseLimits={false}
+        canCreateTeam
+        scopeLabel={null}
+      />,
+    );
+    await u.click(await screen.findByRole("button", { name: "New team" }));
+    expect(
+      await screen.findByRole("dialog", { name: "New team" }),
+    ).toBeInTheDocument();
+  });
+
+  it("after a team is created it becomes the selected team: the picker lists it and ?team= holds its id", async () => {
+    let created = false;
+    stub({
+      "GET /api/litellm/me": () =>
         apiResponse({
           data: {
-            configured: false,
-            connected: true,
-            spendSource: "litellm-team",
-            daily: [],
+            ...meWith(ALL_OPS),
+            teams: [
+              ...meWith(ALL_OPS).teams,
+              ...(created
+                ? [
+                    {
+                      teamId: CREATED.teamId,
+                      teamName: CREATED.name,
+                      linked: false,
+                      configurable: true,
+                    },
+                  ]
+                : []),
+            ],
           },
         }),
+      "GET /api/access/org-units": okData({
+        teams: [],
+        departments: [{ id: "dept-eng", name: "Engineering" }],
+      }),
+      "POST /api/teams": () => {
+        created = true;
+        return apiResponse({ data: CREATED }, 201);
+      },
     });
-    renderView("budgets");
-    const message = await within(
-      await region("Team spend & budgets"),
-    ).findByText("LiteLLM not configured");
-    expect(message).toHaveClass("font-semibold");
+    const onUrlUpdate = vi.fn();
+    const u = user();
+    renderWithProviders(
+      <TeamPageContent
+        canRaiseLimits={false}
+        canCreateTeam
+        scopeLabel={null}
+      />,
+      { onUrlUpdate },
+    );
+    await u.click(await screen.findByRole("button", { name: "New team" }));
+    await screen.findByRole("option", { name: "Engineering" });
+    await u.type(
+      screen.getByRole("textbox", { name: "Team name" }),
+      "Platform Guild",
+    );
+    await u.selectOptions(
+      screen.getByRole("combobox", { name: "Department" }),
+      "Engineering",
+    );
+    await u.click(screen.getByRole("button", { name: "Create team" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Team" })).toHaveValue(
+        CREATED.teamId,
+      ),
+    );
+    expect(
+      within(screen.getByRole("combobox", { name: "Team" }))
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toContain("Platform Guild");
+    const picked = onUrlUpdate.mock.calls
+      .map((c) => c[0].searchParams.get("team"))
+      .filter(Boolean);
+    expect(picked.at(-1)).toBe(CREATED.teamId);
   });
 });
 

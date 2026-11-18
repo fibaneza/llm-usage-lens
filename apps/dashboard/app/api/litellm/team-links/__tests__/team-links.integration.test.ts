@@ -10,6 +10,8 @@ import {
   vi,
 } from "vitest";
 
+import { createAppTeam } from "@/lib/data/access/app-teams";
+import { ctxAt, ok } from "@/test/support/access-test-support";
 import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
 import {
   OTHER_TEAM_ID,
@@ -652,6 +654,129 @@ describe("internal-org-admin on /api/litellm/team-links (LD24, LT22)", () => {
     expect(await linkItem("team-a")).toBeDefined();
     expect(await linkItem("team-b")).toBeUndefined();
   });
+});
+
+// Source: docs/specs/2026-11-17-app-teams.md - "Teams without an AWS account"
+// (a created team takes a link like any team); Access Control - "Created app
+// teams" and T-MI3 (an unknown team id is refused; one LiteLLM team has one
+// owner); LiteLLM spec LT-MI3 / "Identity mapping" (one-to-one). The "known
+// team" check of PUT reads the team directory (M2 design 1, group M2-b); the
+// 404 and 409 outcomes are unchanged.
+describe("PUT /api/litellm/team-links/[teamId] for a created team (App Teams; T-MI3)", () => {
+  const unknownId = "appteam-00000000-0000-4000-8000-00000000dead";
+  const createTeam = async (name = "Guild") =>
+    ok(
+      await createAppTeam(
+        { name, departmentId: "dept-eng", departmentName: "Engineering" },
+        ctxAt(undefined, `req-create-${name}`),
+      ),
+    ).teamId;
+
+  it.each([
+    ["internal-admin", ADMIN],
+    ["internal-org-admin", ORG_ADMIN],
+  ] as const)(
+    "%s links a created team: link, claim and one audit record are written",
+    async (_role, who) => {
+      authMock.mockResolvedValue(who);
+      const teamId = await createTeam();
+      const h = await load();
+      const res = await link(h, teamId, TEAM_ID);
+      expect(res.status).toBe(200);
+      expect((await res.clone().json()).data).toMatchObject({
+        teamId,
+        litellmTeamId: TEAM_ID,
+        version: 1,
+      });
+      expect(await linkItem(teamId)).toMatchObject({ litellmTeamId: TEAM_ID });
+      expect((await claimItem(TEAM_ID))?.teamId).toBe(teamId);
+      expect(await auditActions()).toHaveLength(1);
+    },
+  );
+
+  it("an unknown appteam- id is still 404 NOT_FOUND: nothing stored, nothing audited (T-MI3)", async () => {
+    await createTeam();
+    const h = await load();
+    await expectError(await link(h, unknownId, TEAM_ID), 404, "NOT_FOUND");
+    expect(await linkItem(unknownId)).toBeUndefined();
+    expect(await claimItem(TEAM_ID)).toBeUndefined();
+    expect(await auditActions()).toHaveLength(0);
+  });
+
+  it("a LiteLLM team already linked to another team is still 409 CONFLICT for a created team: link and claim unchanged (T-MI3 / LT-MI3)", async () => {
+    const teamId = await createTeam();
+    const h = await load();
+    await link(h, "team-a", TEAM_ID);
+    await expectError(await link(h, teamId, TEAM_ID), 409, "CONFLICT");
+    expect(await linkItem(teamId)).toBeUndefined();
+    expect((await claimItem(TEAM_ID))?.teamId).toBe("team-a");
+    expect(await auditActions()).toHaveLength(1);
+  });
+});
+
+// M2 merge wiring (App Teams spec - Teams without an AWS account; MI-D4a;
+// implementation-phases M2 "Merge wiring"): GET lists a created team in
+// `appTeams` beside the registry teams, for the audience that may read the
+// view (Admin, Org admin, Auditor) and no one else (LiteLLM spec - API routes).
+describe("GET /api/litellm/team-links - appTeams holds created teams (MI-D4a, T-MI3)", () => {
+  const create = async () =>
+    ok(
+      await createAppTeam(
+        {
+          name: "Platform Guild",
+          departmentId: "dept-eng",
+          departmentName: "Engineering",
+        },
+        ctxAt(undefined, "req-create-guild"),
+      ),
+    ).teamId;
+
+  it.each([
+    ["internal-admin", ADMIN],
+    ["internal-org-admin", ORG_ADMIN],
+    ["internal-auditor", AUDITOR],
+  ])(
+    "%s sees the created team in appTeams (unlinked: member-sum; linked: litellm-team) beside the registry teams",
+    async (_role, s) => {
+      const teamId = await create();
+      const h = await load();
+      authMock.mockResolvedValue(s);
+      let data = (await (await h.LIST(get(LIST_URL), ctxFor())).json()).data;
+      expect(data.appTeams).toContainEqual({
+        teamId,
+        teamName: "Platform Guild",
+        spendSource: "member-sum",
+      });
+      expect(data.appTeams.map((t: { teamId: string }) => t.teamId)).toEqual(
+        expect.arrayContaining(["team-a", "team-b", teamId]),
+      );
+
+      authMock.mockResolvedValue(ADMIN);
+      expect((await link(h, teamId, TEAM_ID)).status).toBe(200);
+      authMock.mockResolvedValue(s);
+      data = (await (await h.LIST(get(LIST_URL), ctxFor())).json()).data;
+      expect(data.appTeams).toContainEqual({
+        teamId,
+        teamName: "Platform Guild",
+        spendSource: "litellm-team",
+      });
+    },
+  );
+
+  it.each([
+    ["internal-team-admin (lead)", LEAD],
+    ["internal-viewer", VIEWER],
+  ])(
+    "%s is refused 403 and learns no created team (LiteLLM spec - API routes)",
+    async (_role, s) => {
+      await create();
+      const h = await load();
+      authMock.mockResolvedValue(s);
+      const res = await h.LIST(get(LIST_URL), ctxFor());
+      expect(res.status).toBe(403);
+      expect(JSON.stringify(await res.json())).not.toContain("Platform Guild");
+    },
+  );
 });
 
 // M1 (MI-D4a, LD37, LT-MI3; Design System D4a): `GET /api/litellm/team-links`

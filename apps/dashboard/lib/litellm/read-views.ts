@@ -17,7 +17,9 @@ import {
   INTERNAL_AUDITOR_ROLE,
   INTERNAL_ORG_ADMIN_ROLE,
 } from "@/lib/auth/roles";
+import { buildTeamDirectory } from "@/lib/api/team-directory";
 import { getAllAccounts } from "@/lib/data/account-meta";
+import { listAppTeams } from "@/lib/data/access/app-teams";
 import { getOperationToggles } from "@/lib/data/litellm/toggles";
 import { getTeamLink, listTeamLinks } from "@/lib/data/litellm/team-links";
 
@@ -112,7 +114,9 @@ export async function resolveLiteLLMTeam(
   session: Session,
   teamId: string,
 ): Promise<LiteLLMTeamRef> {
-  const meta = (await getAllAccounts()).find((a) => a.teamId === teamId);
+  const meta = buildTeamDirectory(
+    ...(await Promise.all([getAllAccounts(), listAppTeams()])),
+  ).find((a) => a.teamId === teamId);
   const scope = await scopeFor(session, [], {});
   if (!meta || !canReadTeamViews(scope, teamId, meta.departmentId)) {
     throw new NotFoundError(NOT_FOUND_MESSAGE);
@@ -147,7 +151,9 @@ export async function viewableTeams(session: Session): Promise<{
   linkedLiteLLMTeamIds: Set<string>;
 }> {
   const [accounts, links, scope, roles] = await Promise.all([
-    getAllAccounts(),
+    Promise.all([getAllAccounts(), listAppTeams()]).then(([a, t]) =>
+      buildTeamDirectory(a, t),
+    ),
     listTeamLinks(),
     scopeFor(session, [], {}),
     globalRolesFor(session),
@@ -211,7 +217,9 @@ export async function isOrgWideReader(session: Session): Promise<boolean> {
 export async function teamAccess(session: Session): Promise<TeamAccess> {
   const [roles, accounts, links, scope] = await Promise.all([
     globalRolesFor(session),
-    getAllAccounts(),
+    Promise.all([getAllAccounts(), listAppTeams()]).then(([a, t]) =>
+      buildTeamDirectory(a, t),
+    ),
     listTeamLinks(),
     scopeFor(session, [], {}),
   ]);

@@ -9,7 +9,11 @@ import {
   OWNER_SK,
   ROLEGRANTS_GSI1PK,
   adminScopeSk,
+  APPTEAMS_GSI1PK,
   adminsGsi1pk,
+  appTeamGsi1sk,
+  appTeamNamePk,
+  appTeamPk,
   auditPk,
   auditSk,
   groupMapPk,
@@ -72,6 +76,16 @@ describe("access-control key builders", () => {
     );
     expect(auditSk("2026-11-14T10:00:00.000Z", "req-1", 12)).toBe(
       "2026-11-14T10:00:00.000Z#req-1#12",
+    );
+  });
+
+  // Source: Data Model — "Entity: AppTeam"; Access Control — "Data model additions".
+  it("builds app-team keys", () => {
+    expect(APPTEAMS_GSI1PK).toBe("APPTEAMS");
+    expect(appTeamPk("appteam-x")).toBe("APPTEAM#appteam-x");
+    expect(appTeamGsi1sk("appteam-x")).toBe("APPTEAM#appteam-x");
+    expect(appTeamNamePk("  Platform GUILD ")).toBe(
+      "APPTEAMNAME#platform guild",
     );
   });
 });

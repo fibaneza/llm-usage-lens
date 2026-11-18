@@ -25,11 +25,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 //   through lib/manage-access (managementAccessFor) and the same primitives the
 //   old team-config page used. `team` flag false -> notFound(). With a
 //   non-global caller and ?team=<id>, the id must be in scope.teamScopes or
-//   belong (via getAllAccounts) to one of scope.departmentScopes, else
-//   notFound(); a global reader (admin, org admin, auditor) may open any team.
-//   Renders <TeamPageContent canRaiseLimits scopeLabel access /> from
+//   belong (via findTeamEntry from @/lib/api/team-directory, which covers a
+//   created app team as well as a registry team; Access Control - Created app
+//   teams) to one of scope.departmentScopes, else notFound(); a global reader (admin, org admin, auditor) may open any team.
+//   Renders <TeamPageContent canRaiseLimits canCreateTeam scopeLabel access />
+//   from
 //   "@/components/manage/TeamPageContent":
 //     canRaiseLimits: boolean, true only for internal-admin;
+//     canCreateTeam: boolean, true for internal-admin and internal-org-admin
+//       only (Design System - New team, D5/D6; Access Control - Created app
+//       teams: auditor and lead never);
 //     scopeLabel: string | null, scopeLabelFor(scope) (null for a global
 //       reader), the client adds the team names;
 //     access: ReactNode | undefined, an <AccessSections viewer stepUp
@@ -46,11 +51,25 @@ vi.mock("@/lib/data/access/authorization", () => ({
 vi.mock("@/env", () => ({
   env: { APP_ENV: "dev", AUTH_ACCESS_MODE: "enforce" },
 }));
-vi.mock("@/lib/data/account-meta", () => ({
-  getAllAccounts: async () => [
-    { teamId: "team-a", departmentId: "dept-eng" },
-    { teamId: "team-c", departmentId: "dept-ops" },
-  ],
+// The department-lead ?team= check reads the team directory (registry teams and
+// created app teams; hasAwsAccount is false for a created team).
+const DIRECTORY = [
+  { teamId: "team-a", departmentId: "dept-eng", hasAwsAccount: true },
+  { teamId: "team-c", departmentId: "dept-ops", hasAwsAccount: true },
+  {
+    teamId: "appteam-00000000-0000-4000-8000-000000000001",
+    departmentId: "dept-eng",
+    hasAwsAccount: false,
+  },
+  {
+    teamId: "appteam-00000000-0000-4000-8000-000000000002",
+    departmentId: "dept-ops",
+    hasAwsAccount: false,
+  },
+];
+vi.mock("@/lib/api/team-directory", () => ({
+  findTeamEntry: async (teamId: string) =>
+    DIRECTORY.find((e) => e.teamId === teamId) ?? null,
 }));
 vi.mock("next/navigation", () => ({
   notFound: () => {
@@ -77,12 +96,14 @@ vi.mock("@/components/settings/access/AccessSections", () => ({
 vi.mock("@/components/manage/TeamPageContent", () => ({
   TeamPageContent: (props: {
     canRaiseLimits: boolean;
+    canCreateTeam: boolean;
     scopeLabel: string | null;
     access?: React.ReactNode;
   }) => (
     <div
       data-testid="team"
       data-raise={String(props.canRaiseLimits)}
+      data-create={String(props.canCreateTeam)}
       data-scope-label={props.scopeLabel ?? ""}
     >
       {props.access}
@@ -219,6 +240,31 @@ describe("TeamPage (/dashboard/manage/team)", () => {
     await expect(open("team-c")).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
+  // Access Control - Created app teams: a created team is covered by the
+  // policy module through its stored department, so a department Lead may open
+  // a created team of its department and not one of another department (T-MI4).
+  it("a department Lead opening ?team= of a created team in its department gets the page; a created team of another department is notFound()", async () => {
+    as(["internal-viewer"], {
+      adminScopes: [
+        { source: "manual", scopeType: "department", scopeId: "dept-eng" },
+      ],
+    });
+    render(await open("appteam-00000000-0000-4000-8000-000000000001"));
+    expect(screen.getByTestId("team")).toBeInTheDocument();
+    await expect(
+      open("appteam-00000000-0000-4000-8000-000000000002"),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("a department Lead opening an unknown ?team= is notFound()", async () => {
+    as(["internal-viewer"], {
+      adminScopes: [
+        { source: "manual", scopeType: "department", scopeId: "dept-eng" },
+      ],
+    });
+    await expect(open("appteam-unknown")).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
   it.each([
     ["an org-admin", ["internal-org-admin"]],
     ["the auditor", ["internal-auditor"]],
@@ -226,6 +272,45 @@ describe("TeamPage (/dashboard/manage/team)", () => {
     as(roles);
     render(await open("t9"));
     expect(screen.getByTestId("team")).toBeInTheDocument();
+  });
+});
+
+// Design System - Management pages, *New team (D5, D6; unit M2)*: "admin,
+// org-admin; absent for everyone else"; Access Control - Created app teams:
+// POST /api/teams is internal-admin and internal-org-admin only (user, Q2).
+// The route refuses everyone else; the page only decides who gets the button.
+describe("TeamPage canCreateTeam (New team; role matrix)", () => {
+  it.each([
+    ["an internal-admin", ["internal-admin"], {}, "true"],
+    ["the legacy Admin alias outside prod", ["Admin"], {}, "true"],
+    ["an internal-org-admin", ["internal-org-admin"], {}, "true"],
+    [
+      "a stored internal-org-admin grant on a viewer claim (Rule 50.4)",
+      ["internal-viewer"],
+      { roleGrants: [{ role: "internal-org-admin" }] },
+      "true",
+    ],
+    ["the read-only internal-auditor", ["internal-auditor"], {}, "false"],
+    [
+      "a Lead with a team admin scope",
+      ["internal-viewer"],
+      { adminScopes: [{ source: "manual", scopeType: "team", scopeId: "t1" }] },
+      "false",
+    ],
+    [
+      "a Lead with a department admin scope",
+      ["internal-viewer"],
+      {
+        adminScopes: [
+          { source: "manual", scopeType: "department", scopeId: "dept-eng" },
+        ],
+      },
+      "false",
+    ],
+  ])("%s gets canCreateTeam=%s", async (_n, roles, authorization, create) => {
+    as(roles, authorization);
+    render(await open());
+    expect(screen.getByTestId("team")).toHaveAttribute("data-create", create);
   });
 });
 

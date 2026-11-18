@@ -939,6 +939,13 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     successStatuses: [200],
   }),
 
+  // M2 (Access Control spec - "Created app teams"; T-MI3): admin and org-admin
+  // create a team; everyone else 403 before parsing with one `denied` record.
+  matrixWrite("POST", "teams/route.ts", {
+    action: "appteam.create",
+    validBody: { name: "Platform Guild 2", departmentId: "dept-eng" },
+    successStatuses: [201],
+  }),
   // ---- unit M4: budget reset requests (Access Control - Permission matrix ->
   // Budget reset requests). The request is the caller's own member-team write;
   // approve and deny are the `member` matrix write of the reset routes. ----

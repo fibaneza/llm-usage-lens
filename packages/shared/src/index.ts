@@ -327,6 +327,23 @@ export type {
   IdentityMapRules,
 } from "./identity-map-rules";
 export { MeResponseSchema, MeUsageResponseSchema } from "./schemas/me";
+export {
+  APP_TEAM_ID_PREFIX,
+  AppTeamIdSchema,
+  AppTeamNameSchema,
+  AppTeamSchema,
+  CreateAppTeamInputSchema,
+  CreateAppTeamResponseSchema,
+  OrgUnitTeamSchema,
+  OrgUnitsResponseSchema,
+  appTeamNameKey,
+  isReservedTeamId,
+} from "./schemas/app-team";
+export type {
+  AppTeam,
+  CreateAppTeamInput,
+  OrgUnitsResponse,
+} from "./schemas/app-team";
 
 export {
   ApproveBudgetResetResponseSchema,

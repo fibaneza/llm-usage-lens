@@ -19,7 +19,9 @@ import {
   parseJsonBody,
 } from "@/lib/api/respond";
 import { INTERNAL_ADMIN_ROLE } from "@/lib/auth/roles";
+import { buildTeamDirectory } from "@/lib/api/team-directory";
 import { getAllAccounts } from "@/lib/data/account-meta";
+import { listAppTeams } from "@/lib/data/access/app-teams";
 import { getTeamLink } from "@/lib/data/litellm/team-links";
 
 import { TOKEN_HASH_RE } from "./allowlist";
@@ -102,7 +104,9 @@ async function runTeamWrite<B>(
   if (refused) return refused;
 
   const teamId = parseInput(params.teamId, IdParamSchema);
-  const meta = (await getAllAccounts()).find((a) => a.teamId === teamId);
+  const meta = buildTeamDirectory(
+    ...(await Promise.all([getAllAccounts(), listAppTeams()])),
+  ).find((a) => a.teamId === teamId);
   const scopeRefusal = await refuse({
     operation: "member",
     team: meta ? { teamId, departmentId: meta.departmentId } : null,

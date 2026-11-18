@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { TEAM_USAGE_HREF } from "@/lib/nav";
 import { LiteLLMOrgResponseSchema } from "@llm-usage-lens/shared";
 
 import { DailySpend } from "./DailySpend";
@@ -57,7 +58,7 @@ function AppTeamSpend({
   return (
     <Link
       className="text-link underline-offset-4 hover:underline"
-      href={teamPageHref(team.teamId)}
+      href={`${TEAM_USAGE_HREF}?team=${encodeURIComponent(team.teamId)}`}
     >
       Open the team page
     </Link>

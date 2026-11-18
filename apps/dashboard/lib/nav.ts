@@ -33,8 +33,8 @@ export type NavGroup = {
 
 export const LITELLM_AREA_HREF = "/dashboard/manage/litellm";
 export const TEAM_USAGE_HREF = "/dashboard/team-usage";
-// Unit M2 flips this when it lands /dashboard/team-usage (coordinator ruling).
-export const TEAM_USAGE_ROUTE = false;
+// M2 landed /dashboard/team-usage; the item shows per management.teamUsage (MI-D1, MI-D7).
+export const TEAM_USAGE_ROUTE = true;
 
 const USAGE_GROUP_LABEL = "Usage";
 const MANAGEMENT_GROUP_LABEL = "Management";

@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { createAppTeam } from "@/lib/data/access/app-teams";
+import { putTeamLink } from "@/lib/data/litellm/team-links";
+import { ctxAt, ok } from "@/test/support/access-test-support";
 import {
   CALLERS,
   LTEAM,
+  UNLINKED_LTEAM,
   auditWith,
   bodyOf,
   callsTo,
@@ -226,5 +230,56 @@ describe("PATCH /api/litellm/teams/[teamId]/budget - budgetDuration", () => {
       team_id: LTEAM["team-a"],
       budget_duration: "7d",
     });
+  });
+});
+
+// Source: docs/specs/2026-11-17-app-teams.md - "Teams without an AWS account"
+// (a created team takes a link, then the team writes); LiteLLM spec - "Roles
+// and rights" (a Lead writes the teams in its scope); Access Control MI-D7
+// (a department scope covers a created team by its stored departmentId),
+// T-MI4, Enforcement 2. runTeamWrite (lib/litellm/team-write.ts, shared by the
+// team and key write routes) reads the team directory (M2 design 1, M2-b), so
+// one route proves it for all of them.
+describe("PATCH /api/litellm/teams/[teamId]/budget - a linked created team (MI-D7; T-MI4)", () => {
+  const createLinked = async (name: string, departmentId: string) => {
+    const teamId = ok(
+      await createAppTeam(
+        { name, departmentId, departmentName: departmentId },
+        ctxAt(undefined, `req-budget-${name}`),
+      ),
+    ).teamId;
+    ok(
+      await putTeamLink(
+        { teamId, litellmTeamId: UNLINKED_LTEAM, version: null },
+        ctxAt(undefined, `req-budget-link-${name}`),
+      ),
+    );
+    return teamId;
+  };
+  const patch = async (teamId: string) =>
+    send(await load(), {
+      method: "PATCH",
+      path: url(teamId),
+      params: { teamId },
+      body: { maxBudget: 50 },
+    });
+
+  it("a department-scope Lead lowers the budget of a linked created team of its department; the audit record carries the created team id", async () => {
+    const teamId = await createLinked("Eng Guild", "dept-eng");
+    signInAs("deptAdminEng");
+    const { res } = await patch(teamId);
+    expect(res.status).toBe(200);
+    const [record] = await auditWith("litellm.team.");
+    expect(record).toMatchObject({ result: "success", teamId });
+  });
+
+  it("the same Lead gets the 404 of a missing team for a created team of another department: no LiteLLM call (T-MI4; Enforcement 2)", async () => {
+    const teamId = await createLinked("Ops Guild", "dept-ops");
+    signInAs("deptAdminEng");
+    const outOfScope = await patch(teamId);
+    const missing = await patch("appteam-00000000-0000-4000-8000-00000000dead");
+    expect(outOfScope.res.status).toBe(404);
+    expect(outOfScope.text).toBe(missing.text);
+    expect(state.fake.calls).toHaveLength(0);
   });
 });

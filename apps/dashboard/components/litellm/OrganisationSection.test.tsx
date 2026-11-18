@@ -30,7 +30,8 @@ import { OrganisationSection } from "./OrganisationSection";
 // in LiteLLM, <p> pending"); the App teams label "Per app team. Rows overlap
 // with each other and do not add up to the total."; the headline total is
 // totals.spend; an open-team row has no spend and a link to
-// /dashboard/manage/team?team=<teamId>; both lists empty -> "No teams".
+// /dashboard/team-usage?team=<teamId> (M2 Verify: the open-team row opens Team
+// usage for that team; AT6); both lists empty -> "No teams".
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -160,7 +161,7 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     expect(within(region).queryByText("$325.75")).toBeNull();
   });
 
-  it("an open-team row has no spend and links to that team's Team page (AT6)", async () => {
+  it("an open-team row has no spend and links to that team's Team usage page (AT6, M2 Verify)", async () => {
     stub(() => apiResponse({ data: ORG }));
     renderSection();
     const table = await screen.findByRole("table", { name: "App teams" });
@@ -170,9 +171,12 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     const link = within(ops).getByRole("link", {
       name: /open the team page/i,
     });
-    expect(link.getAttribute("href")).toMatch(
-      /^\/dashboard\/manage\/team\?(.*&)?team=t3(&|$)/,
-    );
+    expect(link.getAttribute("href")).toBe("/dashboard/team-usage?team=t3");
+    // Only an open-team row carries the Team usage link.
+    const payments = within(table).getByRole("row", { name: /Payments/ });
+    expect(
+      within(payments).queryByRole("link", { name: /open the team page/i }),
+    ).toBeNull();
   });
 
   // Slice B2b, G2 (Design System - Management pages, *Team page views and

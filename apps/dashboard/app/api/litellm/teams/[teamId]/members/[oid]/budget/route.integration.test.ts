@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { createAppTeam } from "@/lib/data/access/app-teams";
+import { putTeamLink } from "@/lib/data/litellm/team-links";
+import { ctxAt, ok } from "@/test/support/access-test-support";
+import { UNLINKED_LTEAM } from "@/test/fakes/fake-litellm-views";
+import { seedMember } from "@/test/support/matrix-route-support";
 import {
   CALLERS,
   LTEAM,
@@ -8,6 +13,7 @@ import {
   defineMemberWriteContract,
   expectError,
   memberAudit,
+  removeDashboardMembership,
   send,
   setupMemberWritesSuite,
   signInAs,
@@ -150,4 +156,64 @@ describe("PATCH /api/litellm/teams/[teamId]/members/[oid]/budget", () => {
       expect(writeCalls(state)).toHaveLength(0);
     },
   );
+});
+
+// Source: docs/specs/2026-11-17-app-teams.md - "Teams without an AWS account"
+// (a created team takes members and a LiteLLM link like any team); Access
+// Control - "Created app teams" (MI-D7); implementation-phases M2 "Merge
+// wiring" (member writes resolve the team from the team directory, so a linked
+// created team is not a 404). One representative member write; the routes share
+// runMemberWrite.
+describe("PATCH members/[oid]/budget on a created team (M2 merge wiring)", () => {
+  const createTeam = async () =>
+    ok(
+      await createAppTeam(
+        {
+          name: "Platform Guild",
+          departmentId: "dept-eng",
+          departmentName: "Engineering",
+        },
+        ctxAt(undefined, "req-create-guild"),
+      ),
+    ).teamId;
+  const patch = async (teamId: string) =>
+    send(await load(), {
+      method: "PATCH",
+      path: url(teamId, CALLERS.memberA.oid),
+      params: { teamId, oid: CALLERS.memberA.oid },
+      body: { maxBudgetInTeam: 20 },
+    });
+
+  it("a linked created team takes a member budget write: 200, sent to its LiteLLM team", async () => {
+    const teamId = await createTeam();
+    ok(
+      await putTeamLink(
+        { teamId, litellmTeamId: UNLINKED_LTEAM, version: null },
+        ctxAt(undefined, "req-link-guild"),
+      ),
+    );
+    await removeDashboardMembership(CALLERS.memberA.oid, "team-a");
+    await seedMember(CALLERS.memberA.oid, teamId);
+    signInAs("admin");
+    const { res } = await patch(teamId);
+    expect(res.status).toBe(200);
+    const writes = writeCalls(state);
+    expect(writes).toHaveLength(1);
+    expect(bodyOf(writes[0]).team_id).toBe(UNLINKED_LTEAM);
+  });
+
+  it("an unlinked created team is 409 CONFLICT (not connected), not 404", async () => {
+    const teamId = await createTeam();
+    signInAs("admin");
+    const { res } = await patch(teamId);
+    await expectError(res, 409, "CONFLICT");
+    expect(writeCalls(state)).toHaveLength(0);
+  });
+
+  it("an unknown appteam- id is still 404 with no LiteLLM write", async () => {
+    signInAs("admin");
+    const { res } = await patch("appteam-00000000-0000-4000-8000-00000000dead");
+    await expectError(res, 404, "NOT_FOUND");
+    expect(writeCalls(state)).toHaveLength(0);
+  });
 });
