@@ -33,7 +33,7 @@ import { IdentityLinksSection } from "./IdentityLinksSection";
 // - Lists "Usage identities" and "Aliases" (each key with a remove button
 //   "Remove usage identity <key>" / "Remove alias <key>"), inputs "New usage
 //   identity" / "New alias" with "Add usage identity" / "Add alias" buttons,
-//   input "LiteLLM user ID", submit "Save links".
+//   read-only "LiteLLM user ID:" text with a link to the LiteLLM users tab, submit "Save links".
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -71,8 +71,15 @@ describe("IdentityLinksSection", () => {
     expect(screen.getByLabelText("Person")).toHaveDisplayValue(
       "Alice Adams (alice@example.com)",
     );
-    expect(screen.getByLabelText("LiteLLM user ID")).toHaveValue(
-      "alice@example.com",
+    // Access Control spec - LiteLLM user links (amended 2026-11-18, M3 review
+    // B1): the id is read-only here and changes only on the LiteLLM users tab.
+    expect(screen.queryByLabelText("LiteLLM user ID")).not.toBeInTheDocument();
+    expect(screen.getByText(/LiteLLM user ID:/).closest("p")).toHaveTextContent(
+      "LiteLLM user ID: alice@example.com",
+    );
+    expect(screen.getByRole("link", { name: /LiteLLM users/ })).toHaveAttribute(
+      "href",
+      "/dashboard/manage/litellm/users",
     );
     expect(
       screen.getByRole("button", { name: "Remove alias alice-sso" }),
@@ -159,20 +166,41 @@ describe("IdentityLinksSection", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(/saved/i);
   });
 
-  it("omits litellmUserId from the body when the field is cleared", async () => {
+  // Access Control spec - LiteLLM user links (amended 2026-11-18, M3 review B1):
+  // Save round-trips the stored id unchanged; a person with none sends none.
+  it("sends the stored litellmUserId unchanged when an alias changes, and none for a person without one", async () => {
     const user = userEvent.setup();
     const api = stubAccessApi(
       routes({
         "PUT /api/identities/oid-alice/links": () =>
           ok({ ...LINK, version: 3 }),
+        "PUT /api/identities/oid-bob/links": () =>
+          ok({ ...LINK, oid: "oid-bob", litellmUserId: undefined, version: 1 }),
       }),
     );
     renderWithProviders(<IdentityLinksSection canEdit />);
     await screen.findByText("alice-sso");
-    await user.clear(screen.getByLabelText("LiteLLM user ID"));
+    await user.type(screen.getByLabelText("New alias"), "alice-work");
+    await user.click(screen.getByRole("button", { name: "Add alias" }));
     await user.click(screen.getByRole("button", { name: "Save links" }));
     await vi.waitFor(() => expect(api.writes()).toHaveLength(1));
-    expect(api.writes()[0]?.body).not.toHaveProperty("litellmUserId");
+    expect(api.writes()[0]?.body).toEqual({
+      usageIdentities: ["alice@example.com"],
+      aliases: ["alice-sso", "alice-work"],
+      litellmUserId: "alice@example.com",
+      version: 2,
+    });
+
+    await user.selectOptions(
+      screen.getByLabelText("Person"),
+      "Bob Brown (bob@example.com)",
+    );
+    await vi.waitFor(() =>
+      expect(screen.queryByText("alice-sso")).not.toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("button", { name: "Save links" }));
+    await vi.waitFor(() => expect(api.writes()).toHaveLength(2));
+    expect(api.writes()[1]?.body).not.toHaveProperty("litellmUserId");
   });
 
   it("maps a duplicate-key 409 to the conflict message and keeps the edits", async () => {

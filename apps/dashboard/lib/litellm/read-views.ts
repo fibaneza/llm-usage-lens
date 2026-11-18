@@ -62,6 +62,7 @@ export async function enabledOperations(): Promise<LiteLLMOperationName[]> {
   return LITELLM_OPERATION_NAMES.filter(
     (name) =>
       settings[name].enabled &&
+      !(LITELLM_OPERATIONS[name].ossOnly === true && !oss) &&
       !(
         oss &&
         LITELLM_OPERATIONS[name].routes.length > 0 &&

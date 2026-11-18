@@ -191,9 +191,9 @@ describe("ci e2e-dev job (llm-usage-lens-build.yml)", () => {
     expect(seed).toBeLessThan(steps.indexOf(run));
   });
 
-  // Coordinator follow-up (ci/e2e-dev-guard): fail unless exactly the 10
+  // Coordinator follow-up (ci/e2e-dev-guard): fail unless exactly the 12
   // dev-login cases ran, none skipped (ACTIONS.md e2e-dev job).
-  it("writes a JSON report and then asserts exactly 10 cases, none skipped (ACTIONS.md e2e-dev)", () => {
+  it("writes a JSON report and then asserts exactly 12 cases, none skipped (ACTIONS.md e2e-dev)", () => {
     // Review warning: a CLI --reporter replaces the config reporters (html,
     // github); the config adds json when PLAYWRIGHT_JSON_OUTPUT_FILE is set.
     expect(run).not.toMatch(/--reporter/);
@@ -201,7 +201,7 @@ describe("ci e2e-dev job (llm-usage-lens-build.yml)", () => {
       /^\s+PLAYWRIGHT_JSON_OUTPUT_FILE:\s*.*e2e-dev-report\.json\s*$/m,
     );
     const guard = steps.findIndex((s) =>
-      /^ {8}run:\s*pnpm exec tsx scripts\/e2e-assert-count-cli\.ts .*e2e-dev-report\.json 10\s*$/m.test(
+      /^ {8}run:\s*pnpm exec tsx scripts\/e2e-assert-count-cli\.ts .*e2e-dev-report\.json 12\s*$/m.test(
         s,
       ),
     );

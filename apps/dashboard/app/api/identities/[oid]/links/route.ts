@@ -88,6 +88,16 @@ const putHandler = withRoute(
       }),
     );
     if (!(await identityExists(oid))) return notFoundResponse();
+    // T-MI1 / LT-MI1: the LiteLLM user id changes only through the
+    // litellm-link route, which validates it against LiteLLM.
+    const stored = await getIdentityLink(oid);
+    if (body.litellmUserId !== stored?.litellmUserId) {
+      return jsonError(
+        409,
+        "CONFLICT",
+        "The LiteLLM user id changes only through PUT /api/identities/[oid]/litellm-link",
+      );
+    }
     // T16: a link holds at most this person's own canonical email as a
     // person-kind key, and only as a usage identity; any other person-kind key,
     // or any person-kind alias, would show its holder someone's usage.

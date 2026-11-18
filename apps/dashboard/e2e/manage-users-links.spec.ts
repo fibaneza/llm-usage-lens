@@ -1,9 +1,6 @@
+import AxeBuilder from "@axe-core/playwright";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 
-import {
-  DEV_LOGIN_ONLY_REASON,
-  E2E_PRODUCTION_SERVERS,
-} from "./support/constants";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 
@@ -57,58 +54,37 @@ async function litellmIsConfigured(context: BrowserContext) {
   return baseUrl !== null;
 }
 
+// Project standard (accessibility.spec.ts): WCAG 2 A/AA, serious or critical.
+async function expectNoBlockingViolations(page: Page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+  expect(
+    results.violations
+      .filter((v) => v.impact === "serious" || v.impact === "critical")
+      .map((v) => ({
+        id: v.id,
+        nodes: v.nodes.map((n) => n.target.join(" ")),
+      })),
+  ).toEqual([]);
+}
+
+async function noHorizontalScroll(page: Page) {
+  return page.evaluate(
+    () =>
+      document.documentElement.scrollWidth <=
+      document.documentElement.clientWidth,
+  );
+}
+
 async function mockDirectory(page: Page) {
   await page.route(/\/api\/identities\/directory/, (route) =>
     route.fulfill({ json: { data: DIRECTORY } }),
   );
 }
 
-test.describe("team lead sign-in (dev login)", () => {
-  test.skip(E2E_PRODUCTION_SERVERS, DEV_LOGIN_ONLY_REASON);
-
-  test("the sign-in form offers Team lead, and choosing it signs in with the lead's stored scope (D14, T-MI2)", async ({
-    page,
-  }) => {
-    await page.goto("/sign-in");
-    const select = page.getByLabel(/role/i);
-    await expect(
-      select.locator("option", { hasText: "Team lead" }),
-    ).toHaveCount(1);
-
-    await select.selectOption({ label: "Team lead" });
-    await expect(
-      page.getByLabel("Sign in as (email or user id)"),
-    ).toBeDisabled();
-    await page.getByRole("button", { name: "Sign in as team lead" }).click();
-
-    // A lead has no global role: it lands on My usage and sees Team under
-    // Management, from the stored admin scope.
-    await expect(page).toHaveURL(/\/dashboard\/me/);
-    const nav = page.getByRole("navigation");
-    await expect(
-      nav.getByRole("link", { name: "Team", exact: true }),
-    ).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Users" })).toHaveCount(0);
-    await expect(nav.getByRole("link", { name: "Settings" })).toHaveCount(0);
-  });
-
-  test("the team lead cannot open Users or Settings (404): no global role from the seed (D14)", async ({
-    page,
-  }) => {
-    await page.goto("/sign-in");
-    await page.getByLabel(/role/i).selectOption({ label: "Team lead" });
-    await page.getByRole("button", { name: "Sign in as team lead" }).click();
-    await expect(page).toHaveURL(/\/dashboard\/me/);
-
-    const users = await page.goto("/dashboard/manage/users");
-    expect(users?.status()).toBe(404);
-    const settings = await page.goto("/dashboard/settings");
-    expect(settings?.status()).toBe(404);
-  });
-});
-
 test.describe("Management -> Users (D15, D16)", () => {
-  test("an admin sees the people list with link states, Add user, and the step set for a pre-SSO admin", async ({
+  test("an admin sees the people list with link states and an Add user dialog with the password step, no serious axe violation at 375 (D15, D16)", async ({
     context,
     page,
   }) => {
@@ -126,6 +102,11 @@ test.describe("Management -> Users (D15, D16)", () => {
     const dialog = page.getByRole("dialog", { name: "Add user" });
     await expect(dialog.getByLabel("Work email")).toBeVisible();
     await expect(dialog.getByLabel("Team (optional)")).toBeVisible();
+    await expect(dialog.getByLabel("Create a password sign-in")).toBeChecked();
+
+    await page.setViewportSize({ width: 375, height: 800 });
+    await expectNoBlockingViolations(page);
+    expect(await noHorizontalScroll(page)).toBe(true);
   });
 
   // Not configured (the CI state, testing guide - E2E without LiteLLM): the
@@ -171,42 +152,6 @@ test.describe("Management -> Users (D15, D16)", () => {
       );
       throw error;
     }
-  });
-
-  // Configured (a local run after dev-login stored the fake connection): the
-  // Match found suggestion is shown and "Link" opens an AlertDialog naming
-  // both sides; nothing is written until confirm (D16, Access Control D27).
-  test("with LiteLLM configured Match found opens a confirm dialog naming both sides and writes nothing until confirmed (D16, D27)", async ({
-    context,
-    page,
-  }) => {
-    test.skip(
-      !(await litellmIsConfigured(context)),
-      "no LiteLLM connection is stored (fresh table, as in CI); the not-configured case covers this state",
-    );
-    await signInAsTestUser(context, { roles: ["internal-admin"] });
-    await mockDirectory(page);
-    const writes: string[] = [];
-    await page.route(/\/litellm-link$/, (route) => {
-      writes.push(route.request().method());
-      return route.fulfill({ status: 500, json: {} });
-    });
-    await page.goto("/dashboard/manage/users");
-    await waitForHydration(page);
-
-    const bob = page.getByRole("row", { name: /Bob Barker/ });
-    await expect(bob).toContainText("Match found");
-    await bob.getByRole("button", { name: /^Link Bob Barker/ }).click();
-
-    const dialog = page.getByRole("alertdialog");
-    await expect(dialog).toContainText("Bob Barker");
-    await expect(dialog).toContainText("bob@example.test");
-    await expect(dialog).toContainText("nothing is linked until you confirm");
-    expect(writes).toEqual([]);
-
-    await dialog.getByRole("button", { name: "Cancel" }).click();
-    await expect(dialog).toHaveCount(0);
-    expect(writes).toEqual([]);
   });
 
   test("an auditor reads the people list and gets neither Add user nor a link control", async ({
@@ -291,5 +236,121 @@ test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
     await expect(
       bob.getByRole("button", { name: "Create and link" }),
     ).toBeVisible();
+  });
+});
+
+// Deterministic in both modes: the list and the search are fulfilled, so the
+// result never depends on a stored connection (Rule 60.24).
+test.describe("Management -> LiteLLM users: link to an existing user (D16, T-MI1)", () => {
+  test("picking a user needs a reason, shows the audit notice, and sends a manual link with the reason; axe and no scroll at 375 with the dialog open", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, {
+      roles: ["internal-admin"],
+      oid: "oid-e2e-admin",
+    });
+    await page.route(/\/api\/litellm\/team-links/, (route) =>
+      route.fulfill({ json: { data: { items: [] } } }),
+    );
+    let searchQuery: string | null = null;
+    await page.route(/\/api\/litellm\/users(\?|$)/, (route) => {
+      const q = new URL(route.request().url()).searchParams.get("q");
+      if (q !== null) {
+        searchQuery = q;
+        return route.fulfill({
+          json: {
+            data: {
+              page: 1,
+              pageSize: 25,
+              hasMore: false,
+              enabledOperations: ["createUser"],
+              mayLink: true,
+              users: [
+                {
+                  userId: "ll-robert",
+                  email: "robert.barker@other.example.test",
+                  spend: 0,
+                  maxBudget: null,
+                  teams: [],
+                },
+              ],
+            },
+          },
+        });
+      }
+      return route.fulfill({
+        json: {
+          data: {
+            page: 1,
+            pageSize: 25,
+            hasMore: false,
+            enabledOperations: ["createUser"],
+            mayLink: true,
+            users: [
+              {
+                key: "oid-bob",
+                linkState: "none",
+                appUser: {
+                  oid: "oid-bob",
+                  displayName: "Bob Barker",
+                  email: "bob@example.test",
+                  version: 3,
+                },
+                litellmUser: null,
+              },
+            ],
+          },
+        },
+      });
+    });
+    const bodies: Record<string, unknown>[] = [];
+    await page.route(/\/api\/identities\/oid-bob\/litellm-link$/, (route) => {
+      bodies.push(route.request().postDataJSON() as Record<string, unknown>);
+      return route.fulfill({
+        json: {
+          data: { oid: "oid-bob", litellmUserId: "ll-robert", version: 4 },
+        },
+      });
+    });
+
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto("/dashboard/manage/litellm/users");
+    await waitForHydration(page);
+    // Below md the list is cards (listitem), not table rows.
+    const bob = page.getByRole("listitem").filter({ hasText: "Bob Barker" });
+    await expect(bob).toContainText("No LiteLLM user with that email");
+    await expectNoBlockingViolations(page);
+
+    await bob
+      .getByRole("button", { name: "Link to an existing LiteLLM user" })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Link to an existing LiteLLM user",
+    });
+    await expect(dialog).toContainText("recorded in the audit log");
+
+    await dialog.getByLabel("Search LiteLLM users").fill("robert");
+    await dialog.getByRole("radio", { name: /robert\.barker/ }).check();
+    expect(searchQuery).toBe("robert");
+
+    // No reason yet: the write is refused in the form and nothing is sent.
+    await dialog.getByRole("button", { name: "Link user" }).click();
+    await expect(dialog).toContainText("Give a reason");
+    expect(bodies).toEqual([]);
+
+    await expectNoBlockingViolations(page);
+    expect(await noHorizontalScroll(page)).toBe(true);
+
+    await dialog.getByLabel("Reason").fill("Contractor uses a personal email");
+    await dialog.getByRole("button", { name: "Link user" }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({
+      litellmUserId: "ll-robert",
+      mode: "manual",
+      reason: "Contractor uses a personal email",
+      version: 3,
+    });
   });
 });

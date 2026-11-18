@@ -111,9 +111,10 @@ async function gate(name: LiteLLMOperationName): Promise<void> {
     throw new LiteLLMOperationRefused("OPERATION_DISABLED");
   }
   const op = LITELLM_OPERATIONS[name];
+  const edition = liteLLMEdition(env.APP_ENV);
   if (
-    op.routes.every((r) => r.enterpriseOnly) &&
-    liteLLMEdition(env.APP_ENV) === "oss"
+    (op.routes.every((r) => r.enterpriseOnly) && edition === "oss") ||
+    (op.ossOnly === true && edition !== "oss")
   ) {
     throw new LiteLLMOperationRefused("OPERATION_UNAVAILABLE");
   }
@@ -743,9 +744,6 @@ export async function createUser(
   ctx: OperationContext,
 ) {
   await gate("createUser");
-  if (liteLLMEdition(env.APP_ENV) !== "oss") {
-    throw new LiteLLMOperationRefused("OPERATION_UNAVAILABLE");
-  }
   const i = CreateUserInput.parse(input);
   const { actor } = Context.parse(ctx);
   const found = (await findUser(i.email)).users.find(

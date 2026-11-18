@@ -24,6 +24,9 @@ export type OperationDefinition = {
   // on for an operation already in this table.
   readonly defaultEnabled: boolean;
   readonly routes: readonly AllowlistedRoute[];
+  // Refused on Enterprise before any request: the person is created by LiteLLM
+  // at SSO sign-in (LiteLLM spec - `createUser`, OSS only).
+  readonly ossOnly?: true;
 };
 
 const get = (template: string, enterpriseOnly?: true): AllowlistedRoute =>
@@ -73,7 +76,10 @@ export const LITELLM_OPERATIONS = {
     post("/user/new"),
     post("/team/member_add"),
   ),
-  createUser: write(true, get("/user/list"), post("/user/new")),
+  createUser: {
+    ...write(true, get("/user/list"), post("/user/new")),
+    ossOnly: true,
+  },
   removeTeamMember: write(true, post("/team/member_delete")),
   setMemberBudget: write(true, post("/team/member_update")),
   setMemberLimits: write(true, post("/team/member_update")),

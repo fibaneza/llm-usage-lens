@@ -707,8 +707,17 @@ person their own usage and **never grant access**.
 LiteLLM user link is written by `internal-admin` or `internal-org-admin`
 (user, Q4) through `PUT`/`DELETE /api/identities/[oid]/litellm-link`; the
 usage identities and aliases stay `internal-admin` through
-`PUT /api/identities/[oid]/links`. Both routes write `litellmUserId`
-through one domain function, so the same rules hold:
+`PUT /api/identities/[oid]/links`. ~~Both routes write `litellmUserId`
+through one domain function, so the same rules hold:~~ *Amended
+2026-11-18 (M3 review B1, agent decision under the coordinator's ruling):*
+only the `litellm-link` routes set, change or remove `litellmUserId`.
+`PUT /api/identities/[oid]/links` refuses a `litellmUserId` that differs
+from the stored one (setting a first one, changing it, or dropping it)
+with `409 CONFLICT` pointing to the `litellm-link` route — nothing is
+written, including on the caller's own `oid` (the own-`oid` `403` stays on
+the `litellm-link` routes, where the link can change); an unchanged id
+passes through with an alias or usage-identity edit. Reason: one write
+path for the link, so the rules below always hold:
 
 - **One-to-one.** A `LiteLLMUserClaim` item (*Data model additions*) is
   written in the same transaction as the link and its audit record; a

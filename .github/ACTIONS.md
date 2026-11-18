@@ -74,11 +74,11 @@ It uses no secrets: the web servers' env is pinned in
 - **`e2e-dev` job (2026-11-17):** the specs that need the dev login
   (`dev-login.spec.ts`, `sign-in-role-choice.spec.ts`, the settings-tabs
   step-up case) skip on production servers. This job runs only those
-  specs, 10 cases on `next dev`, with `E2E_SERVERS=dev`. It has the same
+  specs, 12 cases on `next dev`, with `E2E_SERVERS=dev`. It has the same
   setup and runner pin as `e2e`, and a 15-minute timeout. Playwright's
   `--grep` follows the spec paths with no `--` separator. With `--`,
   Playwright reads every later argument as a file filter. A guard step
-  then fails the job unless exactly 10 cases ran with none skipped
+  then fails the job unless exactly 12 cases ran with none skipped (10 until the two team lead sign-in cases joined `local login role choice`, M3 follow-up 2026-11-18)
   (`scripts/e2e-assert-count.ts`, reading the JSON report from
   `PLAYWRIGHT_JSON_OUTPUT_FILE`). That catches a dropped filter (more
   cases) and production servers (all skipped).

@@ -9,6 +9,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
 
@@ -31,6 +32,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LITELLM_AREA_HREF } from "@/lib/nav";
 import { fetchApi, mutateApi } from "@/lib/query/fetch-api";
 import { sectionData } from "@/lib/query/section-data";
 
@@ -136,19 +138,19 @@ function LinksEditor({
     usageIdentities: link.usageIdentities,
     aliases: link.aliases,
   });
-  const [litellmUserId, setLitellmUserId] = useState(link.litellmUserId ?? "");
   const [saved, setSaved] = useState(false);
 
   const save = useMutation({
     mutationFn: () => {
-      const litellm = litellmUserId.trim();
       return mutateApi(
         `/api/identities/${idPath(link.oid)}/links`,
         "PUT",
         {
           usageIdentities: lists.usageIdentities,
           aliases: lists.aliases,
-          ...(litellm === "" ? {} : { litellmUserId: litellm }),
+          ...(link.litellmUserId === undefined
+            ? {}
+            : { litellmUserId: link.litellmUserId }),
           version: link.version,
         },
         IdentityLinkSchema,
@@ -195,19 +197,7 @@ function LinksEditor({
       />
       {canEdit ? (
         <>
-          <FormField label="LiteLLM user ID">
-            {(props) => (
-              <Input
-                {...props}
-                autoComplete="off"
-                value={litellmUserId}
-                onChange={(e) => {
-                  setLitellmUserId(e.target.value);
-                  setSaved(false);
-                }}
-              />
-            )}
-          </FormField>
+          <LiteLLMUserIdReadOnly litellmUserId={link.litellmUserId} />
           <div>
             <Button
               type="button"
@@ -227,12 +217,31 @@ function LinksEditor({
           {saved ? <FormStatus>Saved.</FormStatus> : null}
         </>
       ) : (
-        <p className="text-sm">
-          <span className="font-medium">LiteLLM user ID: </span>
-          <span className="font-mono">{link.litellmUserId ?? "None"}</span>
-        </p>
+        <LiteLLMUserIdReadOnly litellmUserId={link.litellmUserId} />
       )}
     </div>
+  );
+}
+
+// Access Control spec - LiteLLM user links (M3 review B1): the id changes only
+// through PUT /api/identities/[oid]/litellm-link, so it is shown read-only here.
+function LiteLLMUserIdReadOnly({
+  litellmUserId,
+}: {
+  litellmUserId: string | undefined;
+}) {
+  return (
+    <p className="text-sm">
+      <span className="font-medium">LiteLLM user ID: </span>
+      <span className="font-mono">{litellmUserId ?? "None"}</span>
+      {" - "}
+      <Link
+        href={`${LITELLM_AREA_HREF}/users`}
+        className="text-primary underline"
+      >
+        Link in Management, LiteLLM, LiteLLM users
+      </Link>
+    </p>
   );
 }
 

@@ -27,6 +27,7 @@ import {
   nonAuditItems,
   scopesOf,
   seedCtx,
+  seedIdentity,
   seedWorld,
   signInAs,
   type CallerName,
@@ -85,7 +86,6 @@ const putLink = (oid: string, body: unknown, extra = {}) =>
 const link = (version: number, over = {}) => ({
   usageIdentities: ["alice@company.com"],
   aliases: ["alice-sso"],
-  litellmUserId: "u-alice",
   version,
   ...over,
 });
@@ -220,7 +220,11 @@ describe("GET /api/identities/[oid]/links", () => {
     async (caller) => {
       ok(
         await putIdentityLink(
-          { ...link(0), oid: alice.oid, version: null },
+          {
+            ...link(0, { litellmUserId: "u-alice" }),
+            oid: alice.oid,
+            version: null,
+          },
           seedCtx(),
         ),
       );
@@ -248,7 +252,11 @@ describe("GET /api/identities/[oid]/links", () => {
     async (caller) => {
       ok(
         await putIdentityLink(
-          { ...link(0), oid: alice.oid, version: null },
+          {
+            ...link(0, { litellmUserId: "u-alice" }),
+            oid: alice.oid,
+            version: null,
+          },
           seedCtx(),
         ),
       );
@@ -285,7 +293,6 @@ describe("PUT /api/identities/[oid]/links", () => {
       oid: alice.oid,
       usageIdentities: ["alice@company.com"],
       aliases: ["alice-sso"],
-      litellmUserId: "u-alice",
       version: 1,
     });
     expect(await getIdentityLink(alice.oid)).toMatchObject({ version: 1 });
@@ -318,7 +325,6 @@ describe("PUT /api/identities/[oid]/links", () => {
         link(0, {
           usageIdentities: ["bob@company.com"],
           aliases: ["alice-sso"],
-          litellmUserId: "u-bob", // u-alice is now claimed by Alice (D16)
         }),
       ),
     );
@@ -755,50 +761,113 @@ describe("PUT /api/identities/[oid]/links", () => {
 });
 
 // Source: docs/specs/2026-11-10-access-control.md - "LiteLLM user links" (D16,
-// unit M3: `PUT /api/identities/[oid]/links` writes `litellmUserId` through the
-// same domain function as the litellm-link routes, so the one-to-one
-// `LiteLLMUserClaim` and the duplicate `409` hold here too; the usage
-// identities and aliases stay `internal-admin`, org-admin does not write them),
-// "Audit log" (identity.link.update), T-MI1.
-describe("PUT /api/identities/[oid]/links with a litellmUserId (D16)", () => {
-  it("claims the LiteLLM user and audits it in the after snapshot", async () => {
-    await expectData(await putLink(alice.oid, link(0)));
-    expect(await getLiteLLMUserOwner("u-alice")).toBe(alice.oid);
-    const [record] = await auditToday();
-    expect(record).toMatchObject({
-      action: "identity.link.update",
-      after: { litellmUserId: "u-alice" },
-    });
+// T-MI1: own oid refused, privileged target 409, match/manual with a reason,
+// audit) and "API routes" (the usage identities and aliases stay
+// `internal-admin`). Agent decision under test (review follow-up B1,
+// 2026-11-18): this route never changes `litellmUserId`; a body whose value
+// differs from the stored one (set, change or drop) is `409 CONFLICT` pointing
+// at `PUT /api/identities/[oid]/litellm-link`, which alone enforces the T-MI1
+// rules. An unchanged value (or none stored and none sent) edits only the
+// usage identities and aliases. The same 409 holds on the caller's own oid.
+describe("PUT /api/identities/[oid]/links never changes litellmUserId (T-MI1, B1)", () => {
+  const seedLinked = async (oid = alice.oid) =>
+    ok(
+      await putIdentityLink(
+        {
+          oid,
+          usageIdentities: [],
+          aliases: ["alice-sso"],
+          litellmUserId: "u-alice",
+          version: null,
+        },
+        seedCtx(),
+      ),
+    );
+
+  it("(a) a first litellmUserId is 409 CONFLICT naming the litellm-link route; nothing is written", async () => {
+    const items = await nonAuditItems();
+    const res = await putLink(alice.oid, link(0, { litellmUserId: "u-alice" }));
+    const body = await expectError(res, 409, "CONFLICT");
+    expect(JSON.stringify(body)).toContain("litellm-link");
+    expect(await nonAuditItems()).toEqual(items);
+    expect(await getIdentityLink(alice.oid)).toBeNull();
+    expect(await getLiteLLMUserOwner("u-alice")).toBeNull();
+    expect(await auditToday()).toEqual([]);
   });
 
-  it("409 when another identity already holds that LiteLLM user, nothing written", async () => {
+  it("(a) a different litellmUserId is 409; the stored link and claim are unchanged", async () => {
+    await seedLinked();
+    const items = await nonAuditItems();
+    await expectError(
+      await putLink(alice.oid, link(1, { litellmUserId: "u-other" })),
+      409,
+      "CONFLICT",
+    );
+    expect(await nonAuditItems()).toEqual(items);
+    expect(await getLiteLLMUserOwner("u-alice")).toBe(alice.oid);
+    expect(await getLiteLLMUserOwner("u-other")).toBeNull();
+  });
+
+  it("(a) dropping the litellmUserId (omitted while one is stored) is 409; the claim stays", async () => {
+    await seedLinked();
+    await expectError(await putLink(alice.oid, link(1)), 409, "CONFLICT");
+    expect(await getLiteLLMUserOwner("u-alice")).toBe(alice.oid);
+    expect((await getIdentityLink(alice.oid))?.litellmUserId).toBe("u-alice");
+  });
+
+  it("(b) an unchanged litellmUserId with an alias change is 200, the claim and id kept", async () => {
+    await seedLinked();
+    const data = await expectData<Link>(
+      await putLink(
+        alice.oid,
+        link(1, {
+          aliases: ["alice-sso", "alice-2"],
+          litellmUserId: "u-alice",
+        }),
+      ),
+    );
+    expect(data).toMatchObject({
+      aliases: ["alice-sso", "alice-2"],
+      litellmUserId: "u-alice",
+      version: 2,
+    });
+    expect(await getLiteLLMUserOwner("u-alice")).toBe(alice.oid);
+    const [record] = await auditToday();
+    expect(record).toMatchObject({ action: "identity.link.update" });
+  });
+
+  it("(b) no litellmUserId stored and none sent still creates the link (aliases edit)", async () => {
     await expectData(await putLink(alice.oid, link(0)));
+  });
+
+  it("(c) on the caller's own oid a changed litellmUserId is the same 409 (never on oneself); nothing written", async () => {
+    const self = CALLERS.admin.oid;
+    await seedIdentity(self);
     const items = await nonAuditItems();
     await expectError(
       await putLink(
-        bob.oid,
-        link(0, { usageIdentities: ["bob@company.com"], aliases: [] }),
+        self,
+        link(0, { usageIdentities: [], aliases: [], litellmUserId: "u-self" }),
       ),
       409,
       "CONFLICT",
     );
     expect(await nonAuditItems()).toEqual(items);
-    expect(await getIdentityLink(bob.oid)).toBeNull();
-    expect(await getLiteLLMUserOwner("u-alice")).toBe(alice.oid);
+    expect(await getLiteLLMUserOwner("u-self")).toBeNull();
   });
 
-  it("dropping the LiteLLM user from the link releases its claim", async () => {
-    await expectData(await putLink(alice.oid, link(0)));
-    await expectData(
-      await putLink(alice.oid, link(1, { litellmUserId: undefined })),
+  it("(d) a privileged LiteLLM target cannot be set here: any new id is refused before a claim exists", async () => {
+    await expectError(
+      await putLink(alice.oid, link(0, { litellmUserId: "proxy-admin-user" })),
+      409,
+      "CONFLICT",
     );
-    expect(await getLiteLLMUserOwner("u-alice")).toBeNull();
+    expect(await getLiteLLMUserOwner("proxy-admin-user")).toBeNull();
   });
 
-  it("org-admin cannot write usage identities, aliases or a LiteLLM user here (stay internal-admin)", async () => {
+  it("(e) org-admin still cannot write aliases or usage identities here (403, nothing stored)", async () => {
     signInAs("orgAdmin");
     await expectError(await putLink(alice.oid, link(0)), 403, "FORBIDDEN");
     expect(await getIdentityLink(alice.oid)).toBeNull();
-    expect(await getLiteLLMUserOwner("u-alice")).toBeNull();
   });
 });

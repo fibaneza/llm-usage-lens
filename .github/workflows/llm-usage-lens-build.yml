@@ -206,9 +206,9 @@ jobs:
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/e2e-dev-report.json
         run: pnpm test:e2e e2e/dev-login.spec.ts e2e/sign-in-role-choice.spec.ts e2e/settings-tabs.spec.ts --grep "dev-only local login|dev login identity option|local login role choice|step-up returns to the right tab"
-      # Fails unless exactly the 10 dev-login cases ran, none skipped.
+      # Fails unless exactly the 12 dev-login cases ran, none skipped.
       - name: Assert dev-login case count
-        run: pnpm exec tsx scripts/e2e-assert-count-cli.ts ${{ runner.temp }}/e2e-dev-report.json 10
+        run: pnpm exec tsx scripts/e2e-assert-count-cli.ts ${{ runner.temp }}/e2e-dev-report.json 12
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

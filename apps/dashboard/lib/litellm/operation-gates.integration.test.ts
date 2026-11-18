@@ -37,6 +37,9 @@ import {
 // LiteLLMOperationRefused, exported from lib/litellm/gateway.ts), thrown before
 // any request. The file defaults come from `loadGatewayConfig()` in
 // lib/litellm/gateway-config.ts (mocked here to control the file layer).
+// read-views pulls in the Auth.js session chain through the route guard.
+vi.mock("@/auth", () => ({ auth: vi.fn() }));
+
 const KEY = "sk-fake-key-000";
 const BASE = "http://litellm.test:4000";
 const CTX = { actor: { oid: "oid-actor-1", email: "admin@company.com" } };
@@ -361,5 +364,30 @@ describe("gate order is toggle -> edition -> input validation (Security architec
       ops.getKey!({ tokenId: "not-a-hash" }),
     ).rejects.not.toMatchObject({ code: "OPERATION_DISABLED" });
     expect(fake.calls).toHaveLength(0);
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - `createUser` row ("OSS only") and
+// "Edition gate first: on Enterprise it returns 403 OPERATION_UNAVAILABLE", LT-MI1;
+// the read routes' enabledOperations drives which actions the UI offers, so it
+// must not list createUser on Enterprise (no "Create and link" there).
+describe("enabledOperations and createUser (LT-MI1)", () => {
+  async function enabled(appEnv: "dev" | "prod") {
+    await load({ APP_ENV: appEnv });
+    const { enabledOperations } = await import("./read-views");
+    return enabledOperations();
+  }
+
+  it("Enterprise (APP_ENV=prod): createUser is absent even though its toggle defaults on", async () => {
+    expect(await enabled("prod")).not.toContain("createUser");
+  });
+
+  it("OSS (APP_ENV=dev) with the default toggle on: createUser is present", async () => {
+    expect(await enabled("dev")).toContain("createUser");
+  });
+
+  it("OSS with the toggle saved off: createUser is absent (toggles narrow only)", async () => {
+    await storeToggles({ createUser: false });
+    expect(await enabled("dev")).not.toContain("createUser");
   });
 });
