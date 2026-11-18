@@ -10,6 +10,7 @@ import {
   servicesBody,
   stubApi,
 } from "@/test/fakes/api-stubs";
+import { orgShow } from "@/test/fakes/combined-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { ServicesContent } from "./ServicesContent";
@@ -173,16 +174,16 @@ describe("ServicesContent -- table", () => {
     expect(dataRows(table)[0]).toHaveTextContent("Untagged");
   });
 
-  it("shows the model-usage-only note as a role=note under the page description, above the toolbar (Design System -- Services Page, 2026-11-16)", async () => {
+  // Layout amended by M5 (Design System -- Source panels): the page description
+  // is the PageHeader above the panels; the note leads the Bedrock panel.
+  it("shows the model-usage-only note as a role=note inside the Bedrock panel, above the toolbar (Design System -- Services Page, 2026-11-16; M5)", async () => {
     stubApi({ services: servicesFor() });
     renderWithProviders(<ServicesContent />, URL_PARAMS);
     await screen.findByRole("table");
-    const note = screen.getByRole("note");
+    const bedrock = screen.getByRole("region", { name: "Bedrock" });
+    const note = within(bedrock).getByRole("note");
 
     expect(note).toHaveTextContent(/model usage only/i);
-    const description = note.previousElementSibling;
-    expect(description?.textContent?.trim()).toBeTruthy();
-    expect(description).not.toContainElement(screen.getByRole("searchbox"));
     expect(
       note.compareDocumentPosition(screen.getByRole("searchbox")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -286,7 +287,11 @@ describe("ServicesContent -- states", () => {
     });
     renderWithProviders(<ServicesContent />, URL_PARAMS);
 
-    const retry = await screen.findByRole("button", { name: /retry/i });
+    // The Bedrock figure and the Bedrock panel are separate boundaries (D17),
+    // so one failed read shows a Retry in each; use the panel's.
+    const retry = await within(
+      await screen.findByRole("region", { name: "Bedrock" }),
+    ).findByRole("button", { name: /retry/i });
     const before = stub.servicesRequests().length;
     fail = false;
     await userEvent.setup().click(retry);
@@ -299,5 +304,71 @@ describe("ServicesContent -- states", () => {
     stubApi({ services: () => new Promise<Response>(() => {}) as never });
     const { container } = renderWithProviders(<ServicesContent />, URL_PARAMS);
     expect(container.querySelector('[data-slot="skeleton"]')).not.toBeNull();
+  });
+});
+
+// Source: Design System - "Source panels on Cost by team, Cost by user and
+// Cost by service" (D17 two labelled panels in their own boundaries, no
+// mixed table or CSV; D18 three figures; D19 + Q7 = no: the LiteLLM panel
+// says "LiteLLM does not report cost by service." and never maps a key alias
+// or tag to a service); M5-D1; LT-MI4; implementation-phases M5 Verify.
+describe("ServicesContent -- source panels (M5)", () => {
+  const DOWN = () => apiError(503, "LITELLM_UNAVAILABLE", "down");
+
+  it("D17: Bedrock (AWS-billed) holds the service table; LiteLLM (LiteLLM-reported) holds the honest gap line and no service rows (D19, Q7)", async () => {
+    stubApi({ services: servicesFor() });
+    renderWithProviders(<ServicesContent />, URL_PARAMS);
+    const bedrock = await screen.findByRole("region", { name: "Bedrock" });
+    const litellm = await screen.findByRole("region", { name: "LiteLLM" });
+    expect(within(bedrock).getByText("AWS-billed")).toBeVisible();
+    expect(await within(bedrock).findByRole("table")).toBeVisible();
+    expect(within(litellm).getByText("LiteLLM-reported")).toBeVisible();
+    expect(
+      await within(litellm).findByText(
+        "LiteLLM does not report cost by service.",
+      ),
+    ).toBeVisible();
+    expect(within(litellm).queryByText("payments-api")).toBeNull();
+    expect(within(litellm).queryByText("Untagged")).toBeNull();
+  });
+
+  it("M5-D1 + D18: the Bedrock figure is the table total ($100.00), model usage only; Combined is the server's combined (LT-MI4)", async () => {
+    const stub = stubApi({
+      services: servicesFor(),
+      combinedOrganisation: () => apiResponse({ data: orgShow() }),
+    });
+    renderWithProviders(<ServicesContent />, URL_PARAMS);
+    const figure = await screen.findByTestId("source-figure-bedrock");
+    await waitFor(() => expect(figure).toHaveTextContent("$100.00"));
+    expect(figure).toHaveTextContent(/model usage only/i);
+    expect(
+      within(await screen.findByTestId("source-figure-combined")).getByTestId(
+        "combined-total",
+      ),
+    ).toHaveTextContent("$16.20");
+    // One shared read serves the figures and the LiteLLM panel.
+    expect(stub.combinedRequests()).toHaveLength(1);
+  });
+
+  it("D17 outage: a 503 on the combined read leaves the Bedrock figure and table working", async () => {
+    stubApi({ services: servicesFor(), combinedOrganisation: DOWN });
+    renderWithProviders(<ServicesContent />, URL_PARAMS);
+    const bedrock = await screen.findByRole("region", { name: "Bedrock" });
+    expect(await within(bedrock).findByRole("table")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByTestId("source-figure-bedrock")).toHaveTextContent(
+        "$100.00",
+      ),
+    );
+  });
+
+  // Review m5-r1 Q-B1: per-service cost is a proportional estimate (Rule 20.3),
+  // so the headline figure that sums it carries the mark.
+  it("Q-B1 + Rule 20.3: the Bedrock figure carries the Estimated mark", async () => {
+    stubApi({ services: servicesFor() });
+    renderWithProviders(<ServicesContent />, URL_PARAMS);
+    const bedrock = await screen.findByTestId("source-figure-bedrock");
+    await waitFor(() => expect(bedrock).toHaveTextContent("$100.00"));
+    expect(bedrock).toHaveTextContent(/estimated/i);
   });
 });

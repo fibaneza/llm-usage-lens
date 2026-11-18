@@ -4,6 +4,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { collectConsoleErrors } from "./support/console-errors";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
+import { stubUsageSourceReads } from "./support/usage-source-stubs";
 
 // Phase 4.5 Teams (implementation-phases -- Phase 4.5 tasks and Verify: "all
 // teams from seed data appear, filter narrows results"; Design System --
@@ -105,6 +106,7 @@ async function openTeams(page: Page) {
 test.describe("teams page", () => {
   test.beforeEach(async ({ context }) => {
     await signInAsTestUser(context);
+    await stubUsageSourceReads(context);
   });
 
   test("renders a row per team with the seven columns and no console errors", async ({
@@ -126,7 +128,11 @@ test.describe("teams page", () => {
       /^Services/,
       /^Users/,
     ]) {
-      await expect(page.getByRole("columnheader", { name })).toBeVisible();
+      await expect(
+        page
+          .getByRole("table", { name: "Teams", exact: true })
+          .getByRole("columnheader", { name }),
+      ).toBeVisible();
     }
     await expect(
       page.getByRole("row").filter({ hasText: "Payments" }),
@@ -176,7 +182,9 @@ test.describe("teams page", () => {
     await page.goto(PAGE_URL);
     await waitForHydration(page);
     await expect(page.getByText("No teams in this period")).toBeVisible();
-    await expect(page.getByRole("table")).toHaveCount(0);
+    await expect(
+      page.getByRole("table", { name: "Teams", exact: true }),
+    ).toHaveCount(0);
   });
 
   test("shows the full table from md and a card list below md", async ({
@@ -185,10 +193,14 @@ test.describe("teams page", () => {
     await mockApi(page);
     await page.setViewportSize({ width: 768, height: 900 });
     await openTeams(page);
-    await expect(page.getByRole("table")).toBeVisible();
+    await expect(
+      page.getByRole("table", { name: "Teams", exact: true }),
+    ).toBeVisible();
 
     await page.setViewportSize({ width: 375, height: 812 });
-    await expect(page.getByRole("table")).toBeHidden();
+    await expect(
+      page.getByRole("table", { name: "Teams", exact: true }),
+    ).toBeHidden();
     await expect(page.getByRole("link", { name: "Payments" })).toBeVisible();
     await expect(
       page.getByRole("combobox", { name: "Department" }),

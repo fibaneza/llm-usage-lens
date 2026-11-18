@@ -1,27 +1,15 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { collectConsoleErrors } from "./support/console-errors";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
+import { stubUsageSourceReads } from "./support/usage-source-stubs";
 
 // Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
 // (L6)". Pages now mount the combined sections; with a stored LiteLLM
 // connection and no gateway, /api/litellm/combined/* answers 503 and the
 // browser logs it as a console error. These specs are about the shell, so the
 // combined routes answer the hidden head (packages/shared/src/schemas/combined.ts).
-async function stubCombined(context: BrowserContext) {
-  await context.route(/\/api\/litellm\/combined\//, (route) =>
-    route.fulfill({
-      json: {
-        data: {
-          visibility: "hidden",
-          configured: true,
-          gatewayConfigured: false,
-        },
-      },
-    }),
-  );
-}
 
 // Desktop icon rail (design-system — Layout → Sidebar: collapsible, persistent
 // on desktop). While collapsed to icons a tooltip names each link; while
@@ -35,7 +23,7 @@ for (const width of [768, 1440]) {
 
     test.beforeEach(async ({ context, page }) => {
       await signInAsTestUser(context);
-      await stubCombined(context);
+      await stubUsageSourceReads(context);
       await page.setViewportSize({ width, height: 900 });
       clientErrors = collectConsoleErrors(page);
       page.on("pageerror", (error) => clientErrors.push(error.message));

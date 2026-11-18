@@ -12,7 +12,7 @@ import {
   teamRowFixture,
   teamsBody,
 } from "@/test/fakes/api-stubs";
-import { teamRow, teamsShow } from "@/test/fakes/combined-stubs";
+import { orgShow } from "@/test/fakes/combined-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { TeamsContent } from "./TeamsContent";
@@ -238,10 +238,12 @@ describe("TeamsContent -- department filter", () => {
     expect(
       screen.getByRole("combobox", { name: "Department" }),
     ).toHaveTextContent("Finance");
+    // M5-D1: the Bedrock figure asks for the organisation-wide total, so one
+    // request carries no departmentId; the table's request carries the filter.
     expect(
       stub
         .teamsRequests()
-        .every((u) => u.searchParams.get("departmentId") === "dept-fin"),
+        .some((u) => u.searchParams.get("departmentId") === "dept-fin"),
     ).toBe(true);
   });
 });
@@ -325,7 +327,9 @@ describe("TeamsContent -- states", () => {
     });
     renderWithProviders(<TeamsContent />, URL_PARAMS);
 
-    const retry = await screen.findByRole("button", { name: /retry/i });
+    const retry = await within(
+      await screen.findByRole("region", { name: "Bedrock" }),
+    ).findByRole("button", { name: /retry/i });
     const before = stub.teamsRequests().length;
     fail = false;
     await userEvent.setup().click(retry);
@@ -344,40 +348,244 @@ describe("TeamsContent -- states", () => {
   });
 });
 
-// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
-// (L6)": Where each figure appears ("Teams: a separate 'Combined with
-// LiteLLM' panel under the Bedrock table ...; the Bedrock table and its CSV
-// stay Bedrock-only (provenance)"); Rule 20.3. Mount only (panel states are
-// tested in components/litellm/combined). Contract: TeamsContent renders
-// <CombinedTeamsPanel range={range} /> after the Bedrock table.
-describe("TeamsContent -- Combined with LiteLLM mount (L6)", () => {
-  it("renders the panel under the Bedrock table, which keeps no LiteLLM column", async () => {
-    const stub = stubApi({
-      teams: teamsFor(),
-      departments,
-      combinedTeams: () => apiResponse({ data: teamsShow([teamRow()]) }),
-    });
-    renderWithProviders(<TeamsContent />, URL_PARAMS);
-    const panel = await screen.findByRole("region", {
-      name: "Combined with LiteLLM",
-    });
-    const bedrock = (await screen.findAllByRole("table"))[0] as HTMLElement;
-    expect(bedrock).not.toBe(within(panel).queryByRole("table"));
-    expect(
-      bedrock.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(within(bedrock).queryByText(/Via LiteLLM|Combined/)).toBeNull();
-    expect(
-      stub.combinedRequests().map((u) => Object.fromEntries(u.searchParams)),
-    ).toContainEqual(RANGE);
-  });
+// Source: Design System - "Source panels on Cost by team, Cost by user and
+// Cost by service" (D17: a Bedrock panel "AWS-billed" and a LiteLLM panel
+// "LiteLLM-reported", each in its own boundary, no table, column or CSV mixing
+// the two; a LiteLLM outage leaves the Bedrock panel working; D18: three
+// figures; created teams show "No AWS account" in the Bedrock panel);
+// M5-D1 (the Bedrock figure is the page's own organisation-wide total, the
+// department filter narrows the table only), M5-D2 (L6's "Combined with
+// LiteLLM" panel leaves this page); implementation-phases M5 Verify; App Teams
+// AT6 (no member read on first load).
+describe("TeamsContent -- source panels (M5)", () => {
+  const DOWN = () => apiError(503, "LITELLM_UNAVAILABLE", "down");
 
-  it("without a combined figure (hidden) the page has no panel", async () => {
+  it("D17: a Bedrock region labelled AWS-billed holds the table, a LiteLLM region labelled LiteLLM-reported holds no Bedrock table", async () => {
     stubApi({ teams: teamsFor(), departments });
     renderWithProviders(<TeamsContent />, URL_PARAMS);
-    await screen.findByRole("table");
+    const bedrock = await screen.findByRole("region", { name: "Bedrock" });
+    const litellm = await screen.findByRole("region", { name: "LiteLLM" });
+
+    expect(within(bedrock).getByText("AWS-billed")).toBeVisible();
+    expect(within(bedrock).getByRole("table")).toBeVisible();
+    expect(within(bedrock).queryByText("LiteLLM-reported")).toBeNull();
+    expect(within(litellm).getByText("LiteLLM-reported")).toBeVisible();
+    expect(within(litellm).queryByText("AWS-billed")).toBeNull();
+    expect(within(litellm).queryByText("Payments")).toBeNull();
+  });
+
+  it("D17: the Bedrock table holds no LiteLLM or Combined column", async () => {
+    stubApi({ teams: teamsFor(), departments });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    const table = await within(
+      await screen.findByRole("region", { name: "Bedrock" }),
+    ).findByRole("table");
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent ?? "");
+    expect(headers.some((h) => /LiteLLM|Combined|Via/.test(h))).toBe(false);
+  });
+
+  it("M5-D2: L6's Combined with LiteLLM panel is gone and its teams route is not read", async () => {
+    const stub = stubApi({ teams: teamsFor(), departments });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    await screen.findByRole("region", { name: "LiteLLM" });
     expect(
       screen.queryByRole("region", { name: "Combined with LiteLLM" }),
     ).toBeNull();
+    expect(
+      stub
+        .combinedRequests()
+        .some((u) => u.pathname === "/api/litellm/combined/teams"),
+    ).toBe(false);
+  });
+
+  it("M5-D1: the Bedrock figure is the page's total ($910.00); the department filter narrows the table, not the figure", async () => {
+    const stub = stubApi({
+      teams: teamsFor(),
+      departments,
+      combinedOrganisation: () => apiResponse({ data: orgShow() }),
+    });
+    renderWithProviders(<TeamsContent />, {
+      searchParams: { ...RANGE, department: "dept-fin" },
+    });
+    const figure = await screen.findByTestId("source-figure-bedrock");
+    await waitFor(() => expect(figure).toHaveTextContent("$910.00"));
+    expect(figure).toHaveTextContent("AWS-billed");
+    expect(
+      stub.teamsRequests().some((u) => !u.searchParams.has("departmentId")),
+    ).toBe(true);
+    const table = within(
+      screen.getByRole("region", { name: "Bedrock" }),
+    ).getByRole("table");
+    expect(dataRows(table)).toHaveLength(1);
+  });
+
+  it("D18 + LT-MI4: the three figures show the server's combined, not Bedrock plus LiteLLM", async () => {
+    stubApi({
+      teams: teamsFor(),
+      departments,
+      combinedOrganisation: () => apiResponse({ data: orgShow() }),
+    });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    expect(
+      await screen.findByTestId("source-figure-litellm"),
+    ).toHaveTextContent("$6.20");
+    expect(
+      within(screen.getByTestId("source-figure-combined")).getByTestId(
+        "combined-total",
+      ),
+    ).toHaveTextContent("$16.20");
+    await waitFor(() =>
+      expect(screen.getByTestId("source-figure-bedrock")).toHaveTextContent(
+        "$910.00",
+      ),
+    );
+    expect(screen.queryByText("$926.20")).toBeNull();
+  });
+
+  it("D17 outage: every LiteLLM read at 503 leaves the Bedrock figure and table working", async () => {
+    stubApi({
+      teams: teamsFor(),
+      departments,
+      combinedOrganisation: DOWN,
+      litellmOrg: DOWN,
+    });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    const table = await within(
+      await screen.findByRole("region", { name: "Bedrock" }),
+    ).findByRole("table");
+    expect(dataRows(table)).toHaveLength(3);
+    await waitFor(() =>
+      expect(screen.getByTestId("source-figure-bedrock")).toHaveTextContent(
+        "$910.00",
+      ),
+    );
+    expect(
+      await screen.findByText("Couldn't load the LiteLLM and combined totals."),
+    ).toBeVisible();
+  });
+
+  it("D17 outage the other way: a failing Bedrock read leaves the LiteLLM panel working", async () => {
+    stubApi({
+      teams: () => apiError(500),
+      departments,
+      litellmOrg: () =>
+        apiResponse({
+          data: {
+            configured: true,
+            totals: { spend: 42.5 },
+            daily: [],
+            litellmTeams: [],
+            appTeams: [],
+            enabledOperations: [],
+          },
+        }),
+    });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    const litellm = await screen.findByRole("region", { name: "LiteLLM" });
+    expect(await within(litellm).findByText("$42.50")).toBeVisible();
+  });
+
+  it("M5-D3: a created team is a 'No AWS account' row under the Bedrock table, never $0 and never in the table", async () => {
+    stubApi({
+      teams: teamsFor(),
+      departments,
+      orgUnits: () =>
+        apiResponse({
+          data: {
+            teams: [
+              {
+                id: "team-new",
+                name: "Fresh Crew",
+                departmentId: "dept-eng",
+                hasAwsAccount: false,
+              },
+            ],
+            departments: [{ id: "dept-eng", name: "Engineering" }],
+          },
+        }),
+    });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    const bedrock = await screen.findByRole("region", { name: "Bedrock" });
+    const created = await within(bedrock).findByRole("table", {
+      name: "Teams without an AWS account",
+    });
+    expect(
+      within(created).getByRole("row", { name: /Fresh Crew/ }),
+    ).toHaveTextContent("No AWS account");
+    expect(created).not.toHaveTextContent("$0");
+    const main = within(bedrock)
+      .getAllByRole("table")
+      .find((t) => t !== created) as HTMLElement;
+    expect(dataRows(main)).toHaveLength(3);
+    expect(within(main).queryByText("Fresh Crew")).toBeNull();
+  });
+
+  it("AT6 + MI-D7: no member read on first load; Sum of members is requested on a press only", async () => {
+    const stub = stubApi({
+      teams: teamsFor(),
+      departments,
+      litellmOrg: () =>
+        apiResponse({
+          data: {
+            configured: true,
+            totals: { spend: 12.5 },
+            daily: [],
+            litellmTeams: [],
+            appTeams: [
+              {
+                teamId: "team-pay",
+                teamName: "Payments",
+                spendSource: "litellm-team",
+                spend: 12.5,
+              },
+            ],
+            enabledOperations: [],
+          },
+        }),
+      litellmTeam: () =>
+        apiResponse({
+          data: {
+            connected: false,
+            spendSource: "member-sum",
+            daily: [],
+            memberSum: {
+              total: 9,
+              daily: [],
+              coverage: { members: 1, matched: 1, unmatched: 0, pending: 0 },
+              members: [{ oid: "o1", name: "Ada", matched: true, spend: 9 }],
+            },
+          },
+        }),
+    });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    const litellm = await screen.findByRole("region", { name: "LiteLLM" });
+    const button = await within(litellm).findByRole("button", {
+      name: "Sum of members for Payments",
+    });
+    expect(stub.litellmTeamRequests()).toHaveLength(0);
+
+    await userEvent.setup().click(button);
+    await waitFor(() => expect(stub.litellmTeamRequests()).toHaveLength(1));
+    expect(
+      (stub.litellmTeamRequests()[0] as URL).searchParams.get("include"),
+    ).toBe("memberSum");
+    expect(
+      await within(litellm).findByText(/Sum of members for Payments:/),
+    ).toBeInTheDocument();
+  });
+
+  // Review m5-r1 Q-B1: team cost is exact (Rule 20.3), so no estimate mark.
+  it("Q-B1 + Rule 20.3: the Bedrock figure on Cost by team carries no Estimated mark", async () => {
+    stubApi({
+      teams: teamsFor(),
+      departments,
+      combinedOrganisation: () => apiResponse({ data: orgShow() }),
+    });
+    renderWithProviders(<TeamsContent />, URL_PARAMS);
+    const figure = await screen.findByTestId("source-figure-bedrock");
+    await waitFor(() => expect(figure).toHaveTextContent("$910.00"));
+    expect(figure).not.toHaveTextContent(/est/i);
   });
 });

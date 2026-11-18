@@ -4,6 +4,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { collectConsoleErrors } from "./support/console-errors";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
+import { stubUsageSourceReads } from "./support/usage-source-stubs";
 
 // Phase 4.8 Users (implementation-phases -- Phase 4.8 tasks: users table
 // with User / Team / Department / Cost / Tokens / Invocations / % of
@@ -62,6 +63,7 @@ async function openUsers(page: Page) {
 test.describe("users page", () => {
   test.beforeEach(async ({ context }) => {
     await signInAsTestUser(context);
+    await stubUsageSourceReads(context);
   });
 
   test("renders a row per team and user with the seven columns and no console errors", async ({
@@ -88,7 +90,9 @@ test.describe("users page", () => {
     await expect(
       page.getByRole("row").filter({ hasText: "Payments" }),
     ).toContainText("$60.00");
-    await expect(page.getByRole("note")).toContainText(/model usage only/i);
+    await expect(
+      page.getByRole("note").filter({ hasText: /model usage only/i }),
+    ).toBeVisible();
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
   });

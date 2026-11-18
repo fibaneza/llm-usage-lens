@@ -259,6 +259,21 @@ test.describe("Cost by team and a team without an AWS account (App Teams spec)",
     await expect(
       page.getByText("Payments", { exact: true }).first(),
     ).toBeVisible();
-    await expect(page.getByText(SEEDED_TEAM)).toHaveCount(0);
+    // MI-D5: a created team is never a row of the Bedrock teams table (no $0
+    // Bedrock row). M5-D3 (Design System - Source panels): it is listed in its
+    // own "Teams without an AWS account" table, showing "No AWS account".
+    await expect(
+      page
+        .getByRole("table", { name: "Teams", exact: true })
+        .getByText(SEEDED_TEAM),
+    ).toHaveCount(0);
+
+    const noAccount = page.getByRole("table", {
+      name: "Teams without an AWS account",
+    });
+    const row = noAccount.getByRole("row").filter({ hasText: SEEDED_TEAM });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText("No AWS account");
+    await expect(row).not.toContainText("$0");
   });
 });

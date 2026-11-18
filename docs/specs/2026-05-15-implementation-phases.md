@@ -774,7 +774,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [x] **Built in B2b** (`feature/ui-slice-b2b-team-tabs`, 2026-11-17): the Team page view tabs (Members, Budgets, Keys; `?view=` with history push; Members only for an unlinked or not-configured team), member search, G1 member daily spend (linked teams; existing users route), G2 Organisation → Team links, Rotate focus return, axe on the 375 cards and at 1920, the LD37 card test, shared `MemberActions`/`KeyActions`, and the keyboard walk of the view tabs and search (Design System — *Management pages* → *Team page views and links*)
 
 ### L6 — Combined usage and *My usage* (`feature/phase-l6-litellm-combined`)
-
+ *(M5-D2, 2026-11-18: the Teams "Combined with LiteLLM" panel was removed, because D17 forbids a mixed Combined column; `GET /api/litellm/combined/teams` stays with no UI consumer.)*
 - [x] `GatewayConfig` (`/api/litellm/gateway`, audited; Settings → LiteLLM → Gateway sub-tab); combined totals on Overview, Teams and Team Detail per shared contract §5 (parts shown, gateway slice, reconciliation, unconfigured warning); *My usage* combined card; R5 landings extended (Overview and My usage open on the combined headline); `getUserDailySpend` paging fix
 - [x] Users: the person's combined figure on Management → Users (user detail, under the Organisation cap); **not built:** a combined column on the Users list (one LiteLLM call per row; LD38 — a bulk read is a future improvement)
 - **Declined (user decision U1, 2026-11-17: no):** the organisation's LiteLLM part covers LiteLLM teams only; spend on keys outside any team would need a proxy-wide read that widens the allowlist, so it is not built
@@ -1000,8 +1000,9 @@ Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
 
 *Item 14; decisions D17–D19 (Design System — *Source panels on Cost by team, Cost by user and Cost by service*; LiteLLM spec — MI-D17–D19). Needs L6 on `main` (its combined routes and components).*
 
-- [ ] Cost by team, Cost by user, Cost by service: a Bedrock panel ("AWS-billed") and a LiteLLM panel ("LiteLLM-reported"), each with its own Suspense and ErrorBoundary; the three figures Bedrock, LiteLLM, Combined from L6's routes and `components/litellm/combined/*`
-- [ ] Cost by team's LiteLLM panel with the app teams, "Sum of members" on request for global readers on a linked row and an `open-team` row (`GET /api/litellm/teams/[teamId]?include=memberSum`, MI-D7), created teams as "No AWS account" in the Bedrock panel; Cost by user's LiteLLM users list; Cost by service's honest gap line
+- [x] Cost by team, Cost by user, Cost by service: a Bedrock panel ("AWS-billed") and a LiteLLM panel ("LiteLLM-reported"), each with its own Suspense and ErrorBoundary; the three figures Bedrock, LiteLLM, Combined from L6's routes and `components/litellm/combined/*`
+- [x] Built (2026-11-18): Cost by team's LiteLLM panel with the app teams, "Sum of members" on request for global readers on a linked row and an `open-team` row (`GET /api/litellm/teams/[teamId]?include=memberSum`, MI-D7); Cost by user's LiteLLM users list; Cost by service's honest gap line
+- [x] **Built after M2 (2026-11-18):** created teams as "No AWS account" rows in the Bedrock panel read M2's `hasAwsAccount` on `GET /api/access/org-units` through the shared `OrgUnitsResponseSchema` (the tolerant local schema is removed; M5-D3). e2e keeps stubs
 - [ ] Verify (one test pass at the end; Design System — *Source panels on Cost by team, Cost by user and Cost by service*; LiteLLM spec — MI-D17–D19, LT-MI4; App Teams spec — AT6): no chart or column holds both sources; "Sum of members" is requested only when a global reader asks for it (no member reads on the panel's first load) and works for a linked row and an `open-team` row; the three figures; Combined equals L6's rule on the counted-once fixture (LT-MI4); the warning and the hidden total without a gateway; a LiteLLM outage leaves the Bedrock panel working; "not in LiteLLM" is never `$0`; targeted e2e once; branch gate green with `main` merged in
 
 ### INV1 — Accept a pending invite (`feature/invite-accept`)

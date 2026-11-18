@@ -1,45 +1,16 @@
-import { expect, test, type BrowserContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { NAV_ITEMS } from "../lib/nav";
 import { collectConsoleErrors } from "./support/console-errors";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
+import { stubUsageSourceReads } from "./support/usage-source-stubs";
 
 // Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
 // (L6)". Pages now mount the combined sections; with a stored LiteLLM
 // connection and no gateway, /api/litellm/combined/* answers 503 and the
 // browser logs it as a console error. These specs are about the shell, so the
 // combined routes answer the hidden head (packages/shared/src/schemas/combined.ts).
-async function stubCombined(context: BrowserContext) {
-  await context.route(/\/api\/litellm\/combined\//, (route) =>
-    route.fulfill({
-      json: {
-        data: {
-          visibility: "hidden",
-          configured: true,
-          gatewayConfigured: false,
-        },
-      },
-    }),
-  );
-  // The Organisation page also reads /api/litellm/org; with a stored but
-  // unreachable connection it answers 503 (LiteLLM spec - views by role, L3b),
-  // so answer the not-configured shape (litellm-views.ts LiteLLMOrgResponseSchema).
-  await context.route(/\/api\/litellm\/org(\?|$)/, (route) =>
-    route.fulfill({
-      json: {
-        data: {
-          configured: false,
-          totals: { spend: 0 },
-          daily: [],
-          litellmTeams: [],
-          appTeams: [],
-          enabledOperations: [],
-        },
-      },
-    }),
-  );
-}
 
 test.describe("auth gate", () => {
   test("redirects unauthenticated visitors to /sign-in", async ({ page }) => {
@@ -55,7 +26,7 @@ test.describe("auth gate", () => {
 test.describe("dashboard shell", () => {
   test.beforeEach(async ({ context }) => {
     await signInAsTestUser(context);
-    await stubCombined(context);
+    await stubUsageSourceReads(context);
   });
 
   // Driven by lib/nav.ts so every page added to the sidebar is smoke-covered

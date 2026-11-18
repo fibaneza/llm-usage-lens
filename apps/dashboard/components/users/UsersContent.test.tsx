@@ -10,6 +10,7 @@ import {
   userListRowFixture,
   usersBody,
 } from "@/test/fakes/api-stubs";
+import { orgShow } from "@/test/fakes/combined-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { UsersContent } from "./UsersContent";
@@ -187,16 +188,16 @@ describe("UsersContent -- table", () => {
     expect(dataRows(table)[0]).toHaveTextContent("Ledger");
   });
 
-  it("shows the model-usage-only note as a role=note under the page description, above the toolbar (Design System -- Users Page, 2026-11-16)", async () => {
+  // Layout amended by M5 (Design System -- Source panels): the page description
+  // is the PageHeader above the panels; the note leads the Bedrock panel.
+  it("shows the model-usage-only note as a role=note inside the Bedrock panel, above the toolbar (Design System -- Users Page, 2026-11-16; M5)", async () => {
     stubApi({ users: usersFor() });
     renderWithProviders(<UsersContent />, URL_PARAMS);
     await screen.findByRole("table");
-    const note = screen.getByRole("note");
+    const bedrock = screen.getByRole("region", { name: "Bedrock" });
+    const note = within(bedrock).getByRole("note");
 
     expect(note).toHaveTextContent(/model usage only/i);
-    const description = note.previousElementSibling;
-    expect(description?.textContent?.trim()).toBeTruthy();
-    expect(description).not.toContainElement(screen.getByRole("searchbox"));
     expect(
       note.compareDocumentPosition(screen.getByRole("searchbox")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -272,7 +273,11 @@ describe("UsersContent -- states", () => {
     });
     renderWithProviders(<UsersContent />, URL_PARAMS);
 
-    const retry = await screen.findByRole("button", { name: /retry/i });
+    // The Bedrock figure and the Bedrock panel are separate boundaries (D17),
+    // so one failed read shows a Retry in each; use the panel's.
+    const retry = await within(
+      await screen.findByRole("region", { name: "Bedrock" }),
+    ).findByRole("button", { name: /retry/i });
     const before = stub.usersRequests().length;
     fail = false;
     await userEvent.setup().click(retry);
@@ -288,21 +293,113 @@ describe("UsersContent -- states", () => {
   });
 });
 
-// Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage
-// (L6)": Where each figure appears ("Users: the list's rows are per (team,
-// user) and a per-row figure would need one LiteLLM call per row, so the list
-// carries a one-line note pointing to Management -> Users"; LD34 no unbounded
-// fan-out). Contract: UsersContent shows, above the table, a note whose text
-// contains "LiteLLM" with a link named "Management → Users" to
-// /dashboard/manage/users, and makes no combined request.
-describe("UsersContent -- note pointing to Management -> Users (L6)", () => {
-  it("carries the note and link, and issues no combined request", async () => {
-    const stub = stubApi({ users: usersFor() });
+// Source: Design System - "Source panels on Cost by team, Cost by user and
+// Cost by service" (D17 two panels labelled AWS-billed / LiteLLM-reported in
+// their own boundaries; D18 three figures; Cost by user: the LiteLLM users
+// list, 25 a page, one /user/list page per request (LD34); the range figure
+// for one person moves to Management -> LiteLLM -> LiteLLM users, M5-D4);
+// M5-D1 (model usage only); LT-MI4; implementation-phases M5 Verify.
+// Supersedes the L6 note "Combined ... under Management -> Users".
+describe("UsersContent -- source panels (M5)", () => {
+  const DOWN = () => apiError(503, "LITELLM_UNAVAILABLE", "down");
+
+  it("D17: a Bedrock region labelled AWS-billed holds the table, a LiteLLM region labelled LiteLLM-reported the LiteLLM users", async () => {
+    stubApi({
+      users: usersFor(),
+      litellmUsers: () =>
+        apiResponse({
+          data: {
+            users: [
+              {
+                userId: "u-1",
+                email: "lite@example.test",
+                spend: 2,
+                teams: [],
+              },
+            ],
+            page: 1,
+            pageSize: 25,
+            enabledOperations: [],
+          },
+        }),
+    });
+    renderWithProviders(<UsersContent />, URL_PARAMS);
+    const bedrock = await screen.findByRole("region", { name: "Bedrock" });
+    const litellm = await screen.findByRole("region", { name: "LiteLLM" });
+    expect(within(bedrock).getByText("AWS-billed")).toBeVisible();
+    expect(await within(bedrock).findByRole("table")).toBeVisible();
+    expect(within(bedrock).queryByText("lite@example.test")).toBeNull();
+    expect(within(litellm).getByText("LiteLLM-reported")).toBeVisible();
+    expect(await within(litellm).findByText("lite@example.test")).toBeVisible();
+    expect(within(litellm).queryByText("alice@example.com")).toBeNull();
+  });
+
+  it("M5-D4: the old 'Management → Users' note is gone; the pointer is in the LiteLLM panel", async () => {
+    stubApi({ users: usersFor() });
     renderWithProviders(<UsersContent />, URL_PARAMS);
     await screen.findByRole("table");
-    const link = screen.getByRole("link", { name: "Management → Users" });
-    expect(link).toHaveAttribute("href", "/dashboard/manage/users");
-    expect(link.parentElement).toHaveTextContent(/LiteLLM/);
-    expect(stub.combinedRequests()).toHaveLength(0);
+    expect(
+      screen.queryByRole("link", { name: "Management → Users" }),
+    ).toBeNull();
+    const litellm = await screen.findByRole("region", { name: "LiteLLM" });
+    expect(
+      await within(litellm).findByRole("link", {
+        name: "Management → LiteLLM → LiteLLM users",
+      }),
+    ).toHaveAttribute("href", "/dashboard/manage/litellm/users");
+  });
+
+  it("M5-D1 + D18: the Bedrock figure is the table's model-usage total ($100.00); Combined is the server's combined (LT-MI4)", async () => {
+    stubApi({
+      users: usersFor(),
+      combinedOrganisation: () => apiResponse({ data: orgShow() }),
+    });
+    renderWithProviders(<UsersContent />, URL_PARAMS);
+    const bedrock = await screen.findByTestId("source-figure-bedrock");
+    await waitFor(() => expect(bedrock).toHaveTextContent("$100.00"));
+    expect(bedrock).toHaveTextContent(/model usage only/i);
+    expect(
+      within(await screen.findByTestId("source-figure-combined")).getByTestId(
+        "combined-total",
+      ),
+    ).toHaveTextContent("$16.20");
+  });
+
+  it("makes exactly one combined request (the figures) and none per row (LD34)", async () => {
+    const stub = stubApi({
+      users: usersFor(),
+      combinedOrganisation: () => apiResponse({ data: orgShow() }),
+    });
+    renderWithProviders(<UsersContent />, URL_PARAMS);
+    await screen.findByTestId("source-figure-combined");
+    expect(stub.combinedRequests().map((u) => u.pathname)).toEqual([
+      "/api/litellm/combined/organisation",
+    ]);
+  });
+
+  it("D17 outage: every LiteLLM read at 503 leaves the Bedrock figure and table working", async () => {
+    stubApi({
+      users: usersFor(),
+      combinedOrganisation: DOWN,
+      litellmUsers: DOWN,
+    });
+    renderWithProviders(<UsersContent />, URL_PARAMS);
+    const bedrock = await screen.findByRole("region", { name: "Bedrock" });
+    expect(await within(bedrock).findByRole("table")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByTestId("source-figure-bedrock")).toHaveTextContent(
+        "$100.00",
+      ),
+    );
+  });
+
+  // Review m5-r1 Q-B1: per-user cost is a proportional estimate (Rule 20.3), so
+  // the headline figure that sums it carries the mark.
+  it("Q-B1 + Rule 20.3: the Bedrock figure carries the Estimated mark", async () => {
+    stubApi({ users: usersFor() });
+    renderWithProviders(<UsersContent />, URL_PARAMS);
+    const bedrock = await screen.findByTestId("source-figure-bedrock");
+    await waitFor(() => expect(bedrock).toHaveTextContent("$100.00"));
+    expect(bedrock).toHaveTextContent(/estimated/i);
   });
 });

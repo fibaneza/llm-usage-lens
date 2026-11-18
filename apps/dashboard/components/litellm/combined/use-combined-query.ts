@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  CombinedOrganisationResponseSchema,
+  type CombinedOrganisationResponse,
+} from "@llm-usage-lens/shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import type { z } from "zod";
 
@@ -37,4 +41,15 @@ export function useCombinedQuery<S extends z.ZodType>(
       }
     },
   }).data;
+}
+
+// One request per page for the source figures and the Services panel: the
+// same key as CombinedOrganisationSection.
+export function useCombinedOrganisation(
+  range: CombinedRange,
+): CombinedOrganisationResponse | null {
+  return useCombinedQuery(
+    combinedPath("organisation", range),
+    CombinedOrganisationResponseSchema,
+  );
 }

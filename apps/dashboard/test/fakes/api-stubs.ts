@@ -60,6 +60,12 @@ export type ApiStub = {
   usersRequests: () => URL[];
   // Every `/api/litellm/combined/*` request URL, in call order (L6).
   combinedRequests: () => URL[];
+  // M5 source panels: every `/api/litellm/org`, `/api/litellm/teams/<id>`,
+  // `/api/litellm/users` and `/api/access/org-units` request URL, in call order.
+  litellmOrgRequests: () => URL[];
+  litellmTeamRequests: () => URL[];
+  litellmUsersRequests: () => URL[];
+  orgUnitsRequests: () => URL[];
 };
 
 export function stubApi(handlers: {
@@ -81,6 +87,15 @@ export function stubApi(handlers: {
   combinedTeam?: Handler;
   combinedMe?: Handler;
   me?: Handler;
+  // M5 (docs/specs/2026-05-15-implementation-phases.md - M5; Design System -
+  // Source panels): the LiteLLM panels' own reads. Defaults keep every page
+  // test about its own data: org is the not-configured body, users an empty
+  // page, org-units no teams. `litellmTeam` has NO default: a member-sum read
+  // nobody asked for (App Teams AT6) throws, which fails the test.
+  litellmOrg?: Handler;
+  litellmUsers?: Handler;
+  litellmTeam?: Handler;
+  orgUnits?: Handler;
 }): ApiStub {
   const overviewUrls: URL[] = [];
   const rankingUrls: URL[] = [];
@@ -91,6 +106,10 @@ export function stubApi(handlers: {
   const servicesUrls: URL[] = [];
   const usersUrls: URL[] = [];
   const combinedUrls: URL[] = [];
+  const litellmOrgUrls: URL[] = [];
+  const litellmTeamUrls: URL[] = [];
+  const litellmUsersUrls: URL[] = [];
+  const orgUnitsUrls: URL[] = [];
   let syncCalls = 0;
   const fetchStub = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
@@ -169,6 +188,45 @@ export function stubApi(handlers: {
         })
       );
     }
+    if (url.pathname === "/api/litellm/org") {
+      litellmOrgUrls.push(url);
+      return (
+        handlers.litellmOrg?.(url) ??
+        apiResponse({
+          data: {
+            configured: false,
+            totals: { spend: 0 },
+            daily: [],
+            litellmTeams: [],
+            appTeams: [],
+            enabledOperations: [],
+          },
+        })
+      );
+    }
+    if (url.pathname === "/api/litellm/users") {
+      litellmUsersUrls.push(url);
+      return (
+        handlers.litellmUsers?.(url) ??
+        apiResponse({
+          data: { users: [], page: 1, pageSize: 25, enabledOperations: [] },
+        })
+      );
+    }
+    if (url.pathname.startsWith("/api/litellm/teams/")) {
+      litellmTeamUrls.push(url);
+      if (!handlers.litellmTeam) {
+        throw new Error("unexpected /api/litellm/teams/<id> call");
+      }
+      return handlers.litellmTeam(url);
+    }
+    if (url.pathname === "/api/access/org-units") {
+      orgUnitsUrls.push(url);
+      return (
+        handlers.orgUnits?.(url) ??
+        apiResponse({ data: { teams: [], departments: [] } })
+      );
+    }
     if (url.pathname === "/api/me" && handlers.me) return handlers.me(url);
     throw new Error(`unexpected fetch: ${url.pathname}`);
   });
@@ -188,6 +246,10 @@ export function stubApi(handlers: {
     servicesRequests: () => [...servicesUrls],
     usersRequests: () => [...usersUrls],
     combinedRequests: () => [...combinedUrls],
+    litellmOrgRequests: () => [...litellmOrgUrls],
+    litellmTeamRequests: () => [...litellmTeamUrls],
+    litellmUsersRequests: () => [...litellmUsersUrls],
+    orgUnitsRequests: () => [...orgUnitsUrls],
   };
 }
 
