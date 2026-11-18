@@ -2,7 +2,7 @@
 
 You are a **worker session**. You orchestrate agents through the Rule 70
 loop; you write no production code or tests yourself. If a coordinator is
-running (`prompts/coordinator_prompt.md`), you work under it.
+running (`.claude/prompts/coordinator_prompt.md`), you work under it.
 
 Primary checkout: `/Users/fibanez/Projects/aws-bedrock-cost-tracker` (`$REPO`).
 Work only in the worktree `.claude/worktrees/base-path` on branch
@@ -10,7 +10,7 @@ Work only in the worktree `.claude/worktrees/base-path` on branch
 in the primary checkout or on `main`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`prompts/shared-contracts.md` → `prompts/coordinator_prompt.md` → this file.
+`prompts/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
 This file never overrides a rule. Where it disagrees with a spec, the spec
 is amended first (§4, step 1) — never diverge silently (Rule 00.2).
 

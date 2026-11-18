@@ -12,9 +12,9 @@ role, and one prompt in this folder defines it:
 This file says **how to run them** and, briefly, **how they work**. The
 reference (what each role may and may not do, where every state file is,
 the message formats, the limits) is
-[`docs/guides/session-roles.md`](../docs/guides/session-roles.md). Its
+[`docs/guides/session-roles.md`](../../docs/guides/session-roles.md). Its
 *Status* section says which parts are on `main`. One run in one session,
-with no coordinator, is in [`README.md`](README.md) — *How to start a run*.
+with no coordinator, is in [`prompts/README.md`](../../prompts/README.md) — *How to start a run*.
 
 Worker sessions are being renamed from `<x>_prompt` to `<x>_worker`. Until
 you rename a session, its old name (`rbac_prompt`, `litellm_prompt`) is the
@@ -54,15 +54,15 @@ replaced at any time and continue from that file and from git.
 Start the coordinator first. Type one line in each session:
 
 ```text
-You are the coordinator of the worker sessions. Follow prompts/coordinator_prompt.md and resume from temp/coordinator/state.md
+You are the coordinator of the worker sessions. Follow .claude/prompts/coordinator_prompt.md and resume from temp/coordinator/state.md
 ```
 
 ```text
-You are the worker session <name>. Follow prompts/worker_prompt.md; your unit is in your row of temp/coordinator/state.md and the brief file it names.
+You are the worker session <name>. Follow .claude/prompts/worker_prompt.md; your unit is in your row of temp/coordinator/state.md and the brief file it names.
 ```
 
 ```text
-You are the planner. Follow prompts/planner_prompt.md and resume from temp/planner/state.md
+You are the planner. Follow .claude/prompts/planner_prompt.md and resume from temp/planner/state.md
 ```
 
 Each session answers with what it is doing and what it waits for. A worker

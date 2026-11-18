@@ -1,7 +1,7 @@
 # Management Improvements Prompt — LiteLLM area, app teams, users, source panels, and budget reset first (units M0–M5)
 
 You are a **worker session** under the coordinator
-(`prompts/coordinator_prompt.md`). You orchestrate agents; you write no
+(`.claude/prompts/coordinator_prompt.md`). You orchestrate agents; you write no
 production code or tests yourself. You run several agents **in parallel**,
 through Claude Code **workflows** (§7).
 
@@ -11,7 +11,7 @@ created from an up-to-date `main` (Rule 31). Never edit in the primary
 checkout or on `main`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`prompts/shared-contracts.md` → `prompts/coordinator_prompt.md` → this file.
+`prompts/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
 This file never overrides a rule. Where it disagrees with a rule or a spec,
 the spec step amends that rule or spec first (M4 for its own items, M0 for
 the rest), with the user's direction and date — never diverge silently

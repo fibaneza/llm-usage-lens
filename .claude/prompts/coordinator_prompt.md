@@ -1,7 +1,7 @@
 # Coordinator Prompt — LLM Usage Lens
 
 One Claude session **coordinates** other Claude sessions ("workers") that each
-run a goal from `rbac_prompt.md`, `litellm_prompt.md`, `master_prompt.md` or the
+run a goal from `prompts/rbac_prompt.md`, `prompts/litellm_prompt.md`, `prompts/master_prompt.md` or the
 prompt of a plan the planner wrote (§2c).
 The coordinator does no feature work itself. It assigns goals, **prevents
 conflicts between goals**, **owns every merge into `main`** — the full test
@@ -13,7 +13,7 @@ the state needed to carry on after a context reset or in a new session
 coordinator's, §4).
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`shared-contracts.md` → the goal prompt a worker runs → this file. This file
+`prompts/shared-contracts.md` → the goal prompt a worker runs → this file. This file
 never overrides a rule; it only adds coordination.
 
 **The sessions it coordinates are listed in §0a.** A session that is not in
@@ -65,9 +65,9 @@ branch, queue) for each one; this table says what each session **is**.
 | Session name | Kind | Role | Runs | Channel | Agents |
 |---|---|---|---|---|---|
 | `Coordinator` | this session | Assigns goals, prevents conflicts, reviews and lands every unit, keeps state | this file | — | review and fix agents only (§4) |
-| `improvements_worker` | worker (Claude Desktop session) | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `master_prompt.md`, `ui_refresh_prompt.md`, `management_improvements_prompt.md`, a plan's `<slug>_prompt.md` | live message; relay if held | per the brief (§3a) |
-| `bedrock_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `rbac_prompt.md` (4R units), chores and plan units assigned to it | live message; relay if held | per the brief (§3a) |
-| `litellm_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `litellm_prompt.md` (L units), plan units assigned to it | live message; relay if held | per the brief (§3a) |
+| `improvements_worker` | worker (Claude Desktop session) | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `prompts/master_prompt.md`, `prompts/ui_refresh_prompt.md`, `prompts/management_improvements_prompt.md`, a plan's `<slug>_prompt.md` | live message; relay if held | per the brief (§3a) |
+| `bedrock_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `prompts/rbac_prompt.md` (4R units), chores and plan units assigned to it | live message; relay if held | per the brief (§3a) |
+| `litellm_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `prompts/litellm_prompt.md` (L units), plan units assigned to it | live message; relay if held | per the brief (§3a) |
 | `planner` | planner | Writes plans, spec text and prompts; **never** builds, tests, commits or takes a unit | `planner_prompt.md` | **file relay only** (§2b) | read-only research agents, at most 3 |
 
 **Renaming in progress (user, 2026-11-18).** Worker sessions go from
@@ -77,7 +77,7 @@ the same session: address it by the name `ListAgents` shows, and keep one
 row for it in `state.md` under the new name with the old one beside it.
 File names keyed by session (`briefs/<session>-<unit>.md`,
 `to-<session>.md`, `from-<session>.md`, `workflow-<session>.md`) use the
-**new** name from now on. `rbac_prompt.md` and `litellm_prompt.md` are
+**new** name from now on. `prompts/rbac_prompt.md` and `prompts/litellm_prompt.md` are
 prompt files and keep their names.
 
 Not coordinated, whatever `ListAgents` shows:
@@ -90,7 +90,7 @@ Not coordinated, whatever `ListAgents` shows:
   with the active goals before each merge and tell the user about an
   overlap; do not message it.
 
-Every worker follows `prompts/worker_prompt.md` for its role (how it takes
+Every worker follows `.claude/prompts/worker_prompt.md` for its role (how it takes
 a brief, its boundaries, the branch gate, the handover and the message
 lines); the unit's own prompt says what to build.
 
@@ -102,9 +102,9 @@ roster name, because messages are addressed by name. The lines, also in
 
 | Session | The user types |
 |---|---|
-| `Coordinator` | `You are the coordinator of the worker sessions. Follow prompts/coordinator_prompt.md and resume from temp/coordinator/state.md` |
-| a worker | `You are the worker session <name>. Follow prompts/worker_prompt.md; your unit is in your row of temp/coordinator/state.md and the brief file it names.` |
-| `planner` | `You are the planner. Follow prompts/planner_prompt.md and resume from temp/planner/state.md` |
+| `Coordinator` | `You are the coordinator of the worker sessions. Follow .claude/prompts/coordinator_prompt.md and resume from temp/coordinator/state.md` |
+| a worker | `You are the worker session <name>. Follow .claude/prompts/worker_prompt.md; your unit is in your row of temp/coordinator/state.md and the brief file it names.` |
+| `planner` | `You are the planner. Follow .claude/prompts/planner_prompt.md and resume from temp/planner/state.md` |
 
 A session can be cleared safely only when its state is on disk: before a
 worker is cleared it has rewritten its run `state.md`
@@ -369,7 +369,7 @@ Rules for the roster:
 
 ## 2c. Taking in a plan from the planner (user, 2026-11-18)
 
-`planner` delivers a **plan package** (`prompts/planner_prompt.md` §4) in
+`planner` delivers a **plan package** (`.claude/prompts/planner_prompt.md` §4) in
 `temp/planner/<slug>/`: `plan.md`, `spec-changes.md`, one
 `brief-<unit>.md` per unit, one `workflow-<session>.md` per worker
 session, and a new untracked `prompts/<slug>_prompt.md` in the primary

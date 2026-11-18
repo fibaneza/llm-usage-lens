@@ -24,7 +24,7 @@ cite it in your response.
 | GitHub / Actions practice | `docs/guides/github-best-practices.md` | Workflow, branching, or PR changes |
 | Local git hooks (Husky) | `docs/guides/git-hooks.md` | Changing or debugging hooks |
 | Test layout, projects, helpers, coverage | `docs/guides/testing.md` | Writing, moving or running Vitest tests |
-| Session roles (planner, coordinator, workers) | `docs/guides/session-roles.md`, `prompts/README-sessions.md` | Starting, resuming or clearing a parallel-run session |
+| Session roles (planner, coordinator, workers) | `docs/guides/session-roles.md`, `.claude/prompts/README-sessions.md` | Starting, resuming or clearing a parallel-run session |
 | Guided learning path | `docs/guides/learning-path.md` | Onboarding or explaining the build order |
 
 ## Rules

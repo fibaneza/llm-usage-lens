@@ -14,7 +14,7 @@ prompt wins. *Status* at the end says which parts are on `main`.
 | | Planner | Coordinator | Worker |
 |---|---|---|---|
 | Session name | `planner` | `Coordinator` | `improvements_worker`, `bedrock_worker`, `litellm_worker` |
-| Prompt | [`planner_prompt.md`](../../prompts/planner_prompt.md) | [`coordinator_prompt.md`](../../prompts/coordinator_prompt.md) | [`worker_prompt.md`](../../prompts/worker_prompt.md), plus the unit's own prompt |
+| Prompt | [`planner_prompt.md`](../../.claude/prompts/planner_prompt.md) | [`coordinator_prompt.md`](../../.claude/prompts/coordinator_prompt.md) | [`worker_prompt.md`](../../.claude/prompts/worker_prompt.md), plus the unit's own prompt |
 | Does | Turns a request into a plan package: units, file ownership, queues, workflow designs, spec text, the worker prompt | Assigns units, prevents conflicts, tracks usage and agents, reviews once per unit, lands every unit on local `main`, cleans up | Builds one assigned unit at a time in its worktree, by orchestrating agents; runs the branch gate; stops at "ready to merge" |
 | Never does | Builds, tests, runs a workflow, commits, edits a tracked file or a unit worktree, takes a unit | Feature work; pushes; merges into a worker's tree; gives a unit to `planner` | Writes code or tests itself; reviews; merges into `main`; pushes; edits another unit's files; starts a unit on its own |
 | Agents | Read-only research, at most 3 | Review and fix agents at the merge | `tdd-test-engineer` and `typescript-developer`, through the plan's workflow |
@@ -50,9 +50,9 @@ folder is in the unit's worktree.
 
 | Session | Line |
 |---|---|
-| Coordinator | `You are the coordinator of the worker sessions. Follow prompts/coordinator_prompt.md and resume from temp/coordinator/state.md` |
-| Worker | `You are the worker session <name>. Follow prompts/worker_prompt.md; your unit is in your row of temp/coordinator/state.md and the brief file it names.` |
-| Planner | `You are the planner. Follow prompts/planner_prompt.md and resume from temp/planner/state.md` |
+| Coordinator | `You are the coordinator of the worker sessions. Follow .claude/prompts/coordinator_prompt.md and resume from temp/coordinator/state.md` |
+| Worker | `You are the worker session <name>. Follow .claude/prompts/worker_prompt.md; your unit is in your row of temp/coordinator/state.md and the brief file it names.` |
+| Planner | `You are the planner. Follow .claude/prompts/planner_prompt.md and resume from temp/planner/state.md` |
 
 Each prompt's §0 then rebuilds the state: it reads the state file, checks
 it against git (`git log`, `git status`, `git worktree list`), reads usage,
@@ -88,7 +88,7 @@ scheduled resume) and creates them again at resume.
   every session opened in the repository. The specs in `docs/specs/` are
   read per task (Rule 00).
 - **Precedence:** `CLAUDE.md` → rules → specs → `prompts/shared-contracts.md`
-  → the unit's prompt → `coordinator_prompt.md` → the brief → the role
+  → the unit's prompt → `.claude/prompts/coordinator_prompt.md` → the brief → the role
   prompt. A prompt, a brief or a plan never overrides a rule or a spec; a
   conflict is raised, and the spec is amended first (Rule 00.2).
 - **Standing limits for every role:** no push, no deploy, no `--no-verify`,
@@ -204,8 +204,8 @@ An exception to a usage tier is the user's, for one unit and one window.
 
 ## Status (2026-11-18)
 
-- On `main`: `planner_prompt.md`, [`planner-session.md`](planner-session.md),
-  `worker_prompt.md`, this guide, and the revised `coordinator_prompt.md`
+- On `main`: `.claude/prompts/planner_prompt.md`, [`planner-session.md`](planner-session.md),
+  `.claude/prompts/worker_prompt.md`, this guide, and the revised `.claude/prompts/coordinator_prompt.md`
   (the session list in §0a, plan intake in §2c, agents in §3a, brief files).
 - The cap is **one pool of 80 agents running at once**, summed across all
   sessions and distributed dynamically (user, 2026-11-18). Rule 70 — *Workflows* on `main` still says "at most 5 agents"

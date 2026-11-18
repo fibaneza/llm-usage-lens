@@ -697,7 +697,7 @@ A run is **Completed** when all of these hold:
    onward), is done, reviewed (Rule 70 APPROVE,
    every blocker resolved or recorded) and verified by the orchestrator's own
    gate runs. For L3–L5, the local end-to-end probe has passed too.
-   **Under a coordinator** (`coordinator_prompt.md` §4, decided 2026-11-15,
+   **Under a coordinator** (`.claude/prompts/coordinator_prompt.md` §4, decided 2026-11-15,
    user): the review and the full gate run once per batch and belong to the
    coordinator, so a worker's run is complete at "ready to merge" with a
    green branch gate (typecheck, lint, format, impacted tests) and every

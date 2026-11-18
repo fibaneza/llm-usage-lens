@@ -5,16 +5,16 @@ For all three roles, see [`session-roles.md`](session-roles.md).
 How to start and use the **planner** session, the Claude session that turns a
 request into a plan the coordinator and its worker sessions run in parallel.
 The planner's full instructions are in
-[`prompts/planner_prompt.md`](../../prompts/planner_prompt.md); the
+[`.claude/prompts/planner_prompt.md`](../../.claude/prompts/planner_prompt.md); the
 coordinator's side is
-[`prompts/coordinator_prompt.md`](../../prompts/coordinator_prompt.md) §2b.
+[`.claude/prompts/coordinator_prompt.md`](../../.claude/prompts/coordinator_prompt.md) §2b.
 
 ## Start or resume
 
 Open Claude in the repository (the session is named `planner`) and say:
 
 ```text
-You are the planner. Follow prompts/planner_prompt.md and resume from temp/planner/state.md
+You are the planner. Follow .claude/prompts/planner_prompt.md and resume from temp/planner/state.md
 ```
 
 To pass the coordinator's messages to it, say `check the relay`.
@@ -44,7 +44,7 @@ At most **80 agents per plan**, summed across all sessions and phases,
 review agents included (user, 2026-11-18). It is a total, not a number
 running at once. Each plan carries an agent ledger with a model per agent,
 a reserve for fix rounds and a usage estimate against the freeze tiers
-(`prompts/coordinator_prompt.md` §3).
+(`.claude/prompts/coordinator_prompt.md` §3).
 
 Every worker session runs its plan units as a workflow (user, 2026-11-18):
 the plan has one workflow design per worker session that owns a unit. The

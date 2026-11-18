@@ -121,7 +121,7 @@ review = quality-reviewer + spec-guardian + ecc reviewers
       A dedicated security review that a spec or prompt requires (4R.3,
       4R.4, L1, L2, L4) is part of this one review, not a separate round.
     - **Batched under a coordinator (amended 2026-11-15, user).** When a
-      coordinator runs parallel goals (`prompts/coordinator_prompt.md` §4),
+      coordinator runs parallel goals (`.claude/prompts/coordinator_prompt.md` §4),
       workers stop at a green branch gate with no review of their own; the
       coordinator waits until every active goal is ready (or the workers
       stop on a usage freeze), merges them into
@@ -234,14 +234,14 @@ review = quality-reviewer + spec-guardian + ecc reviewers
 A Claude Code workflow may run a unit's work or the coordinator's merge
 review where the implementation-phases spec allows it (*Workflow
 pilots*: from 2026-11-18 every worker runs its plan units as a workflow,
-`prompts/coordinator_prompt.md` §3a), with the user's opt-in per run. Its agents keep the roles in
+`.claude/prompts/coordinator_prompt.md` §3a), with the user's opt-in per run. Its agents keep the roles in
 rule 8, the unit keeps one branch and one squash commit (Rule 30.4), it
 draws its agents from the one shared pool: at most 80 agents running at
 once, summed across all sessions, distributed dynamically by the
-coordinator (user, 2026-11-18; `prompts/coordinator_prompt.md` §3a,
+coordinator (user, 2026-11-18; `.claude/prompts/coordinator_prompt.md` §3a,
 `docs/guides/session-roles.md` — *Limits*; implementation-phases —
 *Workflow pilots*; supersedes the 5-agent cap and its M0–M5-only raise,
-2026-11-18, because the user gave the pool as the general rule), and it stops at the usage freeze (`prompts/coordinator_prompt.md` §3: 5-hour,
+2026-11-18, because the user gave the pool as the general rule), and it stops at the usage freeze (`.claude/prompts/coordinator_prompt.md` §3: 5-hour,
 and weekly caution 85 % / freeze 95 %, user, 2026-11-18). It never merges
 or skips the review.
 

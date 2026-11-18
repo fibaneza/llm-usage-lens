@@ -8,6 +8,19 @@ report in `temp/`. You push.
 Runs can go **one at a time** in a single session, or **in parallel** in
 worker sessions under a coordinator session (see *Parallel runs* below).
 
+**Two folders (user, 2026-11-18).** This folder holds the **single-use prompts**: one per goal or
+plan, which the planner writes here as `prompts/<slug>_prompt.md`. The standing **role prompts**
+(coordinator, planner, worker) and the sessions runbook live in [`.claude/prompts/`](../.claude/prompts/):
+
+| Role prompt | Purpose |
+|---|---|
+| `.claude/prompts/coordinator_prompt.md` | How one session coordinates the worker sessions that run the goals above: briefs, file ownership and conflict prevention, milestones, the shared usage freeze, **every merge into `main`** (full tests on the `main` candidate, fix agents, clean-up), and the live state in `temp/coordinator/` that survives a context reset |
+| `.claude/prompts/planner_prompt.md` | The planner session: it writes plans, spec text and prompts and never executes them (user, 2026-11-18); it reaches the coordinator only through the file relay in `temp/coordinator/` (coordinator prompt §2b). Start sheet: [`docs/guides/planner-session.md`](../docs/guides/planner-session.md) |
+| `.claude/prompts/worker_prompt.md` | The role prompt for every worker session (`improvements_worker`, `bedrock_worker`, `litellm_worker`): run the unit the coordinator's brief assigns, in its worktree, stop at "ready to merge". The unit's own prompt says what to build. Roles overview: [`docs/guides/session-roles.md`](../docs/guides/session-roles.md) |
+| `.claude/prompts/README-sessions.md` | How to run the planner, coordinator and worker sessions: set up, start lines, a piece of work step by step, the relay, clearing or replacing a session, stopping, troubleshooting |
+
+Single-use prompts:
+
 | File | Purpose |
 |---|---|
 | `master_prompt.md` | Run discipline (timing, usage guard, agents, git rules, report) and the core phase plan (Phases 4.9 and 5, including the two Phase 5 workstreams the user added on 2026-11-11) |
@@ -15,10 +28,6 @@ worker sessions under a coordinator session (see *Parallel runs* below).
 | `rbac_prompt.md` | Role-based access from Entra ID (global `internal-admin`, `internal-org-admin`, `internal-auditor`, `internal-viewer`; scoped `internal-team-admin`; the legacy `Admin` alias only outside `APP_ENV=prod`), SSO group mapping, single-team affiliation and admin scopes, visibility and inheritance, the master user, password users and the pre-SSO mode, the audit log, plus the platform unit |
 | `litellm_prompt.md` | LiteLLM team and user administration through an allowlist gateway and a scoped service key in SSM, budgets, rate limits, keys, combined usage, self-service keys, the monthly statement. Its permissions follow the role model in `rbac_prompt.md` §1.1 |
 | `litellm_user_sync_prompt.md` | Units RS1, SYNC1 and SYNC2 (user, 2026-11-18): Reset spend from the LiteLLM users tab and the Users page; LiteLLM users synced into Management → Users on demand and on a schedule, with team membership only through linked LiteLLM teams that exist (supersedes Access Control D27 "never automatic"; T-MI1 stays) |
-| `coordinator_prompt.md` | How one session coordinates the worker sessions that run the goals above: briefs, file ownership and conflict prevention, milestones, the shared usage freeze, **every merge into `main`** (full tests on the `main` candidate, fix agents, clean-up), and the live state in `temp/coordinator/` that survives a context reset |
-| `planner_prompt.md` | The planner session: it writes plans, spec text and prompts and never executes them (user, 2026-11-18); it reaches the coordinator only through the file relay in `temp/coordinator/` (coordinator prompt §2b). Start sheet: [`docs/guides/planner-session.md`](../docs/guides/planner-session.md) |
-| `worker_prompt.md` | The role prompt for every worker session (`improvements_worker`, `bedrock_worker`, `litellm_worker`): run the unit the coordinator's brief assigns, in its worktree, stop at "ready to merge". The unit's own prompt says what to build. Roles overview: [`docs/guides/session-roles.md`](../docs/guides/session-roles.md) |
-| `README-sessions.md` | How to run the planner, coordinator and worker sessions: set up, start lines, a piece of work step by step, the relay, clearing or replacing a session, stopping, troubleshooting |
 
 ## How runs save tokens (Rule 70.12, decided 2026-11-14)
 
@@ -99,7 +108,7 @@ then the `/goal` line as a second message.
 Several sessions can run at once: a planner (plans only), one coordinator,
 and worker sessions (`improvements_worker`, `bedrock_worker`, `litellm_worker`). How to
 start, resume, clear and stop each one is in
-[`README-sessions.md`](README-sessions.md); the reference is
+[`.claude/prompts/README-sessions.md`](../.claude/prompts/README-sessions.md); the reference is
 [`docs/guides/session-roles.md`](../docs/guides/session-roles.md). A worker
 runs 2 agents for a goal with no plan, and its allocation from the shared pool for a
 plan unit (80 agents running at once, summed across all sessions and

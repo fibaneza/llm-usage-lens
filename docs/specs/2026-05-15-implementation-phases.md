@@ -1080,15 +1080,15 @@ Claude Code workflows (multi-agent orchestration; [Dynamic workflows guide](../g
 were first planned only where a unit has many independent pieces against one
 test bar (the table below). From 2026-11-18 every worker runs its plan units
 as a workflow, a small one when a unit has nothing to fan out
-(`prompts/coordinator_prompt.md` §3a; user, 2026-11-18). Every workflow keeps
+(`.claude/prompts/coordinator_prompt.md` §3a; user, 2026-11-18). Every workflow keeps
 the rules: one branch and one squash commit per unit (Rule 30.4), Rule 70
 roles (tdd-test-engineer writes tests, typescript-developer writes code,
 reviewers read only), the one shared agent pool — at most 80 agents running at
 once, summed across all sessions, distributed dynamically by the coordinator
-(user, 2026-11-18; `prompts/coordinator_prompt.md` §3a,
+(user, 2026-11-18; `.claude/prompts/coordinator_prompt.md` §3a,
 [session roles](../guides/session-roles.md) — *Limits*), so the sessions running
 parallel units share it — the user's opt-in per run, and the usage freeze
-(`prompts/coordinator_prompt.md` §3). Superseded 2026-11-18: the 5-agent cap
+(`.claude/prompts/coordinator_prompt.md` §3). Superseded 2026-11-18: the 5-agent cap
 and its raise for M0–M5 only; reason: the user gave the pool as the general
 rule, not one run's exception. A workflow speeds
 up building inside a unit; it never merges or skips the review.

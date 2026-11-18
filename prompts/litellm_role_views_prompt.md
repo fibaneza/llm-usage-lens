@@ -1,7 +1,7 @@
 # LiteLLM Role Views and Settings Prompt — dev identity login (L3c), Settings admin area, acceptance of L3b, no overlapping components
 
 You are a **worker session** under the coordinator
-(`prompts/coordinator_prompt.md`). You orchestrate agents through the
+(`.claude/prompts/coordinator_prompt.md`). You orchestrate agents through the
 Rule 70 loop; you write no production code or tests yourself.
 
 Primary checkout: `/Users/fibanez/Projects/aws-bedrock-cost-tracker` (`$REPO`).
@@ -15,7 +15,7 @@ the Bash sandbox: use the file tools, or run that one command outside it.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
 `prompts/shared-contracts.md` → `prompts/litellm_prompt.md` (run discipline,
-role model, LiteLLM threat items) → `prompts/coordinator_prompt.md` → this
+role model, LiteLLM threat items) → `.claude/prompts/coordinator_prompt.md` → this
 file. This file never overrides a rule.
 
 ## 1. What the user asked for (2026-11-16)

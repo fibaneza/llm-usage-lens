@@ -35,14 +35,14 @@ The `docs/specs/` directory is the source of truth:
 - `docs/guides/github-best-practices.md` — general GitHub/Actions practice reconciled to this project's GitHub Flow, SAM, and pnpm conventions
 - `docs/guides/git-hooks.md` — local git-hook strategy: the current simulator pre-push hook and the Phase 1 Husky suite that supersedes it
 - `docs/guides/testing.md` — Vitest layout (unit / integration / infra projects), where a test goes, the `apps/dashboard/test/` folders, how to run one project or file, coverage
-- `docs/guides/session-roles.md` — the three session roles (planner, coordinator, workers), how to start or clear a session, and how a unit goes from a request to `main`; runbook in `prompts/README-sessions.md`
+- `docs/guides/session-roles.md` — the three session roles (planner, coordinator, workers), how to start or clear a session, and how a unit goes from a request to `main`; runbook in `.claude/prompts/README-sessions.md`
 - `docs/guides/learning-path.md` — guided, phase-by-phase walk-through of the whole build (lesson + tracker); start here if you're new to the project
 
 Not in the reading path above, but worth knowing they exist:
 
 - `docs/future-improvements.md` — the parking lot of intentionally-deferred enhancements, each with the trigger that would revisit it; per Rule 00, adopting any starts with a spec change, not a PR
 - `ONBOARDING.md` — new-contributor setup checklist (codebases, MCP servers, skills to know)
-- `prompts/` — the prompts behind the guarded, agent-driven build runs (worker and coordinator sessions); [`prompts/README.md`](prompts/README.md) is the index
+- `prompts/` — the single-use prompts behind the guarded, agent-driven build runs (one per goal or plan; the planner writes new ones here); [`prompts/README.md`](prompts/README.md) is the index. The standing role prompts (coordinator, planner, worker) and the sessions runbook are in `.claude/prompts/`
 - `poc/` — an isolated proof of concept that runs the dashboard image on one EC2 instance with Docker Compose; **not** the deployment path and not in the pnpm workspace ([`poc/README.md`](poc/README.md))
 - `docs/superpowers/` — the design spec + implementation plan for the already-shipped `/new-component` command; kept for provenance, not active guidance
 
@@ -52,6 +52,7 @@ Project-specific Claude Code customization lives under `.claude/`:
 - **Rules** — `.claude/rules/` (numbered `00`–`70`; always loaded)
 - **Slash commands** — `.claude/commands/` (see table below)
 - **Agents** — `.claude/agents/` — see Rule 70
+- **Role prompts** — `.claude/prompts/` — the coordinator, planner and worker session prompts and the sessions runbook (`README-sessions.md`)
 - **Hooks** — `.claude/hooks/`, wired in `.claude/settings.json`: `session-start.sh` (installs dependencies), `server-only-guard.sh` (blocks a Rule 10 violation when a `"use client"` file is written), `prettier-on-edit.sh` (formats after an edit)
 
 ## Session roles (parallel runs)
@@ -63,11 +64,11 @@ from its state file **before anything else**; take state from files and git.
 
 | Role | Session name | Read first | Resume from |
 |---|---|---|---|
-| Coordinator | `Coordinator` | `prompts/coordinator_prompt.md` | `temp/coordinator/state.md` |
-| Worker | `improvements_worker`, `bedrock_worker`, `litellm_worker` | `prompts/worker_prompt.md` | your row in `temp/coordinator/state.md` → the brief → `temp/run-<slug>/state.md` |
-| Planner | `planner` | `prompts/planner_prompt.md` | `temp/planner/state.md` |
+| Coordinator | `Coordinator` | `.claude/prompts/coordinator_prompt.md` | `temp/coordinator/state.md` |
+| Worker | `improvements_worker`, `bedrock_worker`, `litellm_worker` | `.claude/prompts/worker_prompt.md` | your row in `temp/coordinator/state.md` → the brief → `temp/run-<slug>/state.md` |
+| Planner | `planner` | `.claude/prompts/planner_prompt.md` | `temp/planner/state.md` |
 
-A session with no role is an ordinary session. **A subagent has no role; ignore this section.** Runbook: [`prompts/README-sessions.md`](prompts/README-sessions.md); reference: [`docs/guides/session-roles.md`](docs/guides/session-roles.md).
+A session with no role is an ordinary session. **A subagent has no role; ignore this section.** Runbook: [`.claude/prompts/README-sessions.md`](.claude/prompts/README-sessions.md); reference: [`docs/guides/session-roles.md`](docs/guides/session-roles.md).
 
 ## What This Project Is
 

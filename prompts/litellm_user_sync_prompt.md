@@ -1,18 +1,18 @@
 # LiteLLM User Sync Prompt — reset spend from the user lists, and LiteLLM users synced into Management → Users (units RS1, SYNC1, SYNC2)
 
 This prompt defines three units for one worker session, `litellm_worker`,
-run in order under the coordinator (`prompts/coordinator_prompt.md`). The
+run in order under the coordinator (`.claude/prompts/coordinator_prompt.md`). The
 worker's role — how it takes a brief, its boundaries, the workflow, the
 branch gate, the handover and the one-line messages — is
-`prompts/worker_prompt.md`. This file says **what to build**.
+`.claude/prompts/worker_prompt.md`. This file says **what to build**.
 
 Plan package (planner, 2026-11-18): `temp/planner/litellm-user-sync/` in
 the primary checkout — `plan.md`, `spec-changes.md`, `brief-sync1.md`,
 `brief-sync2.md`, `workflow-litellm_worker.md`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`prompts/shared-contracts.md` → this file → `prompts/coordinator_prompt.md`
-→ the brief → `prompts/worker_prompt.md`. This file never overrides a rule
+`prompts/shared-contracts.md` → this file → `.claude/prompts/coordinator_prompt.md`
+→ the brief → `.claude/prompts/worker_prompt.md`. This file never overrides a rule
 or a spec. Each unit amends its specs **first**, as the first commit on its
 branch (Rule 00.2), from `spec-changes.md`.
 
@@ -368,7 +368,7 @@ pool of 80 running at once; this plan needs at most **4** at a time.
 `tdd-test-engineer` and `typescript-developer` on sonnet; gate runs on
 haiku. The worker runs no review agent.
 
-Usage tiers apply (`prompts/coordinator_prompt.md` §3): 5-hour caution
+Usage tiers apply (`.claude/prompts/coordinator_prompt.md` §3): 5-hour caution
 60 %, freeze 75 %; weekly caution 85 %, freeze 95 %.
 
 ## 8. Guards and out of scope
@@ -393,7 +393,7 @@ Usage tiers apply (`prompts/coordinator_prompt.md` §3): 5-hour caution
 
 ## 9. Handover
 
-As `prompts/worker_prompt.md` §7. The handover of SYNC1 and SYNC2 always
+As `.claude/prompts/worker_prompt.md` §7. The handover of SYNC1 and SYNC2 always
 includes the security surface: each new route and who may call it, each
 new entity and who can read it, each T-SY item with its guard
 (`file:line`) and its test, and for SYNC2 the synthesised IAM statements.
@@ -405,7 +405,7 @@ A unit is complete when:
 1. Its spec amendments are on the branch and say what the code does.
 2. Every row of §6 for the unit has a passing test that cites its source.
 3. The branch gate is green at the final commit with `main` merged in
-   (`prompts/worker_prompt.md` §6), and for SYNC2 `pnpm test:infra` and
+   (`.claude/prompts/worker_prompt.md` §6), and for SYNC2 `pnpm test:infra` and
    `pnpm --filter @llm-usage-lens/infra synth` with the example context.
 4. Decisions are in the specs; only built boxes are ticked.
 5. The handover and the report are written, and `ready to merge` was sent.

@@ -1,6 +1,6 @@
 # UI Refresh Prompt — compact workspace and test consolidation (LLM Usage Lens)
 
-You are a **worker session** under the coordinator (`prompts/coordinator_prompt.md`).
+You are a **worker session** under the coordinator (`.claude/prompts/coordinator_prompt.md`).
 You orchestrate agents; you write no production code or tests yourself.
 This run was scheduled by the user on 2026-11-15 to start at 00:31 AEDT on
 2026-11-16, after the 5-hour usage window resets.
@@ -9,7 +9,7 @@ Primary checkout: `/Users/fibanez/Projects/aws-bedrock-cost-tracker` (`$REPO`).
 Always use absolute paths; never edit in the primary checkout or on `main`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
-`prompts/shared-contracts.md` → `prompts/coordinator_prompt.md` → this file.
+`prompts/shared-contracts.md` → `.claude/prompts/coordinator_prompt.md` → this file.
 This file never overrides a rule. Where the user's direction below needs a
 spec to change, amend the spec first (Rule 00.2).
 
@@ -246,7 +246,7 @@ still not landed, write the report with the UI unit marked "waiting for the
 1. Save this prompt to `$REPO/temp/run-ui/goal.md` (so a resumed session can
    re-read it), and open `$REPO/temp/run-ui/progress.md`.
 2. Read, in order: `CLAUDE.md`, Rules 00, 30, 31, 40, 60, 70,
-   `prompts/coordinator_prompt.md`, `$REPO/temp/coordinator/state.md`,
+   `.claude/prompts/coordinator_prompt.md`, `$REPO/temp/coordinator/state.md`,
    `docs/specs/2026-05-15-design-system.md`, and in
    `docs/specs/2026-05-15-implementation-phases.md` the sections *Phase
    4R.4*, *4R.5*, *L3–L8*, *Decision policy*, *Maintenance — test

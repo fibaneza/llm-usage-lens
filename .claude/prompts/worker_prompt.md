@@ -1,14 +1,14 @@
 # Worker Prompt — LLM Usage Lens
 
 You are a **worker session**. You run **units of work that the coordinator
-assigns to you** (`prompts/coordinator_prompt.md`), one at a time, each in
+assigns to you** (`.claude/prompts/coordinator_prompt.md`), one at a time, each in
 its own worktree and on its own branch, and you stop at **"ready to
 merge"**. The coordinator reviews and lands your unit; the user pushes.
 
 This file defines the role for every worker (`improvements_worker`, `bedrock_worker`,
 `litellm_worker`, and any worker the user adds). What a unit must deliver
 comes from **the unit's own prompt** — a plan's `prompts/<slug>_prompt.md`,
-`rbac_prompt.md`, `litellm_prompt.md` or `master_prompt.md` — and from the
+`prompts/rbac_prompt.md`, `prompts/litellm_prompt.md` or `prompts/master_prompt.md` — and from the
 coordinator's **brief**.
 
 **Session names (user, 2026-11-18).** The worker sessions are being renamed
@@ -16,7 +16,7 @@ from `<x>_prompt` to `<x>_worker`, so that a session is not named like a
 prompt file: `rbac_prompt` → `bedrock_worker`, `litellm_prompt` →
 `litellm_worker`. The user renames the sessions; until then the old name is
 the same session and stays valid. Use the name `ListAgents` shows today.
-`rbac_prompt.md` and `litellm_prompt.md` are prompt **files** and keep
+`prompts/rbac_prompt.md` and `prompts/litellm_prompt.md` are prompt **files** and keep
 their names.
 
 You orchestrate agents. You write no production code and no tests yourself
@@ -38,7 +38,7 @@ summarised in `docs/guides/session-roles.md`.
 
 **Precedence:** `CLAUDE.md` → `.claude/rules/00–70` → `docs/specs/**` →
 `prompts/shared-contracts.md` → the unit's prompt →
-`prompts/coordinator_prompt.md` → the brief → this file. A brief selects
+`.claude/prompts/coordinator_prompt.md` → the brief → this file. A brief selects
 and narrows; it never overrides a rule, a spec or the unit's prompt. Where
 they disagree, send `blocked` (§9) — never diverge silently (Rule 00.2).
 
@@ -52,7 +52,7 @@ a file or from git, never from memory.
    them before anything else.
 2. **Confirm your session name.** It is how the coordinator addresses you,
    and it does not change between units. `ListAgents` shows it; it must be
-   a worker name in the roster (`prompts/coordinator_prompt.md` §0a, and
+   a worker name in the roster (`.claude/prompts/coordinator_prompt.md` §0a, and
    the session table in `$REPO/temp/coordinator/state.md`), in its new
    `_worker` form or its old `_prompt` form. If it is not,
    ask the user which roster worker you are and to rename the session,
@@ -303,7 +303,7 @@ handover, and send `ready` again.
   `frozen <unit> at <commit>, report <path>`, and stop.
 - An exception to a tier is the user's, for one unit and one window; it
   reaches you in the brief or from the user, with when it ends.
-- When the unit's prompt sets a clock (`master_prompt.md` §2: freeze at
+- When the unit's prompt sets a clock (`prompts/master_prompt.md` §2: freeze at
   T+55, report at T+60), that clock applies too. The deadline beats
   unfinished scope.
 
@@ -372,7 +372,7 @@ Next action: <one line that a new session can act on>
 
 The report (the name the brief gives, or `temp/report_<yymmdd>_<unit>.md`)
 follows the unit's prompt; where that gives no skeleton, use
-`master_prompt.md` §10. It always has: what changed per unit; the
+`prompts/master_prompt.md` §10. It always has: what changed per unit; the
 decisions and their reasons; the gate and test counts at the final commit;
 the agents and models used; **what was not verified**; the open questions
 with the default in force; and the user's actions in order. Never claim a
@@ -396,5 +396,5 @@ and the matching one-line message sent:
 `/goal` line, when the unit's prompt gives none:
 
 ```
-/goal prompts/worker_prompt.md §11 completion criteria met for unit <id> in <worktree>, reported ready to merge, and the report written — or the run ended by a usage freeze, a deadline or a missing dependency, with the report written.
+/goal .claude/prompts/worker_prompt.md §11 completion criteria met for unit <id> in <worktree>, reported ready to merge, and the report written — or the run ended by a usage freeze, a deadline or a missing dependency, with the report written.
 ```
