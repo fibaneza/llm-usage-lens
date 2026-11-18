@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-# Node.js 22 LTS — matches the stack requirement in docs/specs/2026-05-15-design-system.md
-FROM mcr.microsoft.com/devcontainers/javascript-node:22
+# Node.js 24 LTS — matches the stack requirement in docs/specs/2026-05-15-design-system.md
+FROM mcr.microsoft.com/devcontainers/javascript-node:24
 
 # Bash + pipefail for every shell-form RUN. Docker best-practices doc:
 # "/bin/sh -c only evaluates the exit code of the last operation" — without

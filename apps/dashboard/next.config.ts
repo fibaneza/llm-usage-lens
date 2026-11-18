@@ -60,6 +60,8 @@ const nextConfig: NextConfig = {
   // The dev indicator defaults to bottom-left, where it covers the collapsed
   // sidebar rail's footer toggle and intercepts its pointer events (dev only).
   devIndicators: { position: "bottom-right" },
+  // Agent guidance is CLAUDE.md and .claude/rules; tool-injected agent files are not accepted.
+  agentRules: false,
 };
 
 export default nextConfig;

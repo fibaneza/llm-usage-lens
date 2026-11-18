@@ -19,11 +19,11 @@ Layer → Pages 4.1–4.9 → Polish → Lambda Collector). See
 ## Local setup
 
 The project ships a devcontainer with the full toolchain pre-installed
-(Node 22, pnpm, OpenTelemetry stack, DynamoDB Local, Claude Code, plugins,
+(Node 24, pnpm, OpenTelemetry stack, DynamoDB Local, Claude Code, plugins,
 and `actionlint`). Open the repo in VS Code with the Dev Containers
 extension and let `.devcontainer/post-create.sh` run.
 
-Outside the devcontainer, install Node 22 LTS and pnpm; the rest is
+Outside the devcontainer, install Node 24 LTS and pnpm; the rest is
 optional.
 
 ## Branching

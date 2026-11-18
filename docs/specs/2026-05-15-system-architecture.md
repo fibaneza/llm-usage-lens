@@ -340,7 +340,7 @@ Not used: **Amazon Security Lake** — a security-operations data lake in OCSF f
 
 ## Lambda Configuration
 
-- **Runtime:** Node.js 22.x
+- **Runtime:** Node.js 22.x *(the collector Lambda; the dashboard moved to Node.js 24 on 2026-11-18 at the user's direction — align the collector runtime when Phase 6 builds it, if Lambda supports 24 then)*
 - **Timeout:** 5 minutes (CloudTrail Lake SQL polling plus CloudWatch and Cost Explorer queries can take 2-3 minutes for large orgs)
 - **Memory:** 512 MB (sufficient for in-memory merge of all account data)
 - **Concurrency:** Reserved concurrency 1 (single instance, no parallel invocations needed — hourly cron)

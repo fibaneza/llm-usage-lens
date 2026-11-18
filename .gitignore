@@ -188,3 +188,6 @@ docs/todo.md
 .next-probe-r5
 .next-probe-litellm
 .next-base-path
+
+# Written by `next dev` (agentRules: false stops it; never committed)
+apps/dashboard/AGENTS.md

@@ -54,7 +54,7 @@ end-to-end against a local data store (see the root `CLAUDE.md` and `/seed`).
 
 | Service | Image | Local port | Purpose |
 |---|---|---|---|
-| `app` | `devcontainers/javascript-node:22` | 3000 | Dashboard dev server + the `claude` CLI |
+| `app` | `devcontainers/javascript-node:24` | 3000 | Dashboard dev server + the `claude` CLI |
 | `otel-collector` | `otel/opentelemetry-collector-contrib:0.107.0` | 4317 (gRPC) / 4318 (HTTP) | OTLP ingest; routes metrics → Prometheus, logs → Loki |
 | `prometheus` | `prom/prometheus:v2.54.1` | 9090 | Metrics storage; scrapes `otel-collector:8889` |
 | `loki` | `grafana/loki:3.1.2` | 3100 | Log/event storage |
@@ -110,8 +110,8 @@ and explicit port mappings.
 ```yaml
 services:
   app:
-    # Node.js 22 LTS
-    image: mcr.microsoft.com/devcontainers/javascript-node:22
+    # Node.js 24 LTS
+    image: mcr.microsoft.com/devcontainers/javascript-node:24
     volumes:
       - ..:/workspace:cached
     command: sleep infinity

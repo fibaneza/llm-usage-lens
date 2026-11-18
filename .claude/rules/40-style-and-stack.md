@@ -4,7 +4,7 @@ Source: `docs/specs/2026-05-15-design-system.md`.
 
 ## Stack (do not substitute without updating the spec)
 
-- Next.js App Router, TypeScript strict, Node.js 22 LTS, pnpm
+- Next.js App Router, TypeScript strict, Node.js 24 LTS (24.22.3; user, 2026-11-18; previously 22), pnpm
 - Tailwind CSS v4, shadcn/ui (Radix, via the `radix-ui` umbrella), Lucide React — new primitives are shadcn copies, not new packages (2026-11-16)
 - Recharts (charts), TanStack Table (tables), TanStack Query (server state)
 - nuqs (URL state), date-fns (dates), Zod v4 (validation)

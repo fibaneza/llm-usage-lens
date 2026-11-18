@@ -220,7 +220,7 @@ be generically portable to a shared repository (see [Future work](#future-work))
 
 | Action | Inputs (required \*) | Outputs | Purpose |
 | --- | --- | --- | --- |
-| `node-setup` | `node-version` (default `22`) | — | Installs pnpm via `pnpm/action-setup@v6` then Node.js with pnpm cache via `actions/setup-node@v6`. Used in `llm-usage-lens-build.yml`. |
+| `node-setup` | `node-version` (default `24`) | — | Installs pnpm via `pnpm/action-setup@v6` then Node.js with pnpm cache via `actions/setup-node@v6`. Used in `llm-usage-lens-build.yml`. |
 | `aws-sam-setup` | `node-version` (default `22`), `pnpm-version` (default `9`), `cache-pnpm` (default `false`), `cache-dependency-path` | — | Installs Node.js, pnpm, and the AWS SAM CLI for SAM build/deploy jobs. |
 
 ### `github-*` family
@@ -235,7 +235,7 @@ be generically portable to a shared repository (see [Future work](#future-work))
 
 | Action | Inputs | Outputs | Purpose |
 | --- | --- | --- | --- |
-| `node-setup` | `node-version` (default `22`) | — | Installs pnpm via `pnpm/action-setup@v6` then Node.js with pnpm store caching via `actions/setup-node@v6`. Used in `llm-usage-lens-build.yml`. |
+| `node-setup` | `node-version` (default `24`) | — | Installs pnpm via `pnpm/action-setup@v6` then Node.js with pnpm store caching via `actions/setup-node@v6`. Used in `llm-usage-lens-build.yml`. |
 | `aws-sam-setup` | `node-version` (default `22`), `pnpm-version` (default `9`), `cache-pnpm` (default `false`), `cache-dependency-path` | — | Installs Node.js, pnpm, and the AWS SAM CLI. Used in the simulator build workflow (deploy/destroy install the SAM CLI directly via `aws-actions/setup-sam`, as they need neither Node nor pnpm). |
 
 **Inclusion rule:** an action earns its directory only when its extracted logic

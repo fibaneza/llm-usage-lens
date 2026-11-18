@@ -1362,7 +1362,7 @@ jobs:
   quality:
     steps:
       - Checkout
-      - Setup pnpm + Node 22
+      - Setup pnpm + Node 24 (*was Node 22; upgraded 2026-11-18, user*)
       - Install dependencies (pnpm install --frozen-lockfile)
       - Lint (eslint .)
       - Format check (prettier --check .)
@@ -1372,7 +1372,7 @@ jobs:
   test:
     steps:
       - Checkout
-      - Setup pnpm + Node 22
+      - Setup pnpm + Node 24 (*was Node 22; upgraded 2026-11-18, user*)
       - Start DynamoDB Local (Docker service)
       - Create table + seed data
       - Unit + component tests (vitest run)
@@ -1382,7 +1382,7 @@ jobs:
     needs: [quality, test]
     steps:
       - Checkout
-      - Setup pnpm + Node 22
+      - Setup pnpm + Node 24 (*was Node 22; upgraded 2026-11-18, user*)
       - Build (next build)
 
   deploy-collector:                    # Phase 6+ — runs on push to main only, never on pull_request
@@ -1393,7 +1393,7 @@ jobs:
       contents: read
     steps:
       - Checkout
-      - Setup pnpm + Node 22
+      - Setup pnpm + Node 24 (*was Node 22; upgraded 2026-11-18, user*)
       - Configure AWS credentials (OIDC role assumption — observability account)
       - sam build (apps/collector — bundles @llm-usage-lens/shared via esbuild)
       - sam deploy --no-confirm-changeset (bedrock-cost-collector stack)

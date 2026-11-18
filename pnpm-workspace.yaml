@@ -11,3 +11,9 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+
+# Transitive security pins (SEC1, user 2026-11-18). Drop each when the parent
+# package ships a release that already resolves to a patched version.
+#   @opentelemetry/core — @vercel/otel's sdk packages resolve 2.7.1 (moderate; fixed in >=2.8.0)
+overrides:
+  "@opentelemetry/core": ^2.8.0

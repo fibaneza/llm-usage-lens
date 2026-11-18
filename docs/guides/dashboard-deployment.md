@@ -12,7 +12,7 @@ This replaces the Netlify runbook (retired 2026-11-10, Phase 4R.P).
 ## 1. Hosting model
 
 - Image built from `apps/dashboard/Dockerfile` (Next.js `output: "standalone"`,
-  Node 22, non-root, port 3000), stored in the FoundationStack's ECR repository.
+  Node 24, non-root, port 3000), stored in the FoundationStack's ECR repository.
 - Two stacks per environment (`dev` or `prod`), region `ap-southeast-2`
   (`COLLECTOR_REGION`, Rule 50.7):
   - `LlmUsageLens-<env>-Infra`: DynamoDB table, KMS CMK, ECS cluster, ECR
@@ -69,7 +69,11 @@ No CDK input is needed: the task definition does not set `APP_CONFIG_FILE`.
 starts, the `config.loaded` span's `config.file_set_key_paths` attribute
 lists the keys the file sets (names only, never values). An empty list means
 the shipped file sets nothing; a task that fails to start with a
-configuration error names the key path in its log.
+configuration error names the key path in its log. Before a deploy, check
+the image locally: `docker run --rm --entrypoint sh <image> -c 'id -u; stat -c "%U:%G %a" config config/config.yaml; node -v'`
+prints `1001`, `root:root 555` for `config`, `root:root 444` for the file,
+and `v24.22.3` — the directory must be traversable and the file read-only
+(SEC1, 2026-11-18).
 
 ## 3. Inputs (CDK context)
 

@@ -14,9 +14,9 @@ Enterprise analytics dashboard for tracking AWS Bedrock usage and cost across an
 
 | Layer | Technology | Version/Notes |
 |-------|-----------|---------------|
-| **Framework** | Next.js (App Router) | Latest stable, Server Components, Route Handlers |
+| **Framework** | Next.js (App Router) | Latest stable, Server Components, Route Handlers. `agentRules: false` in `next.config.ts`, and `apps/dashboard/AGENTS.md` is git-ignored (coordinator decision, 2026-11-18, SEC1): from 16.4, `next dev` writes agent instructions into `AGENTS.md` and asks agents to run a network feedback command; this project's agent guidance is `CLAUDE.md` and `.claude/rules` only (Rule 00), so tool-injected agent files are not accepted |
 | **Language** | TypeScript | Strict mode, 6.x |
-| **Runtime** | Node.js | 22 LTS |
+| **Runtime** | Node.js | 24 LTS (24.22.3, pinned in the image, `.nvmrc` and CI; user, 2026-11-18: "upgrade to node.js version to the latest 24.x.x"; previously 22 LTS) |
 | **Package Manager** | pnpm | Fast, disk-efficient, lockfile |
 | **Styling** | Tailwind CSS | v4+ |
 | **UI Components** | shadcn/ui | Copy-paste components on Radix UI primitives (the `radix-ui` umbrella package). The compact refresh adds Breadcrumb, Collapsible, Switch and Alert with no new npm dependency; Sonner, data grids, animation and layout libraries are not used (agent decision, 2026-11-16) |
@@ -54,7 +54,7 @@ Decisions on technologies evaluated and excluded, with rationale:
 | **DynamoDB DAX** | Not used | Data updates once per hour. Next.js server cache (1hr TTL) already reduces DynamoDB reads to ~1/hour per unique query. DAX adds cost with no benefit at this refresh rate. |
 | **Redis / Valkey** | Not used (re-evaluated 2026-11-17: gated) | Same reasoning as DAX. Next.js built-in cache + TanStack Query client cache are sufficient for hourly-updating data. No extra infrastructure to manage. Re-evaluated with the Phase 5 *Performance and caching* task: a shared cache only helps once the LiteLLM read cache exists and the two production tasks disagree after a write; it is built as unit PERF-5 only when a trigger in `docs/future-improvements.md` — *Shared cache (Valkey)* is met. |
 | **Browser storage for query data** | Not used (decided 2026-11-17, user) | Persisting the TanStack Query cache to `localStorage` or `sessionStorage` would keep scoped cost data in the browser after sign-out, against the intent of `Cache-Control: private, no-store` (Access Control — *Enforcement* item 4, T14). The in-memory query cache covers in-app navigation. |
-| **Vite** | Not used | Next.js has its own bundler (Turbopack in dev, Webpack in production). Adding Vite would conflict with Next.js's build pipeline. |
+| **Vite** | Not used | Next.js has its own bundler (Turbopack in dev, Webpack in production). Adding Vite would conflict with Next.js's build pipeline. *Note (2026-11-18, SEC1):* `vite` is a root dev dependency only to pin a patched version of the Vite that Vitest already uses (dependency audit); it is not an app bundler. |
 | **Docker** | Deferred to deployment phase | Not needed for local development — `pnpm dev` is simpler. Will add Dockerfile when deploying the Next.js app. DynamoDB Local does run in Docker (the one exception during development). |
 | **Tremor** | Not used (Recharts instead) | Recharts gives finer control over chart internals and has a larger ecosystem. Tremor's component layer overlaps with shadcn/ui, which would create two competing component systems. |
 | **Plain React SPA** | Not used (Next.js kept) | Replacing Next.js with a client-only React SPA (e.g. Vite) was evaluated. Rejected: the server-only data boundary (Rule 10) depends on Server Components and Route Handlers reading DynamoDB with the AWS SDK credential chain. A SPA pushes AWS access to the browser or forces a separate API Gateway + Lambda tier — extra infrastructure that duplicates what Next.js Route Handlers already provide. Auth.js session handling, the 1-hour server cache (matching the Lambda cycle), and per-section SSR/Suspense streaming are also lost in a SPA. Next.js stays. |
