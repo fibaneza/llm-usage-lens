@@ -1081,6 +1081,9 @@ up building inside a unit; it never merges or skips the review.
 
 ### Tasks
 
+- [ ] **WCAG 2.5.3 Label in Name on the shared shell, then axe 4.14** (coordinator, 2026-11-18, found by SEC1; queued for unit C2). `@axe-core/playwright` is held at `~4.11.3` because axe 4.14 newly enforces `label-content-name-mismatch` on the sidebar brand link (visible organisation name, accessible name "LLM Usage Lens — go to overview"), the user menu (visible initials, "Open user menu"), the date presets (visible "7D/30D/90D", "Last N days") and Search. Fix: each `aria-label` starts with the control's visible text; then raise `@axe-core/playwright` to 4.14 and keep the full e2e axe-clean. The hold is not a security fix (SEC1's dependency audit is unaffected).
+- [ ] **Dev-only advisory accepted: `picomatch` ReDoS** (high, CVE-2026-112366, vulnerable `<=4.0.7`; coordinator, 2026-11-18, SEC1). No patched release exists (4.0.7 is the latest); it reaches only dev tooling (Vite through Vitest, lint-staged), and `pnpm audit --prod` is clean. Re-check trigger: a `picomatch` release above 4.0.7, or any `pnpm audit --prod` finding — then upgrade (or override) and tick this.
+
 - [x] UI refresh — fluid workspace (user direction 2026-11-11; delivered 85609ea; Design System — *Layout*). It may run before the rest of Phase 5, on `feature/ui-fluid-workspace`, at the user's direction; one branch, one squash commit
   - Remove the 1280px cap from the `/dashboard` layout; gutters 16 / 24 / 32px
   - Overview on the 12-column panel grid (16px gap; 8 + 4 column rows); the Overview KPI row five across from 1440

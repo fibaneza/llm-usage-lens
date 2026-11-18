@@ -27,10 +27,12 @@ ENV SKIP_ENV_VALIDATION=1 \
     NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH} \
     # Build-time placeholder only; no client code reads NEXT_PUBLIC_APP_URL today.
     NEXT_PUBLIC_APP_URL=http://localhost:3000
-# .dockerignore keeps e2e/, scripts/ and *.test.* out of the context, but the
-# tsconfig also covers the test support, probe and Playwright files that import
-# them; next build type-checks them and fails. Exclude them for the image build
-# only (the app code is type-checked as usual).
+# The build stage copies only tsconfig.base.json, packages/shared and apps/dashboard
+# (repo-root scripts/ is never copied), and the root .dockerignore drops **/e2e and
+# *.test.ts(x). apps/dashboard/test/ and probe/ are still copied and import
+# ../../e2e/ (absent) and the repo-root scripts/ (absent), and the tsconfig include
+# covers them, so next build's type check would fail. Exclude them for the image
+# build only; the app code is type-checked as usual.
 RUN node -e "const f='apps/dashboard/tsconfig.json',c=JSON.parse(require('fs').readFileSync(f,'utf8'));c.exclude=[...c.exclude,'e2e','probe','test','playwright.config.ts','vitest.config.ts','**/*.test.ts','**/*.test.tsx'];require('fs').writeFileSync(f,JSON.stringify(c,null,2))" \
  && mkdir -p apps/dashboard/public \
  && pnpm --filter @llm-usage-lens/dashboard build
@@ -44,6 +46,7 @@ ENV NODE_ENV=production \
 # Smaller runtime surface: the server starts with `node` alone, so the npm,
 # npx, corepack and yarn bundled in the base image (and their dependencies,
 # the source of the base image's CVEs) are removed; the OS packages are patched.
+# apk upgrade is unpinned on purpose: it takes the base image's patched Alpine packages at build time (the base image is pinned by digest, so builds are reproducible up to Alpine security updates).
 RUN apk upgrade --no-cache \
  && rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
     /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-* \
