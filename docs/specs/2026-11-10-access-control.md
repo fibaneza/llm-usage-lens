@@ -228,11 +228,12 @@ validation when Entra is configured** (amending *Sign-in providers*, which
 allowed both outside production). Production fail-closed checks are
 unchanged; no production bypass exists (Rule 70.11).
 
-**Dev sign-in as a lead (management improvements D14, agent decision,
-2026-11-17; item 1, unit M3).** A lead is a **scope**, not a global role, so
+**Team lead sign-in (management improvements D14, agent decision,
+2026-11-17; item 1, unit M3; was "dev sign-in as a lead", renamed at the user's direction, 2026-11-18).** A lead is a **scope**, not a global role, so
 the role select (`GLOBAL_ROLES`) could not offer it. The form gains a
 **Team lead** option that signs in through the stored-identity path above as
-the seeded lead identity (`local:lead@localhost`, email `lead@localhost`),
+the seeded team lead identity (`local:team-lead@localhost`, email
+`team-lead@localhost`, renamed at the user's direction, 2026-11-18),
 which `pnpm db:seed` stores with a team-scope `internal-team-admin` item on
 the first seeded team. The scope comes from the store per request, as for any
 stored identity; the typed text and the option never supply a role or a
@@ -731,6 +732,12 @@ through one domain function, so the same rules hold:
 - Each write is audited (`identity.litellm-link.set` /
   `identity.litellm-link.remove`, with mode, both ids and the reason); the
   auditor reads.
+- (agent decision, 2026-11-18, unit M3: the audit action names and the snapshot keys `mode` and `reason` are added to the shared lists so the record carries them, T17.)
+- (agent decision, 2026-11-18, unit M3: the link item keeps the last `mode` and `reason`, so a remove audits them in `before`; they never leave the server.)
+- (agent decision, 2026-11-18, unit M3: every write of a link that holds a `litellmUserId` also puts its claim, which adds the missing claim of a link stored before M3; releasing a claim that does not exist is not a conflict.)
+- (agent decision, 2026-11-18, unit M3: the own-`oid` refusal of the link routes reads the path `oid` in the permission step, before the body is parsed, and writes one `denied` record; `POST /api/litellm/users` does it after parsing, the `oid` being in the body.)
+- (agent decision, 2026-11-18, unit M3: each directory row carries `linkVersion`, the `IdentityLink` version the link writes must send; an unlinked row reads 0.)
+- (agent decision, 2026-11-18, unit M3: like every LiteLLM route, the link writes answer `403 OPERATION_UNAVAILABLE` in open access mode, LT11.)
 
 **Created app teams (management improvements D5, D6, 2026-11-17; unit M2).**
 `POST /api/teams` creates an `AppTeam` (*Data model additions*):
@@ -802,6 +809,15 @@ remains). The export is audited.
    `can(scope, action, resource)`, called by every Route Handler and Server
    Component after the session check and before returning data. Hiding in
    the UI is never the control (Rule 10).
+   **Effective global roles** are the token claims ∪ the stored
+   `ROLEGRANT` items, for every caller, read per request and never cached,
+   so a revoked grant takes effect on the next request. *Fix, 2026-11-18
+   (unit M3, coordinator ruling; found by the M3 `mayLink` test):*
+   `loadAuthorization` skipped the grant read when the claim was already a
+   global reader, so an auditor claim lost a stored `internal-org-admin`
+   grant; it now always reads the grants. Nothing else changes: the legacy
+   `Admin` alias stays gated outside `APP_ENV=prod`, and group mappings
+   never grant global roles.
 2. **Status codes.** Out-of-scope and nonexistent details return `404` with
    an **identical body**. An unauthorised write returns `403` before input
    parsing. Lists contain only in-scope rows.
@@ -1012,7 +1028,12 @@ password).
   reset, TOTP reset, disable, delete, own password change, bind), the
   password sign-in switch, accounts, the approval, sign-ins and sign-outs, denied write attempts, and the
   LiteLLM actions (LiteLLM spec — *Audit*), including the gateway
-  configuration (`litellm.gateway.update`, LiteLLM unit L6, 2026-11-17).
+  configuration (`litellm.gateway.update`, LiteLLM unit L6, 2026-11-17),
+  and the LiteLLM user links and user creation
+  (`identity.litellm-link.set`, `identity.litellm-link.remove`,
+  `litellm.user.create`, with the snapshot keys `mode` and `reason`;
+  unit M3, 2026-11-18). No snapshot holds a secret or a key value
+  (`createUser` sends `auto_create_key: false`).
 - **Atomicity:** a successful write's audit item is written **in the same
   `TransactWriteItems`** as the change, so neither exists without the
   other; a `failed` record is a separate `PutItem` after the downstream
@@ -1308,7 +1329,7 @@ organisation administrators and auditors. Usage rollups are kept for
 | T42 | Spoofing / disclosure: a password setup link leaves the prefix or trusts a forged host (added 2026-11-17, unit BP) | `setupLink()` builds `https://<request Host><prefix>/account/setup#<token>`; the token stays in the fragment (T24) | BP T4 (prefix present, request `Host` still used) |
 | T43 | Bypass: an unauthenticated API call under the prefix is redirected to an unprefixed page instead of the JSON `401` (added 2026-11-17, unit BP) | `authorized` strips the prefix itself and returns an explicit prefixed sign-in redirect for pages; API paths keep the `401` JSON shape (BP-D10) | BP T6 (API route `401` JSON; page redirect to `<prefix>/sign-in`; with and without `AUTH_URL`) |
 | T-MI1 | Disclosure: a wrong LiteLLM user link shows one person another person's LiteLLM spend and key metadata (management improvements D16, 2026-11-17) — more likely now that org-admin may link | Verified canonical email for a match; approval click in a dialog naming both sides; a required reason for a manual link; one-to-one `LiteLLMUserClaim`; no self-link; privileged targets refused; admin and org-admin only; audited with the reason | M3: org-admin and admin may link, auditor and lead `403`; own `oid` `403` with one `denied`; no automatic link; match with another email `409`; manual without reason `400`; duplicate `409`; a `proxy_admin`, `proxy_admin_viewer` or service-user target `409 PRIVILEGED_TARGET` with no link written; the audit record carries the mode, both ids and the reason (manual) for set and remove; usage aliases stay admin-only |
-| T-MI2 | Elevation: the dev lead sign-in (D14) exists outside dev, or a typed value supplies a scope or role | The option is part of the dev login: env-rejected in `prod` and with Entra configured (T7); the scope comes only from the stored identity's admin-scope item, per request | M3: the option signs in with the stored scope and none from typed text; refused in `prod` and with Entra configured |
+| T-MI2 | Elevation: the team lead sign-in (D14; was "dev lead sign-in", renamed at the user's direction, 2026-11-18) exists outside dev, or a typed value supplies a scope or role | The option is part of the dev login: env-rejected in `prod` and with Entra configured (T7); the scope comes only from the stored identity's admin-scope item, per request | M3: the option signs in with the stored scope and none from typed text; refused in `prod` and with Entra configured |
 | T-MI3 | Tampering: a created app team takes a registry team's id or name, inheriting its members, scopes or spend (D5) | Server-generated `appteam-<uuid>` id; the registry refuses the reserved prefix; name claim and registry name check (`409`), both ways: the account routes refuse a created team's name (`409`) | M2: id never equals a registry team; duplicate name `409` (against created and registry teams); body id ignored; `POST /api/accounts` and `PATCH /api/accounts/[id]` with a created team's name `409`, no write |
 | T-MI4 | Disclosure: Team usage shows a lead another team's spend (D7) | `teamUsage` and the team list come from `resolveScope` per request; a team outside the scope is the missing-page `404`; only a global reader gets every team (MI-D7, coordinator decision) | M2: leak test (a lead sees only teams in scope; another team's id `404`); a global reader without a scope sees every team; a user with no scope `404` |
 

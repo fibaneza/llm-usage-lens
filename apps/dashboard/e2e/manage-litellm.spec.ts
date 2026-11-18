@@ -90,13 +90,24 @@ async function mockApi(page: Page) {
         page: 1,
         pageSize: 25,
         enabledOperations: [],
+        hasMore: false,
         users: [
           {
-            userId: "u-ada",
-            email: "ada@example.test",
-            spend: 77.1,
-            maxBudget: 150,
-            teams: [{ teamId: "t1", teamName: "Payments" }],
+            key: "oid-ada",
+            linkState: "linked",
+            appUser: {
+              oid: "oid-ada",
+              displayName: "Ada Lovelace",
+              email: "ada@example.test",
+              version: 1,
+            },
+            litellmUser: {
+              userId: "u-ada",
+              email: "ada@example.test",
+              spend: 77.1,
+              maxBudget: 150,
+              teams: [{ teamId: "t1", teamName: "Payments" }],
+            },
           },
         ],
       },
@@ -167,8 +178,12 @@ test.describe("Management -> LiteLLM area (M1)", () => {
 
       await tabRow(page).getByRole("tab", { name: "LiteLLM users" }).click();
       await expect(page).toHaveURL(`${AREA}/users`);
+      // D16a: the tab is the users list with link states, search kept.
       await expect(
         page.getByRole("searchbox", { name: /search users/i }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("row", { name: /Ada Lovelace/ }),
       ).toBeVisible();
 
       await page.goBack();

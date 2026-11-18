@@ -253,6 +253,58 @@ describe("resolveDevIdentity", () => {
   });
 });
 
+// Access Control - "Dev sign-in as a lead" (D14, renamed team lead 2026-11-18):
+// the seeded team lead is a stored identity matched by its exact oid (it
+// contains "@" but is not a valid email); the scope comes from the store per
+// request, never from the resolver; a missing seeded identity is the one
+// generic failure. Threat T-MI2.
+describe("resolveDevIdentity team lead sign-in", () => {
+  const TEAM_LEAD_OID = "local:team-lead@localhost";
+  const TEAM_LEAD = {
+    PK: `IDENT#${TEAM_LEAD_OID}`,
+    SK: "META",
+    gsi1pk: "IDENTS",
+    gsi1sk: `IDENT#${TEAM_LEAD_OID}`,
+    oid: TEAM_LEAD_OID,
+    tid: "local",
+    email: "team-lead@localhost",
+    displayName: "Local Team Lead",
+    lastSignInAt: "2026-11-10T10:00:00.000Z",
+    lastSeenRoles: ["internal-viewer"],
+    authMethod: "local",
+    version: 1,
+  };
+
+  it("signs in as the stored seeded identity, with its stored role claim only (D14)", async () => {
+    await putRaw(TEAM_LEAD);
+    expect(identityOf(await resolveDevIdentity(TEAM_LEAD_OID))).toEqual({
+      oid: TEAM_LEAD_OID,
+      email: "team-lead@localhost",
+      name: "Local Team Lead",
+      roles: ["internal-viewer"],
+    });
+  });
+
+  it("carries no scope or lead field: the scope is read from the store per request (D14, T-MI2)", async () => {
+    await putRaw(TEAM_LEAD);
+    const identity = identityOf(await resolveDevIdentity(TEAM_LEAD_OID));
+    expect(Object.keys(identity).sort()).toEqual(
+      ["email", "name", "oid", "roles"].sort(),
+    );
+  });
+
+  it("is the one generic failure when the seeded identity is not stored (D14)", async () => {
+    expect(await resolveDevIdentity(TEAM_LEAD_OID)).toEqual({ ok: false });
+  });
+
+  it("an unseeded oid shaped like it does not become the team lead (T-MI2)", async () => {
+    await putRaw(TEAM_LEAD);
+    expect(await resolveDevIdentity("local:other@localhost")).toEqual({
+      ok: false,
+    });
+  });
+});
+
 // Dev login: "a given identity that exists in DynamoDB signs in as that
 // identity". The signIn callback's upsertIdentity must not turn the stored
 // record into a dev record (authMethod, tid, lastSeenRoles). Lowest layer that
@@ -265,7 +317,10 @@ describe("dev sign-in as a stored identity leaves the stored record's provenance
     }[];
     callbacks: { signIn: (arg: Rec) => Promise<boolean> };
   };
-  const captured = { config: undefined as unknown as Config };
+  const captured = {
+    config: undefined as unknown as Config,
+    user: undefined as Rec | undefined,
+  };
 
   async function devSignIn(credentials: Rec): Promise<boolean> {
     vi.doMock("next-auth", () => ({
@@ -307,6 +362,7 @@ describe("dev sign-in as a stored identity leaves the stored record's provenance
     );
     const user = await provider?.options?.authorize(credentials);
     if (!user) throw new Error("dev-login refused the credentials");
+    captured.user = user;
     return captured.config.callbacks.signIn({
       user,
       account: { provider: "dev-login" },
@@ -357,5 +413,43 @@ describe("dev sign-in as a stored identity leaves the stored record's provenance
       tid: STORED.tid,
       lastSeenRoles: ["internal-org-admin"],
     });
+  });
+  // D14 + T-MI2: the posted role never lifts the team lead; the session token
+  // holds no scope (the scope is a stored ADMINSCOPE item read per request).
+  it("a posted role cannot elevate the team lead, and the session holds no scope (D14, T-MI2)", async () => {
+    await putRaw({
+      PK: "IDENT#local:team-lead@localhost",
+      SK: "META",
+      gsi1pk: "IDENTS",
+      gsi1sk: "IDENT#local:team-lead@localhost",
+      oid: "local:team-lead@localhost",
+      tid: "local",
+      email: "team-lead@localhost",
+      displayName: "Local Team Lead",
+      lastSignInAt: "2026-11-10T10:00:00.000Z",
+      lastSeenRoles: ["internal-viewer"],
+      authMethod: "local",
+      version: 1,
+    });
+    const ok = await devSignIn({
+      role: "internal-admin",
+      identity: "local:team-lead@localhost",
+    });
+    expect(ok).toBe(true);
+    expect(captured.user).toMatchObject({
+      id: "local:team-lead@localhost",
+      roles: ["internal-viewer"],
+    });
+    expect(
+      Object.keys(captured.user ?? {}).filter((k) =>
+        /scope|team|lead/i.test(k),
+      ),
+    ).toEqual([]);
+  });
+
+  it("is refused with the generic failure when the seeded team lead is missing (D14)", async () => {
+    await expect(
+      devSignIn({ identity: "local:team-lead@localhost" }),
+    ).rejects.toThrow("refused");
   });
 });

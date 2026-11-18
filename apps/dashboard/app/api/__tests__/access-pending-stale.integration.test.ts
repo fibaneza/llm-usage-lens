@@ -1,4 +1,8 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DeleteCommand,
+  QueryCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 import {
   afterEach,
   beforeAll,
@@ -122,6 +126,30 @@ async function setLastSignIn(oid: string, at: Date) {
 
 const FRANK = "00000000-0000-4000-8000-000000000f01";
 
+// The seed writer adds the dev team-lead identity with a team scope to every
+// fixture load that has accounts (Access Control spec - "Dev sign-in as a
+// lead", D14). Its lastSignInAt is the account's createdAt, so it would be a
+// stale row. These tests count stale rows exactly, over the rows seedAccess
+// writes, so the dev-only identity is removed.
+const DEV_LEAD_PK = "IDENT#local:team-lead@localhost";
+async function removeDevSeedLead() {
+  const rows = await testDoc().send(
+    new QueryCommand({
+      TableName: TEST_TABLE_NAME,
+      KeyConditionExpression: "PK = :pk",
+      ExpressionAttributeValues: { ":pk": DEV_LEAD_PK },
+    }),
+  );
+  for (const row of rows.Items ?? []) {
+    await testDoc().send(
+      new DeleteCommand({
+        TableName: TEST_TABLE_NAME,
+        Key: { PK: row.PK, SK: row.SK },
+      }),
+    );
+  }
+}
+
 async function seedAccess() {
   // Pending: 5 d (fresh), 75 d (stale), 26 d, 61 d (stale), exactly 30 d (not
   // stale: the limit is "more than 30 days"), 30 d + 1 ms (stale).
@@ -223,6 +251,7 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"], now: NOW });
   await clearTable();
   await seedWorld();
+  await removeDevSeedLead();
   await seedAccess();
   signInAs("admin");
 });

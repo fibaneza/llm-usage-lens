@@ -989,6 +989,32 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     refusedCallers: SELF_REFUSED,
     permittedCallers: ["password"],
   },
+
+  // ---- management improvements M3 (D15, D16): the directory and the LiteLLM
+  // user link writes (admin and org-admin; own oid 403 in each route's file).
+  read("identities/directory/route.ts"),
+  matrixWrite("PUT", "identities/[oid]/litellm-link/route.ts", {
+    family: "litellm",
+    action: "identity.litellm-link.set",
+    validParams: { oid: alice.oid },
+    validBody: {
+      litellmUserId: "lu-1",
+      mode: "manual",
+      reason: "Same person, other email",
+      version: 0,
+    },
+  }),
+  matrixWrite("DELETE", "identities/[oid]/litellm-link/route.ts", {
+    family: "litellm",
+    action: "identity.litellm-link.remove",
+    validParams: { oid: alice.oid },
+    validBody: { version: 1 },
+  }),
+  matrixWrite("POST", "litellm/users/route.ts", {
+    family: "litellm",
+    action: "litellm.user.create",
+    validBody: { oid: alice.oid },
+  }),
 ];
 
 export const registryKeys = (): string[] => ROUTE_REGISTRY.map((e) => e.key);

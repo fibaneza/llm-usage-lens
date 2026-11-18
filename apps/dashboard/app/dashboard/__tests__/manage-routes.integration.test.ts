@@ -41,7 +41,12 @@ import SettingsSyncPage from "../settings/sync/page";
 // Components, so calling them is the layer that sees the gate. The flags per
 // caller are asserted in lib/manage-access.integration.test.ts; the Usage
 // routes in usage-routes.integration.test.ts.
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+// The Users page reads enabledSignInProviders.entra to pick the Add user steps
+// (Management improvements, Users D15); the gate test needs only a value.
+vi.mock("@/auth", () => ({
+  auth: vi.fn(),
+  enabledSignInProviders: { entra: true, devLogin: false, master: false },
+}));
 vi.mock("next/cache", async () => {
   const mod = await import("@/test/fakes/next-cache-fake");
   return mod.fakeNextCache;

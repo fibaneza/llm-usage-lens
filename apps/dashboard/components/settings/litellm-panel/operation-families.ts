@@ -65,6 +65,10 @@ export const OPERATION_INFO: Record<
     family: "team-writes",
     description: "POST /team/update (models)",
   },
+  createUser: {
+    family: "member-writes",
+    description: "POST /user/new",
+  },
   addTeamMember: {
     family: "member-writes",
     description: "POST /team/member_add",

@@ -43,6 +43,7 @@ describe("LITELLM_OPERATION_NAMES", () => {
         "setTeamLimits",
         "setTeamModels",
         "addTeamMember",
+        "createUser",
         "removeTeamMember",
         "setMemberBudget",
         "setMemberLimits",

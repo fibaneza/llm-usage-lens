@@ -137,6 +137,60 @@ describe("edition gate (LT15)", () => {
   });
 });
 
+// Source: docs/specs/2026-11-10-litellm.md - Writes: `createUser` ("Edition
+// gate first: on Enterprise it returns 403 OPERATION_UNAVAILABLE with no call";
+// toggle default on), LT-MI1 ("Enterprise 403 OPERATION_UNAVAILABLE, no
+// /user/new"), "Security architecture" item 2 (toggle -> edition -> validation).
+describe("createUser gates (LT-MI1)", () => {
+  const input = { email: "jane@company.com" };
+
+  it("on Enterprise it is 403 OPERATION_UNAVAILABLE with no LiteLLM call at all, not even the lookup", async () => {
+    install({ edition: "enterprise" });
+    const ops = await load({ APP_ENV: "prod" });
+    await expect(ops.createUser!(input, CTX)).rejects.toMatchObject(
+      UNAVAILABLE,
+    );
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("on Enterprise the edition refusal comes before input validation", async () => {
+    const ops = await load({ APP_ENV: "prod" });
+    await expect(ops.createUser!({}, CTX)).rejects.toMatchObject(UNAVAILABLE);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("the toggle defaults on: with nothing stored, OSS creates the user", async () => {
+    install({ userExists: false });
+    const ops = await load();
+    await ops.createUser!(input, CTX);
+    expect(fake.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "GET /user/list",
+      "POST /user/new",
+    ]);
+  });
+
+  it("a saved off toggle is 403 OPERATION_DISABLED with no call, even with invalid input", async () => {
+    await storeToggles({ createUser: false });
+    const ops = await load();
+    await expect(ops.createUser!({}, CTX)).rejects.toMatchObject(DISABLED);
+    await expect(ops.createUser!(input, CTX)).rejects.toMatchObject(DISABLED);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("the config file can switch it off (file > saved > default)", async () => {
+    const ops = await load({}, { createUser: { enabled: false } });
+    await expect(ops.createUser!(input, CTX)).rejects.toMatchObject(DISABLED);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("a disabled searchUsers also blocks the no-search list (LD19)", async () => {
+    await storeToggles({ searchUsers: false });
+    const ops = await load();
+    await expect(ops.searchUsers!({ page: 1 })).rejects.toMatchObject(DISABLED);
+    expect(fake.calls).toHaveLength(0);
+  });
+});
+
 describe("LD10 defaults: destructive operations are off, everything else on", () => {
   it("resetMemberSpend is disabled by default: 403 OPERATION_DISABLED, no call", async () => {
     const ops = await load();

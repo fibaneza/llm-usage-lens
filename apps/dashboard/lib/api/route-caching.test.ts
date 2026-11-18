@@ -7,9 +7,15 @@ vi.mock("next/cache", async () => {
 });
 const auth = vi.hoisted(() => vi.fn());
 vi.mock("@/auth", () => ({ auth: () => auth() }));
-vi.mock("@/lib/data/access/authorization", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/data/access/authorization")>()),
-  loadGrantedRoles: vi.fn(async () => []),
+// Authorization data is read per request, stored role grants included, and never
+// cached (Access Control spec - Enforcement item 1; Rule 60.10). This file
+// tests the data-read cache, so the per-request authorization reads see an
+// empty table; they are not counted as data reads.
+vi.mock("@/lib/dynamodb", () => ({
+  getTableName: () => "test-table",
+  getDocumentClient: () => ({
+    send: vi.fn(async () => ({ Items: [] })),
+  }),
 }));
 const data = vi.hoisted(() => ({
   getRollupsByDate: vi.fn(),

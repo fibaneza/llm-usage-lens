@@ -6,6 +6,7 @@ import {
   findIdentityByEmail,
   findIdentityByOid,
 } from "@/lib/data/access/identities";
+import { TEAM_LEAD_OID } from "@/lib/auth/team-lead-identity";
 import { MASTER_OID_PREFIX } from "@/lib/auth/master-oid";
 import {
   INTERNAL_VIEWER_ROLE,
@@ -70,6 +71,12 @@ export async function resolveDevIdentity(
   if (!token.success) return { ok: false };
   if (token.data.toLowerCase().startsWith(MASTER_OID_PREFIX)) {
     return { ok: false };
+  }
+
+  // D14: the seeded lead's oid contains "@" but is a stored oid, not an email.
+  if (token.data === TEAM_LEAD_OID) {
+    const lead = await findIdentityByOid(TEAM_LEAD_OID);
+    return lead ? { ok: true, identity: fromStored(lead) } : { ok: false };
   }
 
   if (token.data.includes("@")) {

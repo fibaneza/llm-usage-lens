@@ -37,9 +37,9 @@ const DEBOUNCE_MS = 500;
 // Per-user cost is absent until per-user reporting is approved (LD23).
 const HIDDEN = "Hidden until per-user reporting is approved";
 
-const budget = (value: number | null | undefined) =>
+export const budget = (value: number | null | undefined) =>
   value === undefined ? HIDDEN : value === null ? "No limit" : formatUsd(value);
-const spend = (value: number | undefined) =>
+export const spend = (value: number | undefined) =>
   value === undefined ? HIDDEN : formatUsd(value);
 
 function QueryFailure({ error }: { error: unknown }) {
@@ -50,7 +50,7 @@ function QueryFailure({ error }: { error: unknown }) {
   );
 }
 
-function UserDetail({ userId }: { userId: string }) {
+export function UserDetail({ userId }: { userId: string }) {
   const query = useLiteLLMQueryState(
     ["user", userId],
     `/api/litellm/users/${encodeURIComponent(userId)}`,

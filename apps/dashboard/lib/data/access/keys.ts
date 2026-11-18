@@ -49,3 +49,7 @@ export const ssoRefPk = (tid: string, oid: string): string =>
 // Setup-link lookup by token hash (the token is the only input at setup).
 export const setupLinkPk = (tokenHash: string): string =>
   `SETUPLINK#${tokenHash}`;
+// One-to-one claim of a LiteLLM user by an identity (management improvements
+// D16; Access Control - Data model additions, LiteLLMUserClaim).
+export const litellmUserPk = (litellmUserId: string): string =>
+  `LITELLMUSER#${litellmUserId}`;

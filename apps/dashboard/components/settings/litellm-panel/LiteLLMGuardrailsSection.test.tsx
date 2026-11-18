@@ -89,6 +89,7 @@ const WRITES = [
   "setTeamBudget",
   "setTeamLimits",
   "setTeamModels",
+  "createUser",
   "addTeamMember",
   "removeTeamMember",
   "setMemberBudget",
@@ -341,6 +342,8 @@ const FAMILIES: Array<[string, string[]]> = [
   [
     "Member writes",
     [
+      // createUser (M3, LiteLLM spec createUser) is a user write built like addTeamMember's user body; "Other" is for unrecognised operations only.
+      "createUser",
       "addTeamMember",
       "removeTeamMember",
       "setMemberBudget",

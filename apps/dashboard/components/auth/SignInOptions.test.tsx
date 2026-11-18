@@ -74,13 +74,16 @@ describe("SignInOptions", () => {
 });
 
 describe("SignInOptions local login role choice", () => {
-  it("offers the four global roles, defaulting to internal-admin", () => {
+  // Amended M3 (Design System - Management improvements, D14): the select
+  // still offers the four global roles; "Team lead" is a fifth, non-role option.
+  it("offers the four global roles, defaulting to internal-admin, plus the Team lead option", () => {
     render(<SignInOptions entra={false} devLogin {...actions} />);
     const select = screen.getByLabelText(/role/i) as HTMLSelectElement;
     expect(select.value).toBe("internal-admin");
     expect(
       Array.from(select.options)
         .map((o) => o.value)
+        .filter((v) => v.startsWith("internal-"))
         .sort(),
     ).toEqual(
       [
@@ -90,6 +93,9 @@ describe("SignInOptions local login role choice", () => {
         "internal-viewer",
       ].sort(),
     );
+    expect(
+      screen.getByRole("option", { name: "Team lead" }),
+    ).toBeInTheDocument();
     expect(select.name).toBe("role");
   });
 
@@ -203,5 +209,58 @@ describe("SignInOptions dev identity option", () => {
       );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/\S/);
+  });
+});
+
+// Design System - Management improvements, "Dev sign-in as a lead" (D14, agent
+// decision 2026-11-18): the Team lead choice posts the fixed seeded oid as the
+// identity and no role; the typed identity field is disabled while it is
+// chosen. T-MI2 (Access Control): no typed value supplies a role or a scope.
+describe("SignInOptions team lead sign-in", () => {
+  const TEAM_LEAD_OID = "local:team-lead@localhost";
+
+  async function chooseTeamLead() {
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText(/role/i), "team-lead");
+    return user;
+  }
+
+  it("names the submit button for the team lead and disables the typed identity field (D14)", async () => {
+    render(<SignInOptions entra={false} devLogin {...actions} />);
+    await chooseTeamLead();
+
+    expect(
+      screen.getByRole("button", { name: "Sign in as team lead" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Sign in as (email or user id)"),
+    ).toBeDisabled();
+  });
+
+  it("posts the fixed seeded oid as identity and no role (D14, T-MI2)", async () => {
+    const devLoginAction = vi.fn<DevLoginAction>(async () => null);
+    render(
+      <SignInOptions
+        entra={false}
+        devLogin
+        entraAction={actions.entraAction}
+        devLoginAction={devLoginAction}
+      />,
+    );
+    const user = await chooseTeamLead();
+    await user.click(
+      screen.getByRole("button", { name: "Sign in as team lead" }),
+    );
+
+    await waitFor(() => expect(devLoginAction).toHaveBeenCalledTimes(1));
+    const formData = devLoginAction.mock.calls[0]?.[1];
+    expect(formData?.get("identity")).toBe(TEAM_LEAD_OID);
+    expect(formData?.has("role")).toBe(false);
+  });
+
+  it("is absent where the dev login is absent: Entra only (T-MI2, T7)", () => {
+    render(<SignInOptions entra devLogin={false} {...actions} />);
+    expect(screen.queryByRole("option", { name: "Team lead" })).toBeNull();
+    expect(screen.queryByText(/team lead/i)).toBeNull();
   });
 });

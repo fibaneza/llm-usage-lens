@@ -254,10 +254,17 @@ describe("audit schemas", () => {
     // L4 slice 1 adds the eight member-write actions (LiteLLM spec - Writes).
     // L4 slices 2 and 3 add six key actions and four team actions.
     // L6 adds litellm.gateway.update (LiteLLM spec - Combined usage, Gateway configuration).
-    // M4 adds the three budgetreset.request.* actions (Access Control - Budget reset requests).
-    expect(AUDIT_ACTIONS).toHaveLength(69);
-    for (const op of ["create", "approve", "deny"]) {
-      expect(AUDIT_ACTIONS).toContain(`budgetreset.request.${op}`);
+    // M4 adds the three budgetreset.request.* actions; M3 adds identity.litellm-link.set / .remove and litellm.user.create (Access Control - Budget reset requests, LiteLLM user links, Audit log).
+    expect(AUDIT_ACTIONS).toHaveLength(72);
+    for (const action of [
+      "budgetreset.request.create",
+      "budgetreset.request.approve",
+      "budgetreset.request.deny",
+      "identity.litellm-link.set",
+      "identity.litellm-link.remove",
+      "litellm.user.create",
+    ]) {
+      expect(AUDIT_ACTIONS).toContain(action);
     }
     for (const op of [
       "add",
@@ -454,6 +461,17 @@ describe("sanitizeAuditSnapshot (T17)", () => {
       accountIds: ["123456789012"],
     };
     expect(sanitizeAuditSnapshot(lists)).toEqual(lists);
+  });
+  // Access Control - LiteLLM user links (agent decision, 2026-11-18, unit M3): the record carries mode, both ids and the reason (T17, T-MI1).
+  it("keeps the LiteLLM link mode, both ids and the reason", () => {
+    const link = {
+      oid: "o1",
+      litellmUserId: "lu-1",
+      mode: "manual",
+      reason: "Same person, other email",
+      version: 2,
+    };
+    expect(sanitizeAuditSnapshot({ ...link, key: "sk-secret" })).toEqual(link);
   });
   it("drops secrets and claim-like keys", () => {
     const out = sanitizeAuditSnapshot({

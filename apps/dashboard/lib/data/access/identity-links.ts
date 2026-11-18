@@ -5,10 +5,11 @@ import type { IdentityLink } from "@llm-usage-lens/shared";
 
 import { getTableName } from "@/lib/dynamodb";
 
-import { LINK_SK, OWNER_SK, identPk, usageKeyPk } from "./keys";
+import { LINK_SK, OWNER_SK, identPk, litellmUserPk, usageKeyPk } from "./keys";
 import type { AccessResult, AuditContext } from "./result";
+import type { AuditSpec } from "./store";
 import type { TransactItem } from "./audit";
-import { commitAudited, getItem } from "./store";
+import { commitAudited, getItem, recordAuditedRead } from "./store";
 
 const CLAIM_READ_CONCURRENCY = 10;
 
@@ -50,10 +51,14 @@ export async function getUsageKeysClaimedWith(key: string): Promise<string[]> {
 }
 
 const snapshot = (
-  l: Pick<IdentityLink, "usageIdentities" | "aliases" | "version">,
+  l: Pick<
+    IdentityLink,
+    "usageIdentities" | "aliases" | "version" | "litellmUserId"
+  >,
 ) => ({
   usageIdentities: l.usageIdentities,
   aliases: l.aliases,
+  ...(l.litellmUserId ? { litellmUserId: l.litellmUserId } : {}),
   version: l.version,
 });
 
@@ -111,21 +116,10 @@ export async function putIdentityLink(
       },
     }));
 
-  const linkPut: TransactItem = {
-    Put: {
-      TableName: getTableName(),
-      Item: { PK: identPk(input.oid), SK: LINK_SK, ...value },
-      ...(existing
-        ? {
-            ConditionExpression: "version = :v",
-            ExpressionAttributeValues: { ":v": existing.version },
-          }
-        : { ConditionExpression: "attribute_not_exists(PK)" }),
-    },
-  };
-
-  const result = await commitAudited({
-    items: [linkPut, ...claims, ...releases],
+  const result = await commitLink({
+    existing,
+    value,
+    extra: [...claims, ...releases],
     audit: {
       action: "identity.link.update",
       target: { type: "identity", id: input.oid },
@@ -135,4 +129,210 @@ export async function putIdentityLink(
     ctx,
   });
   return result.ok ? { ok: true, value } : result;
+}
+
+// The one place the `litellmUserId` of a link is written, with its
+// `LiteLLMUserClaim` and the audit record in one transaction (management
+// improvements D16, Access Control - LiteLLM user links; T-MI1). Both
+// `PUT /api/identities/[oid]/links` and the litellm-link routes call it. A
+// link written before M3 has no claim: any write that keeps its LiteLLM user
+// adds the claim (residual-risk note, D16).
+async function commitLink(args: {
+  existing: IdentityLink | null;
+  value: IdentityLink;
+  extra: TransactItem[];
+  audit: AuditSpec;
+  ctx: AuditContext;
+  // Mode and reason of the LiteLLM link, kept on the item so a remove can
+  // audit them.
+  linkMeta?: { mode: string; reason?: string };
+}) {
+  const { existing, value, extra, audit, ctx, linkMeta } = args;
+  const oid = value.oid;
+  const claim: TransactItem[] = [];
+  if (value.litellmUserId) {
+    claim.push({
+      Put: {
+        TableName: getTableName(),
+        Item: {
+          PK: litellmUserPk(value.litellmUserId),
+          SK: OWNER_SK,
+          litellmUserId: value.litellmUserId,
+          oid,
+        },
+        ConditionExpression: "attribute_not_exists(PK) OR #oid = :oid",
+        ExpressionAttributeNames: { "#oid": "oid" },
+        ExpressionAttributeValues: { ":oid": oid },
+      },
+    });
+  }
+  if (
+    existing?.litellmUserId &&
+    existing.litellmUserId !== value.litellmUserId
+  ) {
+    claim.push({
+      Delete: {
+        TableName: getTableName(),
+        Key: { PK: litellmUserPk(existing.litellmUserId), SK: OWNER_SK },
+        ConditionExpression: "attribute_not_exists(PK) OR #oid = :oid",
+        ExpressionAttributeNames: { "#oid": "oid" },
+        ExpressionAttributeValues: { ":oid": oid },
+      },
+    });
+  }
+  const kept = await rawLinkMeta(oid);
+  const meta =
+    linkMeta ??
+    (value.litellmUserId && value.litellmUserId === existing?.litellmUserId
+      ? kept
+      : undefined);
+  const linkPut: TransactItem = {
+    Put: {
+      TableName: getTableName(),
+      Item: {
+        PK: identPk(oid),
+        SK: LINK_SK,
+        ...value,
+        ...(meta ? { litellmLinkMode: meta.mode } : {}),
+        ...(meta?.reason ? { litellmLinkReason: meta.reason } : {}),
+      },
+      ...(existing
+        ? {
+            ConditionExpression: "version = :v",
+            ExpressionAttributeValues: { ":v": existing.version },
+          }
+        : { ConditionExpression: "attribute_not_exists(PK)" }),
+    },
+  };
+  return commitAudited({
+    items: [linkPut, ...extra, ...claim],
+    audit,
+    ctx,
+  });
+}
+
+async function rawLinkMeta(
+  oid: string,
+): Promise<{ mode: string; reason?: string } | undefined> {
+  const item = await getItem(identPk(oid), LINK_SK);
+  if (!item || typeof item.litellmLinkMode !== "string") return undefined;
+  return {
+    mode: item.litellmLinkMode,
+    ...(typeof item.litellmLinkReason === "string"
+      ? { reason: item.litellmLinkReason }
+      : {}),
+  };
+}
+
+export type LiteLLMLinkWrite =
+  | {
+      kind: "set";
+      litellmUserId: string;
+      mode: "match" | "manual";
+      reason?: string;
+    }
+  | { kind: "remove" };
+
+// `version` is the stored link version (null: no link item yet). A LiteLLM
+// user already claimed by another identity is CONFLICT; so is a stale version.
+export async function writeLiteLLMUserLink(
+  input: { oid: string; version: number | null; write: LiteLLMLinkWrite },
+  ctx: AuditContext,
+): Promise<AccessResult<IdentityLink>> {
+  const { oid, write } = input;
+  const existing = await getIdentityLink(oid);
+  if (input.version === null) {
+    if (existing) return { ok: false, code: "CONFLICT" };
+  } else {
+    if (!existing) return { ok: false, code: "NOT_FOUND" };
+    if (existing.version !== input.version) {
+      return { ok: false, code: "CONFLICT" };
+    }
+  }
+  if (write.kind === "remove" && !existing?.litellmUserId) {
+    return { ok: false, code: "NOT_FOUND" };
+  }
+
+  const value: IdentityLink = {
+    oid,
+    usageIdentities: existing?.usageIdentities ?? [],
+    aliases: existing?.aliases ?? [],
+    ...(write.kind === "set" ? { litellmUserId: write.litellmUserId } : {}),
+    version: (existing?.version ?? 0) + 1,
+    updatedAt: ctx.now.toISOString(),
+  };
+  const kept = await rawLinkMeta(oid);
+  const before = existing?.litellmUserId
+    ? {
+        oid,
+        litellmUserId: existing.litellmUserId,
+        version: existing.version,
+        ...(write.kind === "remove" && kept
+          ? {
+              mode: kept.mode,
+              ...(kept.reason ? { reason: kept.reason } : {}),
+            }
+          : {}),
+      }
+    : undefined;
+  const result = await commitLink({
+    existing,
+    value,
+    extra: [],
+    audit:
+      write.kind === "set"
+        ? {
+            action: "identity.litellm-link.set",
+            target: { type: "identity", id: oid },
+            ...(before ? { before } : {}),
+            after: {
+              oid,
+              litellmUserId: write.litellmUserId,
+              mode: write.mode,
+              ...(write.reason ? { reason: write.reason } : {}),
+              version: value.version,
+            },
+          }
+        : {
+            action: "identity.litellm-link.remove",
+            target: { type: "identity", id: oid },
+            ...(before ? { before } : {}),
+            after: { oid, version: value.version },
+          },
+    ctx,
+    ...(write.kind === "set"
+      ? {
+          linkMeta: {
+            mode: write.mode,
+            ...(write.reason ? { reason: write.reason } : {}),
+          },
+        }
+      : {}),
+  });
+  return result.ok ? { ok: true, value } : result;
+}
+
+// The identity that claims a LiteLLM user (LiteLLMUserClaim), null when none.
+// Read per request, never cached (Rule 60.10).
+export async function getLiteLLMUserOwner(
+  litellmUserId: string,
+): Promise<string | null> {
+  const item = await getItem(litellmUserPk(litellmUserId), OWNER_SK);
+  return item && typeof item.oid === "string" ? item.oid : null;
+}
+
+// Source: docs/specs/2026-11-10-litellm.md - audit of LiteLLM user creation;
+// the record is written after the gateway call created the user.
+export async function recordLiteLLMUserCreated(
+  litellmUserId: string,
+  ctx: AuditContext,
+): Promise<void> {
+  await recordAuditedRead(
+    {
+      action: "litellm.user.create",
+      target: { type: "litellm-user", id: litellmUserId },
+      after: { litellmUserId },
+    },
+    ctx,
+  );
 }

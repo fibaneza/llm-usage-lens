@@ -12,6 +12,17 @@ import {
   runBounded,
 } from "@llm-usage-lens/shared";
 
+import {
+  TEAM_LEAD_EMAIL,
+  TEAM_LEAD_NAME,
+  TEAM_LEAD_OID,
+} from "../../apps/dashboard/lib/auth/team-lead-identity";
+import {
+  IDENTS_GSI1PK,
+  adminScopeSk,
+  adminsGsi1pk,
+  identPk,
+} from "../../apps/dashboard/lib/data/access/keys";
 import type { SeedData } from "./seed-data";
 
 // Source: docs/specs/2026-05-15-data-model.md — "Entity Map" (key layout).
@@ -49,6 +60,44 @@ async function writeBatch(
   }
 }
 
+// Dev sign-in as a lead (Access Control spec - "Dev sign-in as a lead", D14):
+// a stored identity with a real team admin scope on the first seeded team,
+// through the same items the app writes. Skipped when no team is seeded.
+function teamLeadItems(data: SeedData): Item[] {
+  const team = data.accounts[0]?.teamId;
+  if (!team) return [];
+  const at = data.accounts[0]?.createdAt ?? "2026-01-05T08:00:00.000Z";
+  return [
+    {
+      PK: identPk(TEAM_LEAD_OID),
+      SK: META_SK,
+      gsi1pk: IDENTS_GSI1PK,
+      gsi1sk: identPk(TEAM_LEAD_OID),
+      oid: TEAM_LEAD_OID,
+      tid: "local",
+      email: TEAM_LEAD_EMAIL,
+      displayName: TEAM_LEAD_NAME,
+      lastSignInAt: at,
+      lastSeenRoles: ["internal-viewer"],
+      authMethod: "local",
+      version: 1,
+    },
+    {
+      PK: identPk(TEAM_LEAD_OID),
+      SK: adminScopeSk("team", team),
+      gsi1pk: adminsGsi1pk("team", team),
+      gsi1sk: identPk(TEAM_LEAD_OID),
+      oid: TEAM_LEAD_OID,
+      scopeType: "team",
+      scopeId: team,
+      source: "ui",
+      version: 1,
+      createdAt: at,
+      createdBy: "seed",
+    },
+  ];
+}
+
 export async function writeSeed(
   doc: DynamoDBDocumentClient,
   tableName: string,
@@ -74,6 +123,7 @@ export async function writeSeed(
       }),
     ),
   ];
+  items.push(...teamLeadItems(data));
   if (data.syncStatus) {
     items.push({ ...data.syncStatus, PK: SYSTEM_PK, SK: SYNC_SK });
   }

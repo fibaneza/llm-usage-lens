@@ -93,12 +93,13 @@ export async function loadAuthorization(
   // Read for every caller, global readers included: it grants no scope, it only
   // feeds own-usage matching (Access Control spec — Canonical usage identity).
   const identityLinkRead = getIdentityLink(oid);
-  const claimRoles = globalRolesOf(session, appEnv, []);
-  // A session that already carries a global reader role needs no grant read.
-  const roleGrants: RoleGrant[] =
-    claimRoles !== null && isGlobalReader(claimRoles)
-      ? []
-      : await queryByIdent(oid, "ROLEGRANT#", RoleGrantSchema);
+  // Stored grants are unioned with the claim on every request (Access Control
+  // spec - Enforcement item 1, "Effective global roles"); never skipped.
+  const roleGrants: RoleGrant[] = await queryByIdent(
+    oid,
+    "ROLEGRANT#",
+    RoleGrantSchema,
+  );
   const roles = globalRolesOf(session, appEnv, roleGrants);
   const approval = await approvalRead;
   const perUserApproved = appEnv !== "prod" || approval !== null;
@@ -154,9 +155,6 @@ export async function loadWriteActor(request: {
 
   const claimRoles = globalRolesOf(session, appEnv, []);
   if (claimRoles === null) return null;
-  if (isMatrixWriter(claimRoles)) {
-    return { oid, roles: claimRoles, teamScopes: none, departmentScopes: none };
-  }
   const grants = await queryByIdent(oid, "ROLEGRANT#", RoleGrantSchema);
   const roles = globalRolesOf(session, appEnv, grants) ?? claimRoles;
   if (isMatrixWriter(roles)) {

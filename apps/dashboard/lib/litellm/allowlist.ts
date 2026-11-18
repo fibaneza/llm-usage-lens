@@ -73,6 +73,7 @@ export const LITELLM_OPERATIONS = {
     post("/user/new"),
     post("/team/member_add"),
   ),
+  createUser: write(true, get("/user/list"), post("/user/new")),
   removeTeamMember: write(true, post("/team/member_delete")),
   setMemberBudget: write(true, post("/team/member_update")),
   setMemberLimits: write(true, post("/team/member_update")),

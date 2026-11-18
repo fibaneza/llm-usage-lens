@@ -412,7 +412,9 @@ export async function findUserByEmail(input: { email: string }) {
 }
 
 const SearchUsersInput = z.strictObject({
-  search: z.string().trim().min(2).max(100),
+  // Optional from management improvements D16a: without it the call lists
+  // LiteLLM's users page by page (still at most 25 a page).
+  search: z.string().trim().min(2).max(100).optional(),
   page: PageNumber.optional(),
   pageSize: z.number().int().min(1).max(25).optional(),
   litellmTeamId: LiteLLMId.optional(),
@@ -727,6 +729,40 @@ export class LiteLLMUserNotSignedIn extends Error {
     super("The person has not signed in to LiteLLM yet");
     this.name = "LiteLLMUserNotSignedIn";
   }
+}
+
+const CreateUserInput = z.strictObject({ email: Email });
+
+// Management improvements D16 (LiteLLM spec - `createUser`): a standalone user
+// creation for "Create and link". The edition gate runs first and on
+// Enterprise nothing is called; the body is the user body `addTeamMember`
+// builds, from the server-resolved email only (LT-MI1, LT17). An existing user
+// with that email is returned, never created twice.
+export async function createUser(
+  input: z.input<typeof CreateUserInput>,
+  ctx: OperationContext,
+) {
+  await gate("createUser");
+  if (liteLLMEdition(env.APP_ENV) !== "oss") {
+    throw new LiteLLMOperationRefused("OPERATION_UNAVAILABLE");
+  }
+  const i = CreateUserInput.parse(input);
+  const { actor } = Context.parse(ctx);
+  const found = (await findUser(i.email)).users.find(
+    (u) => u.user_email?.toLowerCase() === i.email,
+  );
+  if (found) return { litellmUserId: found.user_id, created: false };
+  // The auto-created key (if any) is never read or returned (LT17).
+  const created = await write("/user/new", actor, UserNewResponse, {
+    body: {
+      user_id: i.email,
+      user_email: i.email,
+      user_role: "internal_user",
+      auto_create_key: false,
+      send_invite_email: false,
+    },
+  });
+  return { litellmUserId: created.user_id, created: true };
 }
 
 const AddTeamMemberInput = z.strictObject({

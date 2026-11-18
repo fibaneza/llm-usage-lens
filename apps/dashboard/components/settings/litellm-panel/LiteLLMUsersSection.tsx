@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { UserSearch } from "@/components/litellm/UserSearch";
+import { LiteLLMUsersList } from "@/components/manage/users/LiteLLMUsersList";
 import {
   TEAM_LINKS_KEY,
   TeamLinksSchema,
@@ -10,7 +10,8 @@ import {
 import { fetchApi } from "@/lib/query/fetch-api";
 
 // Design System "Settings Page" - LiteLLM sub-tabs, agent decision (3): the
-// note shows only once the links have loaded and none exist (gap G7).
+// note shows only once the links have loaded and none exist (gap G7). From
+// unit M3 (D16a) the tab is the users list with link states.
 export function LiteLLMUsersSection() {
   const links = useQuery({
     queryKey: TEAM_LINKS_KEY,
@@ -25,7 +26,7 @@ export function LiteLLMUsersSection() {
           links.
         </p>
       ) : null}
-      <UserSearch />
+      <LiteLLMUsersList />
     </div>
   );
 }

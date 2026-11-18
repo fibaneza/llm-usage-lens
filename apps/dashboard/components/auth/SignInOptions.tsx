@@ -2,7 +2,12 @@
 
 import { useActionState, useState } from "react";
 
+import { TEAM_LEAD_OID } from "@/lib/auth/team-lead-identity";
 import { GLOBAL_ROLES, INTERNAL_ADMIN_ROLE } from "@/lib/auth/roles";
+
+// Not a role: the "Team lead" choice posts the seeded lead identity instead
+// (Access Control - Dev sign-in as a lead, D14); the store supplies the scope.
+const TEAM_LEAD_OPTION = "team-lead";
 
 type DevLoginState = { ok: false } | null;
 
@@ -33,6 +38,8 @@ export function SignInOptions({
 }: SignInOptionsProps) {
   const [devState, devAction] = useActionState(devLoginAction, null);
   const [identity, setIdentity] = useState("");
+  const [choice, setChoice] = useState<string>(INTERNAL_ADMIN_ROLE);
+  const asLead = choice === TEAM_LEAD_OPTION && identity.trim() === "";
   return (
     <div className="flex flex-col items-center gap-4">
       {entra ? (
@@ -47,10 +54,11 @@ export function SignInOptions({
           <label className="text-foreground flex flex-col gap-1 text-left text-sm">
             Role
             <select
-              name="role"
+              name={asLead ? undefined : "role"}
               disabled={identity.trim() !== ""}
               aria-describedby={identity.trim() ? "dev-role-hint" : undefined}
-              defaultValue={INTERNAL_ADMIN_ROLE}
+              value={choice}
+              onChange={(event) => setChoice(event.target.value)}
               className={FIELD_CLASS}
             >
               {GLOBAL_ROLES.map((role) => (
@@ -58,8 +66,12 @@ export function SignInOptions({
                   {role}
                 </option>
               ))}
+              <option value={TEAM_LEAD_OPTION}>Team lead</option>
             </select>
           </label>
+          {asLead ? (
+            <input type="hidden" name="identity" value={TEAM_LEAD_OID} />
+          ) : null}
           {identity.trim() ? (
             <p id="dev-role-hint" className="text-muted-foreground text-sm">
               The role comes from the stored user.
@@ -69,6 +81,7 @@ export function SignInOptions({
             Sign in as (email or user id)
             <input
               name="identity"
+              disabled={asLead}
               autoComplete="off"
               className={FIELD_CLASS}
               value={identity}
@@ -83,7 +96,9 @@ export function SignInOptions({
           <button type="submit" className={BUTTON_CLASS}>
             {identity.trim()
               ? `Sign in as ${identity.trim()}`
-              : "Sign in as local developer"}
+              : asLead
+                ? "Sign in as team lead"
+                : "Sign in as local developer"}
           </button>
         </form>
       ) : null}

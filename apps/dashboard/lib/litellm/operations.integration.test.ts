@@ -285,6 +285,20 @@ const CASES: Case[] = [
     ],
   },
   {
+    // Reads: searchUsers `search` optional (D16a): no search text, one page.
+    name: "searchUsers (no search text: one /user/list page, D16a)",
+    write: false,
+    run: (o) => o.searchUsers!({ page: 3, pageSize: 25 }),
+    calls: [
+      {
+        method: "GET",
+        template: "/user/list",
+        path: "/user/list",
+        query: { page: "3", page_size: "25" },
+      },
+    ],
+  },
+  {
     name: "getTeamDailySpend (org: all linked teams in one call, L3b)",
     write: false,
     run: (o) =>
@@ -629,6 +643,34 @@ const CASES: Case[] = [
         body: {
           team_id: TEAM_ID,
           member: { user_id: "jane@company.com", role: "user" },
+        },
+      },
+    ],
+  },
+  {
+    // Writes: createUser (D16): findUserByEmail miss, then exactly the
+    // addTeamMember user body (LT-MI1, LT17).
+    name: "createUser (OSS, user missing: GET /user/list then /user/new)",
+    write: true,
+    fake: { userExists: false },
+    run: (o) => o.createUser!({ email: "Jane@Company.com" }, CTX),
+    calls: [
+      {
+        method: "GET",
+        template: "/user/list",
+        path: "/user/list",
+        query: { user_email: "jane@company.com" },
+      },
+      {
+        method: "POST",
+        template: "/user/new",
+        path: "/user/new",
+        body: {
+          user_id: "jane@company.com",
+          user_email: "jane@company.com",
+          user_role: "internal_user",
+          auto_create_key: false,
+          send_invite_email: false,
         },
       },
     ],
@@ -1214,6 +1256,89 @@ describe("addTeamMember never surfaces an auto-created key (LT17)", () => {
   });
 });
 
+// Source: docs/specs/2026-11-10-litellm.md - Writes: `createUser` (D16: a
+// findUserByEmail miss first; body from the server-resolved email only),
+// the paragraph after the table (no second /user/new on retry), LT-MI1, LT17,
+// LT24 (a result with another email is dropped).
+describe("createUser (D16, LT-MI1)", () => {
+  it("a user that already exists is returned and /user/new is never called (retry finds it by email)", async () => {
+    install({ userExists: true });
+    const { ops } = await load();
+    const result = await ops.createUser!({ email: "Jane@Company.com" }, CTX);
+    expect(fake.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "GET /user/list",
+    ]);
+    expect(result).toMatchObject({
+      litellmUserId: "jane@company.com",
+      created: false,
+    });
+  });
+
+  it("a created user is reported as created, with the id LiteLLM returned", async () => {
+    install({ userExists: false });
+    const { ops } = await load();
+    const result = await ops.createUser!({ email: "jane@company.com" }, CTX);
+    expect(result).toMatchObject({
+      litellmUserId: "jane@company.com",
+      created: true,
+    });
+  });
+
+  it("the result never carries an auto-created key or an upstream extra (LT17)", async () => {
+    install({ userExists: false });
+    const { ops } = await load();
+    const text = JSON.stringify(
+      (await ops.createUser!({ email: "jane@company.com" }, CTX)) ?? null,
+    );
+    expect(text).not.toContain(AUTO_KEY_TRAP);
+    expect(text).not.toContain("sk-");
+  });
+
+  it("a lookup answer with another email is dropped, so the user is created (LT24)", async () => {
+    const base = gatewayHandler({ userExists: false });
+    fake = createFakeLiteLLM((call, attempt) =>
+      call.method === "GET" && call.path === "/user/list"
+        ? {
+            status: 200,
+            body: {
+              users: [
+                {
+                  user_id: "other@company.com",
+                  user_email: "other@company.com",
+                },
+              ],
+              total: 1,
+              page: 1,
+              page_size: 25,
+              total_pages: 1,
+            },
+          }
+        : base(call, attempt),
+    );
+    vi.stubGlobal("fetch", fake.fetch);
+    const { ops } = await load();
+    await ops.createUser!({ email: "jane@company.com" }, CTX);
+    expect(fake.calls.filter((c) => c.path === "/user/new")).toHaveLength(1);
+  });
+
+  it.each([
+    ["no email", {}],
+    ["a malformed email", { email: "not-an-email" }],
+    ["a client-chosen user id", { email: "jane@company.com", userId: "x" }],
+    [
+      "a client-chosen key flag",
+      { email: "jane@company.com", autoCreateKey: true },
+    ],
+  ])(
+    "rejects %s with no call (body from the server-resolved email only)",
+    async (_n, input) => {
+      const { ops } = await load();
+      await expect(ops.createUser!(input, CTX)).rejects.toThrow();
+      expect(fake.calls).toHaveLength(0);
+    },
+  );
+});
+
 describe("disableMember touches only that member's keys in that team (LT7)", () => {
   it("blocks exactly the matching key, even when LiteLLM returns other rows", async () => {
     const { ops } = await load();
@@ -1251,6 +1376,7 @@ describe("strict input schemas: unknown or forbidden fields are rejected before 
     setTeamLimits: { litellmTeamId: TEAM_ID, rpmLimit: 1 },
     setTeamModels: { litellmTeamId: TEAM_ID, models: ["claude-sonnet"] },
     addTeamMember: { litellmTeamId: TEAM_ID, email: "jane@company.com" },
+    createUser: { email: "jane@company.com" },
     removeTeamMember: { litellmTeamId: TEAM_ID, litellmUserId: USER_ID },
     setMemberBudget: {
       litellmTeamId: TEAM_ID,
@@ -1396,6 +1522,24 @@ describe("read inputs are bounded (Reads table)", () => {
     [
       "searchUsers with page_size 26",
       (o: Ops) => o.searchUsers!({ search: "jane", pageSize: 26 }),
+    ],
+    // D16a: search is optional, but when present it keeps the 2-100 bounds,
+    // and page_size <= 25 holds with no search text.
+    [
+      "searchUsers with an empty search",
+      (o: Ops) => o.searchUsers!({ search: "", page: 1 }),
+    ],
+    [
+      "searchUsers with a blank search",
+      (o: Ops) => o.searchUsers!({ search: "   ", page: 1 }),
+    ],
+    [
+      "searchUsers without search and page_size 26",
+      (o: Ops) => o.searchUsers!({ pageSize: 26 }),
+    ],
+    [
+      "searchUsers without search and page 0",
+      (o: Ops) => o.searchUsers!({ page: 0 }),
     ],
     [
       "searchUsers with an unknown field",

@@ -45,6 +45,9 @@ const EXPECTED: Record<string, [Kind, boolean, string[]]> = {
     true,
     ["GET /user/list", "POST /team/member_add", "POST /user/new"],
   ],
+  // Writes table, `createUser` (management improvements D16; M3 Verify): toggle
+  // default on; the findUserByEmail pre-check reads GET /user/list first.
+  createUser: ["write", true, ["GET /user/list", "POST /user/new"]],
   removeTeamMember: ["write", true, ["POST /team/member_delete"]],
   setMemberBudget: ["write", true, ["POST /team/member_update"]],
   setMemberLimits: ["write", true, ["POST /team/member_update"]],
@@ -165,6 +168,13 @@ describe("service key allowed_routes (LT3)", () => {
   it("the code constant equals the spec list and the runbook list, as written", () => {
     expect([...LITELLM_SERVICE_KEY_ALLOWED_ROUTES]).toEqual(specList());
     expect([...LITELLM_SERVICE_KEY_ALLOWED_ROUTES]).toEqual(runbookList());
+  });
+
+  it("createUser needs no new allowed_routes entry: /user/new and /user/list are in the spec and runbook lists (Writes: createUser, Service key; M3 Verify)", () => {
+    for (const list of [specList(), runbookList()]) {
+      expect(list).toContain("/user/new");
+      expect(list).toContain("/user/list");
+    }
   });
 
   it("carries exactly the two temporary wildcards and no other wildcard", () => {

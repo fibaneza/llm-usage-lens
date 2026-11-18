@@ -2,11 +2,14 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { auth } from "@/auth";
 
+import { TEAM_LEAD_OID } from "@/lib/auth/team-lead-identity";
+
 import { ok } from "@/test/support/access-test-support";
 import { resetDeniedAudit } from "@/lib/data/access/audit";
 import { grantRole } from "@/lib/data/access/role-grants";
 import {
   getIdentityLink,
+  getLiteLLMUserOwner,
   putIdentityLink,
 } from "@/lib/data/access/identity-links";
 import {
@@ -137,9 +140,7 @@ describe("GET /api/identities", () => {
         await listIdentities(),
       );
       expect(data.items.map((i) => i.oid).sort()).toEqual(
-        Object.values(PEOPLE)
-          .map((p) => p.oid)
-          .sort(),
+        [...Object.values(PEOPLE).map((p) => p.oid), TEAM_LEAD_OID].sort(),
       );
       const row = data.items.find((i) => i.oid === alice.oid);
       expect(row).toMatchObject({
@@ -175,7 +176,8 @@ describe("GET /api/identities", () => {
       email: "pw@example.com",
       authMethod: "password",
     });
-    expect(data.items).toHaveLength(Object.keys(PEOPLE).length + 1);
+    // + the seeded team lead identity (M3: the seed stores it, Dev login)
+    expect(data.items).toHaveLength(Object.keys(PEOPLE).length + 2);
   });
 
   it("an empty table is 200 with no items", async () => {
@@ -196,12 +198,10 @@ describe("GET /api/identities", () => {
         `?limit=3&cursor=${encodeURIComponent(first.cursor!)}`,
       ),
     );
-    expect(second.items).toHaveLength(1);
+    expect(second.items).toHaveLength(2); // 5 people + the seeded team lead, 3 a page
     expect(second.cursor).toBeUndefined();
     expect([...first.items, ...second.items].map((i) => i.oid).sort()).toEqual(
-      Object.values(PEOPLE)
-        .map((p) => p.oid)
-        .sort(),
+      [...Object.values(PEOPLE).map((p) => p.oid), TEAM_LEAD_OID].sort(),
     );
   });
 
@@ -318,6 +318,7 @@ describe("PUT /api/identities/[oid]/links", () => {
         link(0, {
           usageIdentities: ["bob@company.com"],
           aliases: ["alice-sso"],
+          litellmUserId: "u-bob", // u-alice is now claimed by Alice (D16)
         }),
       ),
     );
@@ -750,5 +751,54 @@ describe("PUT /api/identities/[oid]/links", () => {
       400,
       "BAD_REQUEST",
     );
+  });
+});
+
+// Source: docs/specs/2026-11-10-access-control.md - "LiteLLM user links" (D16,
+// unit M3: `PUT /api/identities/[oid]/links` writes `litellmUserId` through the
+// same domain function as the litellm-link routes, so the one-to-one
+// `LiteLLMUserClaim` and the duplicate `409` hold here too; the usage
+// identities and aliases stay `internal-admin`, org-admin does not write them),
+// "Audit log" (identity.link.update), T-MI1.
+describe("PUT /api/identities/[oid]/links with a litellmUserId (D16)", () => {
+  it("claims the LiteLLM user and audits it in the after snapshot", async () => {
+    await expectData(await putLink(alice.oid, link(0)));
+    expect(await getLiteLLMUserOwner("u-alice")).toBe(alice.oid);
+    const [record] = await auditToday();
+    expect(record).toMatchObject({
+      action: "identity.link.update",
+      after: { litellmUserId: "u-alice" },
+    });
+  });
+
+  it("409 when another identity already holds that LiteLLM user, nothing written", async () => {
+    await expectData(await putLink(alice.oid, link(0)));
+    const items = await nonAuditItems();
+    await expectError(
+      await putLink(
+        bob.oid,
+        link(0, { usageIdentities: ["bob@company.com"], aliases: [] }),
+      ),
+      409,
+      "CONFLICT",
+    );
+    expect(await nonAuditItems()).toEqual(items);
+    expect(await getIdentityLink(bob.oid)).toBeNull();
+    expect(await getLiteLLMUserOwner("u-alice")).toBe(alice.oid);
+  });
+
+  it("dropping the LiteLLM user from the link releases its claim", async () => {
+    await expectData(await putLink(alice.oid, link(0)));
+    await expectData(
+      await putLink(alice.oid, link(1, { litellmUserId: undefined })),
+    );
+    expect(await getLiteLLMUserOwner("u-alice")).toBeNull();
+  });
+
+  it("org-admin cannot write usage identities, aliases or a LiteLLM user here (stay internal-admin)", async () => {
+    signInAs("orgAdmin");
+    await expectError(await putLink(alice.oid, link(0)), 403, "FORBIDDEN");
+    expect(await getIdentityLink(alice.oid)).toBeNull();
+    expect(await getLiteLLMUserOwner("u-alice")).toBeNull();
   });
 });

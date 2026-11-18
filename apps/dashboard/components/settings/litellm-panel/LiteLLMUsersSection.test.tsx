@@ -1,18 +1,20 @@
 import { screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { apiResponse } from "@/test/fakes/api-stubs";
+import { apiError, apiResponse } from "@/test/fakes/api-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { LiteLLMUsersSection } from "./LiteLLMUsersSection";
 
 // Source: Design System "Settings Page" - LiteLLM sub-tabs, agent decision (3)
-// (unit A2, 2026-11-17; gap G7); Design System "LiteLLM Page" (the shared
-// UserSearch, no request until a term is typed). Module under test:
+// (unit A2, 2026-11-17; gap G7) and Management improvements, LiteLLM users tab
+// (D16a, unit M3): the tab opens on the users list (page 1, 25 a page, no
+// search text) with the search box narrowing it, so users ARE requested on
+// open. Module under test:
 // `components/settings/litellm-panel/LiteLLMUsersSection.tsx`
 //   <LiteLLMUsersSection />   (no props)
-// = the shared `UserSearch` plus, when GET /api/litellm/team-links returns no
-// item, a role="status" note. Copy fixed here (the developer matches it):
+// = the list plus, when GET /api/litellm/team-links returns no item, a
+// role="status" note. Copy fixed here (the developer matches it):
 //   "No LiteLLM team is linked yet. User search lists LiteLLM users; a user's
 //    spend appears per team once a team is linked under Team links."
 afterEach(() => {
@@ -24,9 +26,25 @@ function stub(items: unknown[]) {
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL) => {
-      const path = new URL(String(input), "http://localhost").pathname;
-      calls.push(path);
-      return Promise.resolve(apiResponse({ data: { items } }));
+      const url = new URL(String(input), "http://localhost");
+      calls.push(url.pathname + url.search);
+      if (url.pathname === "/api/litellm/users") {
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              users: [],
+              page: 1,
+              pageSize: 25,
+              hasMore: false,
+              enabledOperations: [],
+            },
+          }),
+        );
+      }
+      if (url.pathname === "/api/litellm/team-links") {
+        return Promise.resolve(apiResponse({ data: { items } }));
+      }
+      return Promise.resolve(apiError(404, "NOT_FOUND"));
     }),
   );
   return calls;
@@ -47,7 +65,7 @@ describe("LiteLLMUsersSection", () => {
     ).toBeInTheDocument();
   });
 
-  it("with a team linked, shows the search and no explanation; requests no users until a term is typed", async () => {
+  it("with a team linked, shows the search and no explanation; lists users page 1 on open (D16a)", async () => {
     const calls = stub([
       {
         teamId: "payments",
@@ -62,7 +80,9 @@ describe("LiteLLMUsersSection", () => {
     ).toBeInTheDocument();
     await vi.waitFor(() => expect(calls).toContain("/api/litellm/team-links"));
     expect(screen.queryByRole("status")).toBeNull();
-    expect(calls).not.toContain("/api/litellm/users");
+    await vi.waitFor(() =>
+      expect(calls).toContain("/api/litellm/users?page=1&pageSize=25"),
+    );
   });
 
   it("shows no explanation while the team links are loading", () => {

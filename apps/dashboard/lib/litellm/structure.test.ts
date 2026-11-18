@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { LITELLM_OPERATIONS } from "./allowlist";
+
 // Source: docs/specs/2026-11-10-litellm.md — "Security architecture" items 1,
 // 3, 5 and threats LT1 (server-only; key never in the bundle), LT2 (no master
 // key variable, parameter or reference); Rule 10.2 (lib/litellm/** is
@@ -281,5 +283,69 @@ describe("the BudgetReset ledger is append-only (MG-D8)", () => {
         /\b(budgetResetPutItem|recordMemberReset)\b/.test(read(join(ROOT, p))),
     );
     expect(writers).toEqual([]);
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - Writes table row `createUser`
+// (management improvements D16, M3) and the paragraph after it; threat LT-MI1.
+// The code row must not drift from the spec row: OSS only, Admin and org-admin,
+// toggle on, the fixed body, a findUserByEmail miss first.
+describe("createUser is pinned to its spec row (LT-MI1, M3 Verify)", () => {
+  const spec = read(join(ROOT, "docs/specs/2026-11-10-litellm.md"));
+  const row =
+    spec.split("\n").find((l) => l.startsWith("| `createUser`")) ?? "";
+
+  it("the spec row is present and says OSS only, Admin and org-admin, toggle on", () => {
+    expect(row).not.toBe("");
+    const cells = row.split("|").map((c) => c.trim());
+    expect(cells[2]).toContain("POST /user/new");
+    expect(cells[2]).toContain("OSS only");
+    expect(cells[4]).toBe(
+      "Admin, org-admin; only for an app identity with no LiteLLM user for that email (a `findUserByEmail` miss first)",
+    );
+    expect(cells[5]).toBe("on");
+  });
+
+  it("the spec row fixes the body: user_id = user_email = lower-cased verified email, internal_user, auto_create_key false, no invite", () => {
+    expect(row).toContain("`user_id`=`user_email`=");
+    expect(row).toContain('`user_role:"internal_user"`');
+    expect(row).toContain("`auto_create_key:false`");
+    expect(row).toContain("`send_invite_email:false`");
+  });
+
+  it("the spec refuses createUser on Enterprise with 403 OPERATION_UNAVAILABLE and no call", () => {
+    expect(spec).toMatch(
+      /Edition gate\s+first: on Enterprise it returns `403 OPERATION_UNAVAILABLE` with no call/,
+    );
+  });
+
+  it("the code row is a write, default on, with exactly the lookup and the create routes", () => {
+    const op = LITELLM_OPERATIONS.createUser;
+    expect(op.kind).toBe("write");
+    expect(op.defaultEnabled).toBe(true);
+    expect(op.routes.map((r) => `${r.method} ${r.template}`).sort()).toEqual([
+      "GET /user/list",
+      "POST /user/new",
+    ]);
+    // OSS-only is enforced by the edition check in operations.ts (tested in
+    // operation-gates.integration.test.ts), never by an enterpriseOnly route:
+    // that flag would refuse the lookup the OSS path needs.
+    expect(
+      op.routes.some((r) => "enterpriseOnly" in r && r.enterpriseOnly),
+    ).toBe(false);
+  });
+
+  it("only POST /api/litellm/users calls createUser (no other route or module creates a LiteLLM user)", () => {
+    const files = walk(join(ROOT, "apps/dashboard")).filter(
+      (f) => isCode(f) && !isTest(rel(f)),
+    );
+    const callers = files
+      .map(rel)
+      .filter((p) =>
+        /import\s*\{[^}]*\bcreateUser\b[^}]*\}\s*from\s*["'][^"']*operations["']/.test(
+          read(join(ROOT, p)),
+        ),
+      );
+    expect(callers).toEqual(["apps/dashboard/app/api/litellm/users/route.ts"]);
   });
 });
