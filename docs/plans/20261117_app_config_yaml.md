@@ -154,7 +154,7 @@ one squash commit (Rule 30.4). It is not in the phase plan today, so it
 starts with a spec change (Rule 00, Rule 30).
 
 **Place in the queue:** after the Settings admin area (unit D of
-`litellm_role_views.md`) and after L3d, because the locked-state UI
+`20261117_litellm_role_views.md`) and after L3d, because the locked-state UI
 sits on the new Settings tabs and the toggle precedence touches L3d's
 routes. Step 1 (spec and inventory) may run earlier; it changes no code.
 
@@ -282,5 +282,5 @@ freeze or an unanswered user decision with the report written:
 `/goal` line:
 
 ```
-/goal docs/plans/app_config_yaml.md §8 completion criteria met, and the report written — or the run ended by a usage freeze or an unanswered user decision, with the report written.
+/goal docs/plans/20261117_app_config_yaml.md §8 completion criteria met, and the report written — or the run ended by a usage freeze or an unanswered user decision, with the report written.
 ```

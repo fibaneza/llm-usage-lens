@@ -1,7 +1,7 @@
 # Coordinator Prompt — LLM Usage Lens
 
 One Claude session **coordinates** other Claude sessions ("workers") that each
-run a goal from `docs/plans/rbac.md`, `docs/plans/litellm.md`, `docs/plans/master.md` or the
+run a goal from `docs/plans/20261109_rbac.md`, `docs/plans/20261109_litellm.md`, `docs/plans/20261103_master.md` or the
 prompt of a plan the planner wrote (§2c).
 The coordinator does no feature work itself. It assigns goals, **prevents
 conflicts between goals**, **owns every merge into `main`** — the full test
@@ -65,9 +65,9 @@ branch, queue) for each one; this table says what each session **is**.
 | Session name | Kind | Role | Runs | Channel | Agents |
 |---|---|---|---|---|---|
 | `Coordinator` | this session | Assigns goals, prevents conflicts, reviews and lands every unit, keeps state | this file | — | review and fix agents only (§4) |
-| `improvements_worker` | worker (Claude Desktop session) | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/master.md`, `docs/plans/ui_refresh.md`, `docs/plans/management_improvements.md`, a plan's `<slug>_prompt.md` | live message; relay if held | per the brief (§3a) |
-| `bedrock_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/rbac.md` (4R units), chores and plan units assigned to it | live message; relay if held | per the brief (§3a) |
-| `litellm_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/litellm.md` (L units), plan units assigned to it | live message; relay if held | per the brief (§3a) |
+| `improvements_worker` | worker (Claude Desktop session) | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/20261103_master.md`, `docs/plans/20261117_ui_refresh.md`, `docs/plans/20261117_management_improvements.md`, a plan's `<slug>_prompt.md` | live message; relay if held | per the brief (§3a) |
+| `bedrock_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/20261109_rbac.md` (4R units), chores and plan units assigned to it | live message; relay if held | per the brief (§3a) |
+| `litellm_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/20261109_litellm.md` (L units), plan units assigned to it | live message; relay if held | per the brief (§3a) |
 | `planner` | planner | Writes plans, spec text and prompts; **never** builds, tests, commits or takes a unit | `planner_prompt.md` | **file relay only** (§2b) | read-only research agents, at most 3 |
 
 **Renaming in progress (user, 2026-11-18).** Worker sessions go from
@@ -77,7 +77,7 @@ the same session: address it by the name `ListAgents` shows, and keep one
 row for it in `state.md` under the new name with the old one beside it.
 File names keyed by session (`briefs/<session>-<unit>.md`,
 `to-<session>.md`, `from-<session>.md`, `workflow-<session>.md`) use the
-**new** name from now on. `docs/plans/rbac.md` and `docs/plans/litellm.md` are
+**new** name from now on. `docs/plans/20261109_rbac.md` and `docs/plans/20261109_litellm.md` are
 plan files (renamed from `prompts/*_prompt.md` on 2026-11-18).
 
 Not coordinated, whatever `ListAgents` shows:
@@ -372,7 +372,7 @@ Rules for the roster:
 `planner` delivers a **plan package** (`.claude/prompts/planner_prompt.md` §4) in
 `temp/planner/<slug>/`: `plan.md`, `spec-changes.md`, one
 `brief-<unit>.md` per unit, one `workflow-<session>.md` per worker
-session, and a new untracked `docs/plans/<slug>.md` in the primary
+session, and a new untracked `docs/plans/<YYYYMMDD>_<slug>.md` in the primary
 checkout. A plan is a proposal until you have taken it in:
 
 1. **Read `plan.md`** and check it against reality, not against itself:

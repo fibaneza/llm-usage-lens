@@ -553,5 +553,5 @@ freeze with the report written:
 `/goal` line:
 
 ```
-/goal docs/plans/management_improvements.md §10 completion criteria met for units M0–M5 (M4 first), each reported ready to merge, and the report written — or the run ended by a usage freeze, with the report written.
+/goal docs/plans/20261117_management_improvements.md §10 completion criteria met for units M0–M5 (M4 first), each reported ready to merge, and the report written — or the run ended by a usage freeze, with the report written.
 ```

@@ -42,7 +42,7 @@ Not in the reading path above, but worth knowing they exist:
 
 - `docs/future-improvements.md` — the parking lot of intentionally-deferred enhancements, each with the trigger that would revisit it; per Rule 00, adopting any starts with a spec change, not a PR
 - `ONBOARDING.md` — new-contributor setup checklist (codebases, MCP servers, skills to know)
-- `docs/plans/` — the run plans behind the guarded, agent-driven build runs (one per goal; the planner writes new ones here as `docs/plans/<slug>.md`; renamed from `prompts/` on 2026-11-18); [`docs/plans/README.md`](docs/plans/README.md) is the index. The standing role prompts (coordinator, planner, worker) and the sessions runbook are in `.claude/prompts/`
+- `docs/plans/` — the run plans behind the guarded, agent-driven build runs (one per goal; the planner writes new ones here as `docs/plans/<YYYYMMDD>_<slug>.md`; renamed from `prompts/` on 2026-11-18); [`docs/plans/README.md`](docs/plans/README.md) is the index. The standing role prompts (coordinator, planner, worker) and the sessions runbook are in `.claude/prompts/`
 - `poc/` — an isolated proof of concept that runs the dashboard image on one EC2 instance with Docker Compose; **not** the deployment path and not in the pnpm workspace ([`poc/README.md`](poc/README.md))
 
 Build strictly in phase order (Rule 30 has the order and its decided exceptions). Phase 2 (2.1–2.3), Phase 3 (3.1–3.3), Phase 4 (4.1–4.9), Phase 4R (RP, R1–R5) and the LiteLLM units (L0–L8, with L3b and L3c) are each split into independently deliverable sub-phases — one per branch and squash commit (Rule 30.4); Phase 4's are one per dashboard page. Components are built where first needed and reused later.

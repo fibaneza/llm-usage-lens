@@ -24,7 +24,7 @@ prompt wins. *Status* at the end says which parts are on `main`.
 Worker sessions are being renamed from `<x>_prompt` to `<x>_worker` (user,
 2026-11-18), so that a session is not named like a prompt file. Until the
 user renames a session, its old name is the same session and stays valid.
-The plan files `docs/plans/rbac.md` and `docs/plans/litellm.md` were `prompts/rbac_prompt.md` and `prompts/litellm_prompt.md` until 2026-11-18.
+The plan files `docs/plans/20261109_rbac.md` and `docs/plans/20261109_litellm.md` were `prompts/rbac_prompt.md` and `prompts/litellm_prompt.md` until 2026-11-18.
 
 All `temp/coordinator/**` and `temp/planner/**` paths are in the **primary
 checkout**. Each worktree has its own gitignored `temp/`; a worker's run
@@ -99,7 +99,7 @@ scheduled resume) and creates them again at resume.
 
 ```text
 user request
-  → planner       plan package in temp/planner/<slug>/ + docs/plans/<slug>.md
+  → planner       plan package in temp/planner/<slug>/ + docs/plans/<YYYYMMDD>_<slug>.md
                   relay line "plan <slug>: ready"
   → coordinator   plan intake: checks owners, ownership, start conditions, agent ledger
                   tells the user; waits for go; commits the plan file

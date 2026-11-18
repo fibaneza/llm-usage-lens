@@ -413,5 +413,5 @@ A unit is complete when:
 `/goal` line, one unit per run:
 
 ```
-/goal docs/plans/litellm_user_sync.md §10 completion criteria met for unit <RS1|SYNC1|SYNC2>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.
+/goal docs/plans/20261118_litellm_user_sync.md §10 completion criteria met for unit <RS1|SYNC1|SYNC2>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.
 ```

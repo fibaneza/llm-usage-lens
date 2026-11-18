@@ -3,7 +3,7 @@
 For a **worker** session (`.claude/prompts/worker_prompt.md`). The coordinator
 sends one unit at a time as a brief file. This plan holds the decisions,
 the ownership and the tests of six units. The four other units of the same
-plan (LW1, SYNC1, SYNC2, INV2) are in `docs/plans/litellm_user_sync.md`
+plan (LW1, SYNC1, SYNC2, INV2) are in `docs/plans/20261118_litellm_user_sync.md`
 with its revision.
 
 Specs lead (Rule 00.2): each unit amends its own specs in its first
@@ -369,4 +369,4 @@ commit with `main` merged in; the targeted e2e ran once (the full e2e if a
 shared file changed); the ready self-check passed; the handover and the
 report are written; the `ready` line is sent.
 
-`/goal docs/plans/teams_users_and_litellm_sync.md §8 completion criteria met for unit <LF1|ST1|TM1|US1|US2|SRT1>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.`
+`/goal docs/plans/20261118_teams_users_and_litellm_sync.md §8 completion criteria met for unit <LF1|ST1|TM1|US1|US2|SRT1>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.`

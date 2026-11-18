@@ -7,8 +7,8 @@ merge"**. The coordinator reviews and lands your unit; the user pushes.
 
 This file defines the role for every worker (`improvements_worker`, `bedrock_worker`,
 `litellm_worker`, and any worker the user adds). What a unit must deliver
-comes from **the unit's plan** — a plan's `docs/plans/<slug>.md`,
-`docs/plans/rbac.md`, `docs/plans/litellm.md` or `docs/plans/master.md` — and from the
+comes from **the unit's plan** — a plan's `docs/plans/<YYYYMMDD>_<slug>.md`,
+`docs/plans/20261109_rbac.md`, `docs/plans/20261109_litellm.md` or `docs/plans/20261103_master.md` — and from the
 coordinator's **brief**.
 
 **Session names (user, 2026-11-18).** The worker sessions are being renamed
@@ -16,7 +16,7 @@ from `<x>_prompt` to `<x>_worker`, so that a session is not named like a
 prompt file: `rbac_prompt` → `bedrock_worker`, `litellm_prompt` →
 `litellm_worker`. The user renames the sessions; until then the old name is
 the same session and stays valid. Use the name `ListAgents` shows today.
-`docs/plans/rbac.md` and `docs/plans/litellm.md` are prompt **files** and keep
+`docs/plans/20261109_rbac.md` and `docs/plans/20261109_litellm.md` are prompt **files** and keep
 their names.
 
 You orchestrate agents. You write no production code and no tests yourself
@@ -303,7 +303,7 @@ handover, and send `ready` again.
   `frozen <unit> at <commit>, report <path>`, and stop.
 - An exception to a tier is the user's, for one unit and one window; it
   reaches you in the brief or from the user, with when it ends.
-- When the unit's plan sets a clock (`docs/plans/master.md` §2: freeze at
+- When the unit's plan sets a clock (`docs/plans/20261103_master.md` §2: freeze at
   T+55, report at T+60), that clock applies too. The deadline beats
   unfinished scope.
 
@@ -372,7 +372,7 @@ Next action: <one line that a new session can act on>
 
 The report (the name the brief gives, or `temp/report_<yymmdd>_<unit>.md`)
 follows the unit's plan; where that gives no skeleton, use
-`docs/plans/master.md` §10. It always has: what changed per unit; the
+`docs/plans/20261103_master.md` §10. It always has: what changed per unit; the
 decisions and their reasons; the gate and test counts at the final commit;
 the agents and models used; **what was not verified**; the open questions
 with the default in force; and the user's actions in order. Never claim a

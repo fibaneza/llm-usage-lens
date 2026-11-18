@@ -74,7 +74,7 @@ silently.
   and links to Management → Team.
 - **Settings** is split into tabs at the top, each its own route (AWS
   accounts, Sync and data, LiteLLM, Access, Audit), with a second tab row
-  inside Access and LiteLLM — unit D of `litellm_role_views.md` owns
+  inside Access and LiteLLM — unit D of `20261117_litellm_role_views.md` owns
   the build; this prompt only keeps the look consistent.
 - **Role views.** Landing page: admin and org admin → Cost overview; lead and
   user → My usage. A hidden item is absent, never disabled, and its route
@@ -166,7 +166,7 @@ in §4 and after every `main` merge:
   `feature/phase-l3b-litellm-role-views`; both **land before the UI unit
   touches their files**;
 - the LiteLLM and sign-in surfaces, owned by the role-views run
-  (`docs/plans/litellm_role_views.md`) until it lands:
+  (`docs/plans/20261117_litellm_role_views.md`) until it lands:
   `components/litellm/**`, `components/settings/LiteLLMPanel*`,
   `app/dashboard/litellm/**`, `components/auth/SignInOptions*`,
   `app/sign-in/**`, and the Settings page —
@@ -544,4 +544,4 @@ usage freeze with the report written and the resume scheduled:
   sandbox: use the file tools, or run that one command outside the sandbox.
 
 `/goal` condition, if the user wants to pin it in the session:
-`docs/plans/ui_refresh.md §11 completion criteria met for both units with the report written and nothing merged into main — or the run ended by a usage freeze with the report written and the resume scheduled.`
+`docs/plans/20261117_ui_refresh.md §11 completion criteria met for both units with the report written and nothing merged into main — or the run ended by a usage freeze with the report written and the resume scheduled.`
