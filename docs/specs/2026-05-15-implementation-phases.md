@@ -1004,6 +1004,15 @@ Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
 - [ ] Cost by team's LiteLLM panel with the app teams, "Sum of members" on request for global readers on a linked row and an `open-team` row (`GET /api/litellm/teams/[teamId]?include=memberSum`, MI-D7), created teams as "No AWS account" in the Bedrock panel; Cost by user's LiteLLM users list; Cost by service's honest gap line
 - [ ] Verify (one test pass at the end; Design System — *Source panels on Cost by team, Cost by user and Cost by service*; LiteLLM spec — MI-D17–D19, LT-MI4; App Teams spec — AT6): no chart or column holds both sources; "Sum of members" is requested only when a global reader asks for it (no member reads on the panel's first load) and works for a linked row and an `open-team` row; the three figures; Combined equals L6's rule on the counted-once fixture (LT-MI4); the warning and the hidden total without a gateway; a LiteLLM outage leaves the Bedrock panel working; "not in LiteLLM" is never `$0`; targeted e2e once; branch gate green with `main` merged in
 
+### INV1 — Accept a pending invite (`feature/invite-accept`)
+
+*Added 2026-11-18 at the user's direction ("Admin and team lead should be able to accept a 'sent by them' invitation to the team"); user decisions on what accept means and who may accept, agent decisions on the candidate list, the sender's scope and member-only scope (Access Control — *Accept a pending invite*, permission matrix, *API routes*, T-INV1 to T-INV6; Design System — *Management improvements*). Runs after M3.*
+
+- [x] Data: one `TransactWriteItems` bind (pending delete on `version`, affiliation by `oid`, `affiliation.invite.accept` audit); the candidate read from the pending key; never cached
+- [x] `POST /api/teams/[id]/members/pending/[key]/accept` `{ oid, reason }` and `GET …/candidates`; `403` before parsing; registered in `test/route-registry.ts`
+- [x] UI: Accept on each pending member invitation where pending items show (Team page access sections, Settings → Access); dialog with the candidates (and directory search for admin and org-admin), the key-against-UPN/email mismatch, a required reason, an `AlertDialog` naming the person and the team
+- [ ] Verify: the role × action matrix for accept (complete); T-INV1 to T-INV6 each with a test; a happy-path e2e; branch gate green with `main` merged in (Rule 70.12)
+
 ---
 
 ## Decision policy (decided 2026-11-15, user)

@@ -68,6 +68,24 @@ export const PendingItemSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+// POST .../pending/[key]/accept (Access Control spec - Accept a pending invite,
+// unit INV1): the target is an oid from the server-computed candidates, never
+// free text.
+export const AcceptInviteBodySchema = z.strictObject({
+  oid: IdSchema.max(128),
+  reason: z.string().trim().min(1).max(280),
+});
+
+// One candidate identity for an invite: the fields the dialog needs to compare
+// the key with the person, nothing else.
+export const InviteCandidateSchema = z.strictObject({
+  oid: IdSchema,
+  displayName: z.string().nullable(),
+  upn: z.string().nullable(),
+  email: z.string().nullable(),
+});
+export type InviteCandidate = z.infer<typeof InviteCandidateSchema>;
+
 // GET /api/access/stale (Access Control spec - Leaver, D2, D34): a pending
 // item unbound for more than 30 days (`reason: "pending"`, `subject` the email
 // or UPN) or bound access whose person has not signed in for 90 days
@@ -234,6 +252,7 @@ export const AUDIT_ACTIONS = [
   "affiliation.bind",
   "affiliation.sso.set",
   "affiliation.sso.remove",
+  "affiliation.invite.accept",
   "adminscope.grant",
   "adminscope.revoke",
   "adminscope.bind",
@@ -388,6 +407,7 @@ const SNAPSHOT_KEYS: ReadonlySet<string> = new Set([
   "ambiguousMembership",
   "groupsOverage",
   "removedAdminScope",
+  "emailOrUpn",
   "roles",
   "usageIdentities",
   "aliases",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { accessCapabilities } from "./capabilities";
+import { accessCapabilities, canAcceptInvite } from "./capabilities";
 
 // Source: docs/specs/2026-11-10-access-control.md - "Permission matrix"
 // (which role edits which action), "API routes (additions)" (GET also
@@ -151,5 +151,40 @@ describe("accessCapabilities", () => {
       roleGrants: "read",
       auditLog: true,
     });
+  });
+});
+
+// Source: Access Control - permission matrix row "Accept a pending invite"
+// (unit INV1): admin and org-admin any team; a lead or department admin for
+// teams in scope; others never. The route enforces it again (T-INV5).
+// Module under test: canAcceptInvite(viewer, { id, departmentId }) -> boolean
+describe("canAcceptInvite", () => {
+  const pay = { id: "team-pay", departmentId: "dept-eng" };
+  const risk = { id: "team-risk", departmentId: "dept-fin" };
+  it.each([
+    ["internal-admin", ["internal-admin"], [], pay, true],
+    ["internal-org-admin", ["internal-org-admin"], [], risk, true],
+    ["team scope, in scope", ["internal-viewer"], TEAM_SCOPE, pay, true],
+    ["team scope, other team", ["internal-viewer"], TEAM_SCOPE, risk, false],
+    [
+      "department scope, own department",
+      ["internal-viewer"],
+      DEPT_SCOPE,
+      pay,
+      true,
+    ],
+    [
+      "department scope, other department",
+      ["internal-viewer"],
+      DEPT_SCOPE,
+      risk,
+      false,
+    ],
+    ["internal-auditor", ["internal-auditor"], [], pay, false],
+    ["internal-viewer", ["internal-viewer"], [], pay, false],
+  ])("%s", (_name, roles, adminScopes, team, expected) => {
+    expect(
+      canAcceptInvite({ roles, adminScopes: [...adminScopes] }, team),
+    ).toBe(expected);
   });
 });

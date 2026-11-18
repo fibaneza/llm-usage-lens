@@ -41,6 +41,9 @@
    /api/budget-reset-requests` for a member of a linked team on their own
    budget, and `POST /api/notifications/read` for the owner's own
    notifications, Access Control — *Permission matrix*, 2026-11-18;
+   unit INV1: `POST /api/teams/[id]/members/pending/[key]/accept` with the
+   add-member roles, never on one's own invite, Access Control — *Accept a
+   pending invite*, 2026-11-18;
    the Access Control spec's permission matrix from Phase 4R), before any
    DynamoDB call. Global roles are never granted by group mappings; only an
    `internal-admin` grants `internal-admin` or `internal-org-admin` in the

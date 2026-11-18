@@ -70,3 +70,22 @@ export function accessCapabilities(viewer: ViewerInput): AccessCapabilities {
     accessReview: isAdmin || isAuditor,
   };
 }
+
+// Permission matrix row "Accept a pending invite" (unit INV1): the roles of the
+// add-member row, a lead only for a team in scope. The routes enforce it again.
+export function canAcceptInvite(
+  viewer: ViewerInput,
+  team: { id: string; departmentId: string },
+): boolean {
+  if (
+    viewer.roles.includes(INTERNAL_ADMIN_ROLE) ||
+    viewer.roles.includes(INTERNAL_ORG_ADMIN_ROLE)
+  ) {
+    return true;
+  }
+  return viewer.adminScopes.some((s) =>
+    s.scopeType === "team"
+      ? s.scopeId === team.id
+      : s.scopeId === team.departmentId,
+  );
+}

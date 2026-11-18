@@ -25,7 +25,8 @@ import { loadWriteActor } from "@/lib/data/access/authorization";
 // refusal, none for a target that does not exist, none on a read). The shared
 // frame of the members, admin-scope, visibility and move writes.
 
-const appEnv = (): "dev" | "prod" => (env.APP_ENV === "prod" ? "prod" : "dev");
+export const appEnv = (): "dev" | "prod" =>
+  env.APP_ENV === "prod" ? "prod" : "dev";
 
 export function notFoundResponse(): Response {
   return jsonError(404, "NOT_FOUND", NOT_FOUND_MESSAGE);

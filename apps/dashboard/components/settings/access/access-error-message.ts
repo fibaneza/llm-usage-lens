@@ -13,6 +13,8 @@ const MESSAGES: Record<string, string> = {
   SSO_BOUND:
     "This user signs in with single sign-on (Entra), so password actions don't apply.",
   WEAK_PASSWORD: "That password is too weak. Choose a longer one.",
+  PRIVILEGED_TARGET:
+    "This person holds an administrator role, so they cannot be added through an invite.",
   REAUTH_REQUIRED: "Confirm it's you with a recent sign-in, then try again.",
 };
 

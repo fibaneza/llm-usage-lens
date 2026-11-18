@@ -617,6 +617,80 @@ pending affiliations for different teams bind neither (fail closed). After bindi
 `oid` is the key, so a UPN change or reuse cannot redirect it. An SSO member
 mapping at the same sign-in wins and the invite is discarded (audited). No
 Graph permission or client secret is needed. Pending items grant nothing.
+An invite that does not bind at sign-in can be accepted by a manager
+(*Accept a pending invite*, below).
+
+**Accept a pending invite (unit INV1; user, 2026-11-18: "Admin and team
+lead should be able to accept a 'sent by them' invitation to the team").**
+For an invite that did not bind at sign-in — a UPN that differs from the
+key, a guest (`#EXT#`), or two pending invites for different teams — a
+manager binds the pending **member** invitation to an identity that has
+already signed in, so the person becomes a member now (user decision,
+2026-11-18). Pending admin scopes are not accepted this way (agent
+decision, 2026-11-18: the request was about team membership; an admin
+scope stays a grant). Rules:
+- **Who (user, 2026-11-18):** the person who sent the invite, any lead
+  whose scope covers the team, `internal-org-admin` and `internal-admin` —
+  the roles of the add-member row. The sender may accept only while they
+  still hold that permission on the team (agent decision, 2026-11-18:
+  "sent by them" never outlives the scope it was sent under, BR4
+  precedent): the sender is a subset of those roles, never an extra role.
+- **Target:** an existing identity (signed in at least once) in the
+  configured tenant, chosen from a server-computed candidate list, never
+  typed. Candidates are identities with no member team whose UPN equals
+  the pending key, whose guest UPN encodes it (`jane_example.com#EXT#@…`
+  for `jane@example.com`), or whose stored email equals it (agent decision,
+  2026-11-18: a lead gets no free search over people, D37; the email is a
+  candidate signal only, shown for a human decision, never a bind key).
+  `internal-admin` and `internal-org-admin`, who already read the identity
+  directory, may also pick from it. The dialog shows the key against the
+  identity's UPN and email before confirming, with the mismatch marked.
+- **Refusals:** the invitee accepting their own invite (target `oid` = caller)
+  `403 FORBIDDEN`; a target holding any global role (claims ∪ stored grants)
+  `409 PRIVILEGED_TARGET`; a target in another tenant, or not found, `404`;
+  a target with an SSO-sourced affiliation `409 MANAGED_BY_SSO`; a target
+  already in a team `409 ALREADY_AFFILIATED`; a stale `version` `409
+  CONFLICT`; an invite no longer pending `409 CONFLICT` only when the
+  target already holds this team (a replay), otherwise the missing-key
+  `404` (*Details*; amended 2026-11-18, INV1 review Q-B1); a team outside
+  the caller's scope, a key not pending for that team, the same `404` body
+  as a missing one.
+- **Write:** one `TransactWriteItems` — delete the pending item (conditional
+  on its `version`), write the affiliation keyed by `oid` (UI-sourced,
+  conditional on no affiliation), and write the `affiliation.invite.accept`
+  audit record (actor, pending key, team, target `oid`, reason, result). A
+  required reason of 1–280 characters. Authorization data: never cached
+  (Rule 60.10).
+- **Details (agent decisions, 2026-11-18, INV1 red stage):** a replay finds
+  the pending item gone, so the route answers `409 CONFLICT` when the target
+  already holds the affiliation on this team, else the missing-key `404`
+  (T-INV4 with T-INV5); "a global role" for the privileged refusal is
+  `internal-admin`, `internal-org-admin` or `internal-auditor` by claim or
+  stored grant (`internal-viewer` is everyone's default); the self-accept
+  `403` comes before the privileged `409`; an admin-scope pending key is the
+  missing-key `404`; `?q=` from a lead is ignored; for `internal-admin` and
+  `internal-org-admin` `?q=` returns directory matches of `q` (in the
+  tenant, unaffiliated) instead of the key candidates; the key in the path
+  matches case-insensitively, and a malformed key is `400`. The candidate
+  read writes no audit record. Every refused accept writes one `denied`
+  record (*Audit log*, D17), the self-accept `403` and the
+  `PRIVILEGED_TARGET` `409` included, as on M3's link and create routes
+  (orchestrator ruling, 2026-11-18, INV1 green stage). A lead naming an
+  `oid` outside the candidate set is an authorization refusal (D17, T22
+  probing): one `denied` record (`NOT_FOUND`) and the same `404` body
+  (coordinator ruling, 2026-11-18, INV1 review Q-W1). With no Entra tenant
+  configured the candidate and directory reads return no rows and no
+  accept can name a target (fail closed; agent decision, 2026-11-18). Check
+  order: the permission `403` and the out-of-scope team `404` (before
+  parsing) → body and key `400` → self-accept `403` → the pending member
+  key `404` (or the replay `409`) → the target: for a lead (not
+  `internal-admin` or `internal-org-admin`) the candidate-set check runs
+  first, so an unknown, a foreign-tenant and a same-tenant non-candidate
+  `oid` share one path — the same `404` body and one `denied` record
+  (`NOT_FOUND`), no existence oracle (amended 2026-11-18, INV1 review
+  R2-B1; D17, T22); for `internal-admin` and `internal-org-admin` the
+  target must be an identity in the tenant (`404`) → privileged `409` →
+  the bind (`409` conflicts).
 
 **Mover.** Moving a member to another team needs authority over **both**
 teams; it is **one atomic transaction** (`TransactWriteItems` with the
@@ -639,6 +713,7 @@ the user 2026-11-15; Design System — *Settings Page*).
 | Action | `internal-admin` | `internal-org-admin` | `internal-team-admin` (department scope) | `internal-team-admin` (team scope) | Others |
 |---|---|---|---|---|---|
 | Add an unaffiliated user (or pending email/UPN) as member | ✓ | ✓ any team | ✓ teams in scope | ✓ teams in scope | ✗ |
+| Accept a pending invite (bind to a signed-in identity; unit INV1, user, 2026-11-18) — never one's own invite | ✓ | ✓ any team | ✓ teams in scope | ✓ teams in scope | ✗ |
 | Grant or remove a team-scope `internal-team-admin` | ✓ | ✓ any team | ✓ teams in scope | ✓ teams in scope; never their own scope (grant or remove) | ✗ |
 | Grant or remove a department-scope `internal-team-admin` | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Remove a member | ✓ | ✓ any team | ✓ teams in scope | ✓ teams in scope | ✗ |
@@ -1035,7 +1110,7 @@ password).
   `auth.master.*` security records; session expiry is not an action and is
   not recorded.
 - **Covered:** role grants, group mappings, affiliations (add, remove, move,
-  bind), admin scopes, visibility, identity links, password users (create, setup,
+  bind, invite accept — `affiliation.invite.accept`, unit INV1), admin scopes, visibility, identity links, password users (create, setup,
   reset, TOTP reset, disable, delete, own password change, bind), the
   password sign-in switch, accounts, the approval, sign-ins and sign-outs, denied write attempts, and the
   LiteLLM actions (LiteLLM spec — *Audit*), including the gateway
@@ -1159,6 +1234,8 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/teams/[id]/visibility`, `/api/departments/[id]/visibility` | GET, PUT | Read in scope; write per matrix |
 | `/api/teams/[id]/members` | GET, POST | Per matrix |
 | `/api/teams/[id]/members/[oid]` | DELETE | Per matrix |
+| `/api/teams/[id]/members/pending/[key]/accept` | POST `{ oid, reason }` (strict) | Per matrix (accept a pending invite); `403` before parsing without the permission; rules in *Accept a pending invite* (unit INV1) |
+| `/api/teams/[id]/members/pending/[key]/candidates` | GET (`?q=` for `internal-admin` and `internal-org-admin` only) | Per matrix (accept a pending invite); the candidate identities of *Accept a pending invite*, at most 10, `oid`, display name, UPN and email only (unit INV1) |
 | `/api/teams/[id]/admins`, `/api/departments/[id]/admins` | GET, POST | Per matrix |
 | `/api/teams/[id]/admins/[oid]`, `/api/departments/[id]/admins/[oid]` | DELETE | Per matrix |
 | `/api/affiliations/[oid]/move` | POST `{ fromTeamId, toTeamId, version }` | Per matrix |
@@ -1358,9 +1435,21 @@ test in the M4 Verify list (implementation-phases — *M4*).
 | BR7 | Injection: the request reason as stored text (markup in the bell, the Team page, the dialog or an audit view) | Zod: plain text, 1–280 characters, control characters rejected; rendered as React text only, never as HTML, a URL or a `mailto:`; not copied into notifications or audit records | M4 slice A (a reason with `<script>` and `<img onerror>` renders literally; 281 characters → `400`) |
 | BR8 | Disclosure: a notification shows a request after its recipient lost access | A notification stores ids only; the list joins the request and shows details and buttons only while the caller may still read and decide it | M4 slice A (recipient loses scope → the item shows no name, reason or buttons) |
 | BR9 | Integrity: a LiteLLM failure is reported as approved | `approving → open` on failure, the reset audited `failed`, no notification, no ledger item | M4 slice A (fake LiteLLM `500`: request open, no notification, no ledger) |
+| T-INV1 | Spoofing: binding the wrong person to an invite (unit INV1) | Server-computed candidates only (UPN, guest UPN, stored email of signed-in, unaffiliated identities in the configured tenant); the key-against-UPN/email mismatch shown before confirming; required reason; audited | INV1: an `oid` outside the candidate set (for a lead) `404` with one `denied` record, or outside the tenant `404`; no tenant configured → no candidates; no free-text target in the body schema; the audit carries the key, the `oid` and the reason |
+| T-INV2 | Elevation: the invitee accepts their own invite | target `oid` = session `oid` `403` | INV1: self-accept `403`, no write |
+| T-INV3 | Elevation: an invite binds a privileged identity | a target with a global role (claims ∪ grants) `409 PRIVILEGED_TARGET` | INV1: an `internal-admin`-granted target `409`, no write |
+| T-INV4 | Tampering: a stale or replayed accept binds twice | conditional delete on the pending `version`; affiliation written only if none | INV1: a second accept `409 CONFLICT`; two concurrent accepts bind once, the other `409`; one affiliation, one audit |
+| T-INV5 | Disclosure / elevation: a lead accepts for a team outside its scope, or probes keys | the matrix row; out-of-scope team or unknown key the same `404` | INV1: a lead of another team `404`, same body as a missing key |
+| T-INV6 | Tampering: accept overrides SSO-managed membership | `409 MANAGED_BY_SSO`; `409 ALREADY_AFFILIATED` | INV1: both, no write |
 | BR10 | Disclosure: reset counts and amounts reveal another person's or another team's usage | One scoped read, filtered after the read; per-member figures only with the per-user approval in `prod`; visibility rules apply | M4 slice B leak tests (a user never sees another person's, a Lead never another team's; only team totals before the approval) |
 
 ## Residual risks
+
+- **Invite candidates read the identity list per dialog open (unit INV1,
+  2026-11-18).** The candidate and directory reads scan the identities
+  (O(directory), at most 10 rows returned) each time the accept dialog
+  opens. Accepted for v1: accepts are rare, manual and limited to
+  managers; a key-indexed lookup is the fix if the directory grows large.
 
 - **Budget reset stuck in `approving` (unit M4, MG-D12a; added 2026-11-17):** if the process stops after LiteLLM reset the spend and before the ledger transaction, the request stays `approving`, the reset is in LiteLLM's records and the dashboard audit has no `success` record for it. It is not reopened automatically (a second approval would reset spend accrued since). An Admin resolves it from the Team page list and LiteLLM's own audit. Accepted for v1.
 - **Notification fallback recipients (unit M4, MG-D13):** an Entra-only `internal-admin` or `internal-org-admin` who has never signed in has no last-seen role and is not notified when a team has no lead; the request still shows on the Team page. Accepted for v1.

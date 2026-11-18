@@ -10,13 +10,17 @@ import type {
   StaleAccessRow,
 } from "@llm-usage-lens/shared";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import type { z } from "zod";
 
-import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { EmptyState } from "@/components/display/EmptyState";
+import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { useOrgUnits } from "@/components/settings/access/access-queries";
 import { pageOf } from "@/components/settings/access/access-schemas";
+import { AcceptInviteDialog } from "@/components/settings/access/AcceptInviteDialog";
+import { canAcceptInvite } from "@/components/settings/access/capabilities";
+import type { AccessViewer } from "@/components/settings/access/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -27,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { INTERNAL_ADMIN_ROLE, INTERNAL_ORG_ADMIN_ROLE } from "@/lib/auth/roles";
 import { fetchApi } from "@/lib/query/fetch-api";
 import { sectionData } from "@/lib/query/section-data";
 
@@ -128,9 +133,28 @@ function List<S extends z.ZodType>({
   );
 }
 
-export function PendingAccessSection() {
+type Accepting = { teamId: string; teamName: string; key: string };
+
+export function PendingAccessSection({ viewer }: { viewer: AccessViewer }) {
   // The names are a nicety: while they load, or if they fail, ids show.
-  const names = namesOf(useOrgUnits().data);
+  const units = useOrgUnits().data;
+  const names = namesOf(units);
+  const [accepting, setAccepting] = useState<Accepting | null>(null);
+  // INV1: Accept binds a pending member invitation, for the callers of the
+  // matrix row; the team's department comes from the scoped org units.
+  const canAccept = (
+    row: PendingItem,
+  ): row is PendingItem & { kind: "affiliation" } => {
+    if (row.kind !== "affiliation") return false;
+    const team = units?.teams.find((t) => t.id === row.teamId);
+    return (
+      team !== undefined &&
+      canAcceptInvite(viewer, { id: team.id, departmentId: team.departmentId })
+    );
+  };
+  const canSearch =
+    viewer.roles.includes(INTERNAL_ADMIN_ROLE) ||
+    viewer.roles.includes(INTERNAL_ORG_ADMIN_ROLE);
 
   return (
     <div className="flex flex-col gap-6">
@@ -152,6 +176,9 @@ export function PendingAccessSection() {
                     <TableHead>Email or UPN</TableHead>
                     <TableHead>Will get</TableHead>
                     <TableHead>Invited (UTC)</TableHead>
+                    <TableHead>
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -164,6 +191,26 @@ export function PendingAccessSection() {
                       <TableCell className="font-mono">
                         {utcDay(row.createdAt)}
                       </TableCell>
+                      <TableCell>
+                        {canAccept(row) ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            aria-label={`Accept invite for ${row.emailOrUpn}`}
+                            onClick={() =>
+                              setAccepting({
+                                teamId: row.teamId,
+                                teamName:
+                                  names.teams.get(row.teamId) ?? row.teamId,
+                                key: row.emailOrUpn,
+                              })
+                            }
+                          >
+                            Accept
+                          </Button>
+                        ) : null}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -172,6 +219,16 @@ export function PendingAccessSection() {
           />
         </SectionBoundary>
       </div>
+      {accepting ? (
+        <AcceptInviteDialog
+          teamId={accepting.teamId}
+          teamName={accepting.teamName}
+          inviteKey={accepting.key}
+          canSearch={canSearch}
+          onClose={() => setAccepting(null)}
+          onAccepted={() => setAccepting(null)}
+        />
+      ) : null}
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">Stale access</h3>
         <SectionBoundary

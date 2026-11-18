@@ -81,7 +81,7 @@ export function AccessSections({
           title="the pending and stale access"
           description="Invitations not yet bound to a sign-in, and access whose person has not signed in lately."
         >
-          <PendingAccessSection />
+          <PendingAccessSection viewer={viewer} />
         </AccessSection>
       ) : null}
       {visible("group-mappings") ? (

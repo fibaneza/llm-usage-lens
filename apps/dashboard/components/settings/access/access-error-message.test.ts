@@ -27,6 +27,12 @@ describe("accessErrorMessage", () => {
     [409, "SSO_BOUND", /(single sign-on|sso|entra)/i],
     [400, "WEAK_PASSWORD", /password/i],
     [403, "REAUTH_REQUIRED", /confirm|sign in again|re-?authenticat/i],
+    // INV1, T-INV3: a target holding a global role cannot be bound to an invite.
+    [
+      409,
+      "PRIVILEGED_TARGET",
+      /administrator|global role|privileged|cannot be/i,
+    ],
   ])("maps %s %s to a readable sentence", (status, code, pattern) => {
     const message = accessErrorMessage(err(status, code));
     expect(message).toMatch(pattern);
@@ -47,6 +53,7 @@ describe("accessErrorMessage", () => {
       "SSO_BOUND",
       "WEAK_PASSWORD",
       "REAUTH_REQUIRED",
+      "PRIVILEGED_TARGET",
     ];
     const messages = codes.map((c) => accessErrorMessage(err(409, c)));
     expect(new Set(messages).size).toBe(codes.length);

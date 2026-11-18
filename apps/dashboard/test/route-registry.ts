@@ -32,6 +32,10 @@ import {
 } from "@/test/support/matrix-route-support";
 import { accounts } from "@/test/fixtures/scope-fixtures";
 import { SESSIONS } from "@/test/support/governance-route-support";
+import {
+  KEY as INVITE_KEY,
+  seedInvite,
+} from "@/test/support/invite-accept-support";
 import { putRaw } from "@/test/support/test-support";
 
 export type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -413,6 +417,15 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   }),
   read("teams/[id]/admins/route.ts", { validParams: { id: "team-a" } }),
   read("teams/[id]/members/route.ts", { validParams: { id: "team-a" } }),
+  // INV1 (Access Control - API routes, Accept a pending invite). Frozen only
+  // for the detail-read sweep: that check reads without a seed and expects 200
+  // for an admin, while this read is the same 404 for a key that is not
+  // pending (T-INV5). Its 401 and no-store parity still apply; its matrix and
+  // candidate rules are in its own route.integration.test.ts.
+  read("teams/[id]/members/pending/[key]/candidates/route.ts", {
+    validParams: { id: "team-a", key: INVITE_KEY },
+    frozen: true,
+  }),
   read("teams/[id]/visibility/route.ts", { validParams: { id: "team-a" } }),
   read("users/route.ts", { query: RANGE, badQuery: BAD_RANGE }),
 
@@ -867,6 +880,17 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     validParams: TEAM,
     validBody: { oid: alice.oid },
     successStatuses: [200, 201],
+  }),
+  // INV1: no successStatuses - the target check reads the configured Entra
+  // tenant, which this suite does not fake; the happy path is in the route's
+  // own test (Access Control - Accept a pending invite).
+  matrixWrite("POST", "teams/[id]/members/pending/[key]/accept/route.ts", {
+    action: "affiliation.invite.accept",
+    validParams: { id: "team-a", key: INVITE_KEY },
+    seed: async () => {
+      await seedInvite(INVITE_KEY, "team-a");
+    },
+    validBody: { oid: alice.oid, reason: "Confirmed with the invitee" },
   }),
   matrixWrite("DELETE", "teams/[id]/members/[oid]/route.ts", {
     action: "affiliation.remove",

@@ -34,7 +34,7 @@ export type BindResult =
   | { bound: false }
   | { bound: true; fromIdentityId: string };
 
-function configuredTenant(): string | null {
+export function configuredTenant(): string | null {
   const issuer = env.AUTH_MICROSOFT_ENTRA_ID_ISSUER;
   const match = issuer ? TENANT_PATTERN.exec(issuer) : null;
   return match?.[1]?.toLowerCase() ?? null;

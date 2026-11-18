@@ -13,14 +13,14 @@ import { commitAudited, getItem } from "./store";
 // Source: docs/specs/2026-11-10-access-control.md — "Membership, admin scopes
 // and lifecycle" (Joiner/Mover/Leaver), threat T9; contract R2 decisions 9, 19.
 
-const snapshot = (a: MemberAffiliation) => ({
+export const affiliationSnapshot = (a: MemberAffiliation) => ({
   oid: a.oid,
   teamId: a.teamId,
   source: a.source,
   version: a.version,
 });
 
-const affiliationItem = (a: MemberAffiliation) => ({
+export const affiliationItem = (a: MemberAffiliation) => ({
   PK: identPk(a.oid),
   SK: AFFILIATION_SK,
   gsi1pk: membersGsi1pk(a.teamId),
@@ -63,7 +63,7 @@ export async function addMember(
       action: "affiliation.add",
       target: { type: "identity", id: input.oid },
       teamId: input.teamId,
-      after: snapshot(value),
+      after: affiliationSnapshot(value),
     },
     ctx,
     conflictCodes: { 0: "ALREADY_AFFILIATED" },
@@ -113,7 +113,7 @@ export async function removeMember(
       action: "affiliation.remove",
       target: { type: "identity", id: input.oid },
       teamId: input.teamId,
-      before: snapshot(verdict.current),
+      before: affiliationSnapshot(verdict.current),
     },
     ctx,
   });
@@ -188,8 +188,8 @@ export async function moveMember(
       action: "affiliation.move",
       target: { type: "identity", id: input.oid },
       teamId: input.toTeamId,
-      before: { ...snapshot(current), removedAdminScope: hadScope },
-      after: snapshot(value),
+      before: { ...affiliationSnapshot(current), removedAdminScope: hadScope },
+      after: affiliationSnapshot(value),
     },
     ctx,
   });

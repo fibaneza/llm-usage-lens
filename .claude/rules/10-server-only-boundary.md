@@ -62,7 +62,11 @@ credentials must never reach the browser.
      `POST /api/notifications/read` is open to every signed-in role for the
      **owner**'s own notifications only (keys built from the session
      `oid`); approve and deny reuse the reset routes' `member` matrix write,
-     never the requester.
+     never the requester. Unit INV1 (user, 2026-11-18; Access Control —
+     *Accept a pending invite*): `POST
+     /api/teams/[id]/members/pending/[key]/accept` follows the add-member
+     row (`matrixWrite` `member`: a Lead in scope, `internal-org-admin`,
+     `internal-admin`); never on one's own invite (`403`).
    - Validate query/body with Zod (`400` on failure).
    - Return `{ data: T }` on success, `{ error: { code, message } }` on failure.
    - Use the `DateRangeQuerySchema` 90-day cap on custom ranges.

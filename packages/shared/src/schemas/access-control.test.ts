@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AUDIT_ACTIONS,
+  AcceptInviteBodySchema,
   AccessSourceSchema,
   AdminScopeSchema,
   AuditActionSchema,
@@ -12,6 +13,7 @@ import {
   DepartmentVisibilitySchema,
   GrantableRoleSchema,
   IdentityLinkSchema,
+  InviteCandidateSchema,
   LocalUserSchema,
   MemberAffiliationSchema,
   PendingItemSchema,
@@ -144,6 +146,50 @@ describe("PendingItemSchema", () => {
   });
 });
 
+// Access Control spec - "Accept a pending invite (unit INV1)" (body `{ oid,
+// reason }` strict, reason 1-280; candidate rows are oid, display name, UPN and
+// email only), T-INV1 (no free-text target in the body).
+describe("AcceptInviteBodySchema", () => {
+  const valid = { oid: OID, reason: "Confirmed by phone" };
+  it("accepts { oid, reason } with a reason of 1 to 280 characters", () => {
+    accepts(AcceptInviteBodySchema)(valid);
+    accepts(AcceptInviteBodySchema)({ ...valid, reason: "r" });
+    accepts(AcceptInviteBodySchema)({ ...valid, reason: "r".repeat(280) });
+  });
+  it.each([
+    ["an extra key", { ...valid, teamId: "t1" }],
+    ["a free-text target", { emailOrUpn: "jane@example.com", reason: "x" }],
+    ["a missing reason", { oid: OID }],
+    ["an empty reason", { ...valid, reason: "" }],
+    ["a blank reason", { ...valid, reason: "   " }],
+    ["a reason over 280 characters", { ...valid, reason: "r".repeat(281) }],
+    ["a missing oid", { reason: "x" }],
+    ["an empty oid", { ...valid, oid: "" }],
+    ["a non-string oid", { ...valid, oid: 7 }],
+  ])("rejects %s", (_name, value) => rejects(AcceptInviteBodySchema)(value));
+});
+
+describe("InviteCandidateSchema", () => {
+  const row = {
+    oid: OID,
+    displayName: "Jane Doe",
+    upn: "jane.doe@company.com",
+    email: "jane@example.com",
+  };
+  it("accepts a row, with displayName, upn or email null when unknown", () => {
+    accepts(InviteCandidateSchema)(row);
+    accepts(InviteCandidateSchema)({ ...row, email: null });
+    accepts(InviteCandidateSchema)({ ...row, displayName: null, upn: null });
+  });
+  it.each([
+    ["an extra field (nothing else leaves the route)", { ...row, tid: "t" }],
+    ["lockout state", { ...row, failedAttempts: 1 }],
+    ["a missing oid", { displayName: null, upn: null, email: null }],
+    ["an empty oid", { ...row, oid: "" }],
+    ["an undefined email", { oid: OID, displayName: "J", upn: "j@c.com" }],
+  ])("rejects %s", (_name, value) => rejects(InviteCandidateSchema)(value));
+});
+
 describe("RoleGrantSchema", () => {
   it("accepts a grant", () => accepts(RoleGrantSchema)(roleGrant));
   it.each([
@@ -255,8 +301,10 @@ describe("audit schemas", () => {
     // L4 slices 2 and 3 add six key actions and four team actions.
     // L6 adds litellm.gateway.update (LiteLLM spec - Combined usage, Gateway configuration).
     // M4 adds the three budgetreset.request.* actions; M3 adds identity.litellm-link.set / .remove and litellm.user.create (Access Control - Budget reset requests, LiteLLM user links, Audit log).
-    // M2 adds appteam.create (Access Control - Created app teams).
-    expect(AUDIT_ACTIONS).toHaveLength(73);
+    // M2 adds appteam.create (Access Control - Created app teams); INV1 adds
+    // affiliation.invite.accept (Access Control - Audit log, Covered).
+    expect(AUDIT_ACTIONS).toHaveLength(74);
+    expect(AUDIT_ACTIONS).toContain("affiliation.invite.accept");
     for (const action of [
       "appteam.create",
       "budgetreset.request.create",
