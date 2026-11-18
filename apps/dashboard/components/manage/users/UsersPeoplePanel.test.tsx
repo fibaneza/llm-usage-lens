@@ -96,7 +96,11 @@ function stub(items: unknown[], cursor?: string) {
 
 function show(
   steps = STEPS.admin,
-  over: Partial<{ canCreate: boolean; litellmConfigured: boolean }> = {},
+  over: Partial<{
+    canCreate: boolean;
+    litellmConfigured: boolean;
+    canResetSpend: boolean;
+  }> = {},
 ) {
   renderWithProviders(
     <UsersPeoplePanel
@@ -104,6 +108,9 @@ function show(
       ownOid="oid-me"
       canCreate={over.canCreate ?? true}
       litellmConfigured={over.litellmConfigured ?? true}
+      {...(over.canResetSpend === undefined
+        ? {}
+        : { canResetSpend: over.canResetSpend })}
       authMethod="entra"
       stepUp={stepUp}
     />,
@@ -231,5 +238,64 @@ describe("UsersPeoplePanel without LiteLLM configured (LiteLLM spec LD37)", () =
     expect(screen.getByText("Linked")).toBeInTheDocument();
     expect(screen.queryByText("Match found")).toBeNull();
     expect(screen.queryByRole("button", { name: /create|^link/i })).toBeNull();
+  });
+});
+
+// RS1 (Design System - "Reset spend from the LiteLLM users tab and the Users
+// page", D2, D4; LiteLLM spec `resetMemberSpend` row): a row action "Reset
+// spend" on LINKED people only, opening ResetMemberSpendDialog (its own test
+// covers the dialog). Contract: UsersPeoplePanel takes an optional boolean
+// `canResetSpend` (default false), resolved by the page on the server (LiteLLM
+// configured AND resetMemberSpend enabled AND the caller may write - see
+// page.test.tsx); the panel adds the row-level rule (D4): a person with
+// `litellm.state === "linked"`. Accessible name `Reset spend for ${name}`
+// (displayName, else email, else oid). Nothing is requested until the dialog
+// opens. Not configured hides it even when the prop is true (LD37).
+describe("UsersPeoplePanel Reset spend row action (RS1)", () => {
+  it("shows on a linked person only, not on a match, none or own-unlinked row (D4)", async () => {
+    stub([LINKED, MATCH, NONE]);
+    show(STEPS.admin, { canResetSpend: true });
+    await screen.findByText("Ada Lovelace");
+    expect(
+      screen.getByRole("button", { name: "Reset spend for Ada Lovelace" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /reset spend/i }),
+    ).toHaveLength(1);
+  });
+
+  it.each([
+    ["is false (toggle off, no write right)", { canResetSpend: false }],
+    ["is not passed (default)", {}],
+    [
+      "is true but LiteLLM is not configured (LD37)",
+      { canResetSpend: true, litellmConfigured: false },
+    ],
+  ])("is absent when canResetSpend %s", async (_n, over) => {
+    stub([LINKED]);
+    show(STEPS.admin, over);
+    await screen.findByText("Ada Lovelace");
+    expect(screen.queryByRole("button", { name: /reset spend/i })).toBeNull();
+  });
+
+  it("requests nothing until opened, then reads that person's memberships (D2)", async () => {
+    stub([LINKED]);
+    show(STEPS.orgAdmin, { canResetSpend: true });
+    const trigger = await screen.findByRole("button", {
+      name: "Reset spend for Ada Lovelace",
+    });
+    const memberships = () =>
+      vi
+        .mocked(fetch)
+        .mock.calls.map(([u]) => String(u))
+        .filter((u) => u.includes("/memberships"));
+    expect(memberships()).toEqual([]);
+    await userEvent.setup().click(trigger);
+    expect(
+      await screen.findByRole("alertdialog", {
+        name: "Reset spend for Ada Lovelace?",
+      }),
+    ).toBeInTheDocument();
+    expect(memberships()).toEqual(["/api/litellm/users/ll-ada/memberships"]);
   });
 });

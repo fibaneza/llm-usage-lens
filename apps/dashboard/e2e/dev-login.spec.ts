@@ -9,6 +9,7 @@ import {
 } from "./support/constants";
 import { deleteStoredIdentity, seedStoredIdentity } from "./support/identity";
 import { signInAsTestUser } from "./support/session";
+import { withLiteLLMStateLock } from "../test/fixtures/e2e-litellm-state-lock";
 
 // Runs against the E2E dev server, which sets AUTH_DEV_LOGIN=true and no Entra
 // vars (playwright.config.ts). Auth guide — Dev-only local login.
@@ -75,7 +76,10 @@ async function ensureFakeLiteLLMConnection(context: BrowserContext) {
 // select is disabled while an identity is typed, so no case picks a role.
 test.describe("dev login identity option (L3c, L3c2)", () => {
   test.skip(E2E_PRODUCTION_SERVERS, DEV_LOGIN_ONLY_REASON);
-  // Both LiteLLM tests save the one shared connection; run them in order.
+  // Both LiteLLM tests save the one shared connection; run them in order. They
+  // also take the cross-worker LiteLLM state lock, so reset-spend-users (which
+  // stores and then removes the connection) cannot pull it away mid-test (RS1
+  // review U-W1).
   test.describe.configure({ mode: "serial" });
 
   const SEEDED_OIDS = [
@@ -106,46 +110,50 @@ test.describe("dev login identity option (L3c, L3c2)", () => {
     context,
     page,
   }) => {
-    await ensureFakeLiteLLMConnection(context);
-    await page.goto("/sign-in");
-    await page
-      .getByLabel("Sign in as (email or user id)")
-      .fill(E2E_LITELLM_USER.email.toUpperCase());
-    await expect(page.getByLabel(/role/i)).toBeDisabled();
-    await page
-      .getByRole("button", {
-        name: `Sign in as ${E2E_LITELLM_USER.email.toUpperCase()}`,
-      })
-      .click();
-    await expect(page).toHaveURL(/\/dashboard/);
+    await withLiteLLMStateLock(async () => {
+      await ensureFakeLiteLLMConnection(context);
+      await page.goto("/sign-in");
+      await page
+        .getByLabel("Sign in as (email or user id)")
+        .fill(E2E_LITELLM_USER.email.toUpperCase());
+      await expect(page.getByLabel(/role/i)).toBeDisabled();
+      await page
+        .getByRole("button", {
+          name: `Sign in as ${E2E_LITELLM_USER.email.toUpperCase()}`,
+        })
+        .click();
+      await expect(page).toHaveURL(/\/dashboard/);
 
-    // B2-3 / B2-11: the LiteLLM My usage view is on My usage now.
-    await page.goto("/dashboard/me");
-    await expect(page.getByText("$42.50")).toBeVisible();
-    await expect(
-      page.getByText("Your account is not linked to LiteLLM"),
-    ).toHaveCount(0);
+      // B2-3 / B2-11: the LiteLLM My usage view is on My usage now.
+      await page.goto("/dashboard/me");
+      await expect(page.getByText("$42.50")).toBeVisible();
+      await expect(
+        page.getByText("Your account is not linked to LiteLLM"),
+      ).toHaveCount(0);
+    });
   });
 
   test("an email unknown to LiteLLM shows the not-linked state (Views by role)", async ({
     context,
     page,
   }) => {
-    await ensureFakeLiteLLMConnection(context);
-    await page.goto("/sign-in");
-    await page
-      .getByLabel("Sign in as (email or user id)")
-      .fill("nobody.here@example.test");
-    await page
-      .getByRole("button", { name: "Sign in as nobody.here@example.test" })
-      .click();
-    await expect(page).toHaveURL(/\/dashboard/);
+    await withLiteLLMStateLock(async () => {
+      await ensureFakeLiteLLMConnection(context);
+      await page.goto("/sign-in");
+      await page
+        .getByLabel("Sign in as (email or user id)")
+        .fill("nobody.here@example.test");
+      await page
+        .getByRole("button", { name: "Sign in as nobody.here@example.test" })
+        .click();
+      await expect(page).toHaveURL(/\/dashboard/);
 
-    // B2-3 / B2-11: the LiteLLM My usage view is on My usage now.
-    await page.goto("/dashboard/me");
-    await expect(
-      page.getByText("Your account is not linked to LiteLLM"),
-    ).toBeVisible();
+      // B2-3 / B2-11: the LiteLLM My usage view is on My usage now.
+      await page.goto("/dashboard/me");
+      await expect(
+        page.getByText("Your account is not linked to LiteLLM"),
+      ).toBeVisible();
+    });
   });
 
   test("an email that is not stored is refused with a visible error and no session (Dev login, L3c2)", async ({

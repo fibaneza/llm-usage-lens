@@ -7,6 +7,7 @@ import { useState } from "react";
 import { z } from "zod";
 
 import { Panel } from "@/components/display/Panel";
+import { ResetMemberSpendDialog } from "@/components/litellm/ResetMemberSpendDialog";
 import { LiteLLMLinkCell } from "@/components/manage/users/LiteLLMLinkCell";
 import type { LinkState } from "@/components/manage/users/LiteLLMLinkCell";
 import { AddUserDialog } from "@/components/manage/users/AddUserDialog";
@@ -104,11 +105,13 @@ function People({
   ownOid,
   canCreate,
   litellmConfigured,
+  canResetSpend,
 }: {
   steps: AddUserSteps;
   ownOid: string;
   canCreate: boolean;
   litellmConfigured: boolean;
+  canResetSpend: boolean;
 }) {
   const queryClient = useQueryClient();
   const units = useOrgUnits();
@@ -159,26 +162,38 @@ function People({
                     : "-"}
                 </TableCell>
                 <TableCell>
-                  {state && (litellmConfigured || state.state === "linked") ? (
-                    <LiteLLMLinkCell
-                      subject={{
-                        oid: row.oid,
-                        name,
-                        email: row.email,
-                        version: row.linkVersion,
-                      }}
-                      link={state}
-                      canWrite={steps.link && row.oid !== ownOid}
-                      canCreate={canCreate}
-                      onChanged={refresh}
-                    />
-                  ) : (
-                    <Badge variant="outline">
-                      {litellmConfigured
-                        ? "Not linked"
-                        : "LiteLLM not configured"}
-                    </Badge>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {state &&
+                    (litellmConfigured || state.state === "linked") ? (
+                      <LiteLLMLinkCell
+                        subject={{
+                          oid: row.oid,
+                          name,
+                          email: row.email,
+                          version: row.linkVersion,
+                        }}
+                        link={state}
+                        canWrite={steps.link && row.oid !== ownOid}
+                        canCreate={canCreate}
+                        onChanged={refresh}
+                      />
+                    ) : (
+                      <Badge variant="outline">
+                        {litellmConfigured
+                          ? "Not linked"
+                          : "LiteLLM not configured"}
+                      </Badge>
+                    )}
+                    {canResetSpend &&
+                    litellmConfigured &&
+                    row.litellm.state === "linked" ? (
+                      <ResetMemberSpendDialog
+                        oid={row.oid}
+                        litellmUserId={row.litellm.litellmUserId}
+                        name={name}
+                      />
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             );
@@ -208,11 +223,13 @@ type PanelProps = {
   authMethod: AccessViewer["authMethod"];
   stepUp: StepUpActions;
   litellmConfigured: boolean;
+  canResetSpend: boolean;
 };
 
 function PeoplePanel({
   canCreate,
   litellmConfigured,
+  canResetSpend,
   steps,
   ownOid,
   authMethod,
@@ -240,6 +257,7 @@ function PeoplePanel({
         ownOid={ownOid}
         canCreate={canCreate}
         litellmConfigured={litellmConfigured}
+        canResetSpend={canResetSpend}
       />
       {adding ? (
         <AddUserDialog
@@ -265,13 +283,16 @@ function DerivedPeoplePanel(props: PanelProps) {
 export function UsersPeoplePanel({
   canCreate,
   litellmConfigured = true,
+  canResetSpend = false,
   ...rest
-}: Omit<PanelProps, "litellmConfigured"> & {
+}: Omit<PanelProps, "litellmConfigured" | "canResetSpend"> & {
   // Absent: derived from the list route's enabledOperations (edition and toggle).
   canCreate?: boolean;
   litellmConfigured?: boolean;
+  // RS1: resolved by the page (configured, toggle on, caller may write).
+  canResetSpend?: boolean;
 }) {
-  const props = { ...rest, litellmConfigured };
+  const props = { ...rest, litellmConfigured, canResetSpend };
   return canCreate === undefined ? (
     <DerivedPeoplePanel {...props} />
   ) : (

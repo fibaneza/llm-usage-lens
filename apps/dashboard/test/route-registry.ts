@@ -447,6 +447,10 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     query: RANGE,
     badQuery: BAD_RANGE,
   }),
+  read("litellm/users/[litellmUserId]/memberships/route.ts", {
+    family: "litellm",
+    validParams: { litellmUserId: "lu-1" },
+  }),
   read("litellm/models/route.ts", { family: "litellm" }),
   read("litellm/orphans/route.ts", { family: "litellm" }),
   read("litellm/team-links/route.ts", { family: "litellm" }),

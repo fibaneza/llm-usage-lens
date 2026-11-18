@@ -10,8 +10,9 @@ import { signInAsTestUser } from "./support/session";
 // shows the locked setting"), Access Control T37.
 //
 // The e2e web server (playwright.config.ts) starts with
-// APP_CONFIG_FILE=test/fixtures/config/e2e.yaml, which sets resetMemberSpend,
-// deleteKey and rotateKey to enabled:false. The toggles API is real here (no
+// APP_CONFIG_FILE=test/fixtures/config/e2e.yaml, which sets deleteKey and
+// rotateKey to enabled:false (resetMemberSpend is not locked; see the fixture's
+// header). The toggles API is real here (no
 // page.route for it): the lock comes from the server reading the file. Only
 // the connection read is stubbed, as in the other LiteLLM Settings specs.
 test.describe("Settings -> LiteLLM -> Guardrails with a config.yaml (unit CFG)", () => {
@@ -37,7 +38,7 @@ test.describe("Settings -> LiteLLM -> Guardrails with a config.yaml (unit CFG)",
   test("an operation the file sets shows 'Set in config.yaml' and a disabled switch", async ({
     page,
   }) => {
-    for (const name of ["rotateKey", "deleteKey", "resetMemberSpend"]) {
+    for (const name of ["rotateKey", "deleteKey"]) {
       const sw = page.getByRole("switch", { name });
       await expect(sw).toBeDisabled();
       await expect(sw).not.toBeChecked();

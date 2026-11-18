@@ -1005,6 +1005,15 @@ Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
 - [x] **Built after M2 (2026-11-18):** created teams as "No AWS account" rows in the Bedrock panel read M2's `hasAwsAccount` on `GET /api/access/org-units` through the shared `OrgUnitsResponseSchema` (the tolerant local schema is removed; M5-D3). e2e keeps stubs
 - [ ] Verify (one test pass at the end; Design System — *Source panels on Cost by team, Cost by user and Cost by service*; LiteLLM spec — MI-D17–D19, LT-MI4; App Teams spec — AT6): no chart or column holds both sources; "Sum of members" is requested only when a global reader asks for it (no member reads on the panel's first load) and works for a linked row and an `open-team` row; the three figures; Combined equals L6's rule on the counted-once fixture (LT-MI4); the warning and the hidden total without a gateway; a LiteLLM outage leaves the Bedrock panel working; "not in LiteLLM" is never `$0`; targeted e2e once; branch gate green with `main` merged in
 
+### RS1 — Reset spend on the LiteLLM users tab and the Users page (`feature/reset-spend-users`)
+
+*User request, 2026-11-18; coordinator decisions D1–D7 (Design System — *Reset spend from the LiteLLM users tab and the Users page*, *LiteLLM members with no app membership*; LiteLLM spec — `resetMemberSpend` row). Tests first (Rule 70).*
+
+- [x] *Reset spend* row action on Management → LiteLLM → *LiteLLM users* and Management → Users (linked users), shown only when `resetMemberSpend` is enabled, the row has an `oid` and the caller may write members (D4); a dialog listing the person's resettable team memberships (spend, budget or "No budget") with a confirm per team and *Reset all listed* (one call at a time, a result per team); every reset through the existing reset-spend route
+- [x] Any new read for the memberships: `GET /api/litellm/users/[litellmUserId]/memberships`, a scoped GET (LD37, route registry, `404` parity)
+- [x] Team page: the note and **Add to team** for LiteLLM members with no app membership (D6); member matching by `litellmUserId` too (D7)
+- [ ] Verify: component tests (shown/absent by toggle, `oid` and role; only resettable teams listed; the D6 note and action); integration (any new GET: `401`, scope, `404` parity; the `litellmUserId` match); e2e, one mocked case per page (open, confirm, the reset-spend POST sent) and axe at 375 with the dialog open; branch gate with `main` merged in (Rule 70.12)
+
 ### INV1 — Accept a pending invite (`feature/invite-accept`)
 
 *Added 2026-11-18 at the user's direction ("Admin and team lead should be able to accept a 'sent by them' invitation to the team"); user decisions on what accept means and who may accept, agent decisions on the candidate list, the sender's scope and member-only scope (Access Control — *Accept a pending invite*, permission matrix, *API routes*, T-INV1 to T-INV6; Design System — *Management improvements*). Runs after M3.*

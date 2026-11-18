@@ -29,6 +29,10 @@ import { putTeamLink } from "@/lib/data/litellm/team-links";
 import { ctxAt, ok } from "@/test/support/access-test-support";
 import { seedMember } from "@/test/support/matrix-route-support";
 import { CALLERS, signInAs } from "@/test/fixtures/scope-fixtures";
+import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
+import type { FakeCall } from "@/test/fakes/fake-litellm";
+import { memberWritesHandler } from "@/test/support/litellm-member-writes-support";
+import { putRaw } from "@/test/support/test-support";
 
 // Source: docs/specs/2026-11-10-litellm.md — "API routes" (/api/litellm/teams/
 // [teamId]/members GET in scope), "Roles and rights" (Lead sees members' spend,
@@ -96,6 +100,186 @@ describe("GET /api/litellm/teams/[teamId]/members", () => {
     expectNoSentinels(body);
     for (const banned of ["budget_id", "created_by", "litellm_budget_table"]) {
       expect(JSON.stringify(body)).not.toContain(banned);
+    }
+  });
+});
+
+// Source: Design System - "LiteLLM members with no app membership (unit RS1;
+// D6-D7)" (D7) and its match-precedence ruling R2: a LiteLLM member matches a member of
+// the app team by `user_id`, by email, or by the identity link - its `user_id`
+// equals the team member's `litellmUserId` - so the Team page and the RS1
+// dialogs find the same people. Contract: the matched item carries the app
+// member's `oid` and `name`; an unmatched one carries neither. Links of people
+// outside the app team (another team, or no membership) never match.
+describe("GET /api/litellm/teams/[teamId]/members - matching an app member (RS1 D7)", () => {
+  const LINKED_ID = "uid-bob-7";
+
+  async function linkLiteLLMUser(oid: string, litellmUserId: string) {
+    await putRaw({
+      PK: `IDENT#${oid}`,
+      SK: "LINK",
+      oid,
+      usageIdentities: [],
+      aliases: [],
+      litellmUserId,
+      version: 1,
+      updatedAt: "2026-11-01T00:00:00.000Z",
+    });
+  }
+
+  // team-a's LiteLLM team lists exactly these members; `email` is what
+  // members_with_roles reports (absent: the row's email falls back to user_id).
+  function listMembers(rows: Array<{ id: string; email?: string }>) {
+    const base = memberWritesHandler();
+    state.fake = createFakeLiteLLM((call: FakeCall, attempt: number) => {
+      const reply = base(call, attempt);
+      if (
+        `${call.method} ${call.path}` !== "GET /team/info" ||
+        typeof reply === "string"
+      ) {
+        return reply;
+      }
+      const body = reply.body as {
+        team_info: Record<string, unknown>;
+      } & Record<string, unknown>;
+      return {
+        status: reply.status,
+        body: {
+          ...body,
+          team_info: {
+            ...body.team_info,
+            members_with_roles: rows.flatMap((r) =>
+              r.email
+                ? [{ user_id: r.id, user_email: r.email, role: "user" }]
+                : [],
+            ),
+          },
+          team_memberships: rows.map((r) => ({
+            user_id: r.id,
+            team_id: LTEAM["team-a"],
+            spend: 1,
+          })),
+        },
+      };
+    });
+    vi.stubGlobal("fetch", state.fake.fetch);
+  }
+
+  const items = async () => {
+    signInAs("admin");
+    const { body } = await call(
+      await load(),
+      "/api/litellm/teams/team-a/members",
+      { teamId: "team-a" },
+    );
+    return body.data.items as Array<{
+      userId: string;
+      oid?: string;
+      name?: string;
+    }>;
+  };
+
+  it("matches by the identity link: user_id equals the member's litellmUserId, though user_id and email differ from the app member's (D7)", async () => {
+    await linkLiteLLMUser(PEOPLE.bob.oid, LINKED_ID);
+    listMembers([{ id: LINKED_ID, email: "someone.else@vendor.example" }]);
+
+    expect(await items()).toEqual([
+      expect.objectContaining({
+        userId: LINKED_ID,
+        oid: PEOPLE.bob.oid,
+        name: PEOPLE.bob.name,
+      }),
+    ]);
+  });
+
+  // Source: Design System - "LiteLLM members with no app membership" (R2,
+  // 2026-11-18): an identity-link match takes precedence over email and
+  // usage-identity matches, so a row never shows the wrong person. Both
+  // member orders run: the map is built concurrently, so a last-write-wins
+  // bug would only show for one of them.
+  it.each([
+    ["bob", "alice"],
+    ["alice", "bob"],
+  ] as const)(
+    "a user_id equal to %s's litellmUserId wins over the email of %s, which is a different member (R2)",
+    async (linked, other) => {
+      await linkLiteLLMUser(PEOPLE[linked].oid, LINKED_ID);
+      listMembers([{ id: LINKED_ID, email: PEOPLE[other].email }]);
+
+      expect(await items()).toEqual([
+        expect.objectContaining({
+          userId: LINKED_ID,
+          oid: PEOPLE[linked].oid,
+          name: PEOPLE[linked].name,
+        }),
+      ]);
+    },
+  );
+
+  it.each([
+    ["bob", "alice"],
+    ["alice", "bob"],
+  ] as const)(
+    "a user_id equal to %s's litellmUserId wins over a usage identity of %s listing the same id (R2)",
+    async (linked, other) => {
+      await linkLiteLLMUser(PEOPLE[linked].oid, LINKED_ID);
+      await putRaw({
+        PK: `IDENT#${PEOPLE[other].oid}`,
+        SK: "LINK",
+        oid: PEOPLE[other].oid,
+        usageIdentities: [LINKED_ID],
+        aliases: [],
+        version: 1,
+        updatedAt: "2026-11-01T00:00:00.000Z",
+      });
+      listMembers([{ id: LINKED_ID }]);
+
+      expect(await items()).toEqual([
+        expect.objectContaining({ userId: LINKED_ID, oid: PEOPLE[linked].oid }),
+      ]);
+    },
+  );
+
+  it("matching by user_id equal to the member's email, and by LiteLLM email, is unchanged (Identity mapping)", async () => {
+    listMembers([
+      { id: PEOPLE.alice.email },
+      { id: "uid-other-1", email: PEOPLE.bob.email },
+    ]);
+
+    const rows = await items();
+
+    expect(rows.find((r) => r.userId === PEOPLE.alice.email)?.oid).toBe(
+      PEOPLE.alice.oid,
+    );
+    expect(rows.find((r) => r.userId === "uid-other-1")?.oid).toBe(
+      PEOPLE.bob.oid,
+    );
+  });
+
+  it("a link belonging to a member of ANOTHER team does not match (no cross-team leakage; LT1)", async () => {
+    await linkLiteLLMUser(CALLERS.memberB.oid, "uid-teamb-9");
+    listMembers([{ id: "uid-teamb-9", email: "b9@vendor.example" }]);
+
+    const [row] = await items();
+
+    expect(row).toBeDefined();
+    expect(row?.oid).toBeUndefined();
+    expect(row?.name).toBeUndefined();
+  });
+
+  it("a link of a person who is not a member of any team, and an unlinked LiteLLM user, do not match", async () => {
+    await linkLiteLLMUser(PEOPLE.carol.oid, "uid-carol-3");
+    listMembers([
+      { id: "uid-carol-3", email: "c3@vendor.example" },
+      { id: "uid-nobody", email: "nobody@vendor.example" },
+    ]);
+
+    const rows = await items();
+
+    expect(rows).toHaveLength(2);
+    for (const r of rows) {
+      expect(r.oid).toBeUndefined();
+      expect(r.name).toBeUndefined();
     }
   });
 });

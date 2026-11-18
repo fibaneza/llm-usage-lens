@@ -20,6 +20,7 @@ export async function mapTeamMembers(
   const oids = await listAllTeamMemberOids(teamId);
 
   const byKey = new Map<string, DashboardMember>();
+  const userIdKeys: Array<[string, DashboardMember]> = [];
   await Promise.all(
     oids.map(async (oid) => {
       const [link, identity] = await Promise.all([
@@ -30,15 +31,17 @@ export async function mapTeamMembers(
         oid,
         ...(identity?.displayName ? { name: identity.displayName } : {}),
       };
-      const keys = [
-        link?.litellmUserId,
-        identity?.email,
-        ...(link?.usageIdentities ?? []),
-      ];
+      const keys = [identity?.email, ...(link?.usageIdentities ?? [])];
       for (const key of keys) {
         if (key) byKey.set(key.toLowerCase(), member);
       }
+      if (link?.litellmUserId) {
+        userIdKeys.push([link.litellmUserId.toLowerCase(), member]);
+      }
     }),
   );
+  // A LiteLLM user id is the strongest key: set last so it wins over email and
+  // usage-identity keys whatever order the lookups finished in.
+  for (const [key, member] of userIdKeys) byKey.set(key, member);
   return byKey;
 }

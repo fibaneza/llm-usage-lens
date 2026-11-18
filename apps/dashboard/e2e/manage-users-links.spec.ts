@@ -3,6 +3,7 @@ import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
+import { withLiteLLMStateLock } from "../test/fixtures/e2e-litellm-state-lock";
 
 // Sources: Design System - Management improvements, Users (D15), LiteLLM users
 // tab (D16a), User link states (D16) and Dev sign-in as a lead (D14, team lead
@@ -116,42 +117,46 @@ test.describe("Management -> Users (D15, D16)", () => {
     context,
     page,
   }) => {
-    test.skip(
-      await litellmIsConfigured(context),
-      "a LiteLLM connection is stored (an earlier spec saved one); this case runs on a fresh table, as in CI",
-    );
-    // The dev-login spec may save the connection on another worker while this
-    // runs (the only transition: not configured -> configured); a failure with
-    // the state changed is not a defect, so it skips instead.
-    try {
-      await signInAsTestUser(context, { roles: ["internal-org-admin"] });
-      const includes: (string | null)[] = [];
-      await page.route(/\/api\/identities\/directory/, (route) => {
-        includes.push(
-          new URL(route.request().url()).searchParams.get("include"),
-        );
-        return route.fulfill({ json: { data: DIRECTORY } });
-      });
-      const writes: string[] = [];
-      await page.route(/\/litellm-link$/, (route) => {
-        writes.push(route.request().method());
-        return route.fulfill({ status: 500, json: {} });
-      });
-      await page.goto("/dashboard/manage/users");
-      await waitForHydration(page);
-
-      const bob = page.getByRole("row", { name: /Bob Barker/ });
-      await expect(bob).toContainText("LiteLLM not configured");
-      await expect(bob.getByRole("button", { name: /link/i })).toHaveCount(0);
-      expect(includes).not.toContain("litellmMatch");
-      expect(writes).toEqual([]);
-    } catch (error) {
+    await withLiteLLMStateLock(async () => {
       test.skip(
         await litellmIsConfigured(context),
-        "a LiteLLM connection was saved by another spec during this test",
+        "a LiteLLM connection is stored (an earlier spec saved one); this case runs on a fresh table, as in CI",
       );
-      throw error;
-    }
+      // dev-login and reset-spend-users change the connection on other workers;
+      // the whole case holds the cross-worker LiteLLM state lock, so neither
+      // transition (not configured -> configured, or back) can happen while it
+      // runs (RS1 review U-W1). The catch stays for a spec that does not take
+      // the lock: a failure with the state changed is not a defect.
+      try {
+        await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+        const includes: (string | null)[] = [];
+        await page.route(/\/api\/identities\/directory/, (route) => {
+          includes.push(
+            new URL(route.request().url()).searchParams.get("include"),
+          );
+          return route.fulfill({ json: { data: DIRECTORY } });
+        });
+        const writes: string[] = [];
+        await page.route(/\/litellm-link$/, (route) => {
+          writes.push(route.request().method());
+          return route.fulfill({ status: 500, json: {} });
+        });
+        await page.goto("/dashboard/manage/users");
+        await waitForHydration(page);
+
+        const bob = page.getByRole("row", { name: /Bob Barker/ });
+        await expect(bob).toContainText("LiteLLM not configured");
+        await expect(bob.getByRole("button", { name: /link/i })).toHaveCount(0);
+        expect(includes).not.toContain("litellmMatch");
+        expect(writes).toEqual([]);
+      } catch (error) {
+        test.skip(
+          await litellmIsConfigured(context),
+          "a LiteLLM connection was saved by another spec during this test",
+        );
+        throw error;
+      }
+    });
   });
 
   test("an auditor reads the people list and gets neither Add user nor a link control", async ({

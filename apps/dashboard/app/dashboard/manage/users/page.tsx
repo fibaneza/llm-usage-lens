@@ -27,8 +27,10 @@ export default async function UsersManagePage() {
   const page = await usersPageAccessFor(session, enabledSignInProviders.entra);
   if (!page) notFound();
   const litellmConfigured = await isLiteLLMConfigured();
-  const canCreate =
-    litellmConfigured && (await enabledOperations()).includes("createUser");
+  const enabled = litellmConfigured ? await enabledOperations() : [];
+  const canCreate = enabled.includes("createUser");
+  // RS1: the Reset spend row action needs the toggle and the link/write step.
+  const canResetSpend = page.steps.link && enabled.includes("resetMemberSpend");
   return (
     <div className="flex flex-col gap-4">
       <PageHeader description="People, their teams and LiteLLM links, and a lookup of a person's LiteLLM spend, budget and keys." />
@@ -37,6 +39,7 @@ export default async function UsersManagePage() {
         ownOid={page.ownOid}
         canCreate={canCreate}
         litellmConfigured={litellmConfigured}
+        canResetSpend={canResetSpend}
         authMethod={page.authMethod}
         stepUp={{
           entra: stepUpWithEntra,

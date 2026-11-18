@@ -8,6 +8,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
 
+import { ResetMemberSpendDialog } from "@/components/litellm/ResetMemberSpendDialog";
 import { Empty, Unavailable } from "@/components/litellm/LiteLLMSection";
 import { useLiteLLMQueryState } from "@/components/litellm/use-litellm-query";
 import { UserDetail, budget, spend } from "@/components/litellm/UserSearch";
@@ -104,6 +105,19 @@ function RowLink({
   );
 }
 
+// RS1 (D4): only where the Team page would show it - the toggle is on, the
+// caller may write (mayLink) and the row has an app identity and a LiteLLM user.
+function RowReset({ row, show }: { row: UsersListRow; show: boolean }) {
+  if (!show || !row.appUser || !row.litellmUser) return null;
+  return (
+    <ResetMemberSpendDialog
+      oid={row.appUser.oid}
+      litellmUserId={row.litellmUser.userId}
+      name={row.appUser.displayName ?? row.appUser.email ?? row.appUser.oid}
+    />
+  );
+}
+
 function List({
   mode,
   team,
@@ -153,6 +167,8 @@ function List({
   const { users, hasMore, enabledOperations, mayLink } = query.data.data;
   if (users.length === 0 && page === 1) return <Empty>No users found</Empty>;
   const canCreate = enabledOperations.includes("createUser");
+  const canReset =
+    mayLink === true && enabledOperations.includes("resetMemberSpend");
   const refresh = () =>
     void queryClient.invalidateQueries({ queryKey: ["litellm", "users-list"] });
 
@@ -220,13 +236,16 @@ function List({
                     <dd className="break-words">{c.teams}</dd>
                   </div>
                 </dl>
-                <RowLink
-                  row={row}
-                  mayLink={mayLink}
-                  ownOid={caller.oid}
-                  canCreate={canCreate}
-                  onChanged={refresh}
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <RowLink
+                    row={row}
+                    mayLink={mayLink}
+                    ownOid={caller.oid}
+                    canCreate={canCreate}
+                    onChanged={refresh}
+                  />
+                  <RowReset row={row} show={canReset} />
+                </div>
               </li>
             );
           })}
@@ -266,13 +285,16 @@ function List({
                   </TableCell>
                   <TableCell>{c.teams}</TableCell>
                   <TableCell>
-                    <RowLink
-                      row={row}
-                      mayLink={mayLink}
-                      ownOid={caller.oid}
-                      canCreate={canCreate}
-                      onChanged={refresh}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <RowLink
+                        row={row}
+                        mayLink={mayLink}
+                        ownOid={caller.oid}
+                        canCreate={canCreate}
+                        onChanged={refresh}
+                      />
+                      <RowReset row={row} show={canReset} />
+                    </div>
                   </TableCell>
                 </TableRow>
               );

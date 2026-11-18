@@ -669,3 +669,162 @@ describe("MembersPanel member actions with no operation enabled (review W4)", ()
     expect(lastCell.querySelector("span:empty")).toBeNull();
   });
 });
+
+// Source: Design System - "LiteLLM members with no app membership (unit RS1;
+// D6-D7)": a LiteLLM member with no `oid` shows the muted note "Not a member of
+// this team in the dashboard - add them to reset or manage." and no row
+// actions; a caller who may write members (the members response carries the
+// `candidates` key, Access: Lead in scope / org-admin / Admin) also gets an
+// "Add to team" action using the existing add-member contract (POST
+// /api/teams/[id]/members { emailOrUpn }, as AddUserDialog sends); an Auditor
+// (no `candidates` key) gets the note only.
+describe("MembersPanel members with no app membership (RS1 D6)", () => {
+  const NOTE =
+    "Not a member of this team in the dashboard — add them to reset or manage.";
+  const outsider = {
+    userId: "ext-1",
+    email: "ext1@example.test",
+    spend: 5,
+    maxBudget: 10,
+    rpmLimit: null,
+    tpmLimit: null,
+  };
+  const membersWith = (extra: Record<string, unknown>) => ({
+    "GET /api/litellm/teams/t1/members": () =>
+      apiResponse({
+        data: {
+          connected: true,
+          items: [member("ada", "Ada Lovelace", 77.1, 150), outsider],
+          ...extra,
+        },
+      }),
+  });
+  const outsiderRow = () =>
+    screen.findByRole("row", { name: /ext1@example\.test/ });
+
+  it("shows the exact muted note and no reset, remove or disable action on the row", async () => {
+    stub(ALL_OPS, membersWith({ candidates: [] }));
+    renderPanel();
+    const row = await outsiderRow();
+
+    expect(within(row).getByText(NOTE)).toBeVisible();
+    expect(
+      within(row).queryByRole("button", {
+        name: /reset|remove|disable|enable|edit/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(within(rowOf("Ada Lovelace")).queryByText(NOTE)).toBeNull();
+  });
+
+  // Source: Design System - "LiteLLM members with no app membership" (coordinator
+  // ruling R3, 2026-11-18; Access Control D27 precedent): the email comes from
+  // LiteLLM and is not verified, so "Add to team" opens a confirm AlertDialog
+  // naming the email and the team (the team detail's alias), Cancel focused
+  // first; nothing is sent until Confirm, and Cancel or Escape send nothing.
+  const addStub = () =>
+    stub(ALL_OPS, {
+      ...membersWith({ candidates: [] }),
+      "POST /api/teams/t1/members": () =>
+        apiResponse({ data: { ok: true } }, 201),
+    });
+  const openAddDialog = async (u: ReturnType<typeof user>) => {
+    const row = await outsiderRow();
+    await u.click(
+      within(row).getByRole("button", {
+        name: "Add ext1@example.test to team",
+      }),
+    );
+    return screen.findByRole("alertdialog");
+  };
+
+  it("'Add to team' opens a confirm dialog naming the email and the team, Cancel focused first, and sends nothing yet (R3)", async () => {
+    const api = addStub();
+    const u = user();
+    renderPanel();
+    const dialog = await openAddDialog(u);
+
+    expect(dialog).toHaveTextContent("ext1@example.test");
+    expect(dialog).toHaveTextContent("Payments");
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("button", { name: "Cancel" }),
+      ).toHaveFocus(),
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Confirm" }),
+    ).toBeInTheDocument();
+    expect(api.writes()).toEqual([]);
+  });
+
+  it("Confirm POSTs the existing add-member body to the app-team members route (R3, D6)", async () => {
+    const api = addStub();
+    const u = user();
+    renderPanel();
+    const dialog = await openAddDialog(u);
+
+    await u.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(api.writes()).toHaveLength(1));
+    expect(api.writes()[0]).toMatchObject({
+      method: "POST",
+      path: "/api/teams/t1/members",
+    });
+    const sent = vi
+      .mocked(fetch)
+      .mock.calls.find(([, init]) => init?.method === "POST")?.[1]?.body;
+    expect(JSON.parse(String(sent))).toEqual({
+      emailOrUpn: "ext1@example.test",
+    });
+  });
+
+  it("Cancel closes the dialog and sends nothing (R3)", async () => {
+    const api = addStub();
+    const u = user();
+    renderPanel();
+    const dialog = await openAddDialog(u);
+
+    await u.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(api.writes()).toEqual([]);
+  });
+
+  it("Escape closes the dialog and sends nothing (R3)", async () => {
+    const api = addStub();
+    const u = user();
+    renderPanel();
+    await openAddDialog(u);
+
+    await u.keyboard("{Escape}");
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(api.writes()).toEqual([]);
+  });
+
+  it("shows no 'Add to team' on a member that has an oid", async () => {
+    stub(ALL_OPS, membersWith({ candidates: [] }));
+    renderPanel();
+    await outsiderRow();
+
+    expect(
+      within(rowOf("Ada Lovelace")).queryByRole("button", {
+        name: /add .* to team/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("a read-only caller (no candidates key) sees the note but no action", async () => {
+    stub(["getUserDailySpend"], membersWith({}));
+    renderPanel();
+    const row = await outsiderRow();
+
+    expect(within(row).getByText(NOTE)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /add .* to team/i }),
+    ).not.toBeInTheDocument();
+  });
+});

@@ -1,15 +1,15 @@
 # Playwright fixture (unit CFG, A9), passed through APP_CONFIG_FILE by
-# playwright.config.ts. It locks three operations (resetMemberSpend, deleteKey,
-# rotateKey: enabled false), which Settings -> LiteLLM -> Guardrails shows as
-# "Set in config.yaml" with a disabled switch, and sets display.orgName, which
-# shows under the brand in the sidebar (e2e/config-file.spec.ts).
+# playwright.config.ts. It locks two operations (deleteKey, rotateKey: enabled
+# false), which Settings -> LiteLLM -> Guardrails shows as "Set in config.yaml"
+# with a disabled switch, and sets display.orgName, which shows under the brand
+# in the sidebar (e2e/config-file.spec.ts). resetMemberSpend is deliberately not
+# locked: every e2e spec runs against this file, and the Users-page reset-spend
+# specs switch that toggle on through the toggles route.
 display:
   orgName: E2E Config Org
 
 litellm:
   operations:
-    resetMemberSpend:
-      enabled: false
     deleteKey:
       enabled: false
     rotateKey:

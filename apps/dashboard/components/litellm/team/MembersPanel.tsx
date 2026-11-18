@@ -5,11 +5,13 @@ import {
   LiteLLMUserDetailResponseSchema,
 } from "@llm-usage-lens/shared";
 import { useState } from "react";
+import { z } from "zod";
 
 import { formatUsd } from "@/components/charts/chart-data";
 import { BudgetBar, budgetPercent } from "@/components/manage/BudgetBar";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { ApiRequestError, mutateApi } from "@/lib/query/fetch-api";
 import {
   Dialog,
   DialogContent,
@@ -210,6 +212,7 @@ function EditMemberLimits({
 
 type Member = {
   userId: string;
+  email: string;
   oid?: string | undefined;
   spend?: number | undefined;
 };
@@ -263,6 +266,58 @@ function MemberDailySpend({ userId, name }: { userId: string; name: string }) {
   );
 }
 
+const NOT_IN_DASHBOARD =
+  "Not a member of this team in the dashboard — add them to reset or manage.";
+
+// RS1 (D6): add the LiteLLM member to the app team through the app-team add
+// route, as the Users page does; offered only to callers who may write members
+// (the members response carries `candidates` for them alone).
+function AddToTeam({
+  teamId,
+  email,
+  teamName,
+  onAdded,
+}: {
+  teamId: string;
+  email: string;
+  teamName: string;
+  onAdded: () => Promise<void>;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function add() {
+    setPending(true);
+    setError(null);
+    try {
+      await mutateApi(
+        `/api/teams/${encodeURIComponent(teamId)}/members`,
+        "POST",
+        { emailOrUpn: email },
+        z.unknown(),
+      );
+      await onAdded();
+    } catch (caught) {
+      if (!(caught instanceof ApiRequestError)) throw caught;
+      setError(caught.message);
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <>
+      <ConfirmAction
+        label={`Add ${email} to team`}
+        text="Add to team"
+        title="Add to team?"
+        description={`Adds ${email} to ${teamName} in the dashboard. LiteLLM reported this email and it is not verified. Recorded in the audit log.`}
+        disabled={pending}
+        onConfirm={() => void add()}
+      />
+      <WriteError message={error} />
+    </>
+  );
+}
+
 const ROW_OPERATIONS = [
   "removeTeamMember",
   "resetMemberSpend",
@@ -282,6 +337,8 @@ function MemberActions({
   ops,
   pending,
   write,
+  canAddToTeam,
+  onAdded,
 }: {
   teamId: string;
   member: Member;
@@ -290,6 +347,8 @@ function MemberActions({
   ops: ReadonlySet<string>;
   pending: boolean;
   write: ReturnType<typeof useTeamWrite>["write"];
+  canAddToTeam: boolean;
+  onAdded: () => Promise<void>;
 }) {
   const oid = member.oid;
   const act = (action: string, method: "POST" | "DELETE" = "POST") =>
@@ -299,6 +358,26 @@ function MemberActions({
   // An undefined spend is the Organisation-cap signal: no per-user reporting.
   const dailySpend = ops.has("getUserDailySpend") && member.spend !== undefined;
   const rowActions = oid ? ROW_OPERATIONS.some((op) => ops.has(op)) : false;
+  if (!oid) {
+    return (
+      <span className="flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground text-xs">
+          {NOT_IN_DASHBOARD}
+        </span>
+        {canAddToTeam ? (
+          <AddToTeam
+            teamId={teamId}
+            email={member.email}
+            teamName={teamName}
+            onAdded={onAdded}
+          />
+        ) : null}
+        {dailySpend ? (
+          <MemberDailySpend userId={member.userId} name={name} />
+        ) : null}
+      </span>
+    );
+  }
   if (!dailySpend && !rowActions) return null;
   return (
     <span className="flex flex-wrap gap-2">
@@ -390,7 +469,7 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
     return <NotConnected />;
   }
   const ops = new Set(detail.data.enabledOperations);
-  const { items } = members.data;
+  const { items, candidates } = members.data;
   const teamName = detail.data.team.alias ?? "this team";
   const term = search.trim().toLowerCase();
   const shown = items.filter(
@@ -412,6 +491,8 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
     ops,
     pending,
     write,
+    canAddToTeam: candidates !== undefined,
+    onAdded: () => refresh(["members"]),
   });
 
   const resettable = items.filter((m) => m.oid).length;
@@ -438,10 +519,7 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
     <div className="flex flex-col gap-3">
       {ops.has("addTeamMember") ? (
         <div>
-          <AddMember
-            teamId={teamId}
-            candidates={members.data.candidates ?? []}
-          />
+          <AddMember teamId={teamId} candidates={candidates ?? []} />
         </div>
       ) : null}
       {items.length > 0 ? (

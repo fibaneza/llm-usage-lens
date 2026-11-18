@@ -56,6 +56,18 @@ const ACCESS = {
   ownOid: "oid-me",
   authMethod: "entra",
 };
+const LINKED_ROW = {
+  ...{
+    oid: "oid-ada",
+    displayName: "Ada Lovelace",
+    email: "ada@example.com",
+    authMethod: "entra",
+    memberTeamId: null,
+    linkVersion: 1,
+    match: null,
+  },
+  litellm: { state: "linked", litellmUserId: "ll-ada" },
+};
 const NONE_ROW = {
   oid: "oid-cy",
   displayName: "Cy Young",
@@ -67,7 +79,7 @@ const NONE_ROW = {
   match: null,
 };
 
-function stubFetch() {
+function stubFetch(items: unknown[] = [NONE_ROW]) {
   const urls: URL[] = [];
   vi.stubGlobal(
     "fetch",
@@ -75,7 +87,7 @@ function stubFetch() {
       const url = new URL(String(input), "http://localhost");
       urls.push(url);
       if (url.pathname === "/api/identities/directory") {
-        return Promise.resolve(apiResponse({ data: { items: [NONE_ROW] } }));
+        return Promise.resolve(apiResponse({ data: { items } }));
       }
       if (url.pathname === "/api/access/org-units") {
         return Promise.resolve(
@@ -190,5 +202,46 @@ describe("Users management page (/dashboard/manage/users)", () => {
       screen.queryByRole("button", { name: "Create and link" }),
     ).toBeNull();
     expect(enabledOperations).not.toHaveBeenCalled();
+  });
+
+  // RS1 (Design System - Reset spend from the LiteLLM users tab and the Users
+  // page, D2-D4): the page resolves `canResetSpend` on the server: LiteLLM
+  // configured AND resetMemberSpend enabled AND the caller's `steps.link`
+  // (admin and org-admin; an Auditor has none). Row-level rules and the dialog
+  // are in UsersPeoplePanel.test.tsx and ResetMemberSpendDialog.test.tsx.
+  describe("Reset spend wiring (RS1)", () => {
+    const resetButton = () =>
+      screen.queryByRole("button", { name: "Reset spend for Ada Lovelace" });
+
+    it("shows Reset spend on a linked person when the toggle is on and the caller may write", async () => {
+      litellm(true, ["resetMemberSpend"]);
+      stubFetch([LINKED_ROW]);
+      renderWithProviders(await UsersManagePage());
+      await screen.findByText("Ada Lovelace");
+      expect(resetButton()).toBeInTheDocument();
+    });
+
+    it.each([
+      ["the toggle is off", true, [], ACCESS.steps],
+      [
+        "the caller has no link/write step (Auditor)",
+        true,
+        ["resetMemberSpend"],
+        { password: false, team: false, link: false },
+      ],
+      [
+        "LiteLLM is not configured (LD37)",
+        false,
+        ["resetMemberSpend"],
+        ACCESS.steps,
+      ],
+    ])("shows no Reset spend when %s", async (_n, configured, ops, steps) => {
+      litellm(configured, ops);
+      usersPageAccessFor.mockResolvedValue({ ...ACCESS, steps });
+      stubFetch([LINKED_ROW]);
+      renderWithProviders(await UsersManagePage());
+      await screen.findByText("Ada Lovelace");
+      expect(resetButton()).toBeNull();
+    });
   });
 });

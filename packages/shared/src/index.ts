@@ -316,6 +316,15 @@ export {
 } from "./schemas/litellm-views";
 
 export {
+  LiteLLMUserMembershipSchema,
+  LiteLLMUserMembershipsResponseSchema,
+} from "./schemas/litellm-user-memberships";
+export type {
+  LiteLLMUserMembership,
+  LiteLLMUserMembershipsResponse,
+} from "./schemas/litellm-user-memberships";
+
+export {
   IdentityMapRuleListSchema,
   IdentityMapRuleSchema,
   IdentityMapRulesInputSchema,

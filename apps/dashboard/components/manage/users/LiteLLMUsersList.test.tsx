@@ -7,6 +7,9 @@ import { renderWithProviders } from "@/test/support/render-providers";
 
 import { LiteLLMUsersList } from "./LiteLLMUsersList";
 
+const mobile = vi.hoisted(() => ({ on: false }));
+vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => mobile.on }));
+
 // Source: Design System - Management improvements, LiteLLM users tab (D16a):
 // opens on a list, All users or Members of one team, 25 a page from the
 // server with no search text; "not in LiteLLM", never $0; per-user cost stays
@@ -305,5 +308,120 @@ describe("LiteLLMUsersList link controls (D16)", () => {
     expect(
       screen.queryByRole("button", { name: "Create and link" }),
     ).toBeNull();
+  });
+});
+
+// RS1 (Design System - "Reset spend from the LiteLLM users tab and the Users
+// page", D1-D5; LiteLLM spec `resetMemberSpend` row): a row action "Reset
+// spend" opens ResetMemberSpendDialog (its own test covers the dialog). Shown
+// only when the list response's enabledOperations has resetMemberSpend (D4),
+// the row has an app identity (`appUser.oid`) and a LiteLLM user, and the
+// caller may write: the list response's `mayLink` is the server-computed
+// "admin or org-admin" flag (the only readers of this list who may reset; an
+// Auditor reads it, a Lead and a Viewer get the 404 and never see the tab), so
+// `mayLink` absent or false hides the action (fail closed). Accessible name
+// `Reset spend for ${name}` where name = displayName, else email.
+describe("Reset spend row action (RS1)", () => {
+  const ON = ["createUser", "resetMemberSpend"];
+  const ROW_LITELLM_ONLY = {
+    key: "ll-zed",
+    linkState: "none",
+    appUser: null,
+    litellmUser: {
+      userId: "ll-zed",
+      email: "zed@example.com",
+      spend: 1,
+      maxBudget: null,
+      teams: [],
+    },
+  };
+  const ROW_MATCH = {
+    ...ROW_NONE,
+    linkState: "match",
+    litellmUser: { ...ROW_LINKED.litellmUser, userId: "ll-bob" },
+  };
+
+  it("shows on a row with an app identity and a LiteLLM user when resetMemberSpend is enabled and the caller may write (D4)", async () => {
+    stub({ enabledOperations: ON, mayLink: true });
+    renderWithProviders(<LiteLLMUsersList />);
+    expect(
+      await screen.findByRole("button", {
+        name: "Reset spend for Ada Lovelace",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("is absent when resetMemberSpend is not enabled, as on the Team page (D4)", async () => {
+    stub({ enabledOperations: ["createUser"], mayLink: true });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    expect(screen.queryByRole("button", { name: /reset spend/i })).toBeNull();
+  });
+
+  it.each([
+    ["an Auditor (mayLink false)", false],
+    ["a response without the flag (fail closed)", undefined],
+  ])(
+    "is absent for %s whatever the toggle says (Roles and rights)",
+    async (_n, mayLink) => {
+      stub({ enabledOperations: ON, mayLink });
+      renderWithProviders(<LiteLLMUsersList />);
+      await screen.findByText("Ada Lovelace");
+      expect(screen.queryByRole("button", { name: /reset spend/i })).toBeNull();
+    },
+  );
+
+  it("is absent on a row with no app identity (a LiteLLM-only user) and on a person not in LiteLLM (D4)", async () => {
+    stub({
+      users: [ROW_LITELLM_ONLY, ROW_NONE],
+      enabledOperations: ON,
+      mayLink: true,
+    });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Bob Barker");
+    expect(screen.getAllByText("zed@example.com").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /reset spend/i })).toBeNull();
+  });
+
+  it("shows on a 'Match found' row too: it has an oid and a LiteLLM user (D4)", async () => {
+    stub({ users: [ROW_MATCH], enabledOperations: ON, mayLink: true });
+    renderWithProviders(<LiteLLMUsersList />);
+    expect(
+      await screen.findByRole("button", { name: "Reset spend for Bob Barker" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the dialog for that person and reads that LiteLLM user's memberships (D2)", async () => {
+    stub({ enabledOperations: ON, mayLink: true });
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMUsersList />);
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Reset spend for Ada Lovelace",
+      }),
+    );
+    expect(
+      await screen.findByRole("alertdialog", {
+        name: "Reset spend for Ada Lovelace?",
+      }),
+    ).toBeInTheDocument();
+    const fetched = vi.mocked(fetch).mock.calls.map(([u]) => String(u));
+    expect(fetched).toContain("/api/litellm/users/ll-ada/memberships");
+  });
+
+  it("is also on the stacked card layout below md (touch)", async () => {
+    mobile.on = true;
+    try {
+      stub({ enabledOperations: ON, mayLink: true });
+      renderWithProviders(<LiteLLMUsersList />);
+      const list = await screen.findByRole("list", { name: "LiteLLM users" });
+      expect(
+        within(list).getByRole("button", {
+          name: "Reset spend for Ada Lovelace",
+        }),
+      ).toBeInTheDocument();
+    } finally {
+      mobile.on = false;
+    }
   });
 });
