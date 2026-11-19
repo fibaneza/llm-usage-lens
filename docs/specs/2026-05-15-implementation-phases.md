@@ -808,7 +808,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### CFG — app config file (`feature/app-config-yaml`)
 
-*Added 2026-11-17 at the user's request (2026-11-16: configure the app from a `config.yaml` that wins over database configuration, is loaded at startup and ships in the Docker image; clarified the same day that it does not replace `.env`); [System Architecture — *Configuration file*](2026-05-15-system-architecture.md) is authoritative, with decisions D1–D3, Q1–Q3 and A1–A16 recorded there. Runs at the coordinator's direction (prompt: `docs/plans/20261117_app_config_yaml.md`); its locked-state UI sits on the Settings tabs of unit D and the toggle routes of L3d. One branch, one squash commit (Rule 30.4).*
+*Added 2026-11-17 at the user's request (2026-11-16: configure the app from a `config.yaml` that wins over database configuration, is loaded at startup and ships in the Docker image; clarified the same day that it does not replace `.env`); [System Architecture — *Configuration file*](2026-05-15-system-architecture.md) is authoritative, with decisions D1–D3, Q1–Q3 and A1–A16 recorded there. Runs at the coordinator's direction (landed in `5484f125`; its run plan was removed on 2026-11-18); its locked-state UI sits on the Settings tabs of unit D and the toggle routes of L3d. One branch, one squash commit (Rule 30.4).*
 
 - [x] Spec amendment: System Architecture *Configuration file*; LiteLLM spec LD19 and *Guardrail configuration* (file > UI > LD10 for file-set operations); Data Model *Settings shadowed by the configuration file* and the retention key; Platform *Runtime* image contents; Design System stack and Rule 40 (`yaml`); Access Control T35–T39 and the `CONFIG_FILE_LOCKED` error code; this block
 - [x] `AppConfigSchema` and its inferred type in `packages/shared` (strict; `litellm.operations` is the former `LiteLLMGatewayConfigSchema`; `display.defaultDateRange`, `display.orgName`, `data.retention.dailyRollupDays`; secret-shaped and authorization keys rejected)
@@ -827,7 +827,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### BP — serve the dashboard under a URL prefix (`feature/base-path`)
 
-*Added 2026-11-17 at the user's direction ("all path for the app should start with a prefix, i.e: llm-lens/ … create a rule"): the POC adds a listener rule to an existing ALB listener on port 443 that another application already uses. Outside the phase order (Rule 30). [Platform spec — *Base path*](2026-11-10-platform.md) records BP-D1 to BP-D7, BP-D9, BP-D13, BP-D15 and Q1 to Q3; [Access Control — *Decisions*](2026-11-10-access-control.md) records BP-D8, BP-D10 to BP-D12 and BP-D14 and threat items T40 to T43. Q1 (`/llm-lens` is final) and Q2 (the ECS platform does not serve under the prefix) are user answers, 2026-11-17; Q3 (listener ARN, free rule priority, no clash under `/llm-lens`) is open and lives only in gitignored `poc/stack.env`. Runs at the coordinator's direction (prompt: `docs/plans/20261117_base_path.md`). One branch, one squash commit (Rule 30.4).*
+*Added 2026-11-17 at the user's direction ("all path for the app should start with a prefix, i.e: llm-lens/ … create a rule"): the POC adds a listener rule to an existing ALB listener on port 443 that another application already uses. Outside the phase order (Rule 30). [Platform spec — *Base path*](2026-11-10-platform.md) records BP-D1 to BP-D7, BP-D9, BP-D13, BP-D15 and Q1 to Q3; [Access Control — *Decisions*](2026-11-10-access-control.md) records BP-D8, BP-D10 to BP-D12 and BP-D14 and threat items T40 to T43. Q1 (`/llm-lens` is final) and Q2 (the ECS platform does not serve under the prefix) are user answers, 2026-11-17; Q3 (listener ARN, free rule priority, no clash under `/llm-lens`) is open and lives only in gitignored `poc/stack.env`. Runs at the coordinator's direction (landed in `ae9c4c95`; its run plan was removed on 2026-11-18). One branch, one squash commit (Rule 30.4).*
 
 - [x] Spec amendment: Platform *Base path*, *Runtime* and *Load balancer*; Access Control *Decisions* and *Threat model*; `docs/guides/auth-setup.md`; `docs/guides/testing.md`; Rule 50.2 exception; this block
 - [x] App: `lib/base-path.ts` (BP-D13); `NEXT_PUBLIC_BASE_PATH` in `env.ts`, `.env.example` and `next.config.ts` (BP-D1, BP-D2); `withBasePath` at the raw-URL sites (BP-D3); `auth.ts` (`basePath`, `pages`, `redirect` callback, `authorized`, cookie names and path: BP-D9 to BP-D12); `[...nextauth]` route wrapper; `sidebar_state` path; Dockerfile `ARG`/`ENV` (BP-D6); sign-out menu item keeps its form mounted (BP-D14)
@@ -840,7 +840,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ## Management improvements (units M0–M5; user-directed 2026-11-17)
 
-*Added 2026-11-17 at the user's direction: sixteen requests about the LiteLLM area, app teams, users, the source of each cost figure and on-demand budget resets, run now, before L7, L8 and the rest of Phase 5 (prompt: `docs/plans/20261117_management_improvements.md`). Decisions D1–D7 and D14–D19 (with D4a and D16a) are recorded in the specs below with their reasons (MI-D… in Access Control and the LiteLLM spec); user decisions are marked, the answers Q1–Q4 are user decisions, and Q7 (a LiteLLM "service" dimension) was answered no by the user on 2026-11-17 (D19). Unit **M4** (budget reset requests, the reset ledger and notifications, D8–D13) records its own block and its spec sections; the run directions (order, tests near the end, workflow) are below. One branch and one squash commit per unit (Rule 30.4); M1, M2, M3 and M5 branch from `main` once M0 is on it, or from M0's tip at the coordinator's word.*
+*Added 2026-11-17 at the user's direction: sixteen requests about the LiteLLM area, app teams, users, the source of each cost figure and on-demand budget resets, run now, before L7, L8 and the rest of Phase 5 (M0–M5 have landed; their run plan was removed on 2026-11-18). Decisions D1–D7 and D14–D19 (with D4a and D16a) are recorded in the specs below with their reasons (MI-D… in Access Control and the LiteLLM spec); user decisions are marked, the answers Q1–Q4 are user decisions, and Q7 (a LiteLLM "service" dimension) was answered no by the user on 2026-11-17 (D19). Unit **M4** (budget reset requests, the reset ledger and notifications, D8–D13) records its own block and its spec sections; the run directions (order, tests near the end, workflow) are below. One branch and one squash commit per unit (Rule 30.4); M1, M2, M3 and M5 branch from `main` once M0 is on it, or from M0's tip at the coordinator's word.*
 
 **Run directions (user, 2026-11-17)**, for the management-improvements run
 (units M0–M5; M0 records the other units):
@@ -926,8 +926,9 @@ the `auth.signin.error` record; `withRoute` treats a session without
 
 ### M4 — budget reset requests (`feature/budget-reset-requests`)
 
-*Added 2026-11-17 at the user's direction, from
-`docs/plans/20261117_management_improvements.md` (items 6, 7 and 8). Spec:
+*Added 2026-11-17 at the user's direction, from the
+management improvements run plan (items 6, 7 and 8; the plan was removed
+on 2026-11-18, after the unit landed in `50f51c63`). Spec:
 [LiteLLM — *Budget reset requests*](2026-11-10-litellm.md) and decisions
 MG-D8 to MG-D13 (with MG-D11a, MG-D12a); [Data Model — *Budget reset
 entities (unit M4)*](2026-05-15-data-model.md) and its *API Routes* rows;
@@ -937,7 +938,7 @@ reset that lets the member spend again; no limit) and Q6 (per-member counts
 follow the per-user approval; 400-day ledger) are recorded there as user
 decisions.*
 
-One branch, one squash commit (Rule 30.4). Owned files: `docs/plans/20261117_management_improvements.md` §4.
+One branch, one squash commit (Rule 30.4). Owned files: as landed in `50f51c63`.
 Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
 `main`, so slice A edits no file there; the approve route calls the existing
 `resetMemberSpend` and helpers by import, and writes the ledger from

@@ -1,8 +1,8 @@
-# Management Round 2 — LiteLLM page fixes, settings, team list, users list and user page (units LF1, ST1, TM1, US1, US2, SRT1)
+# Management Round 2 — LiteLLM page fixes, settings, team list, users list and user page (units LF1, ST1, TM1, US1, US2, SRT1, RS2)
 
 For a **worker** session (`.claude/prompts/worker_prompt.md`). The coordinator
 sends one unit at a time as a brief file. This plan holds the decisions,
-the ownership and the tests of six units. The four other units of the same
+the ownership and the tests of seven units. The four other units of the same
 plan (LW1, SYNC1, SYNC2, INV2) are in `docs/plans/20261118_litellm_user_sync.md`
 with its revision.
 
@@ -35,7 +35,8 @@ Seventeen items, numbered as the user wrote them:
 9. Manage → Users: a created-date column.
 10. Manage → Users: sort by column, sorted by the API. The same in other
     tables where relevant.
-11. Settings → Sync: a button to refresh on demand.
+11. Settings → Sync: a button to refresh on demand. **Moved to Phase 6**
+    (user, 2026-11-18: "Wait for Phase 6"); not built in this plan.
 12. Settings → LiteLLM → connection: a green check and "LiteLLM connection
     is ok" on success, a red cross and the error otherwise. The Base URL
     defaults to `http://localhost:4000`, configurable with
@@ -51,22 +52,33 @@ Seventeen items, numbered as the user wrote them:
     unlink and reset, team and role.
 17. Manage → Audit: the access-review export button near the top.
 
+Added on 2026-11-19 (the user's words):
+
+18. Manage → LiteLLM → users: `user/update {"spend": 0}` "should allow to
+    reset budget even the user is not linked to an app user, due they are
+    litellm user already". A user with no team: "only allowed by admins".
+    A "team lead is allowed to reset if user is member of their team". The
+    reset button is shown on the user in Manage → LiteLLM → teams, through
+    the team member API. "admin and org-admin could reset the team budget
+    as well".
+
 ## 2. Units
 
 | Unit | Items | Category | Branch | Worktree |
 |---|---|---|---|---|
 | LF1 | 2, 3, 4, 5, 14, 15 | LiteLLM pages | `fix/litellm-pages` | `.claude/worktrees/lf1` |
-| ST1 | 1, 6, 11, 12, 13, 17 | Settings and small UX | `feature/settings-ux` | `.claude/worktrees/st1` |
+| ST1 | 1, 6, 12, 13, 17 | Settings and small UX | `feature/settings-ux` | `.claude/worktrees/st1` |
 | TM1 | 7 | Teams | `feature/team-list-detail` | `.claude/worktrees/tm1` |
 | US1 | 8, 9, 10 (Users table) | Users | `feature/users-list` | `.claude/worktrees/us1` |
 | US2 | 16 | Users | `feature/user-page` | `.claude/worktrees/us2` |
 | SRT1 | 10 (other tables) | Tables | `feature/table-sort` | `.claude/worktrees/srt1` |
+| RS2 | 18 | LiteLLM resets | `feature/reset-any-litellm-user` | `.claude/worktrees/rs2` |
 
-The user's standing rules apply to every unit (`revision-2.md` §4 in the
-planner's package, and after LW1 the Access Control spec): the dashboard
-never adds or removes a LiteLLM user or a LiteLLM team member; nothing a
-delete does removes spend or usage; no new permission unless a unit below
-says so.
+The user's standing rules apply to every unit: these units add **no new**
+action that creates or removes a LiteLLM user or a LiteLLM team member
+(the shipped add member and remove member stay; create and link is
+limited by LW1); nothing a delete or a reset does removes usage history;
+no new permission unless a unit below says so.
 
 ## 3. Decisions, ownership and tests per unit
 
@@ -131,13 +143,6 @@ LiteLLM spec — the audit read's edition state (D-LF2).
   results, by name, email or UPN, through `GET /api/identities/directory`
   with a new `q` parameter (Zod, 1–100 characters). Same callers as today
   (admin, org-admin, auditor); a lead still gets no people search (D37).
-- **D-ST3 (item 11).** **Refresh now** on Settings → Sync reloads the sync
-  status and clears the dashboard's cached usage data
-  (`POST /api/sync/refresh`: `internal-admin`, `403` before parsing,
-  audited, at most once a minute — a second call inside the minute is
-  `429`). It does **not** start a collection: the collector is Phase 6.
-  The button says what it does: "Reload the latest collected data".
-  Open with the user (Q12).
 - **D-ST4 (item 12).** After **Test connection**: a green check and
   "LiteLLM connection is ok", or a red cross and the error, with the icon
   and the text both (never colour alone), in an `aria-live` region.
@@ -160,29 +165,27 @@ LiteLLM spec — the audit read's edition state (D-LF2).
   Rule 40.9). The section at the bottom keeps its content.
 
 **Owns:** `scripts/dev.mjs` and the root `dev` script; `env.ts` (one
-variable); `components/settings/SyncTab.tsx`, `SyncStatusPanel.tsx`,
-`AccountForm.tsx`, `AccountDialogs.tsx`,
+variable); `components/settings/AccountForm.tsx`, `AccountDialogs.tsx`,
 `litellm-panel/LiteLLMConnectionSection.tsx`,
 `access/IdentityLinksSection.tsx`, `IdentityLinkSuggestions.tsx`;
 `components/manage/AuditPageContent.tsx`; `app/api/accounts/**`;
 `app/api/litellm/connection/**`; `app/api/identities/directory/route.ts`
-(the `q` parameter); a new `app/api/sync/refresh/route.ts` with its
-registry entry; their tests; `e2e/settings-*.spec.ts`.
+(the `q` parameter); their tests; `e2e/settings-*.spec.ts`.
 
 | Test | Proves |
 |---|---|
 | T-ST1 | Item 1: the script prints the URL with the base path |
 | T-ST2 | Item 6: `q` under 1 or over 100 characters → `400`; at most 10 results; a lead → `403` |
-| T-ST3 | Item 11: not admin → `403` before parsing, one `denied` record; second call in a minute → `429`; the tags are revalidated |
 | T-ST4 | Item 12: success and failure states with icon and text; the default is offered and not saved; a host outside the allowlist is still refused |
 | T-ST5 | Item 13: a body with `departmentId` or `teamId` is ignored or `400` (strict body); two teams with the same name get different ids; the AWS account ID is still validated as 12 digits |
 | T-ST6 | Item 17: the export button is in the page header |
 
-**Spec:** Design System — Settings (Sync, LiteLLM connection, Accounts),
-Audit page header; Data Model — *API Routes* (`/api/sync/refresh`,
-generated ids); Access Control — permission matrix row for the refresh,
-the directory's `q`; Rule 10.3 and Rule 50.4 get the refresh route's
-clause; `docs/guides/litellm-admin.md` — the variable.
+**Spec:** Design System — Settings (LiteLLM connection, Accounts), Audit
+page header; Data Model — *API Routes* (generated ids); Access Control —
+the directory's `q`; `docs/guides/litellm-admin.md` — the variable.
+implementation-phases — *Phase 6* gets the task "Settings → Sync: a
+**Refresh now** button that starts a collection on demand
+(`internal-admin`; user, 2026-11-18)".
 
 ### TM1 — Team list, then the team
 
@@ -204,10 +207,8 @@ clause; `docs/guides/litellm-admin.md` — the variable.
 `components/settings/access/PendingAccessSection.tsx`,
 `TeamAdminsSection.tsx`, `VisibilitySection.tsx` (the team prop instead of
 the dropdown), their tests, `e2e/manage-team.spec.ts`.
-**Shared with LW1, line by line:** `TeamPageContent.test.tsx` (LW1 only
-removes the assertions on the LiteLLM add and remove actions).
-**Does not touch:** `components/litellm/team/MembersPanel.tsx` (LW1, then
-INV2).
+**Does not touch:** `components/litellm/team/MembersPanel.tsx` (RS2, then
+INV2); the LiteLLM add and remove member actions stay as they are.
 
 | Test | Proves |
 |---|---|
@@ -238,6 +239,9 @@ INV2).
   `aria-sort` on the `th`, the sort in the URL (nuqs). SRT1 reuses it.
 - **D-US5.** Each row's name links to `/dashboard/manage/users/[oid]`
   (US2's page).
+- **D-US5a.** The Add user steps keep following the sign-in mode
+  (`addUserStepsFor`: the password step only without SSO); US1 does not
+  change them.
 
 **Owns:** `components/manage/users/UsersPeoplePanel.tsx`,
 `app/dashboard/manage/users/page.tsx`, `components/tables/**`,
@@ -271,10 +275,16 @@ its sync button and its "Not signed in yet" panel to the page.
 - **D-US8 — name and email.** For an SSO person they come from Entra at
   every sign-in, so they are shown read-only with that note. For a
   password user the **name** is editable. The **email** of a password
-  user is their sign-in key and is not editable: remove and add the user.
-  Open with the user (Q11).
-- **D-US9.** No LiteLLM write beyond the kept operations (reset, budget);
-  the page never adds or removes a LiteLLM user or team member.
+  user is their sign-in key and is not editable: remove and add the user
+  (user, 2026-11-18: a password user's name only).
+- **D-US9.** The page offers no action that creates or removes a LiteLLM
+  user or a LiteLLM team member. The kept LiteLLM actions it shows are
+  unlink and reset.
+- **D-US10 (the two sign-in modes; user, 2026-11-18).** The page shows how
+  the person signs in. For a password user it also shows, read-only, the
+  SSO reference (expected UPN, expected Entra id) and, once bound, "Signs
+  in with SSO since <date>". Password reset, TOTP reset, disable and
+  delete stay in Settings → Access → Password users; the page links there.
 
 **Owns:** `app/dashboard/manage/users/[oid]/**`, a new
 `components/manage/users/detail/**`, `app/api/identities/[oid]/route.ts`
@@ -289,6 +299,8 @@ is missing, their tests, `e2e/manage-user-page.spec.ts`.
 | T-US6 | Each action appears only for a caller who may use it; own roles cannot be edited |
 | T-US7 | SSO name and email are read-only; a password user's name edit is audited |
 | T-US8 | No LiteLLM call adds or removes a user or a member (zero such calls on the fake LiteLLM) |
+| T-US9 | Deleting a password user and removing a link leave usage rollups, the reset ledger, audit records and LiteLLM spend untouched (user, 2026-11-18: a deleted user keeps spend and usage) |
+| T-US10 | A password user's page shows the SSO reference and the bound date read-only; no credential in the body or the page |
 
 **Spec:** Design System — Management → Users (the user page); Access
 Control — API routes and permission matrix (the new read), threat row for
@@ -319,13 +331,139 @@ on `main`.
 
 **Spec:** Design System — *Tables* (which tables sort where).
 
+### RS2 — Reset any LiteLLM user (item 18)
+
+Today a reset needs an app identity: the reset routes are keyed by `oid`,
+the reset dialog is shown only for a row with an `oid` (RS1, D4), and
+`/user/update` is not on the allowlist. RS2 removes the first two limits
+and adds one LiteLLM call. Answers of 2026-11-19 are marked "user".
+
+- **D-RS1 (user).** A new gateway operation, **`resetUserSpend`**:
+  `POST /user/update` with the body **`{ user_id, spend: 0 }` and nothing
+  else**. The operation parses the outgoing body with a strict Zod schema
+  (`z.strictObject`, `spend: z.literal(0)`) before the send (user: "allow
+  only send spend: 0 … validate the payload with a json schema, zod or
+  similar"). A later field is a new spec line and a schema change, never a
+  pass-through. `/user/delete` stays forbidden.
+- **D-RS2.** `resetUserSpend` is **off by default** (LD10: destructive,
+  like `resetMemberSpend`); an Admin or org-admin switches it on in
+  Settings → LiteLLM. A control whose operation is off is absent.
+- **D-RS3 (user) — who.**
+  - *The user-level reset:* `internal-admin` and `internal-org-admin`, for
+    any LiteLLM user: linked or not, in a team or not. **A Lead too**
+    (user, 2026-11-19: "Yes, leads too"), when the user is a member of a
+    LiteLLM team linked to an app team in the Lead's scope. A user in no
+    team is therefore reset only by Admin and org-admin. The reset clears
+    the person's spend in all of LiteLLM, also for their other teams; the
+    user accepted that, and the dialog and the audit record say it.
+  - *The member reset* (`resetMemberSpend`, `resetMemberBudget`): a Lead,
+    for a member of the LiteLLM team linked to an app team in their scope;
+    `internal-org-admin` and `internal-admin`, for every LiteLLM team,
+    linked or not (user: "admin and org-admin could reset the team budget
+    as well" means each member, like the lead).
+  - An auditor reads and resets nothing.
+- **D-RS4 — targets by LiteLLM id.** Three write routes keyed by LiteLLM
+  ids. The `oid` routes stay as they are (M4's approvals use them).
+  - `POST /api/litellm/users/[litellmUserId]/reset-spend` →
+    `resetUserSpend`
+  - `POST /api/litellm/proxy-teams/[litellmTeamId]/members/[litellmUserId]/reset-spend`
+    → `resetMemberSpend`
+  - `POST /api/litellm/proxy-teams/[litellmTeamId]/members/[litellmUserId]/reset-budget`
+    → `resetMemberBudget`
+
+  Order in each: session, the permission (`403` before parsing, one
+  `denied` record), the path ids (Zod), the toggle, the target. For the
+  member routes the server reads the LiteLLM team and requires the user to
+  be one of its members; a user who is not, or an unknown id, is `404`
+  with the same body (LT5). A Lead with no app team in scope linked to
+  that LiteLLM team gets `403`. For the user-level route and a Lead, the
+  server reads the LiteLLM user's teams and requires one of them to be
+  linked to an app team in the Lead's scope; otherwise `404` with the
+  same body as an unknown user, so a Lead learns nothing about people
+  outside their teams.
+- **D-RS5 — privileged targets.** Before any of the three writes the
+  server reads the LiteLLM user (`getUser`). A `proxy_admin`, a
+  `proxy_admin_viewer` or the service user is `409 PRIVILEGED_TARGET`,
+  with no write (LT18).
+- **D-RS6 — one new read.**
+  `GET /api/litellm/proxy-teams/[litellmTeamId]/members` (admin,
+  org-admin, auditor): the LiteLLM team's members with email, spend,
+  budget and the linked app person or `null`; at most 200 members (LD34).
+  The memberships read (`/api/litellm/users/[litellmUserId]/memberships`)
+  also answers for a user with no app identity.
+- **D-RS7 — where the buttons are.**
+  - *LiteLLM → users:* every row has **Reset spend** (before: linked rows
+    only). The dialog lists "User spend (all of LiteLLM)" first, for Admin
+    and org-admin, then the user's team memberships as today.
+  - *LiteLLM → teams:* a team row opens its members. Each member has
+    **Reset spend** and **Reset budget** for Admin and org-admin; the
+    auditor sees the list with no button.
+  - *Management → Team (the lead's page):* a LiteLLM member with no app
+    membership keeps RS1's note and now also has the two reset actions.
+    Every member row also offers "User spend (all of LiteLLM)" in the
+    reset dialog: a Lead does not see the LiteLLM → users tab, so this is
+    where they use the user-level reset.
+- **D-RS8 — audit and ledger.** One audit record per reset, with the
+  spend before and after (new action `litellm.user.reset-spend`; the
+  member actions exist). The reset ledger (`BudgetReset`) accepts a reset
+  with no app identity and no app team: it becomes a discriminated union
+  on `scope` (`member` or `user`), with `oid`, `teamId` and `departmentId`
+  only where they exist. Per-member counts stay keyed by `oid`; a reset
+  of an unlinked user counts for nobody. If the ledger key changes, the
+  task-role write keys in `infra/` change in this unit, with their infra
+  test (the M2–M4 task-role fix, `e2eb6a17`, is the precedent).
+- **D-RS9 — what a reset leaves alone.** It clears the spend counter that
+  LiteLLM checks against the budget. Usage history (daily activity, spend
+  logs), the dashboard's own cost data and the audit log do not change.
+  The dialog says so.
+
+**User action:** add `/user/update` to the service key's `allowed_routes`
+in each environment (`docs/guides/litellm-admin.md` gets the line). Until
+then the reset fails closed with the gateway's refusal message.
+
+**Owns:** `lib/litellm/allowlist.ts` and `operations.ts` (one operation);
+a new `lib/litellm/litellm-id-write.ts` beside `member-write.ts`, which
+it does not change; the three write routes and the read under
+`app/api/litellm/**`, with their registry entries; the operation name,
+the audit action and the ledger schema in `packages/shared`;
+`lib/data/budget-resets*.ts`; `components/litellm/ResetMemberSpendDialog.tsx`
+(its existing props keep working: US2 mounts it);
+`components/manage/users/LiteLLMUsersList.tsx` (after LF1 and LW1); the
+LiteLLM teams table and a new members panel for it (after LF1); the
+unlinked-member row in `components/litellm/team/MembersPanel.tsx` (before
+INV2); the operation list of Settings → LiteLLM; `infra/` task-role keys
+only if D-RS8 needs it; their tests; `e2e/reset-spend-users.spec.ts`.
+**Security review at the merge** (a new LiteLLM route for the service
+key, three write routes, a permission change).
+
+| Test | Proves |
+|---|---|
+| T-RS1 | The gateway sends `/user/update` with exactly `user_id` and `spend: 0`; any other field or value fails the schema and nothing is sent. A structure test: `/user/update` is used by `resetUserSpend` only, `/user/delete` by nothing |
+| T-RS2 | The user-level route: admin and org-admin `200` for a linked user, an unlinked user and a user in no team; a Lead `200` for a member of a team in their scope, and `404` (the unknown-user body, no write) for a user in no team or only in other teams; an auditor `403` before parsing, with one `denied` record; the operation off → `403` |
+| T-RS3 | The member routes: a Lead in scope `200` for a member with no app identity; a Lead out of scope, or on an unlinked LiteLLM team, `403`; org-admin and admin `200` on a linked and on an unlinked team |
+| T-RS4 | A user who is not a member of that team, or an unknown id → `404` with the same body, and no LiteLLM write |
+| T-RS5 | A privileged LiteLLM user or the service user → `409 PRIVILEGED_TARGET`, no write |
+| T-RS6 | Each reset writes one audit record and one ledger item, also with no `oid`; the `oid` routes and M4's approval still pass the ledger contract |
+| T-RS7 | UI: the button on every LiteLLM users row; a LiteLLM team's members with the two actions for admin and org-admin and none for the auditor; no button while the operation is off |
+| T-RS8 | The members read: admin, org-admin, auditor `200`; a lead `403`; at most 200 members |
+
+**Spec:** LiteLLM spec — the route table (`/user/update`: allowed for
+`resetUserSpend` only, with its body; `/user/delete` stays forbidden),
+*Writes* (the operation, its roles, default off), the API routes, threat
+rows (a wider body; a privileged target; forged ids), and "user-level
+limits are not exposed" stays true: the spend reset is the one user-level
+write. Access Control — permission matrix rows for the three routes.
+Rule 10.3 and Rule 50.4 — their clause. Data Model — the ledger shape and
+the routes. Design System — the three places. `docs/guides/litellm-admin.md`
+— `allowed_routes`.
+
 ## 4. Order and parallel runs
 
 | Wave | `litellm_worker` | `improvements_worker` | `bedrock_worker` |
 |---|---|---|---|
-| 1 | LF1, then LW1 | ST1 | TM1 |
-| 2 | SYNC1 | US1 (needs LW1 on `main`) | US2 (needs TM1 landed) |
-| 3 | SYNC2 | SRT1 (needs LF1, TM1, US1) | INV2 (needs SYNC1, TM1, US1, US2) |
+| 1 | LF1, then LW1, then RS2 | ST1 | TM1 |
+| 2 | SYNC1 (after RS2) | US1 (needs LW1 on `main`) | US2 (needs TM1 landed) |
+| 3 | SYNC2 | SRT1 (needs LF1, RS2, TM1, US1) | INV2 (needs SYNC1, RS2, TM1, US1, US2) |
 
 A unit touches only its own files. A file two units need is named above
 with who edits which lines. Anything else is an `overlap` message to the
@@ -352,14 +490,21 @@ apply.
   from Lucide. Status never by colour alone.
 - Every new Route Handler registers in `test/route-registry.ts`
   (Rule 60.23).
-- A question in §7 is built with its default; do not wait for the answer.
 
-## 7. Open for the user (defaults in force)
+## 7. Questions: all answered by the user
 
-| # | Question | Default built |
+| # | Question | The user's answer |
 |---|---|---|
-| Q11 | Item 16: an SSO person's name and email come from Entra. Read-only for them, name editable for password users, email never? | Yes |
-| Q12 | Item 11: "refresh" reloads the latest collected data and clears caches; it cannot start a collection before the collector exists (Phase 6). Enough for now? | Yes |
+| Q10 | Item 13: which ids are generated? | The AWS account ID stays typed; Department ID and Team ID are generated (2026-11-18) |
+| Q11 | Item 16: which fields may be edited? | A password user's name only; SSO name and email are read-only (2026-11-18) |
+| Q12 | Item 11: what should "refresh" do before the collector exists? | Wait for Phase 6 (2026-11-18) |
+| Q13 | With SSO on, does Add member still create a missing LiteLLM user? | Yes, keep it (2026-11-18) |
+| Q14 | Without SSO, does an invite join a password user at first sign-in by email? | No, keep as today (2026-11-18) |
+| Q15 | With SSO on, does the Users page also offer the password step of Add user? | No, invite only (2026-11-18) |
+| Q16 | Item 18: may the service key call `/user/update`? | Yes, with `spend: 0` only, validated by a schema (2026-11-19) |
+| Q17 | Item 18: who resets a LiteLLM user in no team? | Admin and org-admin (2026-11-19) |
+| Q18 | Item 18: what does "reset the team budget" reset? | Each member, like the lead (2026-11-19) |
+| Q19 | Item 18: does a team lead also get the user-level reset for members of their team? | Yes, leads too (2026-11-19) |
 
 ## 8. Completion criteria
 
@@ -369,4 +514,4 @@ commit with `main` merged in; the targeted e2e ran once (the full e2e if a
 shared file changed); the ready self-check passed; the handover and the
 report are written; the `ready` line is sent.
 
-`/goal docs/plans/20261118_teams_users_and_litellm_sync.md §8 completion criteria met for unit <LF1|ST1|TM1|US1|US2|SRT1>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.`
+`/goal docs/plans/20261118_teams_users_and_litellm_sync.md §8 completion criteria met for unit <LF1|ST1|TM1|US1|US2|SRT1|RS2>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.`

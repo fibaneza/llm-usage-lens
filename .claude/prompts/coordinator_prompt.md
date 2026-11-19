@@ -65,7 +65,7 @@ branch, queue) for each one; this table says what each session **is**.
 | Session name | Kind | Role | Runs | Channel | Agents |
 |---|---|---|---|---|---|
 | `Coordinator` | this session | Assigns goals, prevents conflicts, reviews and lands every unit, keeps state | this file | — | review and fix agents only (§4) |
-| `improvements_worker` | worker (Claude Desktop session) | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/20261103_master.md`, `docs/plans/20261117_ui_refresh.md`, `docs/plans/20261117_management_improvements.md`, a plan's `<slug>_prompt.md` | live message; relay if held | per the brief (§3a) |
+| `improvements_worker` | worker (Claude Desktop session) | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/20261103_master.md`, `docs/plans/20261117_ui_refresh.md`, `docs/plans/20261118_teams_users_and_litellm_sync.md`, a plan's `<slug>_prompt.md` | live message; relay if held | per the brief (§3a) |
 | `bedrock_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/20261109_rbac.md` (4R units), chores and plan units assigned to it | live message; relay if held | per the brief (§3a) |
 | `litellm_worker`  | worker | Builds units, through the workflow its plan designs for it | `worker_prompt.md` (role) + `docs/plans/20261109_litellm.md` (L units), plan units assigned to it | live message; relay if held | per the brief (§3a) |
 | `planner` | planner | Writes plans, spec text and prompts; **never** builds, tests, commits or takes a unit | `planner_prompt.md` | **file relay only** (§2b) | read-only research agents, at most 3 |
