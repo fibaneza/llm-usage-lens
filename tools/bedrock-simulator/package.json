@@ -18,17 +18,17 @@
     "hooks:uninstall": "rm -f ../../.git/hooks/pre-push && echo 'pre-push hook removed'"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.163",
+    "@types/aws-lambda": "^8.10.164",
     "@types/node": "^25.9.3",
     "esbuild": "^0.28.2",
     "typescript": "^6.0.3",
-    "vite": "^8.2.2",
+    "vite": "^8.3.8",
     "vitest": "^4.1.8"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock": "^3.1127.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.1127.0",
-    "@aws-sdk/client-sts": "^3.1127.0",
-    "zod": "^4.5.4"
+    "@aws-sdk/client-bedrock": "^3.1169.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1169.0",
+    "@aws-sdk/client-sts": "^3.1169.0",
+    "zod": "^4.6.7"
   }
 }
