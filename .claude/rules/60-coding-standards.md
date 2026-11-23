@@ -114,8 +114,12 @@ patterns) and current Next.js App Router guidance.
     audit per refused write — is asserted **once**, by a shared
     route-contract suite that iterates a registry of every route; a new
     route registers there instead of copying those cases. A route's own
-    file tests only its route-specific behaviour. Until that suite lands
-    (test cleanup chore), the route's own file keeps the cases.
+    file tests only its route-specific behaviour. The suite is
+    `app/api/__tests__/route-contract.integration.test.ts` with the registry
+    `test/route-registry.ts` (landed 2026-11-16, `3916b281`); a route's own
+    file does not repeat those cases, except a `frozen` registry entry: its own
+    file keeps them until the flag is cleared and the suite runs the route in
+    full (amended 2026-11-24).
 24. **No flaky tests.** No real network, no wall-clock `sleep`; control time
     with `vi.useFakeTimers()`.
 24a. **Test budget (decided 2026-11-15, user).** Spend tests where they
@@ -128,6 +132,25 @@ patterns) and current Next.js App Router guidance.
     - **Tables stay representative** outside security: role × operation,
       denylist, path-parameter and boundary matrices stay complete; other
       `it.each` tables cover the distinct classes, not every combination.
+    - **What counts as a citation (2026-11-24).** A case is cited when
+      its title, an enclosing `describe` title, or a comment directly
+      above either names a spec section, a rule number or a threat item.
+      A review round, a plan, a brief or a run report is not a source.
+    - **One row per class (2026-11-24).** Outside security, a table row
+      stands for a class of input and is named by that class; two rows of
+      one class are one row. Security tables (role × operation, denylist,
+      path-parameter and boundary matrices) stay complete, as above.
+    - **A security case** is one that asserts a `401`, a `403`, a hidden
+      `404`, what a role sees or may do, a denylist or allowlist, a path
+      or boundary check on a guarded route, a `denied` audit record, a
+      secret kept out of an output, a `Cache-Control: private, no-store`
+      header, a `400` on a guarded route, a lockout or rate limit, or that cites
+      a T or LT item
+      (2026-11-24; implementation-phases — *Maintenance — test clean-up,
+      second pass, and test speed*). A security case is removed only as an
+      exact duplicate of a surviving case, named by its full test name,
+      marked `SEC` and approved by a security-scope `quality-reviewer` before
+      deletion (Q1, the user, 2026-11-23).
     - **No per-run test files** (`*.r1`, `*.r2`, `*.review`, …): extend the
       canonical test file next to the code.
 

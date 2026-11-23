@@ -161,6 +161,13 @@ review = quality-reviewer + spec-guardian + ecc reviewers
         task into built and not-built parts instead of ticking it whole.
       - **Ownership and overlap:** `git diff --name-only main...HEAD` holds
         only owned files, plus shared append-only lines (coordinator §2a).
+      - **Test delta (2026-11-24, user: "Do we need all of them?").**
+        The handover says how many written cases and how many cases run
+        the unit added and removed (written: a `git diff` count of `it(`/`test(`
+        titles; run: the JSON reporter before and after on the impacted files),
+        and names any table outside security (`it.each` or `describe.each`) with
+        more than eight rows,
+        with the reason.
     - **Branches run only new and impacted tests** (amended 2026-11-14,
       user). Iterations run the files being worked on
       (`pnpm exec vitest run <paths>`); the phase's green gate — the

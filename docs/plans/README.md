@@ -31,6 +31,8 @@ Run plans, named `<YYYYMMDD>_<slug>.md` by the date each was first written (user
 | `20261117_ui_refresh.md` | The compact workspace (Phase 5 UI refresh) and the test consolidation | Slices A, B1, B2 and B2b and the test consolidation are on `main`; the rest of Slice B is **to confirm** against implementation-phases — *Phase 5*, then remove |
 | `20261118_litellm_user_sync.md` | Units RS1, SYNC1 and SYNC2 (user, 2026-11-18): Reset spend from the LiteLLM users tab and the Users page; LiteLLM users synced into Management → Users on demand and on a schedule, with team membership only through linked LiteLLM teams that exist (supersedes Access Control D27 "never automatic"; T-MI1 stays) | RS1 is on `main`. SYNC1 and SYNC2 are queued; a revision of 2026-11-18 (units LW1 and INV2, automatic links, the two sign-in modes) is with the coordinator to fold in |
 | `20261118_teams_users_and_litellm_sync.md` | Teams, users and LiteLLM sync (management round 2; user, 2026-11-18): it combines the LiteLLM user sync units with the user's new items in seven units (LF1 LiteLLM page fixes, ST1 settings and small UX, TM1 team list then team, US1 users table with API sort, US2 user page, SRT1 sort in other tables, RS2 reset any LiteLLM user), in three waves | **Next to run**, at the weekly usage reset (2026-11-23) |
+| `20261124_test_suite_cleanup.md` | Second test clean-up, the smaller pass (user, 2026-11-23/24): TC0 rules, TC1 route duplicates; the removal list approved before deletion; survivor and coverage proof | Queued; can run beside round 2 |
+| `20261124_test_speed.md` | Test speed: TS1 the password seed hash once per file, TS2 integration files in parallel with a table per worker | Queued; can run beside round 2 |
 
 Removed on 2026-11-18, all units on `main`: the POC plan (`poc/` is built),
 the app config file plan (unit CFG, `5484f12`), the base path plan (unit BP,
@@ -80,6 +82,7 @@ Spec units come before code.
 | 22 | **Round 2, wave 1:** LF1, LW1, RS2, ST1, TM1 | `20261118_teams_users_and_litellm_sync.md`, `20261118_litellm_user_sync.md` (LW1) | **next**, at the weekly usage reset (2026-11-23) | LiteLLM page fixes; "create and link" only when SSO is not enabled; reset any LiteLLM user, linked or not; settings and small UX; the team list, then the team |
 | 23 | **Round 2, wave 2:** SYNC1, US1, US2 | the same two plans | after wave 1 | LiteLLM users synced on demand with automatic links; the users table with API sort; the user page |
 | 24 | **Round 2, wave 3:** SYNC2, SRT1, INV2 | the same two plans | after wave 2 | The scheduled sync; sorting in the other tables; invite, add to team, approve and add |
+| 24a | **Test clean-up and speed:** TC0, TC1, TS1, TS2 | `20261124_test_suite_cleanup.md`, `20261124_test_speed.md` | beside round 2 (TC0 first) | Fewer duplicate route cases, growth rules (K1-K3), a faster integration project |
 | 25 | **Phase 5** polish and accessibility | `20261103_master.md` | fluid workspace done (`85609ea`); compact workspace slices A, B1, B2, B2b on `main`; **the rest is open** | Full accessibility audit (includes the focus-ring token), responsive checks, e2e journeys, and the periodic read-only **security and best-practices review** (HIGH findings block the next unit) |
 
 **Parallel allowances** (user direction, recorded in Rule 30 and
@@ -113,6 +116,8 @@ and gets the Settings → Sync **Refresh now** button (user, 2026-11-18).
 | `20261109_litellm.md` | `docs/plans/20261109_litellm.md §6 completion criteria met for this run's target unit, and the report written — or the run ended by a usage freeze, the T+60 deadline, or a missing dependency, with the report written.` |
 | `20261118_litellm_user_sync.md` | `docs/plans/20261118_litellm_user_sync.md §10 completion criteria met for unit <RS1\|SYNC1\|SYNC2>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.` |
 | `20261118_teams_users_and_litellm_sync.md` | `docs/plans/20261118_teams_users_and_litellm_sync.md §8 completion criteria met for unit <LF1\|ST1\|TM1\|US1\|US2\|SRT1\|RS2>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.` |
+| `20261124_test_suite_cleanup.md` | `docs/plans/20261124_test_suite_cleanup.md §11 completion criteria met for unit TC1, reported ready to merge, and the report written — or the run stopped at "tc-list ready" waiting for the approval, or ended by a usage freeze or a missing dependency, with the report written.` |
+| `20261124_test_speed.md` | `docs/plans/20261124_test_speed.md §10 completion criteria met for unit <TS1\|TS2>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.` |
 
 Send the instruction first (for example "Run docs/plans/20261109_rbac.md for unit
 R3 in this worktree…", mentioning the plan with `@docs/plans/20261109_rbac.md`),

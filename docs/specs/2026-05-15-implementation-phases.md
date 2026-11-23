@@ -1080,11 +1080,68 @@ before L4, never during a unit that edits the same files (Rule 60.24a).
   `departments.spec.ts` cases that re-ran `DepartmentsContent.test.tsx`
   with a stubbed API were removed; the other e2e specs assert shell,
   navigation, responsive or axe behaviour a component test cannot see)
-- [ ] Verify: `pnpm check` green in CI on push and the full `pnpm test:e2e`
+- [ ] Verify (the CI and timing parts carried into the second pass, 2026-11-24; the coverage list is done): `pnpm check` green in CI on push and the full `pnpm test:e2e`
   green in CI (Rule 70.12 — *E2E budget*); no spec
   rule, rule item or threat item loses its last test (coverage
   list per removed case: done, in the finish report); test lines and run time
   before and after reported
+
+## Maintenance — test clean-up, second pass, and test speed (queued 2026-11-24, user)
+
+The user, 2026-11-24: "There are more than 10000 tests. Do we need all of
+them? Run a clean up". Measured in CI on 2026-11-23 (`main` at
+`6ba776d5`): 11,945 cases run from about 4,900 written; Vitest takes
+638 s, of which the integration project, one file at a time, takes 418 s.
+More than half of the cases run are security matrices, which stay whole;
+a full clean-up would remove 750 to 1,300 cases and 20 to 30 s. The user
+chose the smaller pass and a separate speed plan (2026-11-23).
+Plans: `docs/plans/20261124_test_suite_cleanup.md`,
+`docs/plans/20261124_test_speed.md`.
+
+Decisions (agent decisions, 2026-11-24, unless marked; reasons in the
+plans §3):
+
+- Clean-up: cases are removed, not files (D-TC1). A security case is
+  removed only as an exact duplicate of a route-contract case, marked
+  `SEC` and approved by a `quality-reviewer` with security scope before
+  deletion (D-TC2, D-TC3: the user, 2026-11-23, "Yes"; D-TC8). The
+  structure suites and the structural checks of
+  `write-routes.integration.test.ts` are not touched (D-TC4). Proof:
+  every survivor still exists and passes, and every statement, branch and function
+  covered before is covered after (D-TC9).
+- Growth rules (D-TC7, D-TC12): a case is cited by its title, an enclosing
+  `describe` title or a comment directly above either; outside security one
+  table row per input class; each handover reports the written and run
+  cases the unit added and removed. A security case is defined by its
+  content as in D-TC2 (Rule 60.24a); one is removed only as an exact
+  duplicate named by its full test name, marked `SEC` and approved before
+  deletion. A `frozen` registry entry keeps its route's own contract cases
+  (Rule 60.23). (Coordinator, TC0 review, 2026-11-24.)
+- Speed: the seeded password hash is computed once per file with the
+  real parameters; nothing is mocked and no hash cost is lowered
+  (D-TS1, D-TS2). Integration files run in parallel with one table per
+  Vitest worker, at most 4 workers (D-TS3, D-TS6); a file that fails
+  only beside others moves to a serial project and is not edited
+  (D-TS5). The CI `e2e` job is not split (D-TS8; open question Q-TS1).
+
+- [ ] **TC1** route duplicates (`write-routes` cases the route-contract
+  suite also runs; the nine `frozen` registry entries; contract copies
+  in route files)
+  Verify: removal list approved and executed; the survivor check clean;
+  zero coverage losses; typecheck, lint, format, the two structure
+  suites and the full Vitest run green at the final commit; no contract
+  case or role row lost except as an approved `SEC` duplicate
+- [ ] **TS1** the password seed hash, once per file, in `account-password.integration.test.ts` only (coordinator, TC0 review: `password-credentials.integration.test.ts` seeds through the code under test and spies on the hash, so it is left as is)
+  Verify: that file only; the same case count; no assertion changed
+  and no mock added; three green runs; seconds before and after reported
+- [ ] **TS2** integration files in parallel, a table per worker
+  Verify: no test file changed; three full Vitest runs and one shuffled
+  run green with the baseline's counts; no test table left after a run;
+  the table guard unchanged; the integration project's time before and
+  after reported; `docs/guides/testing.md` updated
+- [ ] Verify (both plans): `pnpm check` and the full `pnpm test:e2e`
+  green in CI on push; cases, files and run time before and after
+  recorded in `docs/guides/testing.md` — *Coverage*
 
 ## Workflow pilots (decided 2026-11-15, user)
 

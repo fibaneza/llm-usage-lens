@@ -123,6 +123,17 @@ the dashboard sources (`app`, `components`, `hooks`, `lib` and the root
 `infra/{bin,lib}` and `scripts`; tests, `test/`, `e2e/`, `.next/` and
 `cdk.out/` are excluded.
 
+To compare coverage before and after a change to the tests, write the
+JSON report to a folder of your own and keep the default reporters out
+of the way:
+
+    pnpm exec vitest run --coverage --coverage.reporter=json --coverage.reportsDirectory=temp/<run>/after-coverage
+
+`coverage-final.json` lists the hits per statement, branch and function;
+a removal of tests is safe for coverage when nothing with a hit before
+has none after (implementation-phases — *Maintenance — test clean-up,
+second pass*).
+
 No threshold is enforced yet, and CI does not run coverage. Baseline at
 `chore/test-structure` (2026-11-17, all three projects, 8020 tests):
 
