@@ -365,8 +365,9 @@ test.describe("Management -> Team page", () => {
       .getByRole("button", { name: "Reset spend for Ada Lovelace" })
       .click();
     const dialog = page.getByRole("alertdialog");
+    // Design System - Reset any LiteLLM user, Dialog text (D-RS9).
     await expect(dialog).toContainText(
-      "Sets Ada Lovelace's spend to $0.00. Recorded in the audit log.",
+      "Sets Ada Lovelace's spend to $0.00. Usage history, cost data and the audit log do not change.",
     );
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
     await dialog.getByRole("button", { name: "Cancel" }).click();
