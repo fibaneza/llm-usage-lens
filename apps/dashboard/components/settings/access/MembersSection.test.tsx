@@ -411,3 +411,60 @@ describe("MembersSection follows the page's selected team (?team=)", () => {
     expect(await screen.findByLabelText("Team")).toHaveDisplayValue("Payments");
   });
 });
+
+// Unit TM1, D-TM2 (Design
+// System - Management pages, Team, "List, then the team"): with the optional
+// `teamId` prop the section uses that team, renders no team chooser and
+// ignores ?team=. Without it, the cases above (the chooser and the ?team=
+// fallback) stay as they are. Prop contract: `<MembersSection viewer teamId />`.
+describe("MembersSection with a teamId prop (TM1 D-TM2)", () => {
+  it("uses the route's team and renders no team chooser", async () => {
+    const api = stubAccessApi(
+      routes({
+        "GET /api/teams/team-risk/members": page([
+          memberItem({ oid: "oid-bob", teamId: "team-risk" }),
+        ]),
+      }),
+    );
+    renderWithProviders(<MembersSection viewer={ADMIN} teamId="team-risk" />);
+    await screen.findByRole("row", { name: /Bob Brown/ });
+    expect(screen.queryByLabelText("Team")).not.toBeInTheDocument();
+    expect(api.to(MEMBERS_URL)).toEqual([]);
+  });
+
+  // D-TM2: ?team= is only the fallback for callers without the prop.
+  it("ignores ?team= when the prop is given", async () => {
+    const api = stubAccessApi(routes());
+    renderWithProviders(<MembersSection viewer={ADMIN} teamId="team-pay" />, {
+      searchParams: { team: "team-risk" },
+    });
+    await screen.findByRole("row", { name: /Alice Adams/ });
+    expect(api.to("GET /api/teams/team-risk/members")).toEqual([]);
+  });
+
+  // D-TM2: the add-member write targets the route's team.
+  it("adds a member on the route's team", async () => {
+    const user = userEvent.setup();
+    const api = stubAccessApi(
+      routes({
+        "GET /api/teams/team-risk/members": page([]),
+        "POST /api/teams/team-risk/members": () => ok({}, 201),
+      }),
+    );
+    renderWithProviders(<MembersSection viewer={ADMIN} teamId="team-risk" />);
+    await screen.findByText(/no members/i);
+    await user.type(
+      screen.getByLabelText("Work email or UPN"),
+      "new.hire@example.com",
+    );
+    await user.click(screen.getByRole("button", { name: "Add member" }));
+    expect(
+      await screen.findByText(/new\.hire@example\.com is pending/),
+    ).toBeVisible();
+    expect(api.writes()[0]).toMatchObject({
+      method: "POST",
+      path: "/api/teams/team-risk/members",
+      body: { emailOrUpn: "new.hire@example.com" },
+    });
+  });
+});

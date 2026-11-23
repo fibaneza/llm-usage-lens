@@ -316,7 +316,7 @@ test.describe("Top bar - notification bell (M4, MG-D13, Flow 3 and 5)", () => {
 // ---- review m4-r1 (UI blocker U-B1 and WARNs) ------------------------------------
 
 const COUNTS = {
-  teams: [{ teamId: "t1", count: 2, amount: 7.25 }],
+  teams: [{ teamId: "team-payments", count: 2, amount: 7.25 }],
   own: { count: 2, amount: 7.25 },
 };
 const COUNT_TEXT = "2 resets, $7.25";
@@ -345,7 +345,7 @@ const TEAM_DETAIL = {
 };
 const APP_TEAMS = [
   {
-    teamId: "t1",
+    teamId: "team-payments",
     teamName: "Payments",
     spendSource: "litellm-team",
     spend: 321.75,
@@ -361,7 +361,7 @@ async function mockManagement(page: Page) {
   await page.route(/\/api\/access\/org-units(\?|$)/, (r) =>
     r.fulfill(
       fulfil({
-        teams: [{ id: "t1", name: "Payments", departmentId: "d1" }],
+        teams: [{ id: "team-payments", name: "Payments", departmentId: "d1" }],
         departments: [{ id: "d1", name: "Engineering" }],
       }),
     ),
@@ -374,16 +374,19 @@ async function mockManagement(page: Page) {
         enabledOperations: ["resetMemberSpend"],
         teams: [
           {
-            teamId: "t1",
+            teamId: "team-payments",
             teamName: "Payments",
             linked: true,
             configurable: true,
           },
         ],
       },
-      "/api/litellm/teams/t1": TEAM_DETAIL,
-      "/api/litellm/teams/t1/members": { connected: true, items: [] },
-      "/api/litellm/teams/t1/keys": { connected: true, items: [] },
+      "/api/litellm/teams/team-payments": TEAM_DETAIL,
+      "/api/litellm/teams/team-payments/members": {
+        connected: true,
+        items: [],
+      },
+      "/api/litellm/teams/team-payments/keys": { connected: true, items: [] },
       "/api/litellm/models": { items: ["claude-sonnet"] },
       "/api/litellm/org": {
         configured: true,
@@ -414,7 +417,7 @@ test.describe("Team page Budgets view - open requests (review m4-r1 U-B1; MG-D12
     await mockManagement(page);
     await mockCounts(page, NO_COUNTS);
     await mockNotifications(page, { items: [], unreadCount: 0 });
-    const teamView = { ...VIEW, teamId: "t1" };
+    const teamView = { ...VIEW, teamId: "team-payments" };
     await page.route(/\/api\/budget-reset-requests(\?|$)/, (r) =>
       r.fulfill(fulfil({ items: [teamView] })),
     );
@@ -424,7 +427,7 @@ test.describe("Team page Budgets view - open requests (review m4-r1 U-B1; MG-D12
       return r.fulfill(fulfil({ request: { ...teamView, status: "denied" } }));
     });
 
-    await open(page, "/dashboard/manage/team?team=t1&view=budgets");
+    await open(page, "/dashboard/manage/team/team-payments?view=budgets");
     const row = page.getByRole("listitem").filter({ hasText: "Ada Lovelace" });
     await expect(row).toBeVisible();
     await expect(row).toContainText("ada@example.test");
@@ -546,7 +549,7 @@ test.describe("Budget reset counts are visible text (review m4-r1 UI WARNs; MG-D
     await page.route(/\/api\/budget-reset-requests(\?|$)/, (r) =>
       r.fulfill(fulfil({ items: [] })),
     );
-    await open(page, "/dashboard/manage/team?team=t1&view=budgets");
+    await open(page, "/dashboard/manage/team/team-payments?view=budgets");
     await expect(
       page.getByText(`Budget resets in this range: ${COUNT_TEXT}`),
     ).toBeVisible();

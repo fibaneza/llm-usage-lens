@@ -4,43 +4,35 @@ import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Sources: Design System - Management pages (Team: "lead for the teams it
-// leads, internal-org-admin and internal-admin for every team;
-// internal-auditor read-only"; the ScopeLine for a lead; "Lead's other
-// team-scoped access actions": the page mounts the Access sections the
-// viewer's capabilities allow); Access Control - Navigation and landing by
-// role (Team: admin / org admin every team, auditor read-only, lead the teams
-// it leads, user not offered; Hidden means absent and 404); slice B2 brief
-// B2-4; LiteLLM spec - Team configuration page / LD25-LD26 (only
-// internal-admin raises limits; the legacy Admin alias outside prod counts;
-// a suspended SSO scope grants nothing; a stored grant counts, Rule 50.4;
-// "A team outside the caller's scope returns the same 404"); Rules 10.3,
-// 50.3, 60.7. The auditor reads the page (Access Control - Navigation and
-// landing by role). The full caller x route
-// matrix runs in __tests__/manage-routes.integration.test.ts.
+// Sources: Design System - Management pages, Team, "List, then the team
+// (unit TM1; D-TM1, D-TM4)" and its agent decision on `?team=`; Access Control
+// - Enforcement item 2 (TM1 sentence: the list holds only in-scope teams, the
+// ?team= redirect lands on the same 404) and - Navigation and landing by role
+// (Team: admin / org admin every team, auditor read-only, lead the teams it
+// leads, user not offered; hidden means absent and 404); LiteLLM spec LD25;
+// plan Rules 10.3, 50.3, 60.7.
+//
+// The team page itself (TeamPageContent, access sections, canRaiseLimits) is
+// tested in [teamId]/page.test.tsx; the cases that used to live here for it
+// moved there. This file covers the list page and the `?team=` redirect.
 //
 // Contract for the developer (app/dashboard/manage/team/page.tsx):
 //   default async Server Component, props
-//   { searchParams: Promise<{ team?: string }> }. Roles and live scopes resolve
-//   through lib/manage-access (managementAccessFor) and the same primitives the
-//   old team-config page used. `team` flag false -> notFound(). With a
-//   non-global caller and ?team=<id>, the id must be in scope.teamScopes or
-//   belong (via findTeamEntry from @/lib/api/team-directory, which covers a
-//   created app team as well as a registry team; Access Control - Created app
-//   teams) to one of scope.departmentScopes, else notFound(); a global reader (admin, org admin, auditor) may open any team.
-//   Renders <TeamPageContent canRaiseLimits canCreateTeam scopeLabel access />
-//   from
-//   "@/components/manage/TeamPageContent":
-//     canRaiseLimits: boolean, true only for internal-admin;
-//     canCreateTeam: boolean, true for internal-admin and internal-org-admin
-//       only (Design System - New team, D5/D6; Access Control - Created app
-//       teams: auditor and lead never);
-//     scopeLabel: string | null, scopeLabelFor(scope) (null for a global
-//       reader), the client adds the team names;
-//     access: ReactNode | undefined, an <AccessSections viewer stepUp
-//       sections={["members","team-admins","pending-access","visibility"]} />
-//       when the viewer resolves and has at least one of those sections,
-//       otherwise undefined.
+//   { searchParams: Promise<{ team?: string; view?: string }> }.
+//   `team` flag false -> notFound(). With ?team=<id>: a non-global caller whose
+//   scope holds neither the id in teamScopes nor (via findTeamEntry) its
+//   department in departmentScopes gets notFound(); otherwise
+//   redirect(`/dashboard/manage/team/<id>`) keeping ?view= when present
+//   (temporary redirect). Without ?team=: renders
+//   <TeamListTable rows canCreateTeam scopeLabel /> from
+//   "@/components/manage/TeamListTable", where rows come from the new server
+//   module "@/lib/manage/team-list" `listTeamRows(): Promise<TeamListRow[]>`
+//   (every registry and created team, unscoped: { teamId, teamName,
+//   departmentId, departmentName, memberCount, litellmTeamId }) filtered by
+//   the page: a global reader sees all; a lead sees the teams in its
+//   teamScopes plus those whose departmentId is in its departmentScopes.
+//   canCreateTeam: true for internal-admin and internal-org-admin only.
+//   scopeLabel: scopeLabelFor(scope), null for a global reader.
 const auth = vi.fn();
 vi.mock("@/auth", () => ({ auth: () => auth() }));
 vi.mock("server-only", () => ({}));
@@ -51,9 +43,8 @@ vi.mock("@/lib/data/access/authorization", () => ({
 vi.mock("@/env", () => ({
   env: { APP_ENV: "dev", AUTH_ACCESS_MODE: "enforce" },
 }));
-// The department-lead ?team= check reads the team directory (registry teams and
-// created app teams; hasAwsAccount is false for a created team).
 const DIRECTORY = [
+  { teamId: "t1", departmentId: "dept-eng", hasAwsAccount: true },
   { teamId: "team-a", departmentId: "dept-eng", hasAwsAccount: true },
   { teamId: "team-c", departmentId: "dept-ops", hasAwsAccount: true },
   {
@@ -61,15 +52,26 @@ const DIRECTORY = [
     departmentId: "dept-eng",
     hasAwsAccount: false,
   },
-  {
-    teamId: "appteam-00000000-0000-4000-8000-000000000002",
-    departmentId: "dept-ops",
-    hasAwsAccount: false,
-  },
 ];
 vi.mock("@/lib/api/team-directory", () => ({
   findTeamEntry: async (teamId: string) =>
     DIRECTORY.find((e) => e.teamId === teamId) ?? null,
+}));
+const ROWS = [
+  ["t1", "Payments", "dept-eng"],
+  ["team-a", "Alpha", "dept-eng"],
+  ["team-c", "Gamma", "dept-ops"],
+  ["appteam-00000000-0000-4000-8000-000000000001", "Guild", "dept-eng"],
+].map(([teamId, teamName, departmentId]) => ({
+  teamId,
+  teamName,
+  departmentId,
+  departmentName: departmentId === "dept-eng" ? "Engineering" : "Operations",
+  memberCount: 2,
+  litellmTeamId: teamId === "team-a" ? "alpha-llm" : null,
+}));
+vi.mock("@/lib/manage/team-list", () => ({
+  listTeamRows: async () => ROWS,
 }));
 vi.mock("next/navigation", () => ({
   notFound: () => {
@@ -79,42 +81,27 @@ vi.mock("next/navigation", () => ({
     throw new Error(`NEXT_REDIRECT:${url}`);
   },
 }));
-vi.mock("@/app/dashboard/settings/step-up-actions", () => ({
-  stepUpWithEntra: vi.fn(),
-  stepUpWithCredentials: vi.fn(),
-  stepUpWithDevLogin: vi.fn(),
-}));
-const loadViewer = vi.fn();
-vi.mock("@/lib/auth/settings-access", () => ({
-  loadSettingsAccessViewer: (session: unknown) => loadViewer(session),
-}));
-vi.mock("@/components/settings/access/AccessSections", () => ({
-  AccessSections: (props: { sections: string[] }) => (
-    <div data-testid="access-sections">{props.sections.join(",")}</div>
-  ),
-}));
-vi.mock("@/components/manage/TeamPageContent", () => ({
-  TeamPageContent: (props: {
-    canRaiseLimits: boolean;
+vi.mock("@/components/manage/TeamListTable", () => ({
+  TeamListTable: (props: {
+    rows: { teamId: string }[];
     canCreateTeam: boolean;
-    scopeLabel: string | null;
-    access?: React.ReactNode;
+    scopeLabel?: string | null;
   }) => (
     <div
-      data-testid="team"
-      data-raise={String(props.canRaiseLimits)}
+      data-testid="list"
       data-create={String(props.canCreateTeam)}
       data-scope-label={props.scopeLabel ?? ""}
+      data-rows={JSON.stringify(props.rows)}
     >
-      {props.access}
+      {props.rows.map((r) => r.teamId).join(",")}
     </div>
   ),
 }));
 
 import TeamPage from "./page";
 
-const open = async (team?: string) =>
-  TeamPage({ searchParams: Promise.resolve(team ? { team } : {}) });
+const open = async (query: { team?: string; view?: string } = {}) =>
+  TeamPage({ searchParams: Promise.resolve(query) });
 
 const as = (roles: string[], authorization: Record<string, unknown> = {}) => {
   auth.mockResolvedValue({ user: { oid: "o", roles, authMethod: "entra" } });
@@ -123,15 +110,24 @@ const as = (roles: string[], authorization: Record<string, unknown> = {}) => {
     roleGrants: [],
     ...authorization,
   });
-  const scoped = Array.isArray(authorization.adminScopes)
-    ? authorization.adminScopes
-    : [];
-  loadViewer.mockResolvedValue({
-    roles,
-    authMethod: "entra",
-    adminScopes: scoped,
-  });
 };
+
+const teamLead = (scopeId: string) => ({
+  adminScopes: [{ source: "manual", scopeType: "team", scopeId }],
+});
+const deptLead = (scopeId: string) => ({
+  adminScopes: [{ source: "manual", scopeType: "department", scopeId }],
+});
+const listed = () => screen.getByTestId("list").textContent;
+type PassedRow = {
+  teamId: string;
+  litellmTeamId?: string | null;
+  litellmLinked: boolean;
+};
+const passedRows = () =>
+  JSON.parse(
+    screen.getByTestId("list").getAttribute("data-rows") ?? "[]",
+  ) as PassedRow[];
 
 beforeEach(() => {
   as(["internal-viewer"]);
@@ -141,7 +137,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("TeamPage (/dashboard/manage/team)", () => {
+describe("TeamPage list (/dashboard/manage/team; D-TM1)", () => {
   it("is a Server Component (Rule 60.7)", () => {
     const source = readFileSync(
       resolve(import.meta.dirname, "page.tsx"),
@@ -150,54 +146,31 @@ describe("TeamPage (/dashboard/manage/team)", () => {
     expect(source).not.toMatch(/^\s*["']use client["']/m);
   });
 
-  // Who: lead, org admin, admin get the page; only admin may raise (LD26); the
-  // auditor reads it (Access Control matrix) and cannot raise.
   it.each([
+    ["an internal-org-admin", ["internal-org-admin"], {}],
+    ["the read-only internal-auditor", ["internal-auditor"], {}],
+    ["an internal-admin", ["internal-admin"], {}],
+    ["the legacy Admin alias outside prod", ["Admin"], {}],
+    ["a Lead with a team scope", ["internal-viewer"], teamLead("t1")],
     [
-      "a Lead with a team admin scope",
+      "a Lead with a department scope",
       ["internal-viewer"],
-      { adminScopes: [{ source: "manual", scopeType: "team", scopeId: "t1" }] },
-      "false",
+      deptLead("dept-eng"),
     ],
-    [
-      "a Lead with a department admin scope",
-      ["internal-viewer"],
-      {
-        adminScopes: [
-          { source: "manual", scopeType: "department", scopeId: "d1" },
-        ],
-      },
-      "false",
-    ],
-    [
-      "an internal-org-admin (lowers only, LD26)",
-      ["internal-org-admin"],
-      {},
-      "false",
-    ],
-    ["the read-only internal-auditor", ["internal-auditor"], {}, "false"],
-    ["an internal-admin", ["internal-admin"], {}, "true"],
-    ["the legacy Admin alias outside prod", ["Admin"], {}, "true"],
-    [
-      "a stored internal-org-admin grant on a viewer claim (Rule 50.4)",
-      ["internal-viewer"],
-      { roleGrants: [{ role: "internal-org-admin" }] },
-      "false",
-    ],
-  ])("%s gets the page (Who)", async (_n, roles, authorization, raise) => {
+  ])("%s gets the list (Who)", async (_n, roles, authorization) => {
     as(roles, authorization);
     render(await open());
-    expect(screen.getByTestId("team")).toHaveAttribute("data-raise", raise);
+    expect(screen.getByTestId("list")).toBeInTheDocument();
   });
 
-  // Hidden means absent and 404.
+  // Hidden means absent and 404 (Access Control - Navigation and landing).
   it.each([
     ["a Viewer", ["internal-viewer"], {}],
     ["no role claim", [], {}],
     [
       "a plain team member (affiliation, no admin scope)",
       ["internal-viewer"],
-      { affiliation: { teamId: "t1", departmentId: "d1" } },
+      { affiliation: { teamId: "t1", departmentId: "dept-eng" } },
     ],
     [
       "a Lead whose only scope is suspended (sso, groupsOverage)",
@@ -217,69 +190,86 @@ describe("TeamPage (/dashboard/manage/team)", () => {
     await expect(open()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
-  // Who: "A team outside the caller's scope returns the same 404".
-  it("a Lead opening ?team= inside its scope gets the page; outside it, notFound()", async () => {
-    as(["internal-viewer"], {
-      adminScopes: [{ source: "manual", scopeType: "team", scopeId: "t1" }],
-    });
-    render(await open("t1"));
-    expect(screen.getByTestId("team")).toBeInTheDocument();
-    await expect(open("t2")).rejects.toThrow("NEXT_NOT_FOUND");
+  // the list shows only teams in scope.
+  it.each([
+    ["an admin", ["internal-admin"], {}],
+    ["an org-admin", ["internal-org-admin"], {}],
+    ["the auditor", ["internal-auditor"], {}],
+  ])("%s sees every team (global reader)", async (_n, roles, authorization) => {
+    as(roles, authorization);
+    render(await open());
+    expect(listed()).toBe(ROWS.map((r) => r.teamId).join(","));
   });
 
-  // Coordinator ruling 2026-11-16: a department-scope Lead may open ?team= for
-  // any team in its department (the write routes' scope).
-  it("a department Lead opening ?team= of a team in its department gets the page; outside it, notFound()", async () => {
+  it("a team Lead sees only the teams of its team scopes", async () => {
+    as(["internal-viewer"], teamLead("team-a"));
+    render(await open());
+    expect(listed()).toBe("team-a");
+  });
+
+  it("a department Lead sees every team of its department, registry and created, and none of another (Access Control - Created app teams)", async () => {
+    as(["internal-viewer"], deptLead("dept-eng"));
+    render(await open());
+    expect(listed()).toBe(
+      "t1,team-a,appteam-00000000-0000-4000-8000-000000000001",
+    );
+  });
+
+  it("a Lead holding a team scope and a department scope sees the union", async () => {
     as(["internal-viewer"], {
       adminScopes: [
+        { source: "manual", scopeType: "team", scopeId: "team-c" },
         { source: "manual", scopeType: "department", scopeId: "dept-eng" },
       ],
     });
-    render(await open("team-a"));
-    expect(screen.getByTestId("team")).toBeInTheDocument();
-    await expect(open("team-c")).rejects.toThrow("NEXT_NOT_FOUND");
+    render(await open());
+    expect(listed()).toBe(
+      "t1,team-a,team-c,appteam-00000000-0000-4000-8000-000000000001",
+    );
   });
 
-  // Access Control - Created app teams: a created team is covered by the
-  // policy module through its stored department, so a department Lead may open
-  // a created team of its department and not one of another department (T-MI4).
-  it("a department Lead opening ?team= of a created team in its department gets the page; a created team of another department is notFound()", async () => {
-    as(["internal-viewer"], {
-      adminScopes: [
-        { source: "manual", scopeType: "department", scopeId: "dept-eng" },
-      ],
-    });
-    render(await open("appteam-00000000-0000-4000-8000-000000000001"));
-    expect(screen.getByTestId("team")).toBeInTheDocument();
-    await expect(
-      open("appteam-00000000-0000-4000-8000-000000000002"),
-    ).rejects.toThrow("NEXT_NOT_FOUND");
-  });
-
-  it("a department Lead opening an unknown ?team= is notFound()", async () => {
-    as(["internal-viewer"], {
-      adminScopes: [
-        { source: "manual", scopeType: "department", scopeId: "dept-eng" },
-      ],
-    });
-    await expect(open("appteam-unknown")).rejects.toThrow("NEXT_NOT_FOUND");
-  });
+  // Q-B1 (review r1): Design System - "List, then the team", The LiteLLM team
+  // column by role: admin, org-admin and auditor see the id; every other caller
+  // gets only a linked / not-linked state and the id is not sent to the browser.
+  it.each([
+    ["an admin", ["internal-admin"], {}],
+    ["an org-admin", ["internal-org-admin"], {}],
+    ["the auditor", ["internal-auditor"], {}],
+  ])(
+    "%s gets the LiteLLM team id and the linked state in the rows",
+    async (_n, roles, authorization) => {
+      as(roles, authorization);
+      render(await open());
+      const rows = passedRows();
+      expect(rows.find((r) => r.teamId === "team-a")).toMatchObject({
+        litellmTeamId: "alpha-llm",
+        litellmLinked: true,
+      });
+      expect(rows.find((r) => r.teamId === "t1")).toMatchObject({
+        litellmLinked: false,
+      });
+    },
+  );
 
   it.each([
-    ["an org-admin", ["internal-org-admin"]],
-    ["the auditor", ["internal-auditor"]],
-  ])("%s may open any ?team= (global scope)", async (_n, roles) => {
-    as(roles);
-    render(await open("t9"));
-    expect(screen.getByTestId("team")).toBeInTheDocument();
-  });
-});
+    ["a team lead", teamLead("team-a")],
+    ["a department lead", deptLead("dept-eng")],
+  ])(
+    "%s gets only a linked state: no LiteLLM team id reaches the rows",
+    async (_n, authorization) => {
+      as(["internal-viewer"], authorization);
+      render(await open());
+      const rows = passedRows();
+      expect(rows.find((r) => r.teamId === "team-a")).toMatchObject({
+        litellmLinked: true,
+      });
+      expect(rows.every((r) => !r.litellmTeamId)).toBe(true);
+      expect(
+        screen.getByTestId("list").getAttribute("data-rows"),
+      ).not.toContain("alpha-llm");
+    },
+  );
 
-// Design System - Management pages, *New team (D5, D6; unit M2)*: "admin,
-// org-admin; absent for everyone else"; Access Control - Created app teams:
-// POST /api/teams is internal-admin and internal-org-admin only (user, Q2).
-// The route refuses everyone else; the page only decides who gets the button.
-describe("TeamPage canCreateTeam (New team; role matrix)", () => {
   it.each([
     ["an internal-admin", ["internal-admin"], {}, "true"],
     ["the legacy Admin alias outside prod", ["Admin"], {}, "true"],
@@ -291,95 +281,104 @@ describe("TeamPage canCreateTeam (New team; role matrix)", () => {
       "true",
     ],
     ["the read-only internal-auditor", ["internal-auditor"], {}, "false"],
+    ["a Lead with a team scope", ["internal-viewer"], teamLead("t1"), "false"],
     [
-      "a Lead with a team admin scope",
+      "a Lead with a department scope",
       ["internal-viewer"],
-      { adminScopes: [{ source: "manual", scopeType: "team", scopeId: "t1" }] },
+      deptLead("dept-eng"),
       "false",
     ],
-    [
-      "a Lead with a department admin scope",
-      ["internal-viewer"],
-      {
-        adminScopes: [
-          { source: "manual", scopeType: "department", scopeId: "dept-eng" },
-        ],
-      },
-      "false",
-    ],
-  ])("%s gets canCreateTeam=%s", async (_n, roles, authorization, create) => {
-    as(roles, authorization);
-    render(await open());
-    expect(screen.getByTestId("team")).toHaveAttribute("data-create", create);
-  });
-});
-
-// B2-4: the ScopeLine label for a non-global caller; none for a global reader.
-describe("TeamPage scope line label (Design System - Scoped labels; scopeLabelFor)", () => {
-  it.each([
-    [
-      "a team lead",
-      ["internal-viewer"],
-      { adminScopes: [{ source: "manual", scopeType: "team", scopeId: "t1" }] },
-      "Showing teams you lead",
-    ],
-    [
-      "a department lead",
-      ["internal-viewer"],
-      {
-        adminScopes: [
-          { source: "manual", scopeType: "department", scopeId: "d1" },
-        ],
-      },
-      "Showing departments you lead",
-    ],
-    ["an admin", ["internal-admin"], {}, ""],
-    ["the auditor", ["internal-auditor"], {}, ""],
-  ])("%s", async (_n, roles, authorization, label) => {
-    as(roles, authorization);
-    render(await open());
-    expect(screen.getByTestId("team")).toHaveAttribute(
-      "data-scope-label",
-      label,
-    );
-  });
-});
-
-// B2-4: the lead's team-scoped access surface now that Settings is closed to
-// it. AccessSections filters by capability itself; the page chooses the four
-// team-level sections and mounts nothing for a caller with none of them.
-describe("TeamPage access sections (B2-4)", () => {
-  it.each([
-    [
-      "a team lead",
-      ["internal-viewer"],
-      { adminScopes: [{ source: "manual", scopeType: "team", scopeId: "t1" }] },
-    ],
-    ["an org admin", ["internal-org-admin"], {}],
-    ["an admin", ["internal-admin"], {}],
   ])(
-    "%s gets the four team-level sections",
-    async (_n, roles, authorization) => {
+    "%s gets canCreateTeam=%s (D-TM4; New team: admin and org-admin only)",
+    async (_n, roles, authorization, create) => {
       as(roles, authorization);
       render(await open());
-      expect(screen.getByTestId("access-sections")).toHaveTextContent(
-        "members,team-admins,pending-access,visibility",
+      expect(screen.getByTestId("list")).toHaveAttribute("data-create", create);
+    },
+  );
+
+  it.each([
+    ["a team lead", teamLead("t1"), "Showing teams you lead"],
+    ["a department lead", deptLead("d1"), "Showing departments you lead"],
+  ])(
+    "%s gets the scope label (scopeLabelFor)",
+    async (_n, authorization, label) => {
+      as(["internal-viewer"], authorization);
+      render(await open());
+      expect(screen.getByTestId("list")).toHaveAttribute(
+        "data-scope-label",
+        label,
       );
     },
   );
 
-  it("the auditor (read-only) is offered the sections list too, and the sections' own capability filter hides what it may not read", async () => {
-    as(["internal-auditor"]);
+  it("a global reader gets no scope label", async () => {
+    as(["internal-admin"]);
     render(await open());
-    expect(screen.getByTestId("access-sections")).toHaveTextContent(
-      "members,team-admins,pending-access,visibility",
+    expect(screen.getByTestId("list")).toHaveAttribute("data-scope-label", "");
+  });
+});
+
+// Agent decision (2026-11-23, TM1): /dashboard/manage/team?team=<id> is a
+// temporary redirect to /dashboard/manage/team/<id>, keeping ?view=; out of
+// scope is 404 there (Access Control - Enforcement item 2, TM1 sentence).
+describe("TeamPage ?team= redirect (TM1 agent decision)", () => {
+  // Q-W2 / nit (review r1): an empty ?team= is no team, so the list renders.
+  it.each([
+    ["an admin", ["internal-admin"], {}],
+    ["a team lead", ["internal-viewer"], teamLead("t1")],
+  ])(
+    "%s with an empty ?team= gets the list",
+    async (_n, roles, authorization) => {
+      as(roles, authorization);
+      render(await open({ team: "" }));
+      expect(screen.getByTestId("list")).toBeInTheDocument();
+    },
+  );
+
+  it("redirects ?team=<id> to the team page (global reader)", async () => {
+    as(["internal-org-admin"]);
+    await expect(open({ team: "t9" })).rejects.toThrow(
+      "NEXT_REDIRECT:/dashboard/manage/team/t9",
     );
   });
 
-  it("mounts no access sections when the viewer cannot be resolved", async () => {
+  it("keeps ?view= on the redirect", async () => {
     as(["internal-admin"]);
-    loadViewer.mockResolvedValue(undefined);
-    render(await open());
-    expect(screen.queryByTestId("access-sections")).not.toBeInTheDocument();
+    await expect(open({ team: "t1", view: "budgets" })).rejects.toThrow(
+      "NEXT_REDIRECT:/dashboard/manage/team/t1?view=budgets",
+    );
+  });
+
+  it("a Lead redirects for a team in its team scope", async () => {
+    as(["internal-viewer"], teamLead("t1"));
+    await expect(open({ team: "t1" })).rejects.toThrow(
+      "NEXT_REDIRECT:/dashboard/manage/team/t1",
+    );
+  });
+
+  it("a Lead outside the scope gets notFound(), not a redirect (same 404)", async () => {
+    as(["internal-viewer"], teamLead("t1"));
+    await expect(open({ team: "t2" })).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("a department Lead redirects for a team in its department (registry and created) and gets notFound() outside it or for an unknown id", async () => {
+    as(["internal-viewer"], deptLead("dept-eng"));
+    await expect(open({ team: "team-a" })).rejects.toThrow(
+      "NEXT_REDIRECT:/dashboard/manage/team/team-a",
+    );
+    await expect(
+      open({ team: "appteam-00000000-0000-4000-8000-000000000001" }),
+    ).rejects.toThrow(
+      "NEXT_REDIRECT:/dashboard/manage/team/appteam-00000000-0000-4000-8000-000000000001",
+    );
+    await expect(open({ team: "team-c" })).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(open({ team: "appteam-unknown" })).rejects.toThrow(
+      "NEXT_NOT_FOUND",
+    );
+  });
+
+  it("a Viewer with ?team= gets notFound() (the gate runs first)", async () => {
+    await expect(open({ team: "t1" })).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });

@@ -42,13 +42,19 @@ const ADMIN_OPS = [
   "setTeamModels",
 ] as const;
 
-const TEAM_URL = "/dashboard/manage/team?team=t1";
+// Unit TM1: the team page is /dashboard/manage/team/<id> and an unknown id is
+// 404, so the ids are seeded: team-payments (registry) and the created
+// Platform Guild team (scripts/seed.ts).
+const PAYMENTS_ID = "team-payments";
+const PLATFORM_ID = "appteam-00000000-0000-4000-8000-000000000001";
+const LIST_URL = "/dashboard/manage/team";
+const TEAM_URL = `${LIST_URL}/${PAYMENTS_ID}`;
 // Slice B2b (Design System -- Management pages, *Team page views and links*):
 // the Team page is three views on ?view= (default members); only the active
 // view is rendered, so a test opens the view that holds what it uses.
 type TeamView = "members" | "budgets" | "keys";
 const TEAM_VIEWS: readonly TeamView[] = ["members", "budgets", "keys"];
-const teamUrl = (view: TeamView) => `${TEAM_URL}&view=${view}`;
+const teamUrl = (view: TeamView) => `${TEAM_URL}?view=${view}`;
 const KEY_VALUE = "sk-L5B-SHOWN-ONCE";
 
 type MockOptions = {
@@ -69,8 +75,18 @@ type MockOptions = {
 };
 
 const TEAMS = [
-  { teamId: "t1", teamName: "Payments", linked: true, configurable: true },
-  { teamId: "t2", teamName: "Platform", linked: true, configurable: true },
+  {
+    teamId: PAYMENTS_ID,
+    teamName: "Payments",
+    linked: true,
+    configurable: true,
+  },
+  {
+    teamId: PLATFORM_ID,
+    teamName: "Platform",
+    linked: true,
+    configurable: true,
+  },
 ] as const;
 
 const MEMBERS = [
@@ -152,7 +168,10 @@ async function mockApi(page: Page, options: MockOptions = {}) {
         },
       });
     }
-    const team = /^\/api\/litellm\/teams\/(t\d)(\/[a-z-]+)?$/.exec(path);
+    const team =
+      /^\/api\/litellm\/teams\/(team-payments|appteam-[0-9a-f-]+)(\/[a-z-]+)?$/.exec(
+        path,
+      );
     if (team && request.method() === "GET") {
       const [, id, sub] = team;
       if (sub === "/members") {
@@ -186,8 +205,8 @@ async function mockApi(page: Page, options: MockOptions = {}) {
           connected: true,
           spendSource: "litellm-team",
           team: {
-            alias: id === "t1" ? "Payments" : "Platform",
-            spend: id === "t1" ? 321.75 : 10,
+            alias: id === PAYMENTS_ID ? "Payments" : "Platform",
+            spend: id === PAYMENTS_ID ? 321.75 : 10,
             maxBudget: 500,
             softBudget: null,
             budgetDuration: "30d",
@@ -200,11 +219,14 @@ async function mockApi(page: Page, options: MockOptions = {}) {
         });
       }
     }
-    if (path === "/api/litellm/teams/t1/keys" && request.method() === "POST") {
+    if (
+      path === `/api/litellm/teams/${PAYMENTS_ID}/keys` &&
+      request.method() === "POST"
+    ) {
       return ok({ tokenId: "tok-new", key: KEY_VALUE, oid: "oid-ada" }, 201);
     }
     if (
-      path === "/api/litellm/teams/t1/keys/tok-1234/rotate" &&
+      path === `/api/litellm/teams/${PAYMENTS_ID}/keys/tok-1234/rotate` &&
       request.method() === "POST"
     ) {
       return ok({
@@ -239,12 +261,12 @@ async function mockApi(page: Page, options: MockOptions = {}) {
               spend: 321.75,
               maxBudget: 500,
               memberCount: 7,
-              linkedAppTeam: { teamId: "t1", teamName: "Payments" },
+              linkedAppTeam: { teamId: PAYMENTS_ID, teamName: "Payments" },
             },
           ],
           appTeams: [
             {
-              teamId: "t1",
+              teamId: PAYMENTS_ID,
               teamName: "Payments",
               spendSource: "litellm-team",
               spend: 321.75,
@@ -261,7 +283,7 @@ async function mockApi(page: Page, options: MockOptions = {}) {
               userId: "u-ada",
               email: "ada@example.test",
               ...(capped ? {} : { spend: 77.1, maxBudget: 150 }),
-              teams: [{ teamId: "t1", teamName: "Payments" }],
+              teams: [{ teamId: PAYMENTS_ID, teamName: "Payments" }],
             },
           ],
         });
@@ -282,7 +304,7 @@ async function mockApi(page: Page, options: MockOptions = {}) {
               changedBy: "ops@example.test",
               action: "update",
               tableName: "LiteLLM_TeamTable",
-              objectId: "t1",
+              objectId: PAYMENTS_ID,
               changedFields: ["max_budget"],
               viaDashboard: false,
             },
@@ -563,28 +585,28 @@ test.describe("axe per role and dialog state (L5 Accessibility floor)", () => {
 // search, the Audit source filter, and every dialog).
 // ---------------------------------------------------------------------------
 test.describe("keyboard walk (L5 Accessibility floor)", () => {
-  test("Team selector: type-ahead keys choose a team and the team URL parameter follows", async ({
+  // Unit TM1 (D-TM2): the picker is gone; a team is chosen from the Team list,
+  // by keyboard, and the team's URL follows.
+  test("Team list: the keyboard opens a team's page and the team URL follows", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
-    await open(page, teamUrl("budgets"));
-    await teamPageReady(page, "budgets");
+    await open(page, LIST_URL);
 
-    // Exact name excludes "Team totals"; the page-header selector precedes the
-    // Members region's own "Team" select in the DOM.
-    const select = page
-      .getByRole("combobox", { name: "Team", exact: true })
-      .first();
-    await select.focus();
-    await expect(select).toBeFocused();
-    await page.keyboard.type("Pl");
+    const link = page.getByRole("link", {
+      name: "Platform Guild",
+      exact: true,
+    });
+    await link.focus();
+    await expect(link).toBeFocused();
+    await page.keyboard.press("Enter");
 
-    await expect(page).toHaveURL(/[?&]team=t2(&|$)/);
-    await expect(select).toHaveValue("t2");
+    await expect(page).toHaveURL(new RegExp(`${LIST_URL}/${PLATFORM_ID}$`));
+    await teamPageReady(page);
     await expect(
-      page.getByRole("region", { name: "Budget and limits" }),
+      page.getByRole("region", { name: "LiteLLM members" }),
     ).toBeVisible();
   });
 
@@ -860,7 +882,7 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page, {
       unlinkedTeam: true,
-      teams: [{ teamId: "t1", teamName: "Payments", linked: false }],
+      teams: [{ teamId: PAYMENTS_ID, teamName: "Payments", linked: false }],
     });
     await open(page, TEAM_URL);
     await expect(

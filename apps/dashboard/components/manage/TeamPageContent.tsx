@@ -1,8 +1,7 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
-import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
-import { Fragment, useId, type ReactNode } from "react";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { Fragment, type ReactNode } from "react";
 
 import { formatUsd } from "@/components/charts/chart-data";
 import { Panel } from "@/components/display/Panel";
@@ -13,12 +12,9 @@ import { BudgetLimitsPanel } from "@/components/litellm/team/BudgetLimitsPanel";
 import { KeysPanel } from "@/components/litellm/team/KeysPanel";
 import { MembersPanel } from "@/components/litellm/team/MembersPanel";
 import { ModelsPanel } from "@/components/litellm/team/ModelsPanel";
-import { NativeSelect } from "@/components/litellm/team/native-select";
 import { useMeQuery } from "@/components/litellm/use-me-query";
 import { useTeamDetailState } from "@/components/litellm/use-team-detail";
 import { Skeleton } from "@/components/ui/skeleton";
-
-import { TeamCreateDialog } from "./TeamCreateDialog";
 
 const PANEL_SKELETON = <Skeleton className="h-40 w-full" />;
 const DESCRIPTION =
@@ -38,12 +34,12 @@ const viewParser = parseAsStringLiteral(VIEWS)
   .withOptions({ history: "push" });
 
 type TeamPageContentProps = {
+  // The route gives the team (Design System - List, then the team; D-TM2).
+  teamId: string;
   // True for internal-admin only; everyone else lowers (LiteLLM spec - LD26).
   canRaiseLimits: boolean;
   // The ScopeLine label for a non-global caller (scopeLabelFor), else null.
   scopeLabel: string | null;
-  // True for internal-admin and internal-org-admin: shows New team.
-  canCreateTeam: boolean;
   // Server-rendered team-level access sections, when the caller has any.
   access?: ReactNode;
 };
@@ -53,27 +49,12 @@ type TeamPageContentProps = {
 // who gets here and the routes enforce every write again; each panel hides the
 // controls whose operation is not enabled.
 export function TeamPageContent({
+  teamId,
   canRaiseLimits,
   scopeLabel,
-  canCreateTeam,
   access,
 }: TeamPageContentProps) {
-  const selectId = useId();
-  const [picked, setPicked] = useQueryState("team", parseAsString);
-  const queryClient = useQueryClient();
   const me = useMeQuery();
-
-  const createTrigger = canCreateTeam ? (
-    <TeamCreateDialog
-      onCreated={(created) => {
-        void setPicked(created.teamId);
-        void queryClient.invalidateQueries({ queryKey: ["litellm", "me"] });
-        void queryClient.invalidateQueries({
-          queryKey: ["access", "org-units"],
-        });
-      }}
-    />
-  ) : undefined;
 
   if (me.isPending) return <Skeleton className="h-40 w-full" />;
   if (me.data?.status !== "ok") {
@@ -84,13 +65,13 @@ export function TeamPageContent({
     );
   }
   const teams = me.data.data.teams;
-  const team = teams.find((t) => t.teamId === picked) ?? teams[0];
+  const team = teams.find((t) => t.teamId === teamId);
   if (!team) {
     return (
       <div className="flex flex-col gap-4">
-        <PageHeader description={DESCRIPTION} actions={createTrigger} />
+        <PageHeader description={DESCRIPTION} />
         <p className="text-muted-foreground text-sm">
-          You have no teams to manage.
+          This team is not available.
         </p>
         {access}
       </div>
@@ -101,31 +82,12 @@ export function TeamPageContent({
     <div className="flex flex-col gap-4">
       <PageHeader
         description={DESCRIPTION}
-        actions={createTrigger}
         scopeLine={
           scopeLabel
             ? { label: scopeLabel, names: teams.map((t) => t.teamName) }
             : undefined
         }
-      >
-        <div className="flex items-center gap-2">
-          <label htmlFor={selectId} className="text-cell font-medium">
-            Team
-          </label>
-          <NativeSelect
-            id={selectId}
-            className="w-auto"
-            value={team.teamId}
-            onChange={(e) => void setPicked(e.target.value)}
-          >
-            {teams.map((t) => (
-              <option key={t.teamId} value={t.teamId}>
-                {t.teamName}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
-      </PageHeader>
+      />
       {team.linked ? (
         <LinkedTeamViews
           teamId={team.teamId}

@@ -29,12 +29,18 @@ export function AccessSections({
   viewer,
   stepUp,
   sections,
+  teamId,
+  departmentId,
 }: {
   viewer: AccessViewer;
   stepUp: StepUpActions;
   // Unit D: the Access sub-tab or Audit tab narrows what renders; the
   // capabilities still gate each section.
   sections?: readonly AccessSectionSlug[];
+  // Unit TM1 (D-TM2): the team page's team, for the four team sections.
+  teamId?: string;
+  // The team's department, for its Visibility panel (Q-B2).
+  departmentId?: string;
 }) {
   const capabilities = accessCapabilities(viewer);
   const visible = (slug: AccessSectionSlug) =>
@@ -51,7 +57,7 @@ export function AccessSections({
           title="the members"
           description="Each person belongs to at most one team."
         >
-          <MembersSection viewer={viewer} />
+          <MembersSection viewer={viewer} teamId={teamId} />
         </AccessSection>
       ) : null}
       {visible("team-admins") ? (
@@ -61,7 +67,7 @@ export function AccessSections({
           title="the team admins"
           description="Admins of a team or department manage its members and visibility."
         >
-          <TeamAdminsSection viewer={viewer} />
+          <TeamAdminsSection viewer={viewer} teamId={teamId} />
         </AccessSection>
       ) : null}
       {visible("visibility") ? (
@@ -71,7 +77,11 @@ export function AccessSections({
           title="the visibility settings"
           description="What each team and department shows to its users."
         >
-          <VisibilitySection viewer={viewer} />
+          <VisibilitySection
+            viewer={viewer}
+            teamId={teamId}
+            departmentId={departmentId}
+          />
         </AccessSection>
       ) : null}
       {visible("pending-access") ? (
@@ -81,7 +91,7 @@ export function AccessSections({
           title="the pending and stale access"
           description="Invitations not yet bound to a sign-in, and access whose person has not signed in lately."
         >
-          <PendingAccessSection viewer={viewer} />
+          <PendingAccessSection viewer={viewer} teamId={teamId} />
         </AccessSection>
       ) : null}
       {visible("group-mappings") ? (

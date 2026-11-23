@@ -433,3 +433,160 @@ describe("AccessSections - sections prop (unit D)", () => {
     expect(document.getElementById("password-users")?.tagName).toBe("SECTION");
   });
 });
+
+// Unit TM1, D-TM2 (Design System - Management pages, Team, "List, then the team"): AccessSections
+// takes an optional `teamId` and passes it to Members, Team admins, Visibility
+// and Pending access, so none of them shows a team or scope dropdown. Without
+// it the sections keep their dropdowns (Settings -> Access). Prop contract:
+// `<AccessSections viewer stepUp teamId="team-risk" sections=[...] />`.
+describe("AccessSections with a teamId prop (TM1 D-TM2)", () => {
+  const teamSections = [
+    "members",
+    "team-admins",
+    "visibility",
+    "pending-access",
+  ] as const;
+  const riskRoutes = (): RouteTable => ({
+    ...baseRoutes(),
+    "GET /api/teams/team-risk/members": page([
+      memberItem({ oid: "oid-bob", teamId: "team-risk" }),
+    ]),
+    "GET /api/teams/team-risk/admins": page([]),
+    "GET /api/teams/team-risk/visibility": {
+      teamId: "team-risk",
+      teamLevel: "visible",
+      userLevel: "own",
+      version: 0,
+      updatedAt: "2026-11-10T09:00:00.000Z",
+    },
+  });
+
+  it("renders no Team or Scope dropdown in the four team sections and reads the route's team", async () => {
+    const api = stubAccessApi(riskRoutes());
+    renderWithProviders(
+      <AccessSections
+        viewer={ADMIN}
+        stepUp={stepUp}
+        teamId="team-risk"
+        sections={teamSections}
+      />,
+    );
+    await screen.findByRole("row", { name: /Bob Brown/ });
+    await screen.findByLabelText("User level");
+    expect(screen.queryByLabelText("Team")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Scope")).not.toBeInTheDocument();
+    expect(api.to("GET /api/teams/team-risk/admins").length).toBeGreaterThan(0);
+    expect(
+      api.to("GET /api/teams/team-risk/visibility").length,
+    ).toBeGreaterThan(0);
+    expect(api.to("GET /api/teams/team-pay/members")).toEqual([]);
+    expect(api.to("GET /api/teams/team-pay/admins")).toEqual([]);
+    expect(api.to("GET /api/teams/team-pay/visibility")).toEqual([]);
+  });
+
+  // Design System - "List, then the team", Pending and stale access: GET
+  // /api/access/pending and /stale take an optional teamId query and the
+  // filter runs on the server; AccessSections only passes the route's team.
+  it("passes the team to Pending access: both lists are requested with ?teamId=<route team>", async () => {
+    const rows = [
+      {
+        kind: "affiliation",
+        emailOrUpn: "risk.hire@example.com",
+        teamId: "team-risk",
+        createdBy: "oid-admin",
+        createdAt: "2026-11-10T09:00:00.000Z",
+        version: 1,
+      },
+      {
+        kind: "affiliation",
+        emailOrUpn: "pay.hire@example.com",
+        teamId: "team-pay",
+        createdBy: "oid-admin",
+        createdAt: "2026-11-10T09:00:00.000Z",
+        version: 1,
+      },
+    ];
+    const serverFiltered = (call: { search: string }) => {
+      const id = new URLSearchParams(call.search).get("teamId");
+      return ok(
+        page(
+          id === null
+            ? rows
+            : rows.filter((r) => r.kind === "affiliation" && r.teamId === id),
+        ),
+      );
+    };
+    const api = stubAccessApi({
+      ...riskRoutes(),
+      "GET /api/access/pending": serverFiltered,
+      "GET /api/access/stale": serverFiltered,
+    });
+    renderWithProviders(
+      <AccessSections
+        viewer={ADMIN}
+        stepUp={stepUp}
+        teamId="team-risk"
+        sections={["pending-access"]}
+      />,
+    );
+    await screen.findByRole("row", { name: /risk\.hire@/ });
+    expect(screen.queryByRole("row", { name: /pay\.hire@/ })).toBeNull();
+    for (const key of ["GET /api/access/pending", "GET /api/access/stale"]) {
+      const searches = api.to(key).map((c) => c.search);
+      expect(searches.length).toBeGreaterThan(0);
+      for (const q of searches) {
+        expect(new URLSearchParams(q).get("teamId")).toBe("team-risk");
+      }
+    }
+  });
+
+  // Q-B2 (review r1; Design System - "List, then the team", Department
+  // visibility on the team page): `departmentId` is the team's department.
+  it("a department lead gets the department's Visibility panel on the team page; a team-only lead does not", async () => {
+    stubAccessApi({
+      ...baseRoutes(),
+      "GET /api/departments/dept-eng/visibility": {
+        departmentId: "dept-eng",
+        departmentLevel: "hidden",
+        maxUserLevel: "own",
+        version: 2,
+        updatedAt: "2026-11-10T09:00:00.000Z",
+      },
+    });
+    const lead = renderWithProviders(
+      <AccessSections
+        viewer={DEPT_ADMIN}
+        stepUp={stepUp}
+        teamId="team-pay"
+        departmentId="dept-eng"
+        sections={["visibility"]}
+      />,
+    );
+    expect(await screen.findByLabelText("Department totals")).toBeVisible();
+    lead.unmount();
+    renderWithProviders(
+      <AccessSections
+        viewer={TEAM_ADMIN}
+        stepUp={stepUp}
+        teamId="team-pay"
+        departmentId="dept-eng"
+        sections={["visibility"]}
+      />,
+    );
+    await screen.findByLabelText("User level");
+    expect(screen.queryByLabelText("Department totals")).toBeNull();
+  });
+
+  it("without the prop the Members, Team admins and Visibility dropdowns remain", async () => {
+    stubAccessApi(baseRoutes());
+    renderWithProviders(
+      <AccessSections
+        viewer={ADMIN}
+        stepUp={stepUp}
+        sections={["members", "team-admins", "visibility"]}
+      />,
+    );
+    await screen.findByLabelText("Team");
+    expect(screen.getAllByLabelText("Scope")).toHaveLength(2);
+  });
+});

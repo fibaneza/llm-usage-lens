@@ -59,7 +59,14 @@ function scopePath(type: "team" | "department", id: string) {
   return `/api/${type === "team" ? "teams" : "departments"}/${idPath(id)}/admins`;
 }
 
-export function TeamAdminsSection({ viewer }: { viewer: AccessViewer }) {
+export function TeamAdminsSection({
+  viewer,
+  teamId,
+}: {
+  viewer: AccessViewer;
+  // Unit TM1 (D-TM2): the team page's team; no scope chooser, no department.
+  teamId?: string;
+}) {
   const capabilities = accessCapabilities(viewer);
   const queryClient = useQueryClient();
   const orgUnits = sectionData(useOrgUnits());
@@ -70,24 +77,33 @@ export function TeamAdminsSection({ viewer }: { viewer: AccessViewer }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<AdminScopeRow | null>(null);
 
-  const options: ScopeOption[] = orgUnits
+  const options: ScopeOption[] = teamId
     ? [
-        ...orgUnits.teams.map((t) => ({
-          key: `team:${t.id}`,
-          type: "team" as const,
-          id: t.id,
-          label: `Team: ${t.name}`,
-        })),
-        ...(capabilities.grantDepartmentAdmin
-          ? orgUnits.departments.map((d) => ({
-              key: `department:${d.id}`,
-              type: "department" as const,
-              id: d.id,
-              label: `Department: ${d.name}`,
-            }))
-          : []),
+        {
+          key: `team:${teamId}`,
+          type: "team",
+          id: teamId,
+          label: "Team",
+        },
       ]
-    : [];
+    : orgUnits
+      ? [
+          ...orgUnits.teams.map((t) => ({
+            key: `team:${t.id}`,
+            type: "team" as const,
+            id: t.id,
+            label: `Team: ${t.name}`,
+          })),
+          ...(capabilities.grantDepartmentAdmin
+            ? orgUnits.departments.map((d) => ({
+                key: `department:${d.id}`,
+                type: "department" as const,
+                id: d.id,
+                label: `Department: ${d.name}`,
+              }))
+            : []),
+        ]
+      : [];
   const scope = options.find((o) => o.key === chosen) ?? options[0];
 
   const adminsQuery = useQuery({
@@ -135,7 +151,7 @@ export function TeamAdminsSection({ viewer }: { viewer: AccessViewer }) {
     onError: () => void refresh(),
   });
 
-  if (orgUnits === undefined) {
+  if (teamId === undefined && orgUnits === undefined) {
     return <Skeleton className="h-48 w-full" />;
   }
   if (scope === undefined) return <EmptyState title="No teams to manage." />;
@@ -158,27 +174,29 @@ export function TeamAdminsSection({ viewer }: { viewer: AccessViewer }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="max-w-[72ch]">
-        <FormField label="Scope">
-          {(props) => (
-            <NativeSelect
-              {...props}
-              value={scope.key}
-              onChange={(e) => {
-                setChosen(e.target.value);
-                setNotice(null);
-                add.reset();
-              }}
-            >
-              {options.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
-              ))}
-            </NativeSelect>
-          )}
-        </FormField>
-      </div>
+      {teamId === undefined ? (
+        <div className="max-w-[72ch]">
+          <FormField label="Scope">
+            {(props) => (
+              <NativeSelect
+                {...props}
+                value={scope.key}
+                onChange={(e) => {
+                  setChosen(e.target.value);
+                  setNotice(null);
+                  add.reset();
+                }}
+              >
+                {options.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
+          </FormField>
+        </div>
+      ) : null}
 
       {admins.length === 0 ? (
         <EmptyState title={`No admins for this ${scope.type} yet.`} />

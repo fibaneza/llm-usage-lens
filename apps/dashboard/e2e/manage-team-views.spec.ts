@@ -8,7 +8,7 @@ import { signInAsTestUser } from "./support/session";
 // `?view=` URL state and history push, "so Back steps through views"; G1 -- a
 // "Daily spend" action on each LiteLLM member row, read through the existing
 // GET /api/litellm/users/[litellmUserId] for the URL range; G2 -- each App teams
-// row links its name to /dashboard/manage/team?team=<id>), *Tabs vs secondary
+// row links its name to /dashboard/manage/team/<id>), *Tabs vs secondary
 // navigation*; LiteLLM spec LD23 (per-user daily spend, cap), LD37. Component
 // behaviour (tab contents, fallbacks, unlinked rule, search, link markup) lives
 // in TeamPageContent.test.tsx, MembersPanel.test.tsx and
@@ -17,7 +17,8 @@ import { signInAsTestUser } from "./support/session";
 // harness cannot forge a team-scope Lead (its scope lives in DynamoDB), so
 // internal-org-admin stands in for the Lead on the Team page, as in
 // manage-team.spec.ts. The LiteLLM API is fulfilled from fixtures (Rule 60.24).
-const TEAM_URL = "/dashboard/manage/team?team=t1";
+// team-payments is a seeded registry team: an unknown team id is 404 (unit TM1).
+const TEAM_URL = "/dashboard/manage/team/team-payments";
 const DAILY = [
   { date: "2026-11-02", spend: 1.25 },
   { date: "2026-11-03", spend: 2.5 },
@@ -39,14 +40,14 @@ async function mockApi(page: Page) {
           enabledOperations: OPS,
           teams: [
             {
-              teamId: "t1",
+              teamId: "team-payments",
               teamName: "Payments",
               linked: true,
               configurable: true,
             },
           ],
         });
-      case "GET /api/litellm/teams/t1":
+      case "GET /api/litellm/teams/team-payments":
         return ok({
           connected: true,
           spendSource: "litellm-team",
@@ -63,7 +64,7 @@ async function mockApi(page: Page) {
           daily: [],
           enabledOperations: OPS,
         });
-      case "GET /api/litellm/teams/t1/members":
+      case "GET /api/litellm/teams/team-payments/members":
         return ok({
           connected: true,
           items: [
@@ -79,7 +80,7 @@ async function mockApi(page: Page) {
             },
           ],
         });
-      case "GET /api/litellm/teams/t1/keys":
+      case "GET /api/litellm/teams/team-payments/keys":
         return ok({ connected: true, items: [] });
       case "GET /api/litellm/models":
         return ok({ items: ["claude-sonnet"] });
@@ -101,7 +102,7 @@ async function mockApi(page: Page) {
           litellmTeams: [],
           appTeams: [
             {
-              teamId: "t1",
+              teamId: "team-payments",
               teamName: "Payments",
               spendSource: "litellm-team",
               spend: 321.75,
@@ -190,7 +191,7 @@ test.describe("Team page member daily spend (G1)", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-org-admin"] });
     await mockApi(page);
-    await page.goto(`${TEAM_URL}&dateFrom=2026-11-01&dateTo=2026-11-14`);
+    await page.goto(`${TEAM_URL}?dateFrom=2026-11-01&dateTo=2026-11-14`);
     await waitForHydration(page);
 
     const asked = page.waitForRequest((request) => {
@@ -228,7 +229,7 @@ test.describe("Organisation to Team (G2)", () => {
       .getByRole("link", { name: "Payments" })
       .click();
 
-    await expect(page).toHaveURL(/\/dashboard\/manage\/team\?team=t1/);
+    await expect(page).toHaveURL(/\/dashboard\/manage\/team\/team-payments$/);
     await expect(
       page.getByRole("heading", { level: 1, name: "Team management" }),
     ).toBeVisible();

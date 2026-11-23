@@ -220,7 +220,7 @@ function TeamVisibilityPanel({
   departmentId,
 }: {
   teamId: string;
-  departmentId: string;
+  departmentId: string | undefined;
 }) {
   const query = useQuery({
     queryKey: ["access", "visibility", "team", teamId],
@@ -233,10 +233,11 @@ function TeamVisibilityPanel({
     queryKey: ["access", "visibility", "department", departmentId],
     queryFn: () =>
       fetchApi(
-        `/api/departments/${idPath(departmentId)}/visibility`,
+        `/api/departments/${idPath(departmentId ?? "")}/visibility`,
         DepartmentVisibilitySchema,
       ),
     retry: false,
+    enabled: departmentId !== undefined,
   });
   const data = sectionData(query);
   if (data === undefined) return <Skeleton className="h-40 w-full" />;
@@ -259,7 +260,18 @@ function DepartmentVisibilityPanel({ departmentId }: { departmentId: string }) {
   return <DepartmentForm key={departmentId} data={data} />;
 }
 
-export function VisibilitySection({ viewer }: { viewer: AccessViewer }) {
+export function VisibilitySection({
+  viewer,
+  teamId,
+  departmentId,
+}: {
+  viewer: AccessViewer;
+  // Unit TM1 (D-TM2): the team page's team; no scope chooser.
+  teamId?: string;
+  // The team's department (Design System - "List, then the team", Department
+  // visibility on the team page): a caller who may edit it sees its panel.
+  departmentId?: string;
+}) {
   const capabilities = accessCapabilities(viewer);
   const orgUnits = sectionData(useOrgUnits());
   // Follows the Team page's picker (?team=) until the user picks a scope here.
@@ -271,6 +283,25 @@ export function VisibilitySection({ viewer }: { viewer: AccessViewer }) {
     setChosen(null);
   }
 
+  if (teamId !== undefined) {
+    const ownDepartment =
+      departmentId ??
+      orgUnits?.teams.find((t) => t.id === teamId)?.departmentId;
+    const editsDepartment =
+      departmentId !== undefined &&
+      (capabilities.grantDepartmentAdmin ||
+        viewer.adminScopes.some(
+          (s) => s.scopeType === "department" && s.scopeId === departmentId,
+        ));
+    return (
+      <div className="flex flex-col gap-6">
+        <TeamVisibilityPanel teamId={teamId} departmentId={ownDepartment} />
+        {editsDepartment ? (
+          <DepartmentVisibilityPanel departmentId={departmentId} />
+        ) : null}
+      </div>
+    );
+  }
   if (orgUnits === undefined) {
     return <Skeleton className="h-48 w-full" />;
   }

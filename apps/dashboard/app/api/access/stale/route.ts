@@ -2,7 +2,7 @@ import { StaleAccessRowSchema } from "@llm-usage-lens/shared";
 import { z } from "zod";
 
 import { accessErrorResponse, listOptions } from "@/lib/api/access-route";
-import { loadReadableUnits } from "@/lib/api/pending-stale-route";
+import { loadReadableUnits, narrowToTeam } from "@/lib/api/pending-stale-route";
 import { jsonData, jsonError, withRoute } from "@/lib/api/respond";
 import { listStaleAccess } from "@/lib/data/access/pending-stale";
 
@@ -12,14 +12,16 @@ import { listStaleAccess } from "@/lib/data/access/pending-stale";
 // D34), D37 (names for in-scope rows only), "Permission matrix", Enforcement
 // items 2, 4 and 7, Rule 20.6.
 export const GET = withRoute(async (request, _ctx, session) => {
-  const units = await loadReadableUnits(session);
-  if (units === null) {
+  const readable = await loadReadableUnits(session);
+  if (readable === null) {
     return jsonError(403, "FORBIDDEN", "Insufficient permission");
   }
+  const units = narrowToTeam(readable, request);
   const result = await listStaleAccess(
     {
       teamIds: units.teamIds,
       departmentIds: units.departmentIds,
+      membersOnly: units.membersOnly,
       roleGrants: units.configuration,
       now: new Date(),
     },

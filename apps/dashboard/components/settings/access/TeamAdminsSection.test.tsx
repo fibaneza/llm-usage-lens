@@ -283,3 +283,66 @@ describe("TeamAdminsSection", () => {
     expect(await screen.findByText(/no (team )?admins/i)).toBeInTheDocument();
   });
 });
+
+// Unit TM1, D-TM2 (Design
+// System - Management pages, Team, "List, then the team"): with the optional
+// `teamId` prop the section has no "Scope" select and works on that team.
+// Prop contract: `<TeamAdminsSection viewer teamId="team-risk" />`.
+describe("TeamAdminsSection with a teamId prop (TM1 D-TM2)", () => {
+  const riskAdmins = page([
+    adminScopeItem({ oid: "oid-bob", scopeId: "team-risk", version: 7 }),
+  ]);
+
+  it("renders no Scope select and reads that team's admins, not the first team's", async () => {
+    const api = stubAccessApi(
+      routes({ "GET /api/teams/team-risk/admins": riskAdmins }),
+    );
+    renderWithProviders(
+      <TeamAdminsSection viewer={ADMIN} teamId="team-risk" />,
+    );
+    await screen.findByRole("row", { name: /Bob Brown/ });
+    expect(screen.queryByLabelText("Scope")).not.toBeInTheDocument();
+    expect(api.to("GET /api/teams/team-risk/admins").length).toBeGreaterThan(0);
+    expect(api.to("GET /api/teams/team-pay/admins")).toEqual([]);
+    expect(api.to("GET /api/departments/dept-eng/admins")).toEqual([]);
+  });
+
+  // D-TM2: adding an admin writes to the route's team.
+  it("adds an admin on the route's team", async () => {
+    const user = userEvent.setup();
+    const api = stubAccessApi(
+      routes({
+        "GET /api/teams/team-risk/admins": riskAdmins,
+        "POST /api/teams/team-risk/admins": () => ok({}, 201),
+      }),
+    );
+    renderWithProviders(
+      <TeamAdminsSection viewer={ADMIN} teamId="team-risk" />,
+    );
+    await screen.findByRole("row", { name: /Bob Brown/ });
+    await user.type(
+      screen.getByLabelText("Work email or UPN"),
+      "new.lead@example.com",
+    );
+    await user.click(screen.getByRole("button", { name: "Add admin" }));
+    expect(
+      await screen.findByText(/new\.lead@example\.com is pending/),
+    ).toBeVisible();
+    expect(api.writes()[0]).toMatchObject({
+      method: "POST",
+      path: "/api/teams/team-risk/admins",
+      body: { emailOrUpn: "new.lead@example.com" },
+    });
+  });
+
+  // Coordinator ruling: a team prop outside the shown scopes is still its own
+  // team - the empty state names the team, not a missing-scope message.
+  it("shows the empty state for a team with no admins", async () => {
+    stubAccessApi(routes({ "GET /api/teams/team-risk/admins": page([]) }));
+    renderWithProviders(
+      <TeamAdminsSection viewer={ADMIN} teamId="team-risk" />,
+    );
+    expect(await screen.findByText(/no (team )?admins/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Scope")).not.toBeInTheDocument();
+  });
+});

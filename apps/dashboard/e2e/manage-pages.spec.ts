@@ -340,6 +340,7 @@ test.describe("My usage LiteLLM view and user 404s", () => {
     const hits = await mockApi(page, { ...ME, teams: [] });
     for (const path of [
       "/dashboard/manage/team",
+      "/dashboard/manage/team/team-payments",
       "/dashboard/manage/organisation",
       "/dashboard/manage/litellm",
       "/dashboard/manage/litellm/organisation",

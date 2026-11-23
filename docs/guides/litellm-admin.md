@@ -339,8 +339,9 @@ never widen it. An operation the allowlist lacks cannot be switched on.
 
 A Lead configures their own team's LiteLLM settings on the team
 configuration page, **Management → Team**
-(`/dashboard/manage/team?team=<teamId>`; the old
-`/dashboard/litellm/team-config` URL redirects there). The Auditor sees it
+(`/dashboard/manage/team/<teamId>`, opened from the team list at
+`/dashboard/manage/team`; `/dashboard/manage/team?team=<teamId>` and the old
+`/dashboard/litellm/team-config` URL redirect there — unit TM1, 2026-11-23). The Auditor sees it
 read-only; Viewers and plain members get a `404`; a Lead sees only teams in
 their scope.
 

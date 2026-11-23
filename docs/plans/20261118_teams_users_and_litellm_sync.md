@@ -207,6 +207,19 @@ implementation-phases — *Phase 6* gets the task "Settings → Sync: a
 `components/settings/access/PendingAccessSection.tsx`,
 `TeamAdminsSection.tsx`, `VisibilitySection.tsx` (the team prop instead of
 the dropdown), their tests, `e2e/manage-team.spec.ts`.
+**Ownership change (coordinator rulings, 2026-11-23):** overlap 1 —
+`components/settings/access/AccessSections.tsx` and `MembersSection.tsx`
+(+ tests; an optional team prop, the `?team=` fallback kept); overlap 2 — the
+new `lib/manage/team-list.ts` and the e2e specs `team-create`,
+`manage-team-views`, `litellm-a11y`, `budget-reset-request`,
+`role-landing`, `manage-pages`, `accessibility` (URLs and the removed
+picker steps only); review round 1 — `app/api/access/pending/route.ts` and
+`app/api/access/stale/route.ts` (one optional `teamId` query, unchanged
+without it), with `lib/api/pending-stale-route.ts` (`narrowToTeam`, intersects
+the scoped team ids only) and `lib/data/access/pending-stale.ts` (an optional
+`membersOnly`), the new `lib/manage/team-scope.ts` (server-only, the one
+in-scope helper) and `components/manage/TeamCreateTrigger.tsx`; and
+`components/litellm/OrganisationSection.tsx` (the link repointed).
 **Does not touch:** `components/litellm/team/MembersPanel.tsx` (RS2, then
 INV2); the LiteLLM add and remove member actions stay as they are.
 

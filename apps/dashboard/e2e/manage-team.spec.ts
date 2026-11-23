@@ -26,7 +26,10 @@ const OPS = [
   "removeTeamMember",
   "resetMemberSpend",
 ];
-const TEAM_URL = "/dashboard/manage/team?team=t1";
+const TEAM_ID = "team-payments";
+const UNLINKED_TEAM_ID = "appteam-00000000-0000-4000-8000-000000000001";
+const LIST_URL = "/dashboard/manage/team";
+const TEAM_URL = `${LIST_URL}/${TEAM_ID}`;
 // Slice B2b (Design System - Management pages, *Team page views and links*):
 // the page is three views, ?view= in the URL, only the active one rendered.
 const VIEW_REGIONS = {
@@ -35,7 +38,7 @@ const VIEW_REGIONS = {
   keys: "Models",
 } as const;
 const VIEWS = ["members", "budgets", "keys"] as const;
-const REMOVE_PATH = "/api/litellm/teams/t1/members/oid-ada";
+const REMOVE_PATH = `/api/litellm/teams/${TEAM_ID}/members/oid-ada`;
 // Team is a rail item (NAV_ITEMS), so accessibility.spec.ts and smoke.spec.ts
 // reach it at one width as the default auditor; this spec adds the four
 // breakpoints with the write controls rendered (an admin).
@@ -82,14 +85,14 @@ async function mockApi(page: Page) {
           enabledOperations: OPS,
           teams: [
             {
-              teamId: "t1",
+              teamId: TEAM_ID,
               teamName: "Payments",
               linked: true,
               configurable: true,
             },
           ],
         });
-      case "GET /api/litellm/teams/t1":
+      case `GET /api/litellm/teams/${TEAM_ID}`:
         return ok({
           connected: true,
           spendSource: "litellm-team",
@@ -106,7 +109,7 @@ async function mockApi(page: Page) {
           daily: DAILY,
           enabledOperations: OPS,
         });
-      case "GET /api/litellm/teams/t1/members":
+      case `GET /api/litellm/teams/${TEAM_ID}/members`:
         return ok({
           connected: true,
           items: [
@@ -122,13 +125,13 @@ async function mockApi(page: Page) {
             },
           ],
         });
-      case "GET /api/litellm/teams/t1/keys":
+      case `GET /api/litellm/teams/${TEAM_ID}/keys`:
         return ok({ connected: true, items: [] });
       case "GET /api/litellm/models":
         return ok({ items: ["claude-sonnet", "claude-haiku"] });
       case `DELETE ${REMOVE_PATH}`:
         return ok({ oid: "oid-ada", removed: true });
-      case "POST /api/litellm/teams/t1/keys":
+      case `POST /api/litellm/teams/${TEAM_ID}/keys`:
         return ok({ tokenId: "tok-new", key: KEY_VALUE, oid: "oid-ada" }, 201);
       default:
         return route.fulfill({
@@ -146,9 +149,9 @@ test.describe("Management -> Team page", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-org-admin"] });
     await mockApi(page);
-    await page.goto("/dashboard/litellm/team-config?team=t1");
+    await page.goto("/dashboard/litellm/team-config?team=team-payments");
     await waitForHydration(page);
-    await expect(page).toHaveURL(/\/dashboard\/manage\/team\?team=t1/);
+    await expect(page).toHaveURL(/\/dashboard\/manage\/team\/team-payments$/);
     await expect(
       page.getByRole("heading", { level: 1, name: "Team management" }),
     ).toBeVisible();
@@ -199,7 +202,7 @@ test.describe("Management -> Team page", () => {
       // B2b: each of the three views is checked (Design System - Management
       // pages, Team page views and links).
       for (const view of VIEWS) {
-        await page.goto(`${TEAM_URL}&view=${view}`);
+        await page.goto(`${TEAM_URL}?view=${view}`);
         await waitForHydration(page);
         await expect(
           page.getByRole("region", { name: VIEW_REGIONS[view] }),
@@ -229,29 +232,31 @@ test.describe("Management -> Team page", () => {
     await page.setViewportSize({ width: 375, height: 900 });
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
-    await page.route(/\/api\/litellm\/teams\/t1(\?|$)/, (route) =>
-      route.fulfill({
-        json: {
-          data: {
-            connected: true,
-            spendSource: "litellm-team",
-            team: {
-              alias: "Payments",
-              spend: 321.75,
-              maxBudget: 500,
-              softBudget: null,
-              budgetDuration: "30d",
-              models: ["claude-sonnet"],
-              rpmLimit: 1000000,
-              tpmLimit: 2000000000,
+    await page.route(
+      new RegExp(`/api/litellm/teams/${TEAM_ID}(\\?|$)`),
+      (route) =>
+        route.fulfill({
+          json: {
+            data: {
+              connected: true,
+              spendSource: "litellm-team",
+              team: {
+                alias: "Payments",
+                spend: 321.75,
+                maxBudget: 500,
+                softBudget: null,
+                budgetDuration: "30d",
+                models: ["claude-sonnet"],
+                rpmLimit: 1000000,
+                tpmLimit: 2000000000,
+              },
+              daily: DAILY,
+              enabledOperations: OPS,
             },
-            daily: DAILY,
-            enabledOperations: OPS,
           },
-        },
-      }),
+        }),
     );
-    await page.goto(`${TEAM_URL}&view=budgets`);
+    await page.goto(`${TEAM_URL}?view=budgets`);
     await waitForHydration(page);
     const panel = page.getByRole("region", { name: "Budget and limits" });
     const value = panel
@@ -327,7 +332,7 @@ test.describe("Management -> Team page", () => {
       expect(deletes).toEqual([]);
     });
 
-    test("Confirm sends DELETE /api/litellm/teams/t1/members/<oid>", async ({
+    test("Confirm sends DELETE /api/litellm/teams/<team>/members/<oid>", async ({
       page,
       context,
     }) => {
@@ -405,17 +410,22 @@ test.describe("Management -> Team page", () => {
   test("internal-auditor opens the Team page", async ({ page, context }) => {
     await signInAsTestUser(context, { roles: ["internal-auditor"] });
     await mockApi(page);
-    const response = await page.goto(TEAM_URL);
+    const response = await page.goto(LIST_URL);
     expect(response?.status()).toBe(200);
     await expect(
       page.getByRole("heading", { level: 1, name: "Team management" }),
+    ).toBeVisible();
+    const team = await page.goto(TEAM_URL);
+    expect(team?.status()).toBe(200);
+    await expect(
+      page.getByRole("region", { name: "LiteLLM members" }),
     ).toBeVisible();
   });
 });
 
 // App Teams spec (docs/specs/2026-11-17-app-teams.md) - Spend source, UI. One
-// linked team (t1: the LiteLLM team figure, plus the member sum an org-admin
-// gets on request) and one unlinked team (t2: the member sum, no LiteLLM
+// linked team (team-payments: the LiteLLM team figure, plus the member sum an org-admin
+// gets on request) and one unlinked team (the created Platform Guild team: the member sum, no LiteLLM
 // control). Component cases live in TeamPageContent.test.tsx (Rule 60.24a);
 // this reads both in the real shell. The LiteLLM API is fulfilled from
 // fixtures (Rule 60.24).
@@ -444,17 +454,22 @@ async function mockSpendSources(page: Page) {
       enabledOperations: OPS,
       teams: [
         {
-          teamId: "t1",
+          teamId: TEAM_ID,
           teamName: "Payments",
           linked: true,
           configurable: true,
         },
-        { teamId: "t2", teamName: "Risk", linked: false, configurable: true },
+        {
+          teamId: UNLINKED_TEAM_ID,
+          teamName: "Risk",
+          linked: false,
+          configurable: true,
+        },
       ],
     }),
   );
   await page.route(
-    /\/api\/litellm\/teams\/t1(\?|$)/,
+    new RegExp(`/api/litellm/teams/${TEAM_ID}(\\?|$)`),
     respond({
       connected: true,
       spendSource: "litellm-team",
@@ -474,7 +489,7 @@ async function mockSpendSources(page: Page) {
     }),
   );
   await page.route(
-    /\/api\/litellm\/teams\/t2(\?|$)/,
+    new RegExp(`/api/litellm/teams/${UNLINKED_TEAM_ID}(\\?|$)`),
     respond({
       connected: false,
       spendSource: "member-sum",
@@ -496,7 +511,7 @@ test.describe("Management -> Team: spend source (App Teams)", () => {
       const url = new URL(request.url());
       if (url.searchParams.get("include") === "memberSum") asked.push(url.href);
     });
-    await page.goto("/dashboard/manage/team?team=t1&view=budgets");
+    await page.goto(`${TEAM_URL}?view=budgets`);
     await waitForHydration(page);
     await expect(
       page.getByRole("region", { name: "Budget and limits" }),
@@ -514,7 +529,7 @@ test.describe("Management -> Team: spend source (App Teams)", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-org-admin"] });
     await mockSpendSources(page);
-    await page.goto("/dashboard/manage/team?team=t2");
+    await page.goto(`${LIST_URL}/${UNLINKED_TEAM_ID}`);
     await waitForHydration(page);
     await expect(
       page.getByRole("region", { name: "Team spend", exact: true }),
@@ -541,5 +556,121 @@ test.describe("Management -> Team: spend source (App Teams)", () => {
     ).toHaveCount(0);
     // L4b review round 1: axe on the unlinked page.
     await expectNoBlockingViolations(page);
+  });
+});
+
+// Unit TM1 (Design System - Management pages, "List, then the team", D-TM1 to
+// D-TM4; Access Control - Enforcement item 2, TM1 sentence).
+// The ids are the default seed's: team-payments (registry team, Engineering)
+// and the created Platform Guild team. A team-scope or department-scope Lead
+// cannot be forged in this project (Lead scope lives in DynamoDB), so the
+// lead journeys - a lead's list rows and click-through, a department lead's
+// teams, a lead opening another team's URL - run in the `role-probe` project
+// (role-landing.spec.ts). Role and scope logic is covered by the page tests.
+test.describe("Management -> Team: list, then the team (unit TM1)", () => {
+  test("the list shows the seeded teams with department, members and linked LiteLLM team; a row's name opens that team's page (D-TM1)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await mockApi(page);
+    await page.goto(LIST_URL);
+    await waitForHydration(page);
+    const table = page.getByRole("table");
+    for (const name of ["Team", "Department", "Members", "LiteLLM team"]) {
+      await expect(
+        table.getByRole("columnheader", { name, exact: true }),
+        name,
+      ).toBeVisible();
+    }
+    await expect(
+      table.getByRole("row", { name: /Platform Guild/ }),
+    ).toBeVisible();
+    await table.getByRole("link", { name: "Payments", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${TEAM_URL}$`));
+    await expect(
+      page.getByRole("region", { name: "LiteLLM members" }),
+    ).toBeVisible();
+  });
+
+  test("the team page has no team picker and no scope dropdowns (D-TM2)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.goto(TEAM_URL);
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("region", { name: "LiteLLM members" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: "Team", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByLabel(/Team admins.*scope/i)).toHaveCount(0);
+    await expect(page.getByLabel(/Visibility scope/i)).toHaveCount(0);
+  });
+
+  test("New team is on the list page, not the team page (D-TM4)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.goto(LIST_URL);
+    await waitForHydration(page);
+    await expect(page.getByRole("button", { name: "New team" })).toBeVisible();
+    await page.goto(TEAM_URL);
+    await waitForHydration(page);
+    await expect(page.getByRole("button", { name: "New team" })).toHaveCount(0);
+  });
+
+  test("?team=<id> lands on /dashboard/manage/team/<id>, keeping ?view= (TM1 agent decision)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await mockApi(page);
+    await page.goto(`${LIST_URL}?team=${TEAM_ID}&view=budgets`);
+    await waitForHydration(page);
+    await expect(page).toHaveURL(new RegExp(`${TEAM_URL}\\?view=budgets$`));
+    await expect(
+      page.getByRole("region", { name: "Budget and limits" }),
+    ).toBeVisible();
+  });
+
+  test("an unknown team id is the standard 404, the same page as an out-of-scope team (Access Control - Enforcement)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    const response = await page.goto(`${LIST_URL}/no-such-team`);
+    expect(response?.status()).toBe(404);
+    await expect(
+      page.getByRole("region", { name: "LiteLLM members" }),
+    ).toHaveCount(0);
+  });
+
+  test("a Viewer gets the standard 404 on the list and on a team page (hidden means absent)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-viewer"] });
+    await mockApi(page);
+    expect((await page.goto(LIST_URL))?.status()).toBe(404);
+    expect((await page.goto(TEAM_URL))?.status()).toBe(404);
+  });
+
+  test("the list has no serious or critical axe violations", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.goto(LIST_URL);
+    await waitForHydration(page);
+    await expect(page.getByRole("table")).toBeVisible();
+    await expectNoBlockingViolations(page, "axe on the team list");
   });
 });

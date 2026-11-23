@@ -219,6 +219,9 @@ test.describe("accessibility (axe) - slice B1 surfaces", () => {
 // layout is new, and the Settings page frame.
 const B2_PAGES: readonly [string, string][] = [
   ["/dashboard/manage/team", "Team management"],
+  // Unit TM1: the team page opened from the list (team-payments is seeded;
+  // an unknown id is 404).
+  ["/dashboard/manage/team/team-payments", "Team management"],
   ["/dashboard/manage/litellm/organisation", "LiteLLM"],
   ["/dashboard/manage/users", "Users"],
   ["/dashboard/manage/audit", "Audit log"],

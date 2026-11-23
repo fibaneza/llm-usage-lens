@@ -181,7 +181,7 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
 
   // Slice B2b, G2 (Design System - Management pages, *Team page views and
   // links*): "each App teams row links its name to
-  // /dashboard/manage/team?team=<id> for callers who may open the Team page
+  // /dashboard/manage/team/<id> (unit TM1: the team's own page, Design System - "List, then the team") for callers who may open the Team page
   // (every Organisation reader may - admin, org-admin, auditor)". The section
   // takes no role prop: every reader of this view gets the links.
   it.each([
@@ -197,7 +197,7 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
       const row = within(table).getByRole("row", { name: new RegExp(name) });
       expect(within(row).getByRole("link", { name })).toHaveAttribute(
         "href",
-        `/dashboard/manage/team?team=${teamId}`,
+        `/dashboard/manage/team/${teamId}`,
       );
     },
   );
@@ -232,7 +232,7 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
       expect(items).toHaveLength(3);
       expect(
         within(items[0]!).getByRole("link", { name: "Payments" }),
-      ).toHaveAttribute("href", "/dashboard/manage/team?team=t1");
+      ).toHaveAttribute("href", "/dashboard/manage/team/t1");
     });
 
     // L5b review warning, LD37 in the card layout (docs/specs/2026-11-10-

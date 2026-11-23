@@ -526,7 +526,7 @@ and members, **auditor** = `internal-auditor`.
   - **B2-3 Redirects.** `/dashboard/litellm` follows `?tab=` (`team`,
     `organisation`, `users`, `audit` → the matching `/dashboard/manage/`
     route; anything else → `/dashboard/me`); `/dashboard/litellm/team-config`
-    → `/dashboard/manage/team`, keeping `?team=`; `/dashboard/settings/audit`
+    → `/dashboard/manage/team`, keeping `?team=` (*from 2026-11-23, unit TM1: `/dashboard/manage/team?team=<id>` in turn redirects to `/dashboard/manage/team/<id>`, so the team-config URL lands there in two steps*); `/dashboard/settings/audit`
     → `/dashboard/manage/audit`. A temporary redirect (reversible); a
     target the caller may not see returns `404` there. *Amended 2026-11-17
     (MI-D3): `?tab=organisation` now lands on
@@ -903,7 +903,16 @@ remains). The export is audited.
    never grant global roles.
 2. **Status codes.** Out-of-scope and nonexistent details return `404` with
    an **identical body**. An unauthorised write returns `403` before input
-   parsing. Lists contain only in-scope rows.
+   parsing. Lists contain only in-scope rows. *Named for the team page
+   (unit TM1, 2026-11-23; Design System — *Management pages*, List, then
+   the team):* `/dashboard/manage/team/[teamId]` is `404` with the
+   missing-team body for a team outside the caller's scope (a lead: neither
+   one of its team scopes nor in one of its department scopes) and for an
+   unknown id; the list at `/dashboard/manage/team` holds only in-scope
+   teams, and the `?team=` redirect lands on the same `404`. The team
+   page's pending and stale lists use the optional `teamId` query of
+   `GET /api/access/pending` and `GET /api/access/stale`, which narrows the
+   already scoped rows and never widens them (TM1 review, Q-B3).
 3. **Aggregates after filtering.** Every total, "% of Total", count, top-N,
    most-used model, trend and comparison uses only in-scope rollups and
    attribution; nothing out of scope is inferable from the difference of two

@@ -1,8 +1,10 @@
 import "server-only";
 
 import type { Session } from "next-auth";
+import { z } from "zod";
 
 import { getAllAccountsCached } from "@/lib/api/cached-reads";
+import { parseSearchParams } from "@/lib/api/respond";
 import { loadManager } from "@/lib/api/matrix-route";
 import { INTERNAL_ADMIN_ROLE, INTERNAL_AUDITOR_ROLE } from "@/lib/auth/roles";
 import { isMatrixWriter } from "@/lib/auth/write-policy";
@@ -52,5 +54,26 @@ export async function loadReadableUnits(
     configuration:
       actor.roles.includes(INTERNAL_ADMIN_ROLE) ||
       actor.roles.includes(INTERNAL_AUDITOR_ROLE),
+  };
+}
+
+const TeamFilterSchema = z.object({
+  teamId: z.string().min(1).max(128).optional(),
+});
+
+// The optional `?teamId=` narrows the already scoped units to one team's
+// member rows; it never widens (Design System - "List, then the team", Pending
+// and stale access). A team outside the caller's scope yields no rows.
+export function narrowToTeam<
+  U extends ReadableUnits & { configuration: boolean },
+>(units: U, request: Request): U {
+  const { teamId } = parseSearchParams(request, TeamFilterSchema);
+  if (teamId === undefined) return units;
+  return {
+    ...units,
+    teamIds: units.teamIds.filter((id) => id === teamId),
+    departmentIds: [],
+    configuration: false,
+    membersOnly: true,
   };
 }

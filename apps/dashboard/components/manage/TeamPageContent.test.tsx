@@ -172,11 +172,15 @@ function stub(overrides: Record<string, Handler> = {}, ops = ALL_OPS) {
   return { calls, writes, gets };
 }
 
-function renderConfig(canRaiseLimits = false, searchParams = {}) {
+function renderConfig(
+  canRaiseLimits = false,
+  searchParams = {},
+  teamId = "t1",
+) {
   return renderWithProviders(
     <TeamPageContent
+      teamId={teamId}
       canRaiseLimits={canRaiseLimits}
-      canCreateTeam={false}
       scopeLabel={null}
     />,
     { searchParams },
@@ -207,27 +211,32 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("TeamPageContent team picker (Team configuration page)", () => {
-  it("lists the caller's teams as the me route returns them (B2-4: server-scoped, a read-only caller included)", async () => {
+// D-TM2 (Design System - Management pages, List, then the team): the route
+// gives the team; the page has no picker. Spec: "The team picker ... removed".
+describe("TeamPageContent takes its team as a prop (D-TM2)", () => {
+  it("renders no Team picker, however many teams the me route lists (D-TM2)", async () => {
     stub();
     renderConfig();
-    const picker = await screen.findByRole("combobox", { name: "Team" });
-    const names = within(picker)
-      .getAllByRole("option")
-      .map((o) => o.textContent);
-    expect(names).toEqual(["Payments", "Risk", "Ops"]);
+    await screen.findByRole("tablist");
+    expect(screen.queryByRole("combobox", { name: "Team" })).toBeNull();
   });
 
-  it("?team= deep links to that team and its sections read that team (Route: nuqs deep link)", async () => {
+  it("reads and shows the sections of the teamId prop, not the first listed team (D-TM2)", async () => {
     const api = stub();
-    renderConfig(false, { team: "t2" });
-    expect(await screen.findByRole("combobox", { name: "Team" })).toHaveValue(
-      "t2",
-    );
+    renderConfig(false, {}, "t2");
     await waitFor(() =>
       expect(api.gets("/api/litellm/teams/t2/members")).toBeGreaterThan(0),
     );
     expect(api.gets("/api/litellm/teams/t1/members")).toBe(0);
+  });
+
+  it("ignores a ?team= in the URL: the prop wins (D-TM2)", async () => {
+    const api = stub();
+    renderConfig(false, { team: "t2" }, "t1");
+    await waitFor(() =>
+      expect(api.gets("/api/litellm/teams/t1/members")).toBeGreaterThan(0),
+    );
+    expect(api.gets("/api/litellm/teams/t2/members")).toBe(0);
   });
 });
 
@@ -842,10 +851,10 @@ const unavailable = () =>
   apiError(503, "LITELLM_UNAVAILABLE", "LiteLLM is unavailable");
 
 describe("TeamPageContent page frame (Management pages - Team)", () => {
-  it("opens with a one-line description, no page-level h1, and the team selector", async () => {
+  it("opens with a one-line description and no page-level h1 (the team selector is gone, D-TM2)", async () => {
     stub();
     const view = renderConfig();
-    await screen.findByRole("combobox", { name: "Team" });
+    await screen.findByRole("tablist");
 
     expect(
       view.container.querySelector("p")?.textContent?.trim().length ?? 0,
@@ -857,8 +866,8 @@ describe("TeamPageContent page frame (Management pages - Team)", () => {
     stub();
     renderWithProviders(
       <TeamPageContent
+        teamId="t1"
         canRaiseLimits={false}
-        canCreateTeam={false}
         scopeLabel="Showing teams you lead"
       />,
     );
@@ -870,7 +879,7 @@ describe("TeamPageContent page frame (Management pages - Team)", () => {
   it("renders no scope line without a label", async () => {
     stub();
     renderConfig();
-    await screen.findByRole("combobox", { name: "Team" });
+    await screen.findByRole("tablist");
 
     expect(screen.queryByText(/Showing /)).not.toBeInTheDocument();
   });
@@ -879,8 +888,8 @@ describe("TeamPageContent page frame (Management pages - Team)", () => {
     stub();
     renderWithProviders(
       <TeamPageContent
+        teamId="t1"
         canRaiseLimits={false}
-        canCreateTeam={false}
         scopeLabel={null}
         access={<div data-testid="access-slot" />}
       />,
@@ -971,21 +980,7 @@ describe("TeamPageContent states (Design System - LiteLLM Page: States)", () => 
         ),
       ).toBeInTheDocument();
     }
-    expect(screen.getByRole("combobox", { name: "Team" })).toBeInTheDocument();
-  });
-
-  it("a caller with no teams sees an empty state, not an error", async () => {
-    stub({
-      "GET /api/litellm/me": okData({
-        linked: false,
-        enabledOperations: [],
-        teams: [],
-      }),
-    });
-    renderConfig();
-
-    expect(await screen.findByText(/no teams/i)).toBeInTheDocument();
-    expect(screen.queryAllByRole("alert")).toHaveLength(0);
+    expect(screen.getByRole("tablist")).toBeInTheDocument();
   });
 });
 
@@ -1143,18 +1138,15 @@ function stubNotConfigured() {
 
 // The tabs show while the detail loads and go once it says configured:false.
 const settleNotConfigured = async () => {
-  await screen.findByRole("combobox", { name: "Team" });
+  await screen.findByRole("tablist");
   await waitFor(() => expect(screen.queryByRole("tablist")).toBeNull());
 };
 
 describe("TeamPageContent has no Team spend panel for any role or team state (Design System - Team usage D7; Where each role reads team spend)", () => {
   const ROLES = [
-    ["internal-admin", { canRaiseLimits: true, canCreateTeam: true }],
-    ["internal-org-admin", { canRaiseLimits: false, canCreateTeam: true }],
-    [
-      "internal-auditor or a lead",
-      { canRaiseLimits: false, canCreateTeam: false },
-    ],
+    ["internal-admin", { canRaiseLimits: true }],
+    ["internal-org-admin", { canRaiseLimits: false }],
+    ["internal-auditor or a lead", { canRaiseLimits: false }],
   ] as const;
   const STATES = [
     ["a linked team", () => stub(), () => region("LiteLLM members")],
@@ -1177,6 +1169,7 @@ describe("TeamPageContent has no Team spend panel for any role or team state (De
       const api = arrange();
       renderWithProviders(
         <TeamPageContent
+          teamId="t1"
           {...flags}
           scopeLabel={null}
           access={<section aria-label="Members">app members</section>}
@@ -1205,8 +1198,8 @@ describe("TeamPageContent unlinked team (App Teams: Spend source, UI; AT4)", () 
     const api = stubUnlinked();
     renderWithProviders(
       <TeamPageContent
+        teamId="t1"
         canRaiseLimits
-        canCreateTeam={false}
         scopeLabel={null}
         access={<section aria-label="Members">app members</section>}
       />,
@@ -1230,8 +1223,8 @@ describe("TeamPageContent LiteLLM not configured (LD37; Design System - LiteLLM 
     const api = stubNotConfigured();
     renderWithProviders(
       <TeamPageContent
+        teamId="t1"
         canRaiseLimits
-        canCreateTeam={false}
         scopeLabel={null}
         access={<section aria-label="Members">app members</section>}
       />,
@@ -1276,8 +1269,8 @@ describe("TeamPageContent view tabs (Team page views and links)", () => {
   const renderWithAccess = (searchParams: Record<string, string> = {}) =>
     renderWithProviders(
       <TeamPageContent
+        teamId="t1"
         canRaiseLimits={false}
-        canCreateTeam={false}
         scopeLabel={null}
         access={accessSlot}
       />,
@@ -1337,11 +1330,7 @@ describe("TeamPageContent view tabs (Team page views and links)", () => {
     const onUrlUpdate = vi.fn();
     const u = user();
     renderWithProviders(
-      <TeamPageContent
-        canRaiseLimits={false}
-        canCreateTeam={false}
-        scopeLabel={null}
-      />,
+      <TeamPageContent teamId="t1" canRaiseLimits={false} scopeLabel={null} />,
       { onUrlUpdate },
     );
     await region("LiteLLM members");
@@ -1499,153 +1488,14 @@ describe("TeamPageContent shown-once key dialog focus (L5b review warning)", () 
   });
 });
 
-// ---- New team (Design System - Management pages, *New team (D5, D6; unit
-// M2)*: a New team button for admin and org-admin, absent for everyone else,
-// also when the caller has no teams; on success the new team is selected in
-// the team picker). The dialog's own behaviour is in TeamCreateDialog.test.tsx.
-describe("TeamPageContent New team (D5, D6; unit M2)", () => {
-  const CREATED = {
-    teamId: "appteam-00000000-0000-4000-8000-000000000001",
-    name: "Platform Guild",
-    departmentId: "dept-eng",
-    departmentName: "Engineering",
-    createdBy: "oid-admin",
-    createdAt: "2026-11-18T01:00:00.000Z",
-    version: 1,
-  };
-  const noTeams = {
-    linked: false,
-    enabledOperations: [],
-    teams: [],
-  };
-  const newTeamButton = () =>
-    screen.queryByRole("button", { name: "New team" });
-
-  it.each([
-    [true, "shows"],
-    [false, "does not show"],
-  ])(
-    "canCreateTeam=%s %s the New team button on a team's page",
-    async (can) => {
-      stub();
-      renderWithProviders(
-        <TeamPageContent
-          canRaiseLimits={false}
-          canCreateTeam={can}
-          scopeLabel={null}
-        />,
-      );
-      await screen.findByRole("combobox", { name: "Team" });
-      expect(newTeamButton() !== null).toBe(can);
-    },
-  );
-
-  it.each([
-    [true, "shows"],
-    [false, "does not show"],
-  ])(
-    "canCreateTeam=%s %s the New team button when the caller has no teams",
-    async (can) => {
-      stub({ "GET /api/litellm/me": okData(noTeams) });
-      renderWithProviders(
-        <TeamPageContent
-          canRaiseLimits={false}
-          canCreateTeam={can}
-          scopeLabel={null}
-        />,
-      );
-      expect(
-        await screen.findByText("You have no teams to manage."),
-      ).toBeInTheDocument();
-      expect(newTeamButton() !== null).toBe(can);
-    },
-  );
-
-  it("the New team button opens the New team dialog", async () => {
-    stub({
-      "GET /api/access/org-units": okData({ teams: [], departments: [] }),
-    });
-    const u = user();
-    renderWithProviders(
-      <TeamPageContent
-        canRaiseLimits={false}
-        canCreateTeam
-        scopeLabel={null}
-      />,
-    );
-    await u.click(await screen.findByRole("button", { name: "New team" }));
-    expect(
-      await screen.findByRole("dialog", { name: "New team" }),
-    ).toBeInTheDocument();
-  });
-
-  it("after a team is created it becomes the selected team: the picker lists it and ?team= holds its id", async () => {
-    let created = false;
-    stub({
-      "GET /api/litellm/me": () =>
-        apiResponse({
-          data: {
-            ...meWith(ALL_OPS),
-            teams: [
-              ...meWith(ALL_OPS).teams,
-              ...(created
-                ? [
-                    {
-                      teamId: CREATED.teamId,
-                      teamName: CREATED.name,
-                      linked: false,
-                      configurable: true,
-                    },
-                  ]
-                : []),
-            ],
-          },
-        }),
-      "GET /api/access/org-units": okData({
-        teams: [],
-        departments: [{ id: "dept-eng", name: "Engineering" }],
-      }),
-      "POST /api/teams": () => {
-        created = true;
-        return apiResponse({ data: CREATED }, 201);
-      },
-    });
-    const onUrlUpdate = vi.fn();
-    const u = user();
-    renderWithProviders(
-      <TeamPageContent
-        canRaiseLimits={false}
-        canCreateTeam
-        scopeLabel={null}
-      />,
-      { onUrlUpdate },
-    );
-    await u.click(await screen.findByRole("button", { name: "New team" }));
-    await screen.findByRole("option", { name: "Engineering" });
-    await u.type(
-      screen.getByRole("textbox", { name: "Team name" }),
-      "Platform Guild",
-    );
-    await u.selectOptions(
-      screen.getByRole("combobox", { name: "Department" }),
-      "Engineering",
-    );
-    await u.click(screen.getByRole("button", { name: "Create team" }));
-
-    await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Team" })).toHaveValue(
-        CREATED.teamId,
-      ),
-    );
-    expect(
-      within(screen.getByRole("combobox", { name: "Team" }))
-        .getAllByRole("option")
-        .map((o) => o.textContent),
-    ).toContain("Platform Guild");
-    const picked = onUrlUpdate.mock.calls
-      .map((c) => c[0].searchParams.get("team"))
-      .filter(Boolean);
-    expect(picked.at(-1)).toBe(CREATED.teamId);
+// ---- D-TM4 (Design System - Management pages, List, then the team): New team
+// stays on the list page (TeamListTable.test.tsx); the team page has none.
+describe("TeamPageContent has no New team button (D-TM4)", () => {
+  it("renders no New team button on a team's page", async () => {
+    stub();
+    renderConfig();
+    await screen.findByRole("tablist");
+    expect(screen.queryByRole("button", { name: "New team" })).toBeNull();
   });
 });
 

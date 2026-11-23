@@ -6,7 +6,7 @@ import { signInAsTestUser } from "./support/session";
 
 // Sources: Design System -- Management pages, New team (unit M2, D5, D6: the
 // button for admin and org-admin only; a dialog with "Team name" and
-// "Department"; the new team becomes the selected team); Access Control --
+// "Department"; the new team opens as its own page); Access Control --
 // Created app teams (duplicate name against created and registry teams,
 // T-MI3); App Teams spec -- Teams without an AWS account (no $0 Bedrock row on
 // Cost by team). The create route's rules (403 before parsing, 409, id
@@ -45,12 +45,13 @@ async function stubMe(page: Page, extra: () => MeTeam | null = () => null) {
 const newTeamButton = (page: Page) =>
   page.getByRole("button", { name: "New team" });
 
+// Unit TM1 (D-TM1, D-TM4): New team lives on the Team list, so the journey
+// opens the list; the Payments row is the readiness signal.
 async function openTeamPage(page: Page) {
-  await page.goto(`/dashboard/manage/team?team=${PAYMENTS.teamId}`);
+  await page.goto("/dashboard/manage/team");
   await waitForHydration(page);
-  // The page-header picker precedes the Members region's own "Team" select.
   await expect(
-    page.getByRole("combobox", { name: "Team", exact: true }).first(),
+    page.getByRole("link", { name: PAYMENTS.teamName, exact: true }),
   ).toBeVisible();
 }
 
@@ -156,17 +157,19 @@ test.describe("New team (unit M2, D5, D6)", () => {
     await dialog.getByRole("button", { name: "Create team" }).click();
 
     await expect(dialog).toHaveCount(0);
-    await expect(page).toHaveURL(/[?&]team=appteam-[0-9a-f-]+(&|$)/);
-    const select = page
-      .getByRole("combobox", { name: "Team", exact: true })
-      .first();
-    await expect(select).toHaveValue(/^appteam-/);
-    await expect(
-      select.getByRole("option", { name: NEW_TEAM_NAME }),
-    ).toBeAttached();
+    await expect(page).toHaveURL(
+      /\/dashboard\/manage\/team\/appteam-[0-9a-f-]+$/,
+    );
     await expect(
       page.getByText("This team has no LiteLLM team of its own."),
     ).toBeVisible();
+    // The new team is listed, its name linking to the page just opened.
+    const createdPath = new URL(page.url()).pathname;
+    await page.goto("/dashboard/manage/team");
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("link", { name: NEW_TEAM_NAME, exact: true }),
+    ).toHaveAttribute("href", new RegExp(`${createdPath}$`));
   });
 
   // Review m2-r1 U-B2: Rule 40.6 -- axe (WCAG 2 A/AA, serious or critical) and

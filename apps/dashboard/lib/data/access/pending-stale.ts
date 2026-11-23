@@ -42,6 +42,9 @@ const PENDING_PREFIX = "PENDING#";
 export type ReadableUnits = {
   teamIds: readonly string[];
   departmentIds: readonly string[];
+  // A team page's rows (Design System - "List, then the team", Pending and
+  // stale access): member invitations and affiliations only, no admin scopes.
+  membersOnly?: boolean;
 };
 
 type Source<T> = {
@@ -144,11 +147,15 @@ function partitions(units: ReadableUnits, prefix: string) {
   return [
     ...sorted(units.teamIds).flatMap((id) => [
       { name: `m:${id}:${prefix}`, partition: membersGsi1pk(id), prefix },
-      {
-        name: `at:${id}:${prefix}`,
-        partition: adminsGsi1pk("team", id),
-        prefix,
-      },
+      ...(units.membersOnly
+        ? []
+        : [
+            {
+              name: `at:${id}:${prefix}`,
+              partition: adminsGsi1pk("team", id),
+              prefix,
+            },
+          ]),
     ]),
     ...sorted(units.departmentIds).map((id) => ({
       name: `ad:${id}:${prefix}`,

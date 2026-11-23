@@ -122,7 +122,15 @@ function MoveDialog({
   );
 }
 
-export function MembersSection({ viewer }: { viewer: AccessViewer }) {
+export function MembersSection({
+  viewer,
+  teamId: routeTeamId,
+}: {
+  viewer: AccessViewer;
+  // Unit TM1 (D-TM2): the team page passes its team; the section then renders
+  // no chooser and ignores ?team=.
+  teamId?: string;
+}) {
   const capabilities = accessCapabilities(viewer);
   const queryClient = useQueryClient();
   const teams = sectionData(useOrgUnits())?.teams;
@@ -138,7 +146,8 @@ export function MembersSection({ viewer }: { viewer: AccessViewer }) {
   }
   const known = (id: string | null) =>
     id !== null && teams?.some((t) => t.id === id) ? id : null;
-  const teamId = known(chosen) ?? known(pageTeam) ?? teams?.[0]?.id;
+  const teamId =
+    routeTeamId ?? known(chosen) ?? known(pageTeam) ?? teams?.[0]?.id;
   const membersKey = ["access", "members", teamId] as const;
   const membersQuery = useQuery({
     queryKey: membersKey,
@@ -208,7 +217,10 @@ export function MembersSection({ viewer }: { viewer: AccessViewer }) {
     onError: () => void refresh(),
   });
 
-  if (teams === undefined || members === undefined) {
+  if (
+    members === undefined ||
+    (routeTeamId === undefined && teams === undefined)
+  ) {
     if (teams !== undefined && teamId === undefined) {
       return <EmptyState title="No teams to manage." />;
     }
@@ -237,27 +249,29 @@ export function MembersSection({ viewer }: { viewer: AccessViewer }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="max-w-[72ch]">
-        <FormField label="Team">
-          {(props) => (
-            <NativeSelect
-              {...props}
-              value={teamId}
-              onChange={(e) => {
-                setChosen(e.target.value);
-                setNotice(null);
-                add.reset();
-              }}
-            >
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </NativeSelect>
-          )}
-        </FormField>
-      </div>
+      {routeTeamId === undefined ? (
+        <div className="max-w-[72ch]">
+          <FormField label="Team">
+            {(props) => (
+              <NativeSelect
+                {...props}
+                value={teamId}
+                onChange={(e) => {
+                  setChosen(e.target.value);
+                  setNotice(null);
+                  add.reset();
+                }}
+              >
+                {(teams ?? []).map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
+          </FormField>
+        </div>
+      ) : null}
 
       {members.length === 0 ? (
         <EmptyState title="No members in this team yet." />
@@ -370,7 +384,7 @@ export function MembersSection({ viewer }: { viewer: AccessViewer }) {
       {dialog?.kind === "move" ? (
         <MoveDialog
           member={dialog.member}
-          teams={teams}
+          teams={teams ?? []}
           pending={move.isPending}
           error={move.isError ? accessErrorMessage(move.error) : null}
           onMove={(toTeamId) =>

@@ -92,20 +92,24 @@ function List<S extends z.ZodType>({
   item,
   emptyTitle,
   renderTable,
+  teamId,
 }: {
   queryKey: string;
   path: string;
   item: S;
   emptyTitle: string;
   renderTable: (rows: z.output<S>[]) => ReactNode;
+  teamId?: string | undefined;
 }) {
   const query = useInfiniteQuery({
-    queryKey: ["access", queryKey],
-    queryFn: ({ pageParam }) =>
-      fetchApi(
-        pageParam ? `${path}?cursor=${encodeURIComponent(pageParam)}` : path,
-        pageOf(item),
-      ),
+    queryKey: ["access", queryKey, teamId ?? null],
+    queryFn: ({ pageParam }) => {
+      const query = new URLSearchParams();
+      if (teamId !== undefined) query.set("teamId", teamId);
+      if (pageParam) query.set("cursor", pageParam);
+      const text = query.toString();
+      return fetchApi(text ? `${path}?${text}` : path, pageOf(item));
+    },
     initialPageParam: "",
     getNextPageParam: (last) => last.cursor,
   });
@@ -135,7 +139,16 @@ function List<S extends z.ZodType>({
 
 type Accepting = { teamId: string; teamName: string; key: string };
 
-export function PendingAccessSection({ viewer }: { viewer: AccessViewer }) {
+export function PendingAccessSection({
+  viewer,
+  teamId,
+}: {
+  viewer: AccessViewer;
+  // Unit TM1 (D-TM3): on the team page the routes return only that team's
+  // member invitations and stale member rows (`?teamId=`, filtered on the
+  // server); admin scopes and role grants stay in Settings.
+  teamId?: string;
+}) {
   // The names are a nicety: while they load, or if they fail, ids show.
   const units = useOrgUnits().data;
   const names = namesOf(units);
@@ -168,6 +181,7 @@ export function PendingAccessSection({ viewer }: { viewer: AccessViewer }) {
             queryKey="pending"
             path="/api/access/pending"
             item={PendingItemSchema}
+            teamId={teamId}
             emptyTitle="No pending invitations."
             renderTable={(rows: PendingItem[]) => (
               <Table>
@@ -239,6 +253,7 @@ export function PendingAccessSection({ viewer }: { viewer: AccessViewer }) {
             queryKey="stale"
             path="/api/access/stale"
             item={StaleAccessRowSchema}
+            teamId={teamId}
             emptyTitle="No stale access."
             renderTable={(rows: StaleAccessRow[]) => (
               <Table>

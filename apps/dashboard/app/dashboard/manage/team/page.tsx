@@ -1,45 +1,27 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { auth } from "@/auth";
-import { AccessSections } from "@/components/settings/access/AccessSections";
-import { accessCapabilities } from "@/components/settings/access/capabilities";
-import { TeamPageContent } from "@/components/manage/TeamPageContent";
 import { globalRolesOf, resolveScope } from "@/lib/auth/policy";
-import { INTERNAL_ADMIN_ROLE } from "@/lib/auth/roles";
-import { loadSettingsAccessViewer } from "@/lib/auth/settings-access";
 import { isMatrixWriter } from "@/lib/auth/write-policy";
-import { findTeamEntry } from "@/lib/api/team-directory";
+import { TeamListTable } from "@/components/manage/TeamListTable";
 import { authorizationFor } from "@/lib/litellm/route-guard";
 import { managementAccessFor } from "@/lib/manage-access";
+import { listTeamRows, type TeamListRow } from "@/lib/manage/team-list";
+import { findTeamInScope, teamInScope } from "@/lib/manage/team-scope";
 import { scopeLabelFor } from "@/lib/scope-labels";
-import { isSectionVisible, type AccessSectionSlug } from "@/lib/settings-tabs";
-
-import {
-  stepUpWithCredentials,
-  stepUpWithDevLogin,
-  stepUpWithEntra,
-} from "../../settings/step-up-actions";
-
-// The team-level access surface of a lead now that Settings is closed to it
-// (Design System - Management pages, Team; slice B2, B2-4).
-const ACCESS_SECTIONS: readonly AccessSectionSlug[] = [
-  "members",
-  "team-admins",
-  "pending-access",
-  "visibility",
-];
 
 // Server-side gate (LiteLLM spec - Team configuration page, LD25; Access
-// Control - Navigation and landing by role): a global reader (admin, org admin,
-// read-only auditor) or a live lead gets the page; everyone else, and a team
-// outside a lead's scope, get the standard not-found page. Each write route
-// still enforces its own rights.
-export default async function TeamManagePage({
+// Control - Navigation and landing by role, Enforcement item 2): a global
+// reader (admin, org admin, read-only auditor) or a live lead gets the list;
+// everyone else gets the standard not-found page. The list holds only teams in
+// scope; a non-empty `?team=<id>` redirects to the team page, out of scope is the same 404
+// (unit TM1 agent decision).
+export default async function TeamListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ team?: string }>;
+  searchParams: Promise<{ team?: string; view?: string }>;
 }) {
-  const { team } = await searchParams;
+  const { team, view } = await searchParams;
   const session = await auth();
   const access = await managementAccessFor(session);
   if (!access.team) notFound();
@@ -52,40 +34,29 @@ export default async function TeamManagePage({
     adminScopes: input.adminScopes ?? [],
   });
 
-  if (!access.global && team !== undefined) {
-    let inScope = scope.teamScopes.has(team);
-    if (!inScope && scope.departmentScopes.size > 0) {
-      const meta = await findTeamEntry(team);
-      inScope = !!meta && scope.departmentScopes.has(meta.departmentId);
+  if (team) {
+    if (!access.global && !(await findTeamInScope(team, false, scope))) {
+      notFound();
     }
-    if (!inScope) notFound();
+    const suffix = view ? `?view=${encodeURIComponent(view)}` : "";
+    redirect(`/dashboard/manage/team/${encodeURIComponent(team)}${suffix}`);
   }
 
-  const viewer = await loadSettingsAccessViewer(session);
-  const capabilities = viewer ? accessCapabilities(viewer) : null;
-  const hasAccessSections =
-    viewer !== undefined &&
-    capabilities !== null &&
-    ACCESS_SECTIONS.some((slug) => isSectionVisible(slug, capabilities));
+  const allowed = (t: { teamId: string; departmentId: string }) =>
+    teamInScope(scope, access.global, t);
+  const rows: TeamListRow[] = (await listTeamRows(allowed))
+    .filter(allowed)
+    .map((r) => ({
+      ...r,
+      litellmTeamId: access.global ? r.litellmTeamId : null,
+      litellmLinked: r.litellmTeamId !== null,
+    }));
 
   return (
-    <TeamPageContent
-      canRaiseLimits={roles.includes(INTERNAL_ADMIN_ROLE)}
+    <TeamListTable
+      rows={rows}
       canCreateTeam={isMatrixWriter(roles)}
       scopeLabel={access.global ? null : scopeLabelFor(scope)}
-      access={
-        hasAccessSections ? (
-          <AccessSections
-            viewer={viewer}
-            stepUp={{
-              entra: stepUpWithEntra,
-              credentials: stepUpWithCredentials,
-              devLogin: stepUpWithDevLogin,
-            }}
-            sections={ACCESS_SECTIONS}
-          />
-        ) : undefined
-      }
     />
   );
 }

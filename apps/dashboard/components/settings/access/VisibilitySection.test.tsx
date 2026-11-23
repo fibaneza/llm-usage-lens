@@ -282,3 +282,168 @@ describe("VisibilitySection follows the page's selected team (?team=)", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+// Unit TM1, D-TM2 (Design
+// System - Management pages, Team, "List, then the team"): with the optional
+// `teamId` prop the section has no "Scope" select and edits that team's
+// visibility. Prop contract: `<VisibilitySection viewer teamId="team-risk" />`.
+describe("VisibilitySection with a teamId prop (TM1 D-TM2)", () => {
+  it("renders no Scope select and reads /api/teams/<id>/visibility for the route's team", async () => {
+    const api = stubAccessApi(routes());
+    renderWithProviders(
+      <VisibilitySection viewer={ADMIN} teamId="team-risk" />,
+    );
+    expect(await screen.findByLabelText("User level")).toHaveDisplayValue(
+      "Own",
+    );
+    expect(screen.queryByLabelText("Scope")).not.toBeInTheDocument();
+    expect(
+      api.to("GET /api/teams/team-risk/visibility").length,
+    ).toBeGreaterThan(0);
+    expect(api.to("GET /api/teams/team-pay/visibility")).toEqual([]);
+  });
+
+  // D-TM2: the save writes to the route's team, with the stored version.
+  it("saves to /api/teams/<id>/visibility for the route's team", async () => {
+    const user = userEvent.setup();
+    const api = stubAccessApi(
+      routes({
+        "PUT /api/teams/team-risk/visibility": () =>
+          ok({
+            teamId: "team-risk",
+            teamLevel: "visible",
+            userLevel: "none",
+            version: 1,
+            updatedAt: "2026-11-10T09:00:00.000Z",
+          }),
+      }),
+    );
+    renderWithProviders(
+      <VisibilitySection viewer={ADMIN} teamId="team-risk" />,
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("User level"),
+      "None",
+    );
+    await user.click(
+      within(
+        screen.getByLabelText("User level").closest("form") as HTMLElement,
+      ).getByRole("button", { name: "Save visibility" }),
+    );
+    expect(await screen.findByText("Saved.")).toBeVisible();
+    expect(api.writes()[0]).toMatchObject({
+      method: "PUT",
+      path: "/api/teams/team-risk/visibility",
+      body: { teamLevel: "visible", userLevel: "none", version: 0 },
+    });
+  });
+
+  // Rule: the prop wins over a stray ?team= (the page's route gives the team).
+  it("ignores ?team= when it has a teamId prop", async () => {
+    const api = stubAccessApi(routes());
+    renderWithProviders(
+      <VisibilitySection viewer={ADMIN} teamId="team-pay" />,
+      {
+        searchParams: { team: "team-risk" },
+      },
+    );
+    await screen.findByLabelText("User level");
+    expect(api.to("GET /api/teams/team-pay/visibility").length).toBeGreaterThan(
+      0,
+    );
+    expect(api.to("GET /api/teams/team-risk/visibility")).toEqual([]);
+  });
+});
+
+// Q-B2 (review r1; Design System - "List, then the team", Department
+// visibility on the team page): a caller with editDepartmentVisibility for the
+// team's department also sees that department's panel (setting and cap) on the
+// team page, through the existing department route; a team-only lead does not;
+// a department lead of another department does not. Settings is closed to
+// leads, so this is the only place a department lead can edit it.
+describe("VisibilitySection department panel on the team page (Q-B2)", () => {
+  const OTHER_DEPT_ADMIN = {
+    ...DEPT_ADMIN,
+    adminScopes: [{ scopeType: "department", scopeId: "dept-fin" }],
+  } as typeof DEPT_ADMIN;
+
+  it("a department lead sees the team's department panel beside the team form", async () => {
+    stubAccessApi(routes());
+    renderWithProviders(
+      <VisibilitySection
+        viewer={DEPT_ADMIN}
+        teamId="team-pay"
+        departmentId="dept-eng"
+      />,
+    );
+    expect(await screen.findByLabelText("User level")).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Department totals"),
+    ).toHaveDisplayValue("Hidden");
+    expect(screen.getByLabelText("User level cap")).toHaveDisplayValue("Own");
+  });
+
+  it("a department lead saves the department's setting and cap with the stored version", async () => {
+    const user = userEvent.setup();
+    const api = stubAccessApi(
+      routes({
+        "PUT /api/departments/dept-eng/visibility": () =>
+          ok({ ...DEPT_VIS, departmentLevel: "visible", version: 3 }),
+      }),
+    );
+    renderWithProviders(
+      <VisibilitySection
+        viewer={DEPT_ADMIN}
+        teamId="team-pay"
+        departmentId="dept-eng"
+      />,
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Department totals"),
+      "Visible",
+    );
+    await user.click(
+      within(
+        screen
+          .getByLabelText("Department totals")
+          .closest("form") as HTMLElement,
+      ).getByRole("button", { name: "Save visibility" }),
+    );
+    await vi.waitFor(() =>
+      expect(api.writes()).toEqual([
+        expect.objectContaining({
+          path: "/api/departments/dept-eng/visibility",
+          body: { departmentLevel: "visible", maxUserLevel: "own", version: 2 },
+        }),
+      ]),
+    );
+  });
+
+  it("a team-only lead does not see the department panel and fetches no department setting for it", async () => {
+    const api = stubAccessApi(routes());
+    renderWithProviders(
+      <VisibilitySection
+        viewer={TEAM_ADMIN}
+        teamId="team-pay"
+        departmentId="dept-eng"
+      />,
+    );
+    await screen.findByLabelText("User level");
+    expect(screen.queryByLabelText("Department totals")).toBeNull();
+    expect(screen.queryByLabelText("User level cap")).toBeNull();
+    expect(api.writes()).toEqual([]);
+  });
+
+  it("a department lead of another department does not see this team's department panel", async () => {
+    stubAccessApi(routes());
+    renderWithProviders(
+      <VisibilitySection
+        viewer={OTHER_DEPT_ADMIN}
+        teamId="team-pay"
+        departmentId="dept-eng"
+      />,
+    );
+    await screen.findByLabelText("User level");
+    expect(screen.queryByLabelText("Department totals")).toBeNull();
+  });
+});

@@ -455,3 +455,158 @@ describe("GET /api/access/stale", () => {
     expect(await auditToday()).toHaveLength(audited);
   });
 });
+
+// Q-B3 (review r1; Design System - Management pages, "List, then the team",
+// Pending and stale access (D-TM3): the filter runs on the server; both routes
+// take an optional `teamId` query (Zod), scoped as before, and answer as before
+// without it). The rows of a team are its member invitations and member
+// affiliations only: pending admin scopes and role grants stay in Settings.
+// The shared route-contract suite owns 401/403/no-store, so only the filter is
+// asserted here.
+describe("?teamId= filter on /api/access/pending and /api/access/stale (Q-B3)", () => {
+  it.each([
+    ["team-a", ["new.hire@example.com"]],
+    ["team-b", ["exactly.30@example.com", "just.over@example.com"]],
+    ["team-c", ["old.hire@example.com"]],
+    ["team-none", []],
+  ])(
+    "pending ?teamId=%s returns that team's member invitations only",
+    async (teamId, emails) => {
+      const data = await expectData<Page<Pending>>(
+        await pending(`?teamId=${teamId}`),
+      );
+      expect(pendingKeys(data.items)).toEqual(emails);
+    },
+  );
+
+  it.each([
+    ["team-a", [`inactive:${FRANK}`]],
+    ["team-b", ["pending:just.over@example.com"]],
+    [
+      "team-c",
+      [`inactive:${PEOPLE.alice.oid}`, "pending:old.hire@example.com"].sort(),
+    ],
+  ])(
+    "stale ?teamId=%s returns that team's member rows only (no admin scope, no role grant)",
+    async (teamId, keys) => {
+      const data = await expectData<Page<Stale>>(
+        await stale(`?teamId=${teamId}`),
+      );
+      expect(staleKeys(data.items)).toEqual(keys);
+    },
+  );
+
+  it("is still scoped as before: a team-scope admin asking for another team gets no rows, and none of its own beyond its team", async () => {
+    signInAs("teamAdminA");
+    const other = await expectData<Page<Pending>>(
+      await pending("?teamId=team-c"),
+    );
+    expect(other.items).toEqual([]);
+    const own = await expectData<Page<Pending>>(
+      await pending("?teamId=team-a"),
+    );
+    expect(pendingKeys(own.items)).toEqual(["new.hire@example.com"]);
+    const otherStale = await expectData<Page<Stale>>(
+      await stale("?teamId=team-c"),
+    );
+    expect(otherStale.items).toEqual([]);
+  });
+
+  // No oracle (coordinator ruling 2026-11-23; Design System - "List, then the
+  // team", Pending and stale access): a scoped lead cannot tell an
+  // out-of-scope team that exists from an id that exists nowhere.
+  it("a team-scope admin gets identical responses for an out-of-scope existing team and an unknown team, on both routes", async () => {
+    signInAs("teamAdminA");
+    for (const route of [pending, stale]) {
+      const outOfScope = await route("?teamId=team-c");
+      const unknown = await route("?teamId=team-does-not-exist");
+      expect(outOfScope.status).toBe(200);
+      expect(unknown.status).toBe(200);
+      const a = await outOfScope.json();
+      const b = await unknown.json();
+      expect(a).toEqual(b);
+      expect(a.data.items).toEqual([]);
+    }
+  });
+
+  it("a department-scope admin gets a team of its department and nothing for another department's team", async () => {
+    signInAs("deptAdminEng");
+    const inside = await expectData<Page<Pending>>(
+      await pending("?teamId=team-b"),
+    );
+    expect(pendingKeys(inside.items)).toEqual([
+      "exactly.30@example.com",
+      "just.over@example.com",
+    ]);
+    const outside = await expectData<Page<Pending>>(
+      await pending("?teamId=team-c"),
+    );
+    expect(outside.items).toEqual([]);
+    const outsideStale = await expectData<Page<Stale>>(
+      await stale("?teamId=team-c"),
+    );
+    expect(outsideStale.items).toEqual([]);
+  });
+
+  it("the team's invitation that is on page 2 of the unfiltered list is returned on the first filtered page", async () => {
+    const first = await expectData<Page<Pending>>(await pending("?limit=2"));
+    const onFirst = new Set(first.items.map((i) => i.emailOrUpn));
+    const target = (
+      await expectData<Page<Pending>>(await pending("?limit=100"))
+    ).items.find((i) => i.kind === "affiliation" && !onFirst.has(i.emailOrUpn));
+    expect(target?.teamId).toBeDefined();
+    const filtered = await expectData<Page<Pending>>(
+      await pending(`?teamId=${target?.teamId}&limit=2`),
+    );
+    expect(filtered.items.map((i) => i.emailOrUpn)).toContain(
+      target?.emailOrUpn,
+    );
+  });
+
+  it("the team's stale row that is on page 2 of the unfiltered list is returned on the first filtered page", async () => {
+    const first = await expectData<Page<Stale>>(await stale("?limit=2"));
+    const onFirst = new Set(staleKeys(first.items));
+    const target = (
+      await expectData<Page<Stale>>(await stale("?limit=100"))
+    ).items.find(
+      (i) =>
+        i.kind === "affiliation" && !onFirst.has(`${i.reason}:${i.subject}`),
+    );
+    expect(target?.teamId).toBeDefined();
+    const filtered = await expectData<Page<Stale>>(
+      await stale(`?teamId=${target?.teamId}&limit=2`),
+    );
+    expect(staleKeys(filtered.items)).toContain(
+      `${target?.reason}:${target?.subject}`,
+    );
+  });
+
+  it("filtered pages paginate: ?limit=1 walks both of team-b's invitations once", async () => {
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const query = `?teamId=team-b&limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+      const data = await expectData<Page<Pending>>(await pending(query));
+      seen.push(...data.items.map((i) => i.emailOrUpn));
+      cursor = data.cursor;
+      pages += 1;
+    } while (cursor && pages < 10);
+    expect(seen.sort()).toEqual([
+      "exactly.30@example.com",
+      "just.over@example.com",
+    ]);
+  });
+
+  it("400 BAD_REQUEST for an empty teamId, on both routes", async () => {
+    await expectError(await pending("?teamId="), 400, "BAD_REQUEST");
+    await expectError(await stale("?teamId="), 400, "BAD_REQUEST");
+  });
+
+  it("without teamId both routes answer as before", async () => {
+    const p = await expectData<Page<Pending>>(await pending());
+    expect(pendingKeys(p.items)).toEqual(ALL_PENDING);
+    const s = await expectData<Page<Stale>>(await stale());
+    expect(staleKeys(s.items)).toEqual(STALE_ALL);
+  });
+});

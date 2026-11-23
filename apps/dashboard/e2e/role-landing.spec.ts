@@ -324,12 +324,39 @@ test.describe("journey: lead (team admin)", () => {
   }) => {
     await open(page, context, byName("team-admin"), "/dashboard/me");
 
-    const own = await page.goto(`${TEAM_ITEM.path}?team=${PROBE_TEAM}`);
+    const own = await page.goto(`${TEAM_ITEM.path}/${PROBE_TEAM}`);
     expect(own?.status()).toBe(200);
     await expect(
       page.getByRole("heading", { level: 1, name: TEAM_ITEM.pageTitle }),
     ).toBeVisible();
-    await expectNotFound(page, `${TEAM_ITEM.path}?team=not-a-team-it-leads`);
+    await expectNotFound(page, `${TEAM_ITEM.path}/not-a-team-it-leads`);
+  });
+
+  // Design System - Management pages, "List, then the team" (U-W2, review r1):
+  // a lead's list holds only the team it leads, shows no LiteLLM team id (only
+  // "Linked" / "Not linked", The LiteLLM team column by role), and the row
+  // opens that team's page.
+  test("the Team list holds only the lead's team, shows no LiteLLM team id, and its row opens the team page", async ({
+    context,
+    page,
+  }) => {
+    await open(page, context, byName("team-admin"), "/dashboard/me");
+    await page.goto(TEAM_ITEM.path);
+    await waitForHydration(page);
+
+    const table = page.getByRole("table");
+    await expect(table.getByRole("row")).toHaveCount(2);
+    const row = table.getByRole("row", { name: /Payments/ });
+    await expect(row.getByRole("cell").last()).toHaveText(
+      /^(Linked|Not linked)$/,
+    );
+    await table.getByRole("link", { name: "Payments", exact: true }).click();
+    await expect(page).toHaveURL(
+      pathPattern(`${TEAM_ITEM.path}/${PROBE_TEAM}`),
+    );
+    await expect(
+      page.getByRole("heading", { level: 1, name: TEAM_ITEM.pageTitle }),
+    ).toBeVisible();
   });
 
   // Design System - Management pages (Team: the ScopeLine for a lead; the lead's
@@ -341,7 +368,7 @@ test.describe("journey: lead (team admin)", () => {
   }) => {
     await page.setViewportSize({ width: 375, height: 900 });
     await open(page, context, byName("team-admin"), "/dashboard/me");
-    await page.goto(`${TEAM_ITEM.path}?team=${PROBE_TEAM}`);
+    await page.goto(`${TEAM_ITEM.path}/${PROBE_TEAM}`);
     await waitForHydration(page);
 
     await expect(page.getByText("Showing teams you lead")).toBeVisible();
@@ -547,6 +574,31 @@ test.describe("journey: Team usage and New team by scope (unit M2, T-MI4)", () =
     ]);
   });
 
+  // Design System - "List, then the team" (U-W1, review r1): a department
+  // lead's list holds the teams of its department, registry and created, and
+  // each opens.
+  test("a department lead's Team list shows its department's teams and opening one gives 200", async ({
+    context,
+    page,
+  }) => {
+    await open(page, context, byName("department-admin"), "/dashboard/me");
+    await page.goto(TEAM_ITEM.path);
+    await waitForHydration(page);
+
+    const table = page.getByRole("table");
+    await expect(table.getByRole("link")).toHaveText([
+      "Payments",
+      "Platform",
+      "Platform Guild",
+    ]);
+    await table
+      .getByRole("link", { name: "Platform Guild", exact: true })
+      .click();
+    await expect(page).toHaveURL(pathPattern(`${TEAM_ITEM.path}/${GUILD_ID}`));
+    const opened = await page.goto(`${TEAM_ITEM.path}/${GUILD_ID}`);
+    expect(opened?.status()).toBe(200);
+  });
+
   for (const name of ["member", "viewer-no-team"]) {
     test(`${name}: Team usage is a 404`, async ({ context, page }) => {
       await open(page, context, byName(name), "/dashboard/me");
@@ -578,13 +630,14 @@ test.describe("journey: Team usage and New team by scope (unit M2, T-MI4)", () =
         },
       }),
     );
-    await page.goto(`${TEAM_ITEM.path}?team=${PROBE_TEAM}`);
+    // Unit TM1 (D-TM4): New team is on the Team list, which a lead sees with
+    // its own teams; the team page has neither the button nor a picker.
+    await page.goto(TEAM_ITEM.path);
     await waitForHydration(page);
-    // The page-level team picker is the first "Team" select; the Members
-    // region carries a second one (strict-mode locator, merge with main).
-    await expect(
-      page.getByRole("combobox", { name: "Team", exact: true }).first(),
-    ).toBeVisible();
+    await expect(page.getByRole("table")).toBeVisible();
+    await expect(page.getByRole("button", { name: "New team" })).toHaveCount(0);
+    await page.goto(`${TEAM_ITEM.path}/${PROBE_TEAM}`);
+    await waitForHydration(page);
     await expect(page.getByRole("button", { name: "New team" })).toHaveCount(0);
     // m2-r1 UI WARN: Team spend belongs to Team usage, not the Team page.
     await expect(

@@ -320,3 +320,172 @@ describe("PendingAccessSection - Accept action (INV1)", () => {
     expect(screen.getByRole("row", { name: /risk\.hire@/ })).toBeVisible();
   });
 });
+
+// Unit TM1, D-TM3 (Design
+// System - Management pages, Team, "List, then the team"): with the optional
+// `teamId` prop (the route's team) the section lists that team's member
+// invitations only, with their age and the stale mark; pending admin scopes,
+// other teams' rows, role grants and admin-scope stale rows stay in
+// Settings -> Access. Prop contract: `<PendingAccessSection viewer teamId="team-pay" />`.
+describe("PendingAccessSection with a teamId prop (TM1 D-TM3)", () => {
+  const staleOwn = {
+    reason: "pending",
+    kind: "affiliation",
+    subject: "stale.hire@example.com",
+    teamId: "team-pay",
+    since: "2026-09-02T09:00:00.000Z",
+  };
+  // The route does the filtering (Design System - "List, then the team",
+  // Pending and stale access: "The filter runs on the server"): this stand-in
+  // answers ?teamId= with that team's member rows only.
+  const serverFiltered =
+    (rows: Record<string, unknown>[]) => (call: { search: string }) => {
+      const id = new URLSearchParams(call.search).get("teamId");
+      const shown =
+        id === null
+          ? rows
+          : rows.filter((r) => r.kind === "affiliation" && r.teamId === id);
+      return ok(page(shown));
+    };
+  const teamRoutes = () =>
+    routes({
+      "GET /api/access/pending": serverFiltered([
+        pending(),
+        pending({ emailOrUpn: "risk.hire@example.com", teamId: "team-risk" }),
+        pending({
+          kind: "adminScope",
+          emailOrUpn: "lead@example.com",
+          teamId: undefined,
+          scopeType: "team",
+          scopeId: "team-pay",
+        }),
+      ]),
+      "GET /api/access/stale": serverFiltered([
+        staleOwn,
+        staleUnbound,
+        staleGrant,
+        staleScope,
+      ]),
+    });
+
+  // Q-B3 (review r1; Design System, Pending and stale access: the filter runs
+  // on the server, a browser filter over loaded pages could say "No pending
+  // invitations." while the team had some on a later page).
+  it("requests ?teamId= on both lists", async () => {
+    const api = stubAccessApi(teamRoutes());
+    renderWithProviders(
+      <PendingAccessSection viewer={ADMIN} teamId="team-pay" />,
+    );
+    await screen.findByRole("row", { name: /new\.hire@/ });
+    await screen.findByRole("row", { name: /stale\.hire@/ });
+    for (const key of ["GET /api/access/pending", "GET /api/access/stale"]) {
+      const searches = api.to(key).map((c) => c.search);
+      expect(searches.length).toBeGreaterThan(0);
+      for (const s of searches) {
+        expect(new URLSearchParams(s).get("teamId")).toBe("team-pay");
+      }
+    }
+  });
+
+  it("does not filter in the browser: it shows the rows the route returned", async () => {
+    stubAccessApi(
+      routes({
+        "GET /api/access/pending": page([
+          pending({ emailOrUpn: "late.hire@example.com", teamId: "team-pay" }),
+          pending({ emailOrUpn: "odd@example.com", teamId: "team-risk" }),
+        ]),
+        "GET /api/access/stale": page([]),
+      }),
+    );
+    renderWithProviders(
+      <PendingAccessSection viewer={ADMIN} teamId="team-pay" />,
+    );
+    await screen.findByRole("row", { name: /late\.hire@/ });
+    expect(screen.getByRole("row", { name: /odd@/ })).toBeVisible();
+  });
+
+  it("Load more keeps ?teamId= beside the cursor", async () => {
+    const user = userEvent.setup();
+    const api = stubAccessApi(
+      routes({
+        "GET /api/access/pending": (call: { search: string }) =>
+          new URLSearchParams(call.search).has("cursor")
+            ? ok(page([pending({ emailOrUpn: "second@example.com" })]))
+            : ok(page([pending()], "next-1")),
+        "GET /api/access/stale": page([]),
+      }),
+    );
+    renderWithProviders(
+      <PendingAccessSection viewer={ADMIN} teamId="team-pay" />,
+    );
+    await screen.findByRole("row", { name: /new\.hire@/ });
+    await user.click(screen.getByRole("button", { name: "Load more" }));
+    await screen.findByRole("row", { name: /second@/ });
+    const second = api
+      .to("GET /api/access/pending")
+      .map((c) => new URLSearchParams(c.search))
+      .find((q) => q.has("cursor"));
+    expect(second?.get("teamId")).toBe("team-pay");
+    expect(second?.get("cursor")).toBe("next-1");
+  });
+
+  it("lists only that team's member invitations, with the invited date", async () => {
+    stubAccessApi(teamRoutes());
+    renderWithProviders(
+      <PendingAccessSection viewer={ADMIN} teamId="team-pay" />,
+    );
+    const own = await screen.findByRole("row", { name: /new\.hire@/ });
+    expect(own).toHaveTextContent(/2026-11-10/);
+    expect(
+      screen.queryByRole("row", { name: /risk\.hire@/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  // D-TM3: pending admin scopes stay in Settings -> Access.
+  it("shows no pending admin-scope row, even for this team", async () => {
+    stubAccessApi(teamRoutes());
+    renderWithProviders(
+      <PendingAccessSection viewer={ADMIN} teamId="team-pay" />,
+    );
+    await screen.findByRole("row", { name: /new\.hire@/ });
+    expect(
+      screen.queryByRole("row", { name: /lead@example\.com/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  // D-TM3 "with the stale mark": this team's unbound invitation shows its
+  // reason and date; other teams' stale rows, role grants and admin scopes do not.
+  it("lists only this team's stale member rows, with the stale reason", async () => {
+    stubAccessApi(teamRoutes());
+    renderWithProviders(
+      <PendingAccessSection viewer={ADMIN} teamId="team-pay" />,
+    );
+    const stale = await screen.findByRole("row", { name: /stale\.hire@/ });
+    expect(stale).toHaveTextContent(/not bound after 30 days/i);
+    expect(stale).toHaveTextContent(/2026-09-02/);
+    expect(screen.queryByRole("row", { name: /old\.hire@/ })).toBeNull();
+    expect(screen.queryByRole("row", { name: /Alice Adams/ })).toBeNull();
+    expect(screen.queryByRole("row", { name: /Bob Brown/ })).toBeNull();
+  });
+
+  // a team with no invitations shows the empty state, not other teams' rows.
+  it("shows the empty states for a team that has no invitations and no stale rows", async () => {
+    stubAccessApi(teamRoutes());
+    renderWithProviders(
+      <PendingAccessSection viewer={ADMIN} teamId="team-none" />,
+    );
+    expect(await screen.findByText("No pending invitations.")).toBeVisible();
+    expect(await screen.findByText("No stale access.")).toBeVisible();
+  });
+
+  // Coordinator ruling: without the prop the section is unchanged
+  // (covered in full by the cases above; this pins the admin-scope row).
+  it("without the prop still lists the pending admin-scope row", async () => {
+    stubAccessApi(teamRoutes());
+    renderWithProviders(<PendingAccessSection viewer={ADMIN} />);
+    expect(
+      await screen.findByRole("row", { name: /lead@example\.com/ }),
+    ).toBeVisible();
+    expect(screen.getByRole("row", { name: /risk\.hire@/ })).toBeVisible();
+  });
+});

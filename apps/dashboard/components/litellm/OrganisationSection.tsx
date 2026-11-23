@@ -33,7 +33,7 @@ const SOURCE_LABEL = {
 type OrgData = ReturnType<typeof LiteLLMOrgResponseSchema.parse>;
 
 const teamPageHref = (teamId: string) =>
-  `/dashboard/manage/team?team=${encodeURIComponent(teamId)}`;
+  `/dashboard/manage/team/${encodeURIComponent(teamId)}`;
 
 function AppTeamName({ team }: { team: OrgData["appTeams"][number] }) {
   return (
