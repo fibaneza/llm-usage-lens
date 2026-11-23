@@ -397,6 +397,10 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   read("governance/per-user-approval/route.ts"),
   read("group-mappings/route.ts"),
   read("identities/route.ts"),
+  // Unit US2 (D-US6): one person for the user page; admin, org-admin, auditor.
+  read("identities/[oid]/route.ts", {
+    validParams: { oid: PEOPLE.alice.oid },
+  }),
   read("identities/[oid]/links/route.ts", {
     validParams: { oid: PEOPLE.alice.oid },
   }),

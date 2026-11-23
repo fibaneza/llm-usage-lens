@@ -314,6 +314,13 @@ its sync button and its "Not signed in yet" panel to the page.
 with its registry entry, the name edit in the password-user route if it
 is missing, their tests, `e2e/manage-user-page.spec.ts`.
 **Does not touch:** `UsersPeoplePanel.tsx` (US1 adds the link).
+**Ownership change (coordinator rulings, 2026-11-24):**
+`packages/shared/src/identity.ts` (`createdAt` optional on
+`IdentityRecordSchema`), `packages/shared/src/schemas/access-control.ts`
+(`IdentityDetailSchema`; `displayName` in `SNAPSHOT_KEYS`),
+`lib/data/access/password-users.ts` (`updatePasswordUserDisplayName`), and
+— review round 1 — `lib/data/identity.ts` (the sign-in upsert writes
+`createdAt` with `if_not_exists`). US1 does not edit `identity.ts`.
 **Security review at the merge** (a new read of one person's access).
 
 | Test | Proves |

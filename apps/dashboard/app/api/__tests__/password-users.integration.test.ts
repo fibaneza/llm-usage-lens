@@ -722,6 +722,203 @@ describe("PATCH /api/password-users/[email]", () => {
   });
 });
 
+// Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)"
+// (PATCH: enable or disable and, from unit US2, `displayName` - the name only,
+// never the email, audited, internal-admin); Design System - "The user page
+// (unit US2)" D-US8 (the email is the sign-in key and is not editable).
+// 403 before parsing (non-admin PATCH, one denied audit) is the shared
+// route-contract suite's for this route (Rule 60.23); not copied here.
+// Design System "The user page" 2026-11-24 rulings (Q-B1): `version` is
+// REQUIRED on the displayName branch (Access Control - Enforcement item 6);
+// a stale version is 409.
+describe("PATCH /api/password-users/[email] - displayName (unit US2, D-US8)", () => {
+  const patch = (email: string, body: unknown) =>
+    invoke(PATCH, {
+      method: "PATCH",
+      path: one(email),
+      params: { email },
+      body,
+    });
+  const updates = async () =>
+    (await auditToday()).filter((r) => r.action.startsWith("localuser."));
+
+  it("400 BAD_REQUEST for a name edit without a version (Q-B1); unchanged, no audit, no denied record", async () => {
+    await seedUser();
+    await expectError(
+      await patch("alice@example.com", { displayName: "New" }),
+      400,
+      "BAD_REQUEST",
+    );
+    expect((await rows())[0]).toMatchObject({
+      displayName: "Alice",
+      version: 1,
+    });
+    expect(await updates()).toEqual([]);
+    expect(await deniedToday()).toEqual([]);
+  });
+
+  it("an admin changes the name with the version it read: 200 with the list item, one localuser.update success record", async () => {
+    const user = await seedActiveUser();
+    const { text, data } = await readData<Row>(
+      await patch(user.email, { displayName: "Alice Brown", version: 2 }),
+    );
+    expectNoSecrets(text);
+    expect(data).toMatchObject({
+      email: "alice@example.com",
+      displayName: "Alice Brown",
+    });
+    expect((await rows())[0]).toMatchObject({ displayName: "Alice Brown" });
+    const records = await updates();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      action: "localuser.update",
+      result: "success",
+      actor: "oid-admin",
+      target: { type: "identity", id: user.oid },
+    });
+  });
+
+  it("keeps the status, the password and the TOTP enrolment, and bumps the version", async () => {
+    const user = await seedActiveUser();
+    const { data } = await readData<Row>(
+      await patch(user.email, { displayName: "Alice B", version: 2 }),
+    );
+    expect(data).toMatchObject({
+      status: "enabled",
+      totpEnrolled: true,
+      version: 3,
+    });
+  });
+
+  it("409 CONFLICT for a stale version; the name is unchanged and nothing is audited", async () => {
+    await seedUser();
+    await expectError(
+      await patch("alice@example.com", { displayName: "New", version: 9 }),
+      409,
+      "CONFLICT",
+    );
+    expect((await rows())[0]).toMatchObject({ displayName: "Alice" });
+    expect(await updates()).toEqual([]);
+  });
+
+  it.each([
+    [
+      "an email beside the name",
+      { displayName: "New", version: 1, email: "b@example.com" },
+    ],
+    [
+      "an email beside enabled",
+      { enabled: false, version: 1, email: "b@example.com" },
+    ],
+    ["an empty name", { displayName: "", version: 1 }],
+    [
+      "a name over 200 characters",
+      { displayName: "x".repeat(201), version: 1 },
+    ],
+    ["a non-string name", { displayName: 5, version: 1 }],
+  ])(
+    "400 BAD_REQUEST for %s; the user is unchanged, no audit, no denied record",
+    async (_n, body) => {
+      await seedUser();
+      await expectError(
+        await patch("alice@example.com", body),
+        400,
+        "BAD_REQUEST",
+      );
+      expect(await rows()).toEqual([
+        expect.objectContaining({
+          email: "alice@example.com",
+          displayName: "Alice",
+          version: 1,
+        }),
+      ]);
+      expect(await updates()).toEqual([]);
+      expect(await deniedToday()).toEqual([]);
+    },
+  );
+
+  // Coordinator ruling 2026-11-24 (US2 fix round 2), Access Control -
+  // password-users row, D-US8: the name is trimmed and free of control chars.
+  it("the name is trimmed: '  New Name  ' is stored and returned as 'New Name'", async () => {
+    await seedUser();
+    const { data } = await readData<Row>(
+      await patch("alice@example.com", {
+        displayName: "  New Name  ",
+        version: 1,
+      }),
+    );
+    expect(data.displayName).toBe("New Name");
+    expect((await rows())[0]).toMatchObject({ displayName: "New Name" });
+  });
+
+  it.each([
+    ["a whitespace-only name", "   "],
+    ["a NUL", "Al\u0000ice"],
+    ["a newline", "Al\nice"],
+    ["a tab", "Al\tice"],
+    ["a DEL", "Al\u007fice"],
+  ])(
+    "400 BAD_REQUEST for %s (trim and control-character rule); unchanged, no audit",
+    async (_n, displayName) => {
+      await seedUser();
+      await expectError(
+        await patch("alice@example.com", { displayName, version: 1 }),
+        400,
+        "BAD_REQUEST",
+      );
+      expect((await rows())[0]).toMatchObject({
+        displayName: "Alice",
+        version: 1,
+      });
+      expect(await updates()).toEqual([]);
+      expect(await deniedToday()).toEqual([]);
+    },
+  );
+
+  // The audit snapshot keys are an allowlist in packages/shared
+  // (SNAPSHOT_KEYS); the other localuser.update records carry before/after.
+  it("the audit record carries the old and new name in before/after; still exactly one record", async () => {
+    await seedUser();
+    await readData<Row>(
+      await patch("alice@example.com", {
+        displayName: "  Alice Brown ",
+        version: 1,
+      }),
+    );
+    const records = await updates();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      action: "localuser.update",
+      before: { displayName: "Alice" },
+      after: { displayName: "Alice Brown" },
+    });
+  });
+
+  // Access Control - password-users row: an sso-bound user is not editable
+  // through this route (same 409 as the enable/disable case above).
+  it("409 CONFLICT for an sso-bound user; the name is unchanged and nothing is audited", async () => {
+    await seedUser();
+    await setRawStatus("alice@example.com", "sso-bound");
+    await expectError(
+      await patch("alice@example.com", { displayName: "New", version: 1 }),
+      409,
+      "CONFLICT",
+    );
+    expect((await rows())[0]).toMatchObject({ displayName: "Alice" });
+    expect(await updates()).toEqual([]);
+  });
+
+  it("404 NOT_FOUND for an unknown email, nothing echoed, no audit record", async () => {
+    const a = await expectError(
+      await patch("ghost@example.com", { displayName: "New", version: 1 }),
+      404,
+      "NOT_FOUND",
+    );
+    expect(JSON.stringify(a)).not.toContain("ghost");
+    expect(await auditToday()).toEqual([]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // DELETE /api/password-users/[email]
 // ---------------------------------------------------------------------------

@@ -178,7 +178,7 @@ per request and apply on the next request.
 |---|---|---|
 | Entra ID (OIDC) | All environments; **required in `prod` once SSO is approved** — until then `prod` runs in *Pre-SSO mode* | From the token |
 | **Master user** (username + password) | All environments; **required** in Pre-SSO `prod` | Always `internal-admin` |
-| **Password users** (email + password, amended 2026-11-14) | All environments, while password sign-in is on (*Password users*) | In-app role grants, member team and admin scopes, set in Settings |
+| **Password users** (email + password, amended 2026-11-14) | All environments, while password sign-in is on (*Password users*) | In-app role grants, member team and admin scopes, set in Settings or on the user page (unit US2, 2026-11-24; Design System — *The user page*) |
 | Dev login (no password) | **Outside production and only while Entra is not configured** | With no identity: chosen at sign-in, default `internal-admin`. With an identity: that stored user's `lastSeenRoles` (amended L3c2, user, 2026-11-16) |
 
 **Master user** (break-glass and first-time setup; amends System
@@ -721,6 +721,7 @@ the user 2026-11-15; Design System — *Settings Page*).
 | Edit visibility | ✓ | ✓ | ✓ dept, its cap and its teams | ✓ teams in scope | ✗ |
 | Grant or revoke `internal-org-admin` / `internal-admin` | ✓ **only** | ✗ | ✗ | ✗ | ✗ |
 | LiteLLM operation toggles (incl. reset) and team links (LiteLLM LD24; user, 2026-11-16, extending D14) | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Read one person's global roles and usage identities on the user page (`GET /api/identities/[oid]`; unit US2, D-US11 — **the user's decision, 2026-11-23**; read only: the writes stay in the `internal-admin` rows; `internal-auditor` reads too) | ✓ | ✓ read only | ✗ | ✗ | ✗ (auditor ✓ read) |
 | Create an app team (`POST /api/teams`; management improvements D6, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Create, approve or remove a person's LiteLLM user link (`litellmUserId`; never on their own identity; D16, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Configuration (everything else in *Configuration* above) | ✓ | ✗ | ✗ | ✗ | ✗ |
@@ -1020,7 +1021,7 @@ writes and the credential- and sign-in-affecting admin writes (D33):
 
 Not re-auth: group mappings (they never grant a global role), memberships,
 admin scopes, visibility, identity links and mapping rules, password-user
-`PATCH` (enable or disable), the per-user
+`PATCH` (enable or disable, and the name edit of unit US2, 2026-11-24), the per-user
 approval, and the own password change (it already requires the current
 password).
 
@@ -1285,11 +1286,12 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/group-mappings`, `/api/group-mappings/[groupId]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`) |
 | `/api/identities`, `/api/identities/[oid]/links` | GET, PUT | `internal-admin` (GET also `internal-auditor`); never opened to scoped admins (D37) |
 | `/api/identities/directory` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor`; everyone else `403`. From 2026-11-23 (unit ST1, D-ST2; user, 2026-11-18) the route takes `q` (Zod, trimmed, 1–100 characters), a search by name, email or UPN that returns at most 10 results, for the same callers, through `searchIdentities(q, limit)` in `lib/data/access/identities.ts` (server cap 10; GSI1 `IDENTS` pages until the limit, never a Scan; only rows the unfiltered directory shows; no cursor; agent decision with the coordinator's ruling, 2026-11-23, reason: the route stays off access keys and store internals); a lead still gets no people search (D37) and is `403`. Reason: the Settings identity pickers become a search box. The people list of Management → Users and the LiteLLM users tab (management improvements D15, D16, 2026-11-17): per identity `oid`, `displayName`, `email`, `authMethod`, `memberTeamId`, and the LiteLLM link state (`linked` with `litellmUserId`, or `none`); with `?include=litellmMatch` each unlinked row on the page also carries `match` from `findUserByEmail` on its verified email (read only, nothing written). 25 rows a page, opaque cursor; no usage identities or aliases. Agent decision: org-admin approves LiteLLM user links (user, Q4) and needs to see whom it links; it already manages every team, and D37's restriction is about scoped admins |
+| `/api/identities/[oid]` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor`; everyone else `403`; an unknown `oid` `404` (unit US2, D-US6, 2026-11-23). One person for the user page (Design System — *Management pages*, *The user page*): `oid`, `displayName`, `email`, `upn`, `authMethod`, `createdAt`, `lastSignInAt`, the team membership and lead scope, the LiteLLM link state, usage identities and aliases and global role grants (admin, auditor, and org-admin read-only: the user, 2026-11-23, D-US11), and — **absent otherwise (D-US12)** — a password user's SSO reference and bound date (admin, auditor; not in an org-admin's body). Never a password hash, a TOTP secret, a lockout state, a setup token or the tenant id. Read per request, never cached (Rule 60.10). The response carries the caller's allowed actions on that person, computed on the server from the effective roles, so the page offers only those, and the `version` of each item a write route takes (agent decision, 2026-11-24, US2). |
 | `/api/identities/[oid]/litellm-link` | PUT `{ litellmUserId, mode: "match" \| "manual", reason?, version }`, DELETE `{ version }` | `internal-admin`, `internal-org-admin`; own `oid` `403`; rules in *LiteLLM user links* (D16) |
 | `/api/teams` | POST `{ name, departmentId }` | `internal-admin`, `internal-org-admin`; `201` with the `AppTeam`; rules in *Created app teams* (D5, D6). `GET /api/teams` stays the Bedrock team list (Data Model — *API Routes*) |
 | `/api/governance/identity-map-rules` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` (versioned, audited; D27) |
 | `/api/governance/identity-map-rules/suggestions` | GET | `internal-admin`/`internal-auditor`; read-only, not audited; confirming a suggestion is `PUT /api/identities/[oid]/links` (D27) |
-| `/api/password-users`, `/api/password-users/[email]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`); POST returns the setup link once; POST and DELETE **re-auth**; DELETE takes the user's `version` (optimistic concurrency, *Enforcement* item 6; amended 2026-11-15); PATCH (enable or disable) not |
+| `/api/password-users`, `/api/password-users/[email]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`); POST returns the setup link once; POST and DELETE **re-auth**; DELETE takes the user's `version` (optimistic concurrency, *Enforcement* item 6; amended 2026-11-15); PATCH (enable or disable; and, from unit US2, 2026-11-23, `displayName` with the user's `version` — the name only, never the email, never an SSO-bound user, audited; a stale `version` is `409`, coordinator ruling Q-B1, 2026-11-24) not |
 | `/api/password-users/[email]/reset`, `/api/password-users/[email]/totp-reset` | POST | `internal-admin`; **re-auth** (new setup link once; TOTP re-enrolment at next sign-in) |
 | `/api/account/password` | POST | The signed-in password user (own password; current password and TOTP required); another `authMethod` → `403` with a `denied` record (D36). Used by the Account page `/dashboard/account` (D30) |
 | `/api/governance/password-sign-in` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin`, **re-auth** |
@@ -1338,6 +1340,11 @@ bound person's identity (`null` when unknown); pending rows carry their
 email or UPN. Only the rows of the requested, in-scope team or department
 are returned, so a scoped admin sees the names of the people they manage
 and no one else's, without `/api/identities`.
+*Amended 2026-11-24 (unit US2, D-US11, the user's decision of
+2026-11-23):* the global readers (`internal-admin`, `internal-org-admin`,
+`internal-auditor`) read one person through `GET /api/identities/[oid]`,
+which for `internal-org-admin` includes the global roles and usage
+identities read-only; scoped admins still never read `/api/identities`.
 
 **Error-code registry:** `UNAUTHORIZED` (401), `FORBIDDEN` (403),
 `REAUTH_REQUIRED` (403, a **re-auth** write without a sign-in in the last
@@ -1461,6 +1468,7 @@ organisation administrators and auditors. Usage rollups are kept for
 | T-MI2 | Elevation: the team lead sign-in (D14; was "dev lead sign-in", renamed at the user's direction, 2026-11-18) exists outside dev, or a typed value supplies a scope or role | The option is part of the dev login: env-rejected in `prod` and with Entra configured (T7); the scope comes only from the stored identity's admin-scope item, per request | M3: the option signs in with the stored scope and none from typed text; refused in `prod` and with Entra configured |
 | T-MI3 | Tampering: a created app team takes a registry team's id or name, inheriting its members, scopes or spend (D5) | Server-generated `appteam-<uuid>` id; the registry refuses the reserved prefix; name claim and registry name check (`409`), both ways: the account routes refuse a created team's name (`409`) | M2: id never equals a registry team; duplicate name `409` (against created and registry teams); body id refused (`400`, strict body; agent decision, 2026-11-18, M2 build — stronger than "ignored"); `POST /api/accounts` and `PATCH /api/accounts/[id]` with a created team's name `409`, no write |
 | T-MI4 | Disclosure: Team usage shows a lead another team's spend (D7) | `teamUsage` and the team list come from `resolveScope` per request; a team outside the scope is the missing-page `404`; only a global reader gets every team (MI-D7, coordinator decision) | M2: leak test (a lead sees only teams in scope; another team's id `404`); a global reader without a scope sees every team; a user with no scope `404` |
+| T-US1 | Disclosure: the user page aggregates one person's access (roles, links, sign-in reference) and shows a reader more than Settings would (unit US2, 2026-11-23) | One read for the three global readers only; each block follows the capability that guards it in Settings, except the org-admin read of global roles and usage identities that the user decided for this page (D-US11, 2026-11-23; read only); the SSO reference stays absent for an org-admin (D-US12), and an absent block is absent from the response, not hidden in the page; no credential, hash, secret, lockout state or tenant id in any body; every write goes to its existing route with its own check; no own-role or own-link edit | US2: admin, org-admin, auditor `200`, lead and user `403`, unknown `oid` `404`; an org-admin body has the global roles and usage identities and no SSO reference, and the write routes behind them answer an org-admin `403`; no hash, secret, lockout or tenant id for any role; own page offers no role or link write; no LiteLLM user or member add or remove (zero calls on the fake) |
 
 **Budget reset requests (unit M4; added 2026-11-17).** Each item has its
 test in the M4 Verify list (implementation-phases — *M4*).

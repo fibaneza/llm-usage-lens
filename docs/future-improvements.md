@@ -559,3 +559,19 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
   exists.
 - **Adopt when:** See the conditions in the guide.
 - **References:** [`guides/dynamic-workflows.md`](guides/dynamic-workflows.md).
+
+### Step-up return to the user page
+
+- **Status:** Deferred.
+- **What:** After "Confirm it's you" for a role grant started on Management → Users → a person, return to that person's page instead of Settings → Access → *Role grants*.
+- **Why deferred:** The step-up return is the existing hash-based mechanism of Settings; a new return target needs a validated return path, which is its own change (unit US2 review, coordinator ruling, 2026-11-24).
+- **Adopt when:** admins grant roles mainly from the user page and the detour to Settings becomes a complaint.
+- **References:** [Design System](specs/2026-05-15-design-system.md) — *The user page*, *Known limits*; [Access Control](specs/2026-11-10-access-control.md) — *Recent authentication*.
+
+### Server-side self rule on role grants
+
+- **Status:** Deferred.
+- **What:** `POST /api/role-grants` and `DELETE /api/role-grants/[oid]/[role]` refuse a caller's own `oid` on the server (`403` with a `denied` record), as the LiteLLM user links already do.
+- **Why deferred:** Today the self-guard is in the page only; the last-admin invariant stays atomic, so an admin cannot lock the organisation out, but a server rule is a permission change to an existing route (unit US2 review, coordinator ruling R4, 2026-11-24).
+- **Adopt when:** the next change to the role-grant routes, or a review asks for defence in depth on self-elevation.
+- **References:** [Access Control](specs/2026-11-10-access-control.md) — *Permission matrix*, *Enforcement* item 8; [Design System](specs/2026-05-15-design-system.md) — *The user page*, *Known limits*.

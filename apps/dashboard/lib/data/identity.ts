@@ -30,6 +30,7 @@ export async function upsertIdentity(
     "#g1pk": "gsi1pk",
     "#g1sk": "gsi1sk",
     "#v": "version",
+    "#ca": "createdAt",
   };
   const values: Record<string, unknown> = {
     ":oid": identity.oid,
@@ -51,6 +52,7 @@ export async function upsertIdentity(
     "#g1pk = :g1pk",
     "#g1sk = :g1sk",
     "#v = if_not_exists(#v, :zero) + :one",
+    "#ca = if_not_exists(#ca, :lsa)",
   ];
   const removes: string[] = [];
   for (const [attr, val] of [

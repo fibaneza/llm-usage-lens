@@ -369,6 +369,51 @@ export const enablePasswordUser = (
   expectedVersion?: number,
 ) => setStatus(email, "enabled", ctx, expectedVersion);
 
+// Unit US2 (Access Control - API routes, PATCH `displayName`; Design System
+// D-US8): the name only. The email is the sign-in key and never changes; the
+// status, password, TOTP enrolment and reservations stay as they are.
+export async function updatePasswordUserDisplayName(
+  emailInput: string,
+  displayName: string,
+  ctx: AuditContext,
+  expectedVersion?: number,
+): Promise<AccessResult<void>> {
+  const email = emailInput.toLowerCase();
+  const loaded = await loadMutable(email);
+  if (!loaded.ok) return loaded;
+  const version = Number(loaded.item.version);
+  if (expectedVersion !== undefined && expectedVersion !== version) {
+    return { ok: false, code: "CONFLICT" };
+  }
+  const result = await commitAudited({
+    items: [
+      {
+        Update: {
+          TableName: getTableName(),
+          Key: userKey(email),
+          UpdateExpression:
+            "SET displayName = :n, version = :next, updatedAt = :now",
+          ConditionExpression: "version = :v",
+          ExpressionAttributeValues: {
+            ":n": displayName,
+            ":v": version,
+            ":next": version + 1,
+            ":now": ctx.now.toISOString(),
+          },
+        },
+      },
+    ],
+    audit: {
+      action: "localuser.update",
+      target: { type: "identity", id: String(loaded.item.oid) },
+      before: { displayName: String(loaded.item.displayName ?? "") },
+      after: { displayName },
+    },
+    ctx,
+  });
+  return result.ok ? { ok: true, value: undefined } : result;
+}
+
 export async function issueSetupLink(
   emailInput: string,
   ctx: AuditContext,

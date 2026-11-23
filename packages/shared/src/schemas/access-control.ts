@@ -387,6 +387,7 @@ export function auditCategory(
 
 // T17: only these keys may reach a stored before/after snapshot.
 const SNAPSHOT_KEYS: ReadonlySet<string> = new Set([
+  "displayName",
   "oid",
   "teamId",
   "fromTeamId",
@@ -495,3 +496,63 @@ export type LocalUser = z.infer<typeof LocalUserSchema>;
 export type IdentityLink = z.infer<typeof IdentityLinkSchema>;
 export type UsageKeyClaim = z.infer<typeof UsageKeyClaimSchema>;
 export type AuditRecord = z.infer<typeof AuditRecordSchema>;
+
+// Unit US2 (docs/specs/2026-11-10-access-control.md - "API routes (additions)",
+// `GET /api/identities/[oid]`; Design System - "The user page", D-US6, D-US11,
+// D-US12). One person for the user page. The optional blocks are absent, not
+// empty, for a caller who may not read them. Versions are the ones the existing
+// write routes need (`0` = none). A role grant carries no reason; no credential,
+// lockout state, setup token or tenant id is part of this shape (T-US1).
+export const IdentityDetailSchema = z.object({
+  oid: IdSchema,
+  displayName: z.string().nullable(),
+  email: z.string().nullable(),
+  upn: z.string().nullable(),
+  authMethod: z.enum(["entra", "master", "local", "password"]),
+  createdAt: Iso8601Schema.nullable(),
+  lastSignInAt: Iso8601Schema.nullable(),
+  memberTeamId: IdSchema.nullable(),
+  memberVersion: VersionSchema,
+  leadScopes: z.array(
+    z.object({
+      scopeType: ScopeTypeSchema,
+      scopeId: IdSchema,
+      version: VersionSchema,
+    }),
+  ),
+  litellm: z.discriminatedUnion("state", [
+    z.object({ state: z.literal("linked"), litellmUserId: IdSchema }),
+    z.object({ state: z.literal("none") }),
+  ]),
+  linkVersion: VersionSchema,
+  usageIdentities: z.array(IdSchema).optional(),
+  aliases: z.array(IdSchema).optional(),
+  roleGrants: z
+    .array(
+      z.object({
+        role: GrantableRoleSchema,
+        grantedAt: Iso8601Schema,
+        version: VersionSchema,
+      }),
+    )
+    .optional(),
+  sso: z
+    .object({
+      expectedUpn: IdSchema,
+      expectedOid: IdSchema.optional(),
+      boundAt: Iso8601Schema.optional(),
+    })
+    .optional(),
+  passwordUserVersion: VersionSchema.optional(),
+  allowed: z.object({
+    editDisplayName: z.boolean(),
+    linkLiteLLM: z.boolean(),
+    unlinkLiteLLM: z.boolean(),
+    resetSpend: z.boolean(),
+    changeMembership: z.boolean(),
+    changeLead: z.boolean(),
+    editRoles: z.boolean(),
+    editUsageIdentities: z.boolean(),
+  }),
+});
+export type IdentityDetail = z.infer<typeof IdentityDetailSchema>;

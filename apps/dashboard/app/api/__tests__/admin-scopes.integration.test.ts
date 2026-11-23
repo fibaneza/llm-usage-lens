@@ -17,6 +17,7 @@ import {
   nonAuditItems,
   scopesOf,
   seedAdminScope,
+  seedIdentity,
   seedMember,
   seedWorld,
   signInAs,
@@ -279,6 +280,18 @@ describe("team-scope admins: POST /api/teams/[id]/admins", () => {
     expect(await scopesOf(alice.oid)).toEqual([
       expect.objectContaining({ scopeId: "team-b" }),
     ]);
+  });
+
+  it("two identities sharing an email: POST { oid } of the second makes the second lead, never the first (US2 R2, 2026-11-24: Make team lead sends the oid)", async () => {
+    const twin = "oid-twin-of-alice";
+    await seedIdentity(twin, { email: alice.email });
+    signInAs("teamAdminA");
+    await expectData(await grantTeam("team-a", { oid: twin }), [200, 201]);
+    expect(await scopesOf(twin)).toEqual([
+      expect.objectContaining({ scopeType: "team", scopeId: "team-a" }),
+    ]);
+    expect(await scopesOf(alice.oid)).toEqual([]);
+    expect(await auditToday()).toHaveLength(1);
   });
 
   it.each([

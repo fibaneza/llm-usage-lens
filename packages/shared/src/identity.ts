@@ -10,6 +10,7 @@ export const IdentityRecordSchema = z.object({
   email: z.string().optional(),
   upn: z.string().optional(),
   displayName: z.string().optional(),
+  createdAt: Iso8601Schema.optional(),
   lastSignInAt: Iso8601Schema,
   lastSeenRoles: z.array(z.string()),
   authMethod: z.enum(["entra", "master", "local", "password"]),

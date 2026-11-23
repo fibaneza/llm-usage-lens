@@ -85,6 +85,19 @@ describe("upsertIdentity", () => {
     });
   });
 
+  // Design System - "The user page" 2026-11-24 rulings (Q-B2): createdAt is
+  // written at the first sign-in (`if_not_exists`) and never changes.
+  it("sets createdAt at the first sign-in and keeps that value on a later one", async () => {
+    await upsertIdentity(entra, NOW);
+    expect((await item(OID))?.createdAt).toBe(NOW.toISOString());
+    const later = new Date("2026-11-20T09:00:00.000Z");
+    await upsertIdentity({ ...entra, roles: ["internal-admin"] }, later);
+    expect(await item(OID)).toMatchObject({
+      createdAt: NOW.toISOString(),
+      lastSignInAt: later.toISOString(),
+    });
+  });
+
   it("stores a master identity without email", async () => {
     await upsertIdentity(
       {
