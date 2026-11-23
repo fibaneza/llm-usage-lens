@@ -407,6 +407,102 @@ test.describe("journey: lead (team admin)", () => {
   });
 });
 
+// Review RS2 round 3 (Design System - "Reset any LiteLLM user", D-RS7, Q19;
+// LiteLLM LD34): the real team-scope Lead (team-admin on team-payments, seeded
+// by the role-probe fixture) opens the Team page reset dialog and is offered
+// the user-level scope. The LiteLLM API is fulfilled from fixtures (Rule 60.24).
+test.describe("journey: lead reset dialog (RS2, D-RS7, Q19)", () => {
+  test("a Lead opens a member's Reset spend dialog and sees User spend (all of LiteLLM) (RS2, D-RS7, Q19)", async ({
+    context,
+    page,
+  }) => {
+    const ops = ["resetMemberSpend", "resetMemberBudget", "resetUserSpend"];
+    await page.route(/\/api\/sync-status(\?|$)/, (route) =>
+      route.fulfill({ json: { data: { state: "never-synced" } } }),
+    );
+    await page.route(/\/api\/litellm\//, (route) => {
+      const url = new URL(route.request().url());
+      const key = `${route.request().method()} ${url.pathname}`;
+      const ok = (data: unknown) => route.fulfill({ json: { data } });
+      switch (key) {
+        case "GET /api/litellm/me":
+          return ok({
+            linked: false,
+            enabledOperations: ops,
+            teams: [
+              {
+                teamId: PROBE_TEAM,
+                teamName: "Payments",
+                linked: true,
+                configurable: true,
+              },
+            ],
+          });
+        case `GET /api/litellm/teams/${PROBE_TEAM}`:
+          return ok({
+            connected: true,
+            spendSource: "litellm-team",
+            team: {
+              alias: "Payments",
+              spend: 321.75,
+              maxBudget: 500,
+              softBudget: null,
+              budgetDuration: "30d",
+              models: ["claude-sonnet"],
+              rpmLimit: null,
+              tpmLimit: null,
+            },
+            daily: [{ date: "2026-11-14", spend: 321.75 }],
+            enabledOperations: ops,
+          });
+        case `GET /api/litellm/teams/${PROBE_TEAM}/members`:
+          return ok({
+            connected: true,
+            litellmTeamId: "ll-1",
+            items: [
+              {
+                userId: "u-ada",
+                oid: "oid-ada",
+                name: "Ada Lovelace",
+                email: "ada@example.test",
+                spend: 77.1,
+                maxBudget: 150,
+                rpmLimit: null,
+                tpmLimit: null,
+              },
+            ],
+          });
+        case `GET /api/litellm/teams/${PROBE_TEAM}/keys`:
+          return ok({ connected: true, items: [] });
+        default:
+          return route.fulfill({
+            status: 404,
+            json: { error: { code: "NOT_FOUND", message: "not found" } },
+          });
+      }
+    });
+    await open(
+      page,
+      context,
+      byName("team-admin"),
+      `/dashboard/manage/team/${PROBE_TEAM}`,
+    );
+    await page
+      .getByRole("button", { name: "Reset spend for Ada Lovelace" })
+      .click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Reset spend for Ada Lovelace?",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("radio", { name: "This team only" }),
+    ).toBeChecked();
+    await expect(
+      dialog.getByRole("radio", { name: "User spend (all of LiteLLM)" }),
+    ).toBeVisible();
+  });
+});
+
 test.describe("journey: user (member)", () => {
   test("lands on My usage, sees the Usage group with My usage only and no Management or Administration, no sync badge", async ({
     context,

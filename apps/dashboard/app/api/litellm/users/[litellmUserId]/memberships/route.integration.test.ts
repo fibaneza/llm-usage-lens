@@ -9,6 +9,7 @@ import type { FakeHandler } from "@/test/fakes/fake-litellm";
 import {
   GHOST_USER_ID,
   LTEAM,
+  UNLINKED_LTEAM,
   call,
   enterProd,
   expectError,
@@ -440,5 +441,41 @@ describe("GET /api/litellm/users/[litellmUserId]/memberships (RS1)", () => {
     signInAs("memberA");
     const { res } = await get(CALLERS.memberA.email);
     await expectError(res, 404, "NOT_FOUND");
+  });
+
+  // RS2 D-RS6 (LiteLLM spec - API routes, memberships row, extended 2026-11-19):
+  // the read is keyed by the LiteLLM user id and needs no app identity. This
+  // person has none and sits only in a LiteLLM team no app team links.
+  it("answers for a LiteLLM user with no app identity who is only in an unlinked LiteLLM team: an admin gets 200 items [] with no getTeam call, a Lead the missing-user 404 (RS2 D-RS6; LT21)", async () => {
+    installMemberships();
+    const views = viewsHandler();
+    state.fake = createFakeLiteLLM((c, a) =>
+      c.method === "GET" &&
+      c.path === "/user/info" &&
+      new URL(c.url).searchParams.get("user_id") === "ul1@company.com"
+        ? {
+            status: 200,
+            body: {
+              user_id: "ul1@company.com",
+              user_info: {
+                user_id: "ul1@company.com",
+                user_email: "ul1@company.com",
+                user_role: "internal_user",
+                spend: 2.5,
+              },
+              keys: [],
+              teams: [{ team_id: UNLINKED_LTEAM, team_alias: "Shared" }],
+            },
+          }
+        : views(c, a),
+    );
+    vi.stubGlobal("fetch", state.fake.fetch);
+    signInAs("admin");
+    const admin = await get("ul1@company.com");
+    expect(admin.res.status).toBe(200);
+    expect(admin.body.data.items).toEqual([]);
+    expect(teamCalls()).toHaveLength(0);
+    signInAs("teamAdminA");
+    await expectError((await get("ul1@company.com")).res, 404, "NOT_FOUND");
   });
 });

@@ -248,6 +248,58 @@ describe("the route-less requestBudgetReset operation (MG-D11a)", () => {
   });
 });
 
+// Source: docs/specs/2026-11-10-litellm.md - route table (RS2, D-RS1, T-RS1):
+// `/user/update` is allowlisted for `resetUserSpend` only; `/user/delete`
+// stays forbidden (LT37: no user delete, LiteLLM users are never removed).
+describe("/user/update and /user/delete (RS2, T-RS1)", () => {
+  it("/user/update is a route of resetUserSpend and of no other operation", () => {
+    const users = Object.entries(LITELLM_OPERATIONS)
+      .filter(([, op]) => op.routes.some((r) => r.template === "/user/update"))
+      .map(([name]) => name);
+    expect(users).toEqual(["resetUserSpend"]);
+  });
+
+  it("no operation route is /user/delete", () => {
+    const templates = Object.values(LITELLM_OPERATIONS).flatMap((op) =>
+      op.routes.map((r) => r.template),
+    );
+    expect(templates).not.toContain("/user/delete");
+  });
+
+  it("no production file outside allowlist.ts and operations.ts names /user/update, and none names /user/delete", () => {
+    const files = walk(join(ROOT, "apps/dashboard")).filter(
+      (f) => isCode(f) && !isTest(rel(f)),
+    );
+    const allowed = new Set([
+      "apps/dashboard/lib/litellm/allowlist.ts",
+      "apps/dashboard/lib/litellm/operations.ts",
+    ]);
+    const update = files
+      .map(rel)
+      .filter((p) => !allowed.has(p))
+      .filter((p) => /["'`]\/user\/update\b/.test(read(join(ROOT, p))));
+    const del = files
+      .map(rel)
+      .filter((p) => /\/user\/delete\b/.test(read(join(ROOT, p))));
+    expect(update).toEqual([]);
+    expect(del).toEqual([]);
+  });
+});
+
+// R3 (review RS2 r1); LT35: the one /user/update write is resetUserSpend's.
+describe("only resetUserSpend writes /user/update (R3, LT35)", () => {
+  it('operations.ts calls write("/user/update") once, inside resetUserSpend', () => {
+    const src = read(join(ROOT, "apps/dashboard/lib/litellm/operations.ts"));
+    const calls = [...src.matchAll(/write\(\s*["'`]\/user\/update["'`]/g)];
+    expect(calls).toHaveLength(1);
+    const start = src.indexOf("export async function resetUserSpend");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const next = src.indexOf("\nexport ", start + 1);
+    const body = src.slice(start, next === -1 ? undefined : next);
+    expect(body).toMatch(/write\(\s*["'`]\/user\/update["'`]/);
+  });
+});
+
 describe("the BudgetReset ledger is append-only (MG-D8)", () => {
   const dataDir = join(ROOT, "apps/dashboard/lib/data");
   const ledgerModules = [

@@ -124,7 +124,7 @@ async function mockTab(page: Page) {
           page: 1,
           pageSize: 25,
           hasMore: false,
-          enabledOperations: ["resetMemberSpend"],
+          enabledOperations: ["resetMemberSpend", "resetUserSpend"],
           mayLink: true,
           users: [
             {
@@ -432,5 +432,321 @@ test.describe("Reset spend on the Users page (RS1)", () => {
       const { dialog } = await openDialog(page);
       await expectNoHorizontalScroll(page, dialog);
     });
+  });
+});
+
+// RS2 (Design System - "Reset any LiteLLM user", D-RS7; plan T-RS7): a LiteLLM
+// user with no app identity has the action on the users tab, and a LiteLLM
+// team's members (Management -> LiteLLM -> LiteLLM teams) each have Reset spend
+// and Reset budget. The LiteLLM routes are fulfilled from fixtures (Rule 60.24);
+// gating by role and operation is in the component tests (Rule 60.24a).
+const LITELLM_TEAMS = "/dashboard/manage/litellm/teams";
+const UNLINKED_USER_URL = "/api/litellm/users/ll-zed/reset-spend";
+const MEMBER_URL = "/api/litellm/proxy-teams/ll-1/members/ll-zed/reset-spend";
+
+test.describe("Reset any LiteLLM user (RS2)", () => {
+  test("an unlinked LiteLLM user has Reset spend and the user-level reset calls the LiteLLM-id route (D-RS4, item 18)", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockTab(page);
+    await page.route(/\/api\/litellm\/users(\?.*)?$/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            page: 1,
+            pageSize: 25,
+            hasMore: false,
+            enabledOperations: ["resetMemberSpend", "resetUserSpend"],
+            mayLink: true,
+            users: [
+              {
+                key: "ll-zed",
+                linkState: "none",
+                appUser: null,
+                litellmUser: {
+                  userId: "ll-zed",
+                  email: "zed@example.test",
+                  spend: 3,
+                  maxBudget: null,
+                  teams: [],
+                },
+              },
+            ],
+          },
+        },
+      }),
+    );
+    await page.route(/\/api\/litellm\/users\/[^/]+\/memberships$/, (route) =>
+      route.fulfill({ json: { data: { items: [] } } }),
+    );
+    const posts: Sent[] = [];
+    await page.route(/\/api\/litellm\/users\/[^/]+\/reset-spend$/, (route) => {
+      const request = route.request();
+      posts.push({
+        method: request.method(),
+        path: new URL(request.url()).pathname,
+        body: request.postData(),
+      });
+      return route.fulfill({ json: { data: { litellmUserId: "ll-zed" } } });
+    });
+    await page.goto(LITELLM_USERS);
+    await waitForHydration(page);
+    await page
+      .getByRole("button", { name: "Reset spend for zed@example.test" })
+      .click();
+    const option = page.getByRole("group", {
+      name: "User spend (all of LiteLLM)",
+    });
+    await expect(option).toBeVisible();
+    await option
+      .getByRole("button", { name: "Reset user spend in all of LiteLLM" })
+      .click();
+    await expect(option).toContainText("Spend reset to $0.00");
+    expect(posts.map((p) => p.path)).toEqual([UNLINKED_USER_URL]);
+    expect(posts[0]?.body).toBeNull();
+  });
+
+  test("a LiteLLM team's members each have Reset spend and Reset budget; Confirm calls the member route (D-RS7, D-RS4)", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockTab(page);
+    await page.route(/\/api\/litellm\/team-links$/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            items: [],
+            configured: true,
+            litellmTeams: [{ litellmTeamId: "ll-1", alias: "Payments LL" }],
+          },
+        },
+      }),
+    );
+    await page.route(/\/api\/litellm\/proxy-teams\/ll-1\/members$/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            litellmTeamId: "ll-1",
+            enabledOperations: ["resetMemberSpend", "resetMemberBudget"],
+            items: [
+              {
+                userId: "ll-zed",
+                email: "zed@example.test",
+                spend: 3,
+                maxBudget: null,
+                person: null,
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const posts: Sent[] = [];
+    await page.route(
+      /\/api\/litellm\/proxy-teams\/.+\/reset-spend$/,
+      (route) => {
+        posts.push({
+          method: route.request().method(),
+          path: new URL(route.request().url()).pathname,
+          body: route.request().postData(),
+        });
+        return route.fulfill({ json: { data: { litellmUserId: "ll-zed" } } });
+      },
+    );
+    await page.goto(LITELLM_TEAMS);
+    await waitForHydration(page);
+    await page
+      .getByRole("table", { name: "LiteLLM teams" })
+      .getByRole("button", { name: "Members of Payments LL" })
+      .click();
+    const members = page.getByRole("table", { name: "Members of Payments LL" });
+    await expect(members).toBeVisible();
+    await expect(
+      members.getByRole("button", {
+        name: "Reset budget for zed@example.test",
+      }),
+    ).toBeVisible();
+    await members
+      .getByRole("button", { name: "Reset spend for zed@example.test" })
+      .click();
+    // Review round 1 WARN (playwright-ui-reviewer; Responsive): axe at 375 with
+    // the ConfirmAction dialog open. This panel has no mobile layout swap, so
+    // the dialog survives the resize.
+    const confirm = page.getByRole("alertdialog");
+    await expect(confirm).toBeVisible();
+    await page.setViewportSize({ width: 375, height: 800 });
+    await expectNoBlockingViolations(page);
+    await confirm.getByRole("button", { name: "Confirm" }).click();
+    await expect.poll(() => posts.length).toBe(1);
+    expect(posts[0]?.path).toBe(MEMBER_URL);
+    expect(posts[0]?.method).toBe("POST");
+  });
+});
+
+// Review round 1 U-B1 (playwright-ui-reviewer; Design System - "Reset any
+// LiteLLM user", D-RS7, D-RS9, Q19; LiteLLM LD34): the Lead's Team-page reset
+// dialog. This project signs in as internal-org-admin (no
+// DynamoDB team scope); the Lead variant runs in the role-probe project
+// (team-admin on team-payments, role-landing.spec.ts, RS2 D-RS7 Q19). The members read carries the
+// top-level litellmTeamId and enabledOperations come from the team detail.
+test.describe("Team page reset dialog, both scopes (RS2 U-B1)", () => {
+  const TEAM_PAGE = "/dashboard/manage/team/team-payments";
+  const OPS = ["resetMemberSpend", "resetMemberBudget", "resetUserSpend"];
+  const TEAM_ROUTE =
+    "/api/litellm/teams/team-payments/members/oid-ada/reset-spend";
+  const USER_ROUTE = "/api/litellm/users/u-ada/reset-spend";
+  const PROXY_ROUTE = "/api/litellm/proxy-teams/ll-1/members/u-zed/reset-spend";
+
+  async function mockTeamPage(page: Page): Promise<Sent[]> {
+    const posts: Sent[] = [];
+    await page.route(/\/api\/sync-status(\?|$)/, (route) =>
+      route.fulfill({ json: { data: { state: "never-synced" } } }),
+    );
+    await page.route(/\/api\/litellm\//, (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const key = `${request.method()} ${url.pathname}`;
+      const ok = (data: unknown) => route.fulfill({ json: { data } });
+      if (
+        request.method() === "POST" &&
+        url.pathname.endsWith("/reset-spend")
+      ) {
+        posts.push({
+          method: request.method(),
+          path: url.pathname,
+          body: request.postData(),
+        });
+        return ok({ litellmUserId: "u-ada" });
+      }
+      switch (key) {
+        case "GET /api/litellm/me":
+          return ok({
+            linked: false,
+            enabledOperations: OPS,
+            teams: [
+              {
+                teamId: "team-payments",
+                teamName: "Payments",
+                linked: true,
+                configurable: true,
+              },
+            ],
+          });
+        case "GET /api/litellm/teams/team-payments":
+          return ok({
+            connected: true,
+            spendSource: "litellm-team",
+            team: {
+              alias: "Payments",
+              spend: 321.75,
+              maxBudget: 500,
+              softBudget: null,
+              budgetDuration: "30d",
+              models: ["claude-sonnet"],
+              rpmLimit: null,
+              tpmLimit: null,
+            },
+            daily: [{ date: "2026-11-14", spend: 321.75 }],
+            enabledOperations: OPS,
+          });
+        case "GET /api/litellm/teams/team-payments/members":
+          return ok({
+            connected: true,
+            litellmTeamId: "ll-1",
+            items: [
+              {
+                userId: "u-ada",
+                oid: "oid-ada",
+                name: "Ada Lovelace",
+                email: "ada@example.test",
+                spend: 77.1,
+                maxBudget: 150,
+                rpmLimit: null,
+                tpmLimit: null,
+              },
+              {
+                userId: "u-zed",
+                email: "zed@example.test",
+                spend: 3,
+                maxBudget: null,
+                rpmLimit: null,
+                tpmLimit: null,
+              },
+            ],
+          });
+        case "GET /api/litellm/teams/team-payments/keys":
+          return ok({ connected: true, items: [] });
+        default:
+          return route.fulfill({
+            status: 404,
+            json: { error: { code: "NOT_FOUND", message: "not found" } },
+          });
+      }
+    });
+    return posts;
+  }
+
+  async function open(page: Page, name: string) {
+    await page.getByRole("button", { name: `Reset spend for ${name}` }).click();
+    const dialog = page.getByRole("alertdialog", {
+      name: `Reset spend for ${name}?`,
+    });
+    await expect(dialog).toBeVisible();
+    return dialog;
+  }
+
+  test("the dialog offers This team only and User spend (all of LiteLLM); each confirm POSTs its own route; axe at 375 and no sideways scroll at 1440 with it open (D-RS7, D-RS9, Q19)", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await page.setViewportSize({ width: 375, height: 800 });
+    const posts = await mockTeamPage(page);
+    await page.goto(TEAM_PAGE);
+    await waitForHydration(page);
+
+    // 375: axe with the dialog open (the cards layout).
+    let dialog = await open(page, "Ada Lovelace");
+    await expect(dialog).toContainText("across all of their teams");
+    await expect(
+      dialog.getByRole("radio", { name: "This team only" }),
+    ).toBeChecked();
+    await expectNoBlockingViolations(page);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+
+    // 1440: the document never scrolls sideways with the dialog open.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    dialog = await open(page, "Ada Lovelace");
+    await expectNoHorizontalScroll(page, dialog);
+
+    // Default scope: a linked member's team-only reset is the team route.
+    await dialog.getByRole("button", { name: "Confirm" }).click();
+    await expect.poll(() => posts.length).toBe(1);
+    expect(posts[0]?.method).toBe("POST");
+    expect(posts[0]?.path).toBe(TEAM_ROUTE);
+
+    // Reopen, choose the user-level scope: the LiteLLM-user route.
+    dialog = await open(page, "Ada Lovelace");
+    await expect(
+      dialog.getByRole("radio", { name: "This team only" }),
+    ).toBeChecked();
+    await dialog
+      .getByRole("radio", { name: "User spend (all of LiteLLM)" })
+      .check();
+    await dialog.getByRole("button", { name: "Confirm" }).click();
+    await expect.poll(() => posts.length).toBe(2);
+    expect(posts[1]?.path).toBe(USER_ROUTE);
+    expect(posts[1]?.body).toBeNull();
+
+    // An unlinked member (no app identity), labelled by email: the team-only
+    // reset is the proxy-teams route built from the top-level litellmTeamId.
+    dialog = await open(page, "zed@example.test");
+    await dialog.getByRole("button", { name: "Confirm" }).click();
+    await expect.poll(() => posts.length).toBe(3);
+    expect(posts[2]?.path).toBe(PROXY_ROUTE);
   });
 });

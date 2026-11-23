@@ -190,6 +190,17 @@ export function gatewayHandler(opts: GatewayFakeOptions = {}): FakeHandler {
             trap: AUTO_KEY_TRAP,
           },
         };
+      case "POST /user/update": {
+        // LiteLLM spec - /user/update (RS2, D-RS1): { user_id, spend }.
+        if (opts.userExists === false) {
+          return { status: 404, body: { detail: "user not found" } };
+        }
+        const b = call.body as { user_id?: string; spend?: number };
+        return {
+          status: 200,
+          body: { user_id: b.user_id, user_info: { spend: b.spend } },
+        };
+      }
       case "POST /team/member_add":
         return {
           status: 200,

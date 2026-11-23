@@ -4,11 +4,22 @@ import {
   LiteLLMMembersResponseSchema,
   LiteLLMUserDetailResponseSchema,
 } from "@llm-usage-lens/shared";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { z } from "zod";
 
 import { formatUsd } from "@/components/charts/chart-data";
 import { BudgetBar, budgetPercent } from "@/components/manage/BudgetBar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiRequestError, mutateApi } from "@/lib/query/fetch-api";
@@ -318,9 +329,91 @@ function AddToTeam({
   );
 }
 
+// RS2 (D-RS7): the reset-spend confirmation. With resetUserSpend on, it offers
+// the user-level reset (all of LiteLLM) next to the default, this team only.
+function ResetSpendAction({
+  name,
+  disabled,
+  userLevel,
+  teamReset,
+  onTeam,
+  onUser,
+}: {
+  name: string;
+  disabled: boolean;
+  userLevel: boolean;
+  teamReset: boolean;
+  onTeam: () => void;
+  onUser: () => void;
+}) {
+  const [scope, setScope] = useState<"team" | "user">(
+    teamReset ? "team" : "user",
+  );
+  const radioName = useId();
+  return (
+    <AlertDialog
+      onOpenChange={(open) => {
+        if (open) setScope(teamReset ? "team" : "user");
+      }}
+    >
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={`Reset spend for ${name}`}
+          disabled={disabled}
+        >
+          Reset spend
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{`Reset spend for ${name}?`}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {userLevel
+              ? `Sets ${name}'s spend to $0.00 in this team, or across all of their teams when the user-level option is chosen. Usage history, cost data and the audit log do not change.`
+              : `Sets ${name}'s spend to $0.00. Usage history, cost data and the audit log do not change.`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {userLevel ? (
+          <fieldset className="grid gap-2 text-sm">
+            <legend className="sr-only">Scope of the reset</legend>
+            {(
+              [
+                ...(teamReset ? [["team", "This team only"] as const] : []),
+                ["user", "User spend (all of LiteLLM)"] as const,
+              ] as const
+            ).map(([value, text]) => (
+              <label key={value} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name={radioName}
+                  checked={scope === value}
+                  onChange={() => setScope(value)}
+                />
+                {text}
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={scope === "user" && userLevel ? onUser : onTeam}
+          >
+            Confirm
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 const ROW_OPERATIONS = [
   "removeTeamMember",
   "resetMemberSpend",
+  "resetUserSpend",
   "resetMemberBudget",
   "disableMember",
   "enableMember",
@@ -339,6 +432,7 @@ function MemberActions({
   write,
   canAddToTeam,
   onAdded,
+  litellmTeamId,
 }: {
   teamId: string;
   member: Member;
@@ -349,8 +443,28 @@ function MemberActions({
   write: ReturnType<typeof useTeamWrite>["write"];
   canAddToTeam: boolean;
   onAdded: () => Promise<void>;
+  litellmTeamId: string | undefined;
 }) {
   const oid = member.oid;
+  const userLevel = ops.has("resetUserSpend");
+  const teamReset = ops.has("resetMemberSpend");
+  const canReset = teamReset || userLevel;
+  const actUser = () =>
+    write(
+      `/api/litellm/users/${encodeURIComponent(member.userId)}/reset-spend`,
+      "POST",
+      undefined,
+      ["members"],
+    );
+  const actProxy = (action: string) =>
+    litellmTeamId
+      ? write(
+          `/api/litellm/proxy-teams/${encodeURIComponent(litellmTeamId)}/members/${encodeURIComponent(member.userId)}${action}`,
+          "POST",
+          undefined,
+          ["members"],
+        )
+      : Promise.resolve();
   const act = (action: string, method: "POST" | "DELETE" = "POST") =>
     oid
       ? write(memberPath(teamId, oid, action), method, undefined, ["members"])
@@ -375,6 +489,26 @@ function MemberActions({
         {dailySpend ? (
           <MemberDailySpend userId={member.userId} name={name} />
         ) : null}
+        {litellmTeamId && canReset ? (
+          <ResetSpendAction
+            name={member.email}
+            disabled={pending}
+            userLevel={userLevel}
+            teamReset={teamReset}
+            onTeam={() => void actProxy("/reset-spend")}
+            onUser={() => void actUser()}
+          />
+        ) : null}
+        {litellmTeamId && ops.has("resetMemberBudget") ? (
+          <ConfirmAction
+            label={`Reset budget for ${member.email}`}
+            text="Reset budget"
+            title={`Reset budget for ${member.email}?`}
+            description="The member's budget period restarts."
+            disabled={pending}
+            onConfirm={() => void actProxy("/reset-budget")}
+          />
+        ) : null}
       </span>
     );
   }
@@ -396,14 +530,14 @@ function MemberActions({
               onConfirm={() => void act("", "DELETE")}
             />
           ) : null}
-          {ops.has("resetMemberSpend") ? (
-            <ConfirmAction
-              label={`Reset spend for ${name}`}
-              text="Reset spend"
-              title={`Reset spend for ${name}?`}
-              description={`Sets ${name}'s spend to $0.00. Recorded in the audit log.`}
+          {canReset ? (
+            <ResetSpendAction
+              name={name}
               disabled={pending}
-              onConfirm={() => void act("/reset-spend")}
+              userLevel={userLevel}
+              teamReset={teamReset}
+              onTeam={() => void act("/reset-spend")}
+              onUser={() => void actUser()}
             />
           ) : null}
           {ops.has("resetMemberBudget") ? (
@@ -469,7 +603,7 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
     return <NotConnected />;
   }
   const ops = new Set(detail.data.enabledOperations);
-  const { items, candidates } = members.data;
+  const { items, candidates, litellmTeamId } = members.data;
   const teamName = detail.data.team.alias ?? "this team";
   const term = search.trim().toLowerCase();
   const shown = items.filter(
@@ -493,6 +627,7 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
     write,
     canAddToTeam: candidates !== undefined,
     onAdded: () => refresh(["members"]),
+    litellmTeamId,
   });
 
   const resettable = items.filter((m) => m.oid).length;

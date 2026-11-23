@@ -66,7 +66,14 @@ credentials must never reach the browser.
      *Accept a pending invite*): `POST
      /api/teams/[id]/members/pending/[key]/accept` follows the add-member
      row (`matrixWrite` `member`: a Lead in scope, `internal-org-admin`,
-     `internal-admin`); never on one's own invite (`403`).
+     `internal-admin`); never on one's own invite (`403`). Unit RS2 (user, 2026-11-19; LiteLLM LD39):
+     the three LiteLLM-id reset routes (`POST
+     /api/litellm/users/[litellmUserId]/reset-spend` and `POST
+     /api/litellm/proxy-teams/[litellmTeamId]/members/[litellmUserId]/reset-spend`
+     and `/reset-budget`) follow the matrix (`matrixWrite`: a Lead in scope,
+     `internal-org-admin`, `internal-admin`; `403` before parsing); the
+     user-level reset by a Lead only for a member of a team in their scope,
+     otherwise `404`; the auditor resets nothing.
    - Validate query/body with Zod (`400` on failure).
    - Return `{ data: T }` on success, `{ error: { code, message } }` on failure.
    - Use the `DateRangeQuerySchema` 90-day cap on custom ranges.

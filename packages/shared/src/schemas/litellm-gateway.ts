@@ -32,6 +32,7 @@ export const LITELLM_OPERATION_NAMES = [
   "setMemberBudget",
   "setMemberLimits",
   "resetMemberSpend",
+  "resetUserSpend",
   "resetMemberBudget",
   "disableMember",
   "enableMember",

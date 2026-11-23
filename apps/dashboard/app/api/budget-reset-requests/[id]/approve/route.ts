@@ -141,6 +141,7 @@ export const POST = matrixWrite(
       {
         request: begun.value,
         reset: {
+          scope: "member",
           resetId,
           oid: requesterOid,
           teamId,

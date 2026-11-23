@@ -140,11 +140,29 @@ const MemberCandidateSchema = z.object({
 export const LiteLLMMembersResponseSchema = z.discriminatedUnion("connected", [
   z.object({
     connected: z.literal(true),
+    litellmTeamId: z.string().optional(),
     items: z.array(MemberSchema),
     candidates: z.array(MemberCandidateSchema).optional(),
   }),
   z.object({ connected: z.literal(false), items: z.array(z.never()) }),
 ]);
+
+// RS2, D-RS6: the LiteLLM team's members by LiteLLM id; spend and maxBudget are
+// absent while the Organisation cap hides per-user cost (LD23).
+export const LiteLLMProxyTeamMembersResponseSchema = z.object({
+  litellmTeamId: z.string(),
+  enabledOperations: z.array(z.string()),
+  truncated: z.boolean().optional(),
+  items: z.array(
+    z.object({
+      userId: z.string(),
+      email: z.string(),
+      spend: z.number().optional(),
+      maxBudget: z.number().nullable().optional(),
+      person: z.object({ oid: z.string(), name: z.string() }).nullable(),
+    }),
+  ),
+});
 
 export const LiteLLMKeysResponseSchema = z.discriminatedUnion("connected", [
   z.object({ connected: z.literal(true), items: z.array(KeyMetadataSchema) }),

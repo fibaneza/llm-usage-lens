@@ -79,6 +79,7 @@ export const GET = withRoute(async (_request, { params }, session) => {
     return jsonData(
       LiteLLMMembersResponseSchema.parse({
         connected: true,
+        litellmTeamId,
         items,
         ...(candidates ? { candidates } : {}),
       }),

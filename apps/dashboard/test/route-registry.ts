@@ -450,6 +450,13 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     family: "litellm",
     validParams: { litellmUserId: "lu-1" },
   }),
+  // Unit RS2 (Access Control - Permission matrix, "Reset by LiteLLM ids"; LiteLLM
+  // spec - API routes). The read is Admin, org-admin and Auditor; a Lead is
+  // refused by the route itself.
+  read("litellm/proxy-teams/[litellmTeamId]/members/route.ts", {
+    family: "litellm",
+    validParams: { litellmTeamId: "lt-team-a" },
+  }),
   read("litellm/models/route.ts", { family: "litellm" }),
   read("litellm/orphans/route.ts", { family: "litellm" }),
   read("litellm/team-links/route.ts", { family: "litellm" }),
@@ -781,6 +788,60 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
       validParams: { teamId: "team-a", oid: alice.oid },
       validBody: {},
       badInput: { params: { teamId: "team-a", oid: LONG } },
+    },
+  ),
+  // Unit RS2: the three resets by LiteLLM id (LiteLLM spec LD39; Access Control
+  // - "Reset by LiteLLM ids"). The operations default off or on per LD10, so
+  // the permitted call is seeded past the toggle.
+  matrixWrite("POST", "litellm/users/[litellmUserId]/reset-spend/route.ts", {
+    family: "litellm",
+    action: "litellm.user.reset-spend",
+    validParams: { litellmUserId: "lu-1" },
+    seed: async () => {
+      await putRaw({
+        PK: "LITELLM#CONFIG",
+        SK: "TOGGLES",
+        version: 1,
+        toggles: { resetUserSpend: true },
+        updatedAt: "2026-01-02T03:04:05.000Z",
+      });
+    },
+    validBody: {},
+    badInput: { params: { litellmUserId: LONG } },
+  }),
+  matrixWrite(
+    "POST",
+    "litellm/proxy-teams/[litellmTeamId]/members/[litellmUserId]/reset-spend/route.ts",
+    {
+      family: "litellm",
+      action: "litellm.member.reset-spend",
+      validParams: { litellmTeamId: "lt-team-a", litellmUserId: "lu-1" },
+      seed: async () => {
+        await putRaw({
+          PK: "LITELLM#CONFIG",
+          SK: "TOGGLES",
+          version: 1,
+          toggles: { resetMemberSpend: true },
+          updatedAt: "2026-01-02T03:04:05.000Z",
+        });
+      },
+      validBody: {},
+      badInput: {
+        params: { litellmTeamId: "lt-team-a", litellmUserId: LONG },
+      },
+    },
+  ),
+  matrixWrite(
+    "POST",
+    "litellm/proxy-teams/[litellmTeamId]/members/[litellmUserId]/reset-budget/route.ts",
+    {
+      family: "litellm",
+      action: "litellm.member.reset-budget",
+      validParams: { litellmTeamId: "lt-team-a", litellmUserId: "lu-1" },
+      validBody: {},
+      badInput: {
+        params: { litellmTeamId: "lt-team-a", litellmUserId: LONG },
+      },
     },
   ),
   matrixWrite("POST", "litellm/teams/[teamId]/members/[oid]/disable/route.ts", {

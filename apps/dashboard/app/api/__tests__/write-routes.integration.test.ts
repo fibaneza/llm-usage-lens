@@ -14,6 +14,7 @@ import {
 } from "@/lib/api/respond";
 import { ROUTE_REGISTRY } from "@/test/route-registry";
 import { NON_ADMIN_SESSIONS } from "@/test/fixtures/route-sessions";
+import { setToggles } from "@/test/fakes/fake-litellm-views";
 import {
   TEST_TABLE_NAME,
   clearTable,
@@ -820,6 +821,12 @@ describe("every matrix write route enforces session, permission and origin", () 
   it.each(MATRIX_ROUTES)(
     "%s: a same-origin internal-admin or internal-org-admin write is not stopped by the session, role or origin gate",
     async (name, route) => {
+      // LD10 / RS2 D-RS4: the toggle gate precedes the target, and these ops default off.
+      await setToggles({
+        resetUserSpend: true,
+        resetMemberSpend: true,
+        resetMemberBudget: true,
+      });
       for (const [roleName, session] of MATRIX_WRITERS) {
         setSession(session);
         const res = await call(route, "{}");

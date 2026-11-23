@@ -8,6 +8,7 @@ import {
   TEAM_LINKS_KEY,
   TeamLinksSchema,
 } from "@/components/settings/litellm-panel/keys";
+import { LiteLLMTeamMembersPanel } from "@/components/settings/litellm-panel/LiteLLMTeamMembersPanel";
 import { PanelSkeleton } from "@/components/settings/litellm-panel/PanelSkeleton";
 import { SpendSourceTable } from "@/components/settings/litellm-panel/SpendSourceTable";
 import {
@@ -17,7 +18,17 @@ import {
 } from "@/components/settings/litellm-panel/TeamLinkForm";
 import { TeamLinkNewTeamForm } from "@/components/settings/litellm-panel/TeamLinkNewTeamForm";
 import { TeamLinkRow } from "@/components/settings/litellm-panel/TeamLinkRow";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { fetchApi } from "@/lib/query/fetch-api";
 
 // Moved from Settings to Management -> LiteLLM -> LiteLLM teams (D3, 2026-11-17).
@@ -31,6 +42,7 @@ export function LiteLLMTeamLinksSection({
 }) {
   const searchId = useId();
   const [term, setTerm] = useState("");
+  const [openTeam, setOpenTeam] = useState<string | null>(null);
   const query = useQuery({
     queryKey: TEAM_LINKS_KEY,
     queryFn: () => fetchApi("/api/litellm/team-links", TeamLinksSchema),
@@ -98,6 +110,55 @@ export function LiteLLMTeamLinksSection({
           ))}
         </ul>
       )}
+      {litellmTeams.state === "ready" && litellmTeams.teams.length > 0 ? (
+        <>
+          <Table>
+            <TableCaption className="sr-only">LiteLLM teams</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead>LiteLLM team</TableHead>
+                <TableHead>Members</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {litellmTeams.teams.map((team) => (
+                <TableRow key={team.litellmTeamId}>
+                  <TableCell>{team.alias}</TableCell>
+                  <TableCell>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Members of ${team.alias}`}
+                      aria-pressed={openTeam === team.litellmTeamId}
+                      onClick={() =>
+                        setOpenTeam(
+                          openTeam === team.litellmTeamId
+                            ? null
+                            : team.litellmTeamId,
+                        )
+                      }
+                    >
+                      Members
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {litellmTeams.teams.find((t) => t.litellmTeamId === openTeam) ? (
+            <LiteLLMTeamMembersPanel
+              key={openTeam}
+              litellmTeamId={openTeam ?? ""}
+              teamName={
+                litellmTeams.teams.find((t) => t.litellmTeamId === openTeam)
+                  ?.alias ?? ""
+              }
+              canReset={canEdit}
+            />
+          ) : null}
+        </>
+      ) : null}
       <SpendSourceTable appTeams={query.data.appTeams} />
       {canEdit && orgUnits.isPending ? <PanelSkeleton /> : null}
       {canEdit && !orgUnits.isPending ? (

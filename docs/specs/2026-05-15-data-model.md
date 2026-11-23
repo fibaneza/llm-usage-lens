@@ -35,7 +35,7 @@ All data is stored in a single DynamoDB table (`bedrock-usage`) with one GSI. Th
 | Migration marker (PERF-1b) | `SYSTEM` | `MIGRATION#ACCOUNT_REGISTRY` | — | — |
 | AppTeam (management improvements D5, 2026-11-17) | `APPTEAM#{teamId}` | `META` | `APPTEAMS` | `APPTEAM#{teamId}` |
 | AppTeamNameClaim | `APPTEAMNAME#{lower(trim(name))}` | `OWNER` | — | — |
-| BudgetResetRequest, OpenResetRequestClaim, BudgetReset, Notification (unit M4, 2026-11-17) | `BRREQ#…`, `BRREQOPEN#…`, `BRESET#TEAM#…`, `NOTIF#…` | see *Budget reset entities (unit M4)* | `BRREQS#TEAM#…`, `BRESETS#IDENT#…` | see that section |
+| BudgetResetRequest, OpenResetRequestClaim, BudgetReset, Notification (unit M4, 2026-11-17) | `BRREQ#…`, `BRREQOPEN#…`, `BRESET#TEAM#…` (RS2 adds `BRESET#LTEAM#…`, `BRESET#LUSER#…`), `NOTIF#…` | see *Budget reset entities (unit M4)* | `BRREQS#TEAM#…`, `BRESETS#IDENT#…` | see that section |
 
 The `SYSTEM` partition holds one-off system items: the sync status and, from PERF-1b, the account-registry migration marker that the backfill writes (*Access Patterns* — PERF-1b *Migration*). Neither item is on GSI1.
 
@@ -427,7 +427,7 @@ seconds).
 |---|---|---|---|---|---|
 | BudgetResetRequest | `BRREQ#{requestId}` | `META` | `BRREQS#TEAM#{teamId}` | `{status}#{createdAt}#{requestId}` | `createdAt` + 90 days |
 | OpenResetRequestClaim (one open request per person per team) | `BRREQOPEN#{teamId}#{oid}` | `OWNER` | — | — | `requestExpiresAt` |
-| BudgetReset (ledger) | `BRESET#TEAM#{teamId}` | `{timestamp}#{resetId}` | `BRESETS#IDENT#{oid}` | `{timestamp}#{resetId}` | `timestamp` + 400 days |
+| BudgetReset (ledger) | `BRESET#TEAM#{teamId}` (scope `member`, LiteLLM team linked to an app team; unchanged); `BRESET#LTEAM#{litellmTeamId}` (scope `member`, LiteLLM team not linked); `BRESET#LUSER#{litellmUserId}` (scope `user`) — the last two from unit RS2 | `{timestamp}#{resetId}` | `BRESETS#IDENT#{oid}` only when an `oid` exists; otherwise no GSI1 attributes | `{timestamp}#{resetId}` | `timestamp` + 400 days |
 | Notification | `NOTIF#{recipientOid}` | `{createdAt}#{notificationId}` | — | — | `createdAt` + 90 days |
 
 **BudgetResetRequest** — `requestId` (UUID, server-generated), `teamId`,
@@ -465,6 +465,25 @@ the `Put` carries `attribute_not_exists(SK)`; it is written in the same
 transaction as the audit record, after LiteLLM confirmed; no update, no
 delete except TTL.
 
+*Amended 2026-11-19 (unit RS2, D-RS8; LiteLLM spec LD39).* The ledger is a
+**discriminated union on `scope`**: `member` (a `resetMemberSpend`, as above,
+`operation` `spend` or `budget`) or `user` (a `resetUserSpend`, the user's
+spend across all of LiteLLM; `litellmTeamId` absent, `operation` `spend`).
+`oid`, `teamId` and `departmentId` are present **only where they exist**: a
+reset of a LiteLLM user with no app identity has no `oid`, and a reset on a
+LiteLLM team not linked to an app team has no `teamId` or `departmentId`.
+Agent decision (Rule 00.3): the key needs two new PK forms, both under the
+`BRESET#` prefix, because a reset without an app team has no `teamId` to key on
+and the LiteLLM id is the stable target id (`BRESET#LTEAM#{litellmTeamId}` for
+a member reset on an unlinked team, `BRESET#LUSER#{litellmUserId}` for scope
+`user`); the `BRESET#TEAM#{teamId}` form is unchanged. GSI1 `BRESETS#IDENT#{oid}`
+is written only when an `oid` exists. The task role's `PutItem` condition is
+`LeadingKeys BRESET#*`, which already covers the new forms, so `infra/` and its
+test need no change. The pre-RS2 `oid`, `teamId` and `departmentId` fields
+were required (superseded 2026-11-19, RS2: a reset by LiteLLM id may have
+neither); existing items are all `scope: "member"` with all three, and the
+reader treats an item with no `scope` as `member`. For `scope: "user"`, `amount` is the user's total spend across all of LiteLLM from `getUser` just before the reset, and `budget` is the user's `max_budget` from `getUser`, or `null` when LiteLLM reports none (coordinator decision, 2026-11-24, RS2 review round 2: the code records the user's max_budget).
+
 **Notification** (MG-D13) — `notificationId` (UUID), `recipientOid`,
 `kind` (`budget-reset.requested` \| `budget-reset.approved` \|
 `budget-reset.denied` \| `budget-reset.expired`), `requestId`, `teamId`,
@@ -487,7 +506,7 @@ its own kinds; nothing in slice A is key-specific.
 | A person's notifications | `Query PK = NOTIF#{oid}`, `ScanIndexForward: false`, `Limit` 20, opaque signed cursor (Access Control — *Storage boundary* item 4) |
 | Unread count | `Query PK = NOTIF#{oid}`, `FilterExpression attribute_not_exists(readAt)`, `Select: COUNT`, paginated; the bell shows `99+` above 99 |
 | Mark read | `UpdateItem PK = NOTIF#{session oid}, SK = {id}` `SET readAt` with `attribute_exists(PK)` (a foreign or missing id changes nothing and is not an error per id); "all" pages the unread items and updates each |
-| Reset counts (slice B) | Per team: `Query PK = BRESET#TEAM#{teamId}`, `SK BETWEEN {from}T00:00:00.000Z AND {to}T23:59:59.999Z~`; per person: `Query GSI1 BRESETS#IDENT#{oid}` with the same bound; both paginated; filtered by scope after the read, never cached (Rule 60.10) |
+| Reset counts (slice B) | Per team: `Query PK = BRESET#TEAM#{teamId}`, `SK BETWEEN {from}T00:00:00.000Z AND {to}T23:59:59.999Z~`; per person: `Query GSI1 BRESETS#IDENT#{oid}` with the same bound; both paginated; filtered by scope after the read, never cached (Rule 60.10). *Unit RS2, 2026-11-19:* a reset with no `oid` (an unlinked LiteLLM user) has no GSI1 item and counts for nobody; a reset on an unlinked LiteLLM team sits under `BRESET#LTEAM#…` and counts for no app team, so the per-team counts and the per-person counts are unchanged by it |
 
 ## Zod Validation Schemas
 
@@ -547,6 +566,8 @@ All routes live under `apps/dashboard/app/api/`, require an Auth.js session, val
 | `/api/notifications` | GET | `NotificationListQuerySchema` (`cursor`) | Any signed-in role, own notifications only: `{ data: { items: NotificationView[], unreadCount, cursor? } }`; each `budget-reset.requested` item embeds the request view and `canDecide` only while the caller may still read and decide it (re-checked per request) |
 | `/api/notifications/read` | POST | `MarkNotificationsReadInputSchema` (`{ ids: string[1..50] }` or `{ all: true }`) | Own notifications only (keys from the session): `200 { data: { updated } }`; not audited (own state) |
 | `/api/budget-resets` | GET | `BudgetResetCountsQuerySchema` (`DateRangeQuerySchema` + optional `teamId`) | Slice B (MG-D10): `{ data: { teams: [{ teamId, count, amount, members?: [{ oid, count, amount }] }], own: { count, amount } } }`, scoped per role; `members` only when per-user data is allowed |
+| `/api/litellm/users/[litellmUserId]/reset-spend`, `/api/litellm/proxy-teams/[litellmTeamId]/members/[litellmUserId]/reset-spend`, `/reset-budget` | POST | path ids only (Zod); no body | Unit RS2, 2026-11-19 (LiteLLM spec LD39; roles per Access Control — *Permission matrix*): each writes one audit record (`litellm.user.reset-spend` with the spend before and after, or `litellm.member.reset-spend` / `litellm.member.reset-budget`) and one `BudgetReset` ledger item (scope `user` or `member`; no `oid`, `teamId` or `departmentId` when none exists) in one transaction after LiteLLM confirmed |
+| `/api/litellm/proxy-teams/[litellmTeamId]/members` | GET | path id (Zod) | RS2: the LiteLLM team's members with email, spend, budget and the linked app person or `null`; at most 200 members |
 
 The access-control routes (`/api/health`, `/api/me`, members, admins, moves, role grants, group mappings, visibility, identities, password users, the password sign-in switch, the per-user approval, audit, access review) and their permissions are listed in [Access Control spec](2026-11-10-access-control.md) — *API routes*. The budget reset and notification routes above (unit M4) follow Rule 10.3, set `Cache-Control: private, no-store`, register in `test/route-registry.ts`, and are never cached (Rule 60.10). The LiteLLM routes (`/api/litellm/**`, `/api/finance/statement`) and the error codes `OPERATION_DISABLED` (403), `OPERATION_UNAVAILABLE` (403), `LITELLM_UNAVAILABLE` (503) and `PRIVILEGED_TARGET` (409) are in the [LiteLLM spec](2026-11-10-litellm.md) — *API routes*. `Admin` above reads `internal-admin` from Phase 4R.
 

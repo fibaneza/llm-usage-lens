@@ -303,6 +303,7 @@ export const AUDIT_ACTIONS = [
   "litellm.key.rotate",
   "litellm.team.create",
   "litellm.user.create",
+  "litellm.user.reset-spend",
   "litellm.team.budget",
   "litellm.team.limits",
   "litellm.team.models",

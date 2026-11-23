@@ -199,6 +199,7 @@ async function recordLedger(args: {
   const timestamp = ctx.now.toISOString();
   await recordMemberReset(
     {
+      scope: "member",
       resetId: randomUUID(),
       oid: args.oid,
       teamId: meta.teamId,

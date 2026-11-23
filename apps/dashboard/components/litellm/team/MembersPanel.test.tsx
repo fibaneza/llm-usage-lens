@@ -182,10 +182,7 @@ describe("MembersPanel 'Near or over budget' filter (>= 80%)", () => {
 
 describe("MembersPanel confirmation wording (Confirm destructive actions)", () => {
   it.each([
-    [
-      "Reset spend for Ada Lovelace",
-      "Sets Ada Lovelace's spend to $0.00. Recorded in the audit log.",
-    ],
+    ["Reset spend for Ada Lovelace", "Sets Ada Lovelace's spend to $0.00."],
     [
       "Remove Ada Lovelace",
       "Removes Ada Lovelace from Payments. Recorded in the audit log.",
@@ -702,7 +699,9 @@ describe("MembersPanel members with no app membership (RS1 D6)", () => {
   const outsiderRow = () =>
     screen.findByRole("row", { name: /ext1@example\.test/ });
 
-  it("shows the exact muted note and no reset, remove or disable action on the row", async () => {
+  // RS2 (D-RS7) supersedes RS1's "no reset action": the note stays and the row
+  // gains Reset spend and Reset budget; remove, disable and edit stay absent.
+  it("shows the exact muted note and no remove, disable or edit action on the row", async () => {
     stub(ALL_OPS, membersWith({ candidates: [] }));
     renderPanel();
     const row = await outsiderRow();
@@ -710,7 +709,7 @@ describe("MembersPanel members with no app membership (RS1 D6)", () => {
     expect(within(row).getByText(NOTE)).toBeVisible();
     expect(
       within(row).queryByRole("button", {
-        name: /reset|remove|disable|enable|edit/i,
+        name: /remove|disable|enable|edit/i,
       }),
     ).not.toBeInTheDocument();
     expect(within(rowOf("Ada Lovelace")).queryByText(NOTE)).toBeNull();
@@ -827,4 +826,270 @@ describe("MembersPanel members with no app membership (RS1 D6)", () => {
       screen.queryByRole("button", { name: /add .* to team/i }),
     ).not.toBeInTheDocument();
   });
+});
+
+// RS2 (Design System - "Reset any LiteLLM user", D-RS7; LiteLLM LD39).
+// Contract: the connected members response carries `litellmTeamId` (the LiteLLM
+// team the app team is linked to; absent when unlinked). A member with no `oid`
+// keeps RS1's note and gains "Reset spend for ${email}" and "Reset budget for
+// ${email}" (shown by resetMemberSpend / resetMemberBudget in the team detail's
+// enabledOperations), each an AlertDialog (Cancel first, Confirm) that POSTs
+// /api/litellm/proxy-teams/${litellmTeamId}/members/${userId}/reset-spend or
+// /reset-budget. Every member row's reset-spend dialog, when resetUserSpend is
+// enabled, offers a radio "User spend (all of LiteLLM)" next to the default
+// "This team only"; confirming with it selected POSTs
+// /api/litellm/users/${userId}/reset-spend instead, and the dialog says it
+// clears spend across all of the person's teams.
+describe("MembersPanel RS2: resets for members with no app membership and the user-level option", () => {
+  const OPS = [...ALL_OPS, "resetUserSpend"];
+  const outsider = {
+    userId: "ext-1",
+    email: "ext1@example.test",
+    spend: 5,
+    maxBudget: 10,
+    rpmLimit: null,
+    tpmLimit: null,
+  };
+  const data = {
+    connected: true,
+    litellmTeamId: "ll-t1",
+    candidates: [],
+    items: [member("ada", "Ada Lovelace", 77.1, 150), outsider],
+  };
+  const proxy = (action: string) =>
+    `/api/litellm/proxy-teams/ll-t1/members/ext-1/${action}`;
+  const withMembers = (extra: Record<string, () => Response> = {}) => ({
+    "GET /api/litellm/teams/t1/members": () => apiResponse({ data }),
+    ...extra,
+  });
+  const outsiderRow = () =>
+    screen.findByRole("row", { name: /ext1@example\.test/ });
+
+  it.each([
+    ["Reset spend", "reset-spend"],
+    ["Reset budget", "reset-budget"],
+  ])(
+    "%s on an unlinked member POSTs the LiteLLM-id member route only after Confirm (D-RS4)",
+    async (text, action) => {
+      const api = stub(OPS, {
+        ...withMembers(),
+        [`POST ${proxy(action)}`]: () => apiResponse({ data: { ok: true } }),
+      });
+      const u = user();
+      renderPanel();
+      const row = await outsiderRow();
+      await u.click(
+        within(row).getByRole("button", {
+          name: `${text} for ext1@example.test`,
+        }),
+      );
+      const dialog = await screen.findByRole("alertdialog");
+      expect(api.writes()).toEqual([]);
+      await u.click(within(dialog).getByRole("button", { name: "Confirm" }));
+      await waitFor(() => expect(api.writes()).toHaveLength(1));
+      expect(api.writes()[0]).toMatchObject({
+        method: "POST",
+        path: proxy(action),
+      });
+    },
+  );
+
+  // R1 (Design System - "Reset any LiteLLM user"): the baseline has both reset
+  // operations off, so the absent button proves "no member operation and no
+  // user operation -> no button" (control absent while off).
+  it.each([
+    ["resetMemberSpend", "Reset spend"],
+    ["resetMemberBudget", "Reset budget"],
+  ])(
+    "no %s operation and no resetUserSpend: the unlinked row has no '%s' button (R1)",
+    async (op, text) => {
+      stub(
+        ALL_OPS.filter((o) => o !== op),
+        withMembers(),
+      );
+      renderPanel();
+      const row = await outsiderRow();
+      expect(
+        within(row).queryByRole("button", { name: new RegExp(`^${text} for`) }),
+      ).toBeNull();
+    },
+  );
+
+  it.each([
+    ["a linked member", "Ada Lovelace", "u-ada"],
+    ["an unlinked member", "ext1@example.test", "ext-1"],
+  ])(
+    "%s: the reset-spend dialog offers 'User spend (all of LiteLLM)' and confirming it POSTs the user route (D-RS7)",
+    async (_n, name, userId) => {
+      const api = stub(OPS, {
+        ...withMembers(),
+        [`POST /api/litellm/users/${userId}/reset-spend`]: () =>
+          apiResponse({ data: { ok: true } }),
+      });
+      const u = user();
+      renderPanel();
+      await outsiderRow();
+      const row = screen.getByRole("row", { name: new RegExp(name) });
+      await u.click(
+        within(row).getByRole("button", { name: `Reset spend for ${name}` }),
+      );
+      const dialog = await screen.findByRole("alertdialog");
+      expect(dialog).toHaveTextContent(/all of (their|the person's) teams/i);
+      await u.click(
+        within(dialog).getByRole("radio", {
+          name: "User spend (all of LiteLLM)",
+        }),
+      );
+      await u.click(within(dialog).getByRole("button", { name: "Confirm" }));
+      await waitFor(() => expect(api.writes()).toHaveLength(1));
+      expect(api.writes()[0]).toMatchObject({
+        method: "POST",
+        path: `/api/litellm/users/${userId}/reset-spend`,
+      });
+    },
+  );
+
+  it("without selecting it the dialog resets this team only: the existing route (D-RS7)", async () => {
+    const api = stub(OPS, {
+      ...withMembers(),
+      [`POST ${resetUrl("ada")}`]: () => apiResponse({ data: { ok: true } }),
+    });
+    const u = user();
+    renderPanel();
+    await outsiderRow();
+    await u.click(
+      within(rowOf("Ada Lovelace")).getByRole("button", {
+        name: "Reset spend for Ada Lovelace",
+      }),
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    await u.click(within(dialog).getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(api.writes()).toHaveLength(1));
+    expect(api.writes()[0]?.path).toBe(resetUrl("ada"));
+  });
+
+  it("no resetUserSpend operation: the dialog has no user-level option (control absent while off)", async () => {
+    stub(ALL_OPS, withMembers());
+    const u = user();
+    renderPanel();
+    await outsiderRow();
+    await u.click(
+      within(rowOf("Ada Lovelace")).getByRole("button", {
+        name: "Reset spend for Ada Lovelace",
+      }),
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    expect(
+      within(dialog).queryByRole("radio", {
+        name: "User spend (all of LiteLLM)",
+      }),
+    ).toBeNull();
+  });
+
+  // R4 (review r1, D-RS9): the member-level description, user-level or not.
+  it.each([
+    ["without resetUserSpend", ALL_OPS],
+    ["with resetUserSpend", OPS],
+  ])(
+    "the reset-spend confirm %s says usage history, cost data and the audit log do not change (D-RS9, R4)",
+    async (_n, ops) => {
+      stub(ops, withMembers());
+      const u = user();
+      renderPanel();
+      await outsiderRow();
+      await u.click(
+        within(rowOf("Ada Lovelace")).getByRole("button", {
+          name: "Reset spend for Ada Lovelace",
+        }),
+      );
+      expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+        /usage history, cost data and the audit log do not change/i,
+      );
+    },
+  );
+
+  // R1 (coordinator ruling, review r1; Q-W1): the 2x2 toggle table. The row
+  // button shows when either operation is on; "This team only" and its POST
+  // need resetMemberSpend; the user-level option and its POST need
+  // resetUserSpend. With resetUserSpend alone the dialog has no "This team
+  // only" option and Confirm POSTs the user route.
+  const BASE = ALL_OPS.filter((o) => o !== "resetMemberSpend");
+  it.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ] as const)(
+    "resetMemberSpend=%s resetUserSpend=%s: each reset control shows exactly when its own operation is on (R1)",
+    async (memberOn, userOn) => {
+      const ops = [
+        ...BASE,
+        ...(memberOn ? ["resetMemberSpend"] : []),
+        ...(userOn ? ["resetUserSpend"] : []),
+      ];
+      const api = stub(ops, {
+        ...withMembers(),
+        [`POST ${resetUrl("ada")}`]: () => apiResponse({ data: { ok: true } }),
+        "POST /api/litellm/users/u-ada/reset-spend": () =>
+          apiResponse({ data: { ok: true } }),
+      });
+      const u = user();
+      renderPanel();
+      await outsiderRow();
+      const trigger = within(rowOf("Ada Lovelace")).queryByRole("button", {
+        name: "Reset spend for Ada Lovelace",
+      });
+      if (!memberOn && !userOn) {
+        expect(trigger).toBeNull();
+        return;
+      }
+      expect(trigger).not.toBeNull();
+      if (!trigger) return;
+      await u.click(trigger);
+      const dialog = await screen.findByRole("alertdialog");
+      const teamOnly = within(dialog).queryByRole("radio", {
+        name: "This team only",
+      });
+      const userLevel = within(dialog).queryByRole("radio", {
+        name: "User spend (all of LiteLLM)",
+      });
+      expect(teamOnly !== null).toBe(memberOn && userOn);
+      expect(userLevel !== null).toBe(userOn);
+      if (userOn && !memberOn) {
+        await u.click(within(dialog).getByRole("button", { name: "Confirm" }));
+        await waitFor(() => expect(api.writes()).toHaveLength(1));
+        expect(api.writes()[0]?.path).toBe(
+          "/api/litellm/users/u-ada/reset-spend",
+        );
+      }
+      if (memberOn && !userOn) {
+        await u.click(within(dialog).getByRole("button", { name: "Confirm" }));
+        await waitFor(() => expect(api.writes()).toHaveLength(1));
+        expect(api.writes()[0]?.path).toBe(resetUrl("ada"));
+      }
+    },
+  );
+
+  it.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ] as const)(
+    "resetMemberSpend=%s resetUserSpend=%s: the unlinked row's Reset spend shows when either is on (R1)",
+    async (memberOn, userOn) => {
+      const ops = [
+        ...BASE,
+        ...(memberOn ? ["resetMemberSpend"] : []),
+        ...(userOn ? ["resetUserSpend"] : []),
+      ];
+      stub(ops, withMembers());
+      renderPanel();
+      const row = await outsiderRow();
+      const button = within(row).queryByRole("button", {
+        name: "Reset spend for ext1@example.test",
+      });
+      expect(button !== null).toBe(memberOn || userOn);
+    },
+  );
 });

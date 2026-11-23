@@ -19,6 +19,10 @@ export const brReqOpenPk = (teamId: string, oid: string) =>
 export const bResetPk = (teamId: string) => `BRESET#TEAM#${teamId}`;
 export const bResetSk = (timestamp: string, resetId: string) =>
   `${timestamp}#${resetId}`;
+export const bResetLTeamPk = (litellmTeamId: string) =>
+  `BRESET#LTEAM#${litellmTeamId}`;
+export const bResetLUserPk = (litellmUserId: string) =>
+  `BRESET#LUSER#${litellmUserId}`;
 export const bResetsGsi1pk = (oid: string) => `BRESETS#IDENT#${oid}`;
 
 // Mirrors lib/data/access/keys.ts (META_SK, identPk) for the recipient lookup.

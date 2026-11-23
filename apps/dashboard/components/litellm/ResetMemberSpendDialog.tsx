@@ -40,14 +40,84 @@ type Memberships =
 const resetPath = (teamId: string, oid: string) =>
   `/api/litellm/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(oid)}/reset-spend`;
 
+const userResetPath = (litellmUserId: string) =>
+  `/api/litellm/users/${encodeURIComponent(litellmUserId)}/reset-spend`;
+
+// RS2 (D-RS7, D-RS4): the user-level reset, by LiteLLM id, listed before the
+// team memberships; "Reset all listed" never runs it.
+function UserLevelReset({
+  litellmUserId,
+  busy,
+}: {
+  litellmUserId: string;
+  busy: boolean;
+}) {
+  const [pending, setPending] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  async function run() {
+    setPending(true);
+    try {
+      await mutateApi(
+        userResetPath(litellmUserId),
+        "POST",
+        undefined,
+        WriteDataSchema,
+      );
+      setOutcome({ kind: "done" });
+    } catch (caught) {
+      if (!(caught instanceof ApiRequestError)) throw caught;
+      setOutcome({ kind: "failed", message: caught.message });
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <div
+      role="group"
+      aria-label="User spend (all of LiteLLM)"
+      className="rounded-card flex flex-col gap-2 border p-3"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <span className="font-medium">User spend (all of LiteLLM)</span>
+          <p className="text-muted-foreground text-sm">
+            Clears the spend counter across all of their teams.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="Reset user spend in all of LiteLLM"
+          disabled={busy || pending || outcome?.kind === "done"}
+          onClick={() => void run()}
+        >
+          Reset
+        </Button>
+      </div>
+      {outcome?.kind === "done" ? (
+        <p className="text-sm">Spend reset to $0.00</p>
+      ) : null}
+      {outcome?.kind === "failed" ? (
+        <p role="alert" className="text-destructive text-sm">
+          {`Failed: ${outcome.message}`}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function DialogBody({
   oid,
   litellmUserId,
   name,
+  userReset,
+  teamReset,
 }: {
-  oid: string;
+  oid: string | undefined;
   litellmUserId: string;
   name: string;
+  userReset: boolean;
+  teamReset: boolean;
 }) {
   const query = useQuery({
     queryKey: ["litellm", "user", litellmUserId, "memberships"],
@@ -81,6 +151,7 @@ function DialogBody({
   const [busy, setBusy] = useState(false);
 
   async function reset(teamId: string): Promise<void> {
+    if (oid === undefined) return;
     try {
       await mutateApi(
         resetPath(teamId, oid),
@@ -124,7 +195,7 @@ function DialogBody({
   const footer = (
     <AlertDialogFooter>
       <AlertDialogCancel>Cancel</AlertDialogCancel>
-      {items.length > 0 ? (
+      {teamReset && items.length > 0 && oid !== undefined ? (
         <Button
           variant="destructive"
           disabled={busy}
@@ -169,15 +240,17 @@ function DialogBody({
                 <span className="min-w-0 font-medium break-words">
                   {item.teamName}
                 </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-label={`Reset spend in ${item.teamName}`}
-                  disabled={busy || outcome?.kind === "done"}
-                  onClick={() => void resetOne(item.teamId)}
-                >
-                  Reset
-                </Button>
+                {oid === undefined || !teamReset ? null : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Reset spend in ${item.teamName}`}
+                    disabled={busy || outcome?.kind === "done"}
+                    onClick={() => void resetOne(item.teamId)}
+                  >
+                    Reset
+                  </Button>
+                )}
               </div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                 <div className="min-w-0">
@@ -216,9 +289,12 @@ function DialogBody({
       <AlertDialogHeader>
         <AlertDialogTitle>{`Reset spend for ${name}?`}</AlertDialogTitle>
         <AlertDialogDescription>
-          {`Sets ${name}'s spend to $0.00 in each team listed below. Recorded in the audit log.`}
+          {`Sets ${name}'s spend to $0.00 in each team listed below. A reset clears the spend counter only: usage history, cost data and the audit log do not change. Recorded in the audit log.`}
         </AlertDialogDescription>
       </AlertDialogHeader>
+      {userReset ? (
+        <UserLevelReset litellmUserId={litellmUserId} busy={busy} />
+      ) : null}
       {content}
       {footer}
     </>
@@ -229,11 +305,17 @@ export function ResetMemberSpendDialog({
   oid,
   litellmUserId,
   name,
+  userReset = false,
+  enabledOperations,
 }: {
-  oid: string;
+  oid?: string;
   litellmUserId: string;
   name: string;
+  userReset?: boolean;
+  enabledOperations?: string[];
 }) {
+  const allows = (op: string) =>
+    enabledOperations === undefined || enabledOperations.includes(op);
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -246,7 +328,13 @@ export function ResetMemberSpendDialog({
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
-        <DialogBody oid={oid} litellmUserId={litellmUserId} name={name} />
+        <DialogBody
+          oid={oid}
+          litellmUserId={litellmUserId}
+          name={name}
+          userReset={userReset && allows("resetUserSpend")}
+          teamReset={allows("resetMemberSpend")}
+        />
       </AlertDialogContent>
     </AlertDialog>
   );

@@ -892,6 +892,27 @@ export async function resetMemberSpend(
   });
 }
 
+const ResetUserSpendInput = z.strictObject({
+  litellmUserId: LiteLLMId,
+});
+// LiteLLM spec - /user/update (RS2): exactly { user_id, spend: 0 }; anything
+// wider or any other value throws before a request is made.
+const ResetUserSpendBody = z.strictObject({
+  user_id: LiteLLMId,
+  spend: z.literal(0),
+});
+
+export async function resetUserSpend(
+  input: z.input<typeof ResetUserSpendInput>,
+  ctx: OperationContext,
+) {
+  await gate("resetUserSpend");
+  const i = ResetUserSpendInput.parse(input);
+  const { actor } = Context.parse(ctx);
+  const body = ResetUserSpendBody.parse({ user_id: i.litellmUserId, spend: 0 });
+  await write("/user/update", actor, Ack, { body });
+}
+
 export async function resetMemberBudget(
   input: z.input<typeof MemberInput>,
   ctx: OperationContext,

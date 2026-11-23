@@ -93,6 +93,7 @@ dashboard, its CI or its AWS account. `$LITELLM` is the proxy base URL.
 /user/new
 /user/info
 /user/list
+/user/update         (spend reset only: body {user_id, spend:0}; unit RS2)
 /user/daily/activity
 /key/generate
 /key/update
@@ -116,6 +117,15 @@ hard-limit routes, so the dashboard's gateway guardrails refuse those
 (LiteLLM spec — *Gateway guardrails*) and the Settings → LiteLLM panel
 shows a warning while they are present. Replace them with the exact
 templated routes once LiteLLM supports them (future-improvements).
+
+**`/user/update` (unit RS2, 2026-11-19; user action).** The *Reset spend*
+control for a LiteLLM user (`resetUserSpend`) calls `POST /user/update` with
+exactly `{ "user_id": …, "spend": 0 }`; the gateway refuses any other body
+before the send. Add `/user/update` to the service key's `allowed_routes` in
+each environment: create a new key with the §3 list (§6, rotation) or update
+the existing key's `allowed_routes` as an operator. Until then the reset
+fails closed with the gateway's refusal message and nothing changes in
+LiteLLM. `/user/delete` stays off the list.
 
 ## 4. Store the key in SSM (user, by hand)
 
@@ -144,7 +154,7 @@ aws ssm put-parameter --name /llm-usage-lens/<env>/litellm/service-key \
    URL, run the connection test (it must report `ok` before the URL saves),
    check the edition shown, then link dashboard teams to LiteLLM teams.
 5. Review the operation toggles. The destructive operations (reset member
-   spend, delete key) and self-service key requests start **off**; remove
+   spend, reset user spend, delete key) and self-service key requests start **off**; remove
    member starts **on** (LiteLLM spec LD10, amended 2026-11-14).
 
 **`LLM_LENS_LITELLM_BASE_URL`** (optional URL, default `http://localhost:4000`; unit ST1, D-ST4, user, 2026-11-18): the value the Base URL field offers when no connection is saved. It is only offered, never saved by itself, and the allowed-hosts rule (`LITELLM_ALLOWED_HOSTS`) still applies, so `localhost` is refused in production.

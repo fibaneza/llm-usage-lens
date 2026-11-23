@@ -1,8 +1,10 @@
 import {
   BatchWriteCommand,
   GetCommand,
+  PutCommand,
   TransactWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
+import type { BudgetReset } from "@llm-usage-lens/shared";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -29,6 +31,7 @@ const OID = "00000000-0000-4000-8000-0000000000c1";
 const RESET_ID = "00000000-0000-4000-8000-000000000001";
 const TS = "2026-11-14T10:00:00.000Z";
 const reset = {
+  scope: "member" as const,
   resetId: RESET_ID,
   oid: OID,
   teamId: "team-a",
@@ -46,6 +49,13 @@ const reset = {
 
 const write = (item: ReturnType<typeof budgetResetPutItem>) =>
   testDoc().send(new TransactWriteCommand({ TransactItems: [item] }));
+
+// A copy of an item without the named keys (builds the unlinked and no-team shapes).
+const omitKeys = (
+  obj: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(obj).filter(([k]) => !keys.includes(k)));
 
 describe("budgetResetPutItem (MG-D8; Data Model - BudgetReset)", () => {
   it("stores the item under the spec keys with a 400-day expiry", async () => {
@@ -96,6 +106,164 @@ describe("budgetResetPutItem (MG-D8; Data Model - BudgetReset)", () => {
       ).toThrow();
     },
   );
+});
+
+// Data Model - BudgetReset (amended 2026-11-19, RS2, D-RS8): two new PK forms
+// under BRESET#; GSI1 only when an oid exists; an unlinked reset counts for
+// nobody. Ledger key decision: temp/run-rs2/ledger-key.md (T-RS6).
+describe("budgetResetPutItem for resets by LiteLLM id (RS2, D-RS8, T-RS6)", () => {
+  const RID2 = "00000000-0000-4000-8000-000000000002";
+  const memberNoApp = omitKeys(reset, ["oid", "teamId", "departmentId"]);
+  const userReset = {
+    scope: "user" as const,
+    resetId: RID2,
+    litellmUserId: "u9@company.com",
+    operation: "spend" as const,
+    amount: 7.5,
+    budget: null as number | null,
+    trigger: "direct" as const,
+    actorOid: "00000000-0000-4000-8000-0000000000a1",
+    requestId: "req-2",
+    timestamp: TS,
+  };
+  const get = async (pk: string, resetId: string) =>
+    (
+      await testDoc().send(
+        new GetCommand({
+          TableName: TEST_TABLE_NAME,
+          Key: { PK: pk, SK: `${TS}#${resetId}` },
+        }),
+      )
+    ).Item;
+
+  it("a member reset on an unlinked LiteLLM team, with no app identity, is keyed BRESET#LTEAM#{litellmTeamId} with no GSI1 attributes", async () => {
+    await write(budgetResetPutItem(memberNoApp as BudgetReset));
+    const item = await get("BRESET#LTEAM#lt-team-a", RESET_ID);
+    expect(item).toMatchObject({
+      scope: "member",
+      litellmTeamId: "lt-team-a",
+      litellmUserId: "a1@company.com",
+      amount: 3.25,
+      expiresAt: Date.parse(TS) / 1000 + 400 * 86_400,
+    });
+    expect(item).not.toHaveProperty("gsi1pk");
+    expect(item).not.toHaveProperty("gsi1sk");
+    expect(item).not.toHaveProperty("oid");
+    expect(item).not.toHaveProperty("teamId");
+    expect(item).not.toHaveProperty("departmentId");
+    expect(await get("BRESET#TEAM#team-a", RESET_ID)).toBeUndefined();
+  });
+
+  it("a member reset on an unlinked team for a linked person (oid, no teamId) is keyed BRESET#LTEAM# and still has the person's GSI1 item", async () => {
+    const noTeam = omitKeys(reset, ["teamId", "departmentId"]);
+    await write(budgetResetPutItem(noTeam as BudgetReset));
+    expect(await get("BRESET#LTEAM#lt-team-a", RESET_ID)).toMatchObject({
+      gsi1pk: `BRESETS#IDENT#${OID}`,
+      gsi1sk: `${TS}#${RESET_ID}`,
+    });
+    expect(await listResetsOf(OID, "2026-11-14", "2026-11-14")).toEqual([
+      { oid: OID, amount: 3.25 },
+    ]);
+  });
+
+  it("a user-scope reset with no oid is keyed BRESET#LUSER#{litellmUserId}, no GSI1, no litellmTeamId", async () => {
+    await write(budgetResetPutItem(userReset));
+    const item = await get("BRESET#LUSER#u9@company.com", RID2);
+    expect(item).toMatchObject({
+      scope: "user",
+      litellmUserId: "u9@company.com",
+      operation: "spend",
+      amount: 7.5,
+      trigger: "direct",
+      expiresAt: Date.parse(TS) / 1000 + 400 * 86_400,
+    });
+    for (const k of ["gsi1pk", "gsi1sk", "oid", "teamId", "litellmTeamId"]) {
+      expect(item, k).not.toHaveProperty(k);
+    }
+  });
+
+  it("a user-scope reset of a linked person (oid) keeps BRESET#LUSER# and adds BRESETS#IDENT#{oid}", async () => {
+    await write(budgetResetPutItem({ ...userReset, oid: OID }));
+    expect(await get("BRESET#LUSER#u9@company.com", RID2)).toMatchObject({
+      gsi1pk: `BRESETS#IDENT#${OID}`,
+      gsi1sk: `${TS}#${RID2}`,
+    });
+    expect(await listResetsOf(OID, "2026-11-14", "2026-11-14")).toEqual([
+      { oid: OID, amount: 7.5 },
+    ]);
+  });
+
+  it("an unlinked reset counts for nobody: no per-team and no per-person read returns it (Data Model - Reset counts)", async () => {
+    await write(budgetResetPutItem(memberNoApp as BudgetReset));
+    await write(budgetResetPutItem(userReset));
+    expect(await listTeamResets("team-a", "2026-11-14", "2026-11-14")).toEqual(
+      [],
+    );
+    expect(await listResetsOf(OID, "2026-11-14", "2026-11-14")).toEqual([]);
+    expect(await listResetsOf("anyone", "2026-11-14", "2026-11-14")).toEqual(
+      [],
+    );
+  });
+
+  it("the new forms stay append-only: a second Put of the same key fails and changes nothing", async () => {
+    await write(budgetResetPutItem(userReset));
+    await expect(
+      write(budgetResetPutItem({ ...userReset, amount: 99 })),
+    ).rejects.toThrow();
+    expect((await get("BRESET#LUSER#u9@company.com", RID2))?.amount).toBe(7.5);
+  });
+
+  it.each([
+    [
+      "a user scope with the budget operation",
+      { ...userReset, operation: "budget" },
+    ],
+    [
+      "a user scope carrying a litellmTeamId",
+      { ...userReset, litellmTeamId: "lt" },
+    ],
+    [
+      "a user scope with no litellmUserId",
+      { ...userReset, litellmUserId: undefined },
+    ],
+    ["an item with no scope", { ...reset, scope: undefined }],
+    ["an empty oid", { ...userReset, oid: "" }],
+  ])("refuses %s before anything is written", (_n, bad) => {
+    expect(() => budgetResetPutItem(bad as unknown as BudgetReset)).toThrow();
+  });
+
+  it("existing oid-based member items still satisfy the ledger contract (T-RS6): BRESET#TEAM# + GSI1, counted per team and per person", async () => {
+    await write(budgetResetPutItem(reset));
+    expect((await get("BRESET#TEAM#team-a", RESET_ID))?.gsi1pk).toBe(
+      `BRESETS#IDENT#${OID}`,
+    );
+    expect(await listTeamResets("team-a", "2026-11-14", "2026-11-14")).toEqual([
+      { oid: OID, amount: 3.25 },
+    ]);
+  });
+
+  it("the reader counts a pre-RS2 item that has no scope attribute as a member reset (Data Model, amended 2026-11-19)", async () => {
+    const sk = `${TS}#${RESET_ID}`;
+    await testDoc().send(
+      new PutCommand({
+        TableName: TEST_TABLE_NAME,
+        Item: {
+          PK: "BRESET#TEAM#team-a",
+          SK: sk,
+          gsi1pk: `BRESETS#IDENT#${OID}`,
+          gsi1sk: sk,
+          oid: OID,
+          amount: 2,
+        },
+      }),
+    );
+    expect(await listTeamResets("team-a", "2026-11-14", "2026-11-14")).toEqual([
+      { oid: OID, amount: 2 },
+    ]);
+    expect(await listResetsOf(OID, "2026-11-14", "2026-11-14")).toEqual([
+      { oid: OID, amount: 2 },
+    ]);
+  });
 });
 
 describe("the ledger reads (MG-D9; Data Model - Reset counts)", () => {

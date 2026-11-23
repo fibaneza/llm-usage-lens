@@ -135,8 +135,11 @@ describe("NotificationIdSchema and kinds", () => {
   });
 });
 
-describe("BudgetResetSchema (the ledger item; MG-D8)", () => {
+describe("BudgetResetSchema (the ledger item; MG-D8; RS2 D-RS8)", () => {
+  // Data Model - BudgetReset (amended 2026-11-19, RS2): a discriminated union
+  // on `scope`; oid, teamId and departmentId only where they exist.
   const item = {
+    scope: "member",
     resetId: UUID,
     oid: "oid-ada",
     teamId: "team-a",
@@ -151,12 +154,72 @@ describe("BudgetResetSchema (the ledger item; MG-D8)", () => {
     requestId: UUID,
     timestamp: "2026-11-14T09:00:00.000Z",
   };
+  const userItem = {
+    scope: "user",
+    resetId: UUID,
+    litellmUserId: "lu-1",
+    operation: "spend",
+    amount: 4,
+    budget: null,
+    trigger: "direct",
+    actorOid: "oid-admin",
+    requestId: "http-req-1",
+    timestamp: "2026-11-14T09:00:00.000Z",
+  };
+  const without = <T extends object>(o: T, ...keys: string[]) =>
+    Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
 
-  it("accepts a ledger item, with a null budget when unset", () => {
+  it("accepts a member ledger item, with a null budget when unset", () => {
     expect(BudgetResetSchema.safeParse(item).success).toBe(true);
     expect(BudgetResetSchema.safeParse({ ...item, budget: 50 }).success).toBe(
       true,
     );
+  });
+
+  it.each([
+    ["oid", ["oid"]],
+    ["teamId and departmentId", ["teamId", "departmentId"]],
+    ["oid, teamId and departmentId", ["oid", "teamId", "departmentId"]],
+  ])(
+    "accepts a member reset with no %s (a reset by LiteLLM id; D-RS8)",
+    (_n, keys) => {
+      expect(BudgetResetSchema.safeParse(without(item, ...keys)).success).toBe(
+        true,
+      );
+    },
+  );
+
+  it("accepts a user-scope item with no oid, team or department, and keeps the scope", () => {
+    const r = BudgetResetSchema.safeParse(userItem);
+    expect(r.success).toBe(true);
+    expect(r.success && r.data.scope).toBe("user");
+  });
+
+  it("accepts a user-scope item that has an oid (a linked user)", () => {
+    expect(
+      BudgetResetSchema.safeParse({ ...userItem, oid: "oid-ada" }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ["a missing scope", without(item, "scope")],
+    ["an unknown scope", { ...item, scope: "team" }],
+    [
+      "a user scope with the budget operation",
+      { ...userItem, operation: "budget" },
+    ],
+    [
+      "a user scope with a litellmTeamId",
+      { ...userItem, litellmTeamId: "lt-1" },
+    ],
+    ["a member scope with no litellmTeamId", without(item, "litellmTeamId")],
+    ["a member scope with no litellmUserId", without(item, "litellmUserId")],
+    ["a user scope with no litellmUserId", without(userItem, "litellmUserId")],
+    ["an empty oid", { ...item, oid: "" }],
+    ["an empty teamId", { ...item, teamId: "" }],
+    ["an empty departmentId", { ...item, departmentId: "" }],
+  ])("rejects %s", (_n, value) => {
+    expect(BudgetResetSchema.safeParse(value).success).toBe(false);
   });
 
   it.each(["direct", "request"])(
@@ -182,8 +245,11 @@ describe("BudgetResetSchema (the ledger item; MG-D8)", () => {
     ["an unknown operation", { operation: "key" }],
     ["a non-UTC-ISO timestamp", { timestamp: "14/11/2026" }],
     ["an extra field", { reason: "free text" }],
-  ])("rejects %s", (_n, over) => {
+  ])("rejects %s on both scopes", (_n, over) => {
     expect(BudgetResetSchema.safeParse({ ...item, ...over }).success).toBe(
+      false,
+    );
+    expect(BudgetResetSchema.safeParse({ ...userItem, ...over }).success).toBe(
       false,
     );
   });

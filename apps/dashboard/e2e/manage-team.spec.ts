@@ -14,10 +14,10 @@ import { signInAsTestUser } from "./support/session";
 // reads Team); slice B2 brief B2-3, B2-4, B2-6. Component behaviour lives in
 // TeamPageContent.test.tsx and MembersPanel.test.tsx (Rule 60.24a); this
 // covers the real shell, the redirect, the server gate, axe, and the
-// AlertDialog in a real browser. The harness cannot forge a team-scope Lead
-// (Lead scope lives in DynamoDB), so internal-org-admin stands in for the Lead
-// path; the lead's rail and 404s run in role-landing.spec.ts against the probe
-// identities. The LiteLLM API is fulfilled from fixtures (Rule 60.24).
+// AlertDialog in a real browser. This project's sessions carry no team-scope
+// Lead (Lead scope lives in DynamoDB), so internal-org-admin stands in for the
+// Lead path; the role-probe project (team-admin on team-payments) runs the
+// lead's rail, 404s and reset dialog in role-landing.spec.ts. The LiteLLM API is fulfilled from fixtures (Rule 60.24).
 const KEY_VALUE = "sk-E2E-SHOWN-ONCE";
 const OPS = [
   "generateMemberKey",

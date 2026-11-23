@@ -330,3 +330,171 @@ describe("ResetMemberSpendDialog (RS1)", () => {
     expect(trigger).toHaveFocus();
   });
 });
+
+// RS2 (Design System - "Reset any LiteLLM user", D-RS7/D-RS9; LiteLLM LD39).
+// Contract additions to ResetMemberSpendDialog (existing props keep working):
+//   - `oid` becomes optional (a LiteLLM user with no app identity) and a new
+//     optional prop `userReset?: boolean` (default false) shows the user-level
+//     option, passed by the callers whose role may use it;
+//   - the option is a `role="group"` named "User spend (all of LiteLLM)",
+//     rendered BEFORE the "Team memberships" list, with a button named
+//     "Reset user spend in all of LiteLLM" (text "Reset"); it POSTs
+//     /api/litellm/users/${litellmUserId}/reset-spend (no body) and shows
+//     "Spend reset to $0.00" in the group, or `Failed: ${message}` (role alert);
+//   - the dialog description says a reset clears the spend counter and that usage
+//     history, cost data and the audit log do not change (D-RS9); the group says
+//     the reset clears spend across all of the person's teams;
+//   - "Reset all listed" never includes the user-level reset.
+describe("ResetMemberSpendDialog user-level option (RS2)", () => {
+  const userUrl = "/api/litellm/users/ll-ada/reset-spend";
+  const openWith = async (props: {
+    oid?: string;
+    userReset?: boolean;
+  }): Promise<{ user: ReturnType<typeof userEvent.setup> }> => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ResetMemberSpendDialog
+        litellmUserId={ADA.litellmUserId}
+        name={ADA.name}
+        {...props}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Reset spend for Ada Lovelace" }),
+    );
+    await screen.findByRole("alertdialog");
+    return { user };
+  };
+  const group = () =>
+    screen.findByRole("group", { name: "User spend (all of LiteLLM)" });
+
+  it("lists 'User spend (all of LiteLLM)' first, before the team memberships (D-RS7)", async () => {
+    stub({ items: [A] });
+    await openWith({ oid: ADA.oid, userReset: true });
+    const option = await group();
+    const list = await screen.findByRole("list", { name: "Team memberships" });
+    expect(
+      option.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("offers no user-level option unless userReset is set (D-RS3, existing props keep working)", async () => {
+    stub({ items: [A] });
+    await openWith({ oid: ADA.oid });
+    await screen.findByRole("list", { name: "Team memberships" });
+    expect(
+      screen.queryByRole("group", { name: "User spend (all of LiteLLM)" }),
+    ).toBeNull();
+  });
+
+  it("says usage history, cost data and the audit log do not change, and that all of the person's teams are cleared (D-RS9)", async () => {
+    stub({ items: [A] });
+    await openWith({ oid: ADA.oid, userReset: true });
+    const option = await group();
+    expect(option).toHaveTextContent(/all of (their|the person's) teams/i);
+    const dialog = screen.getByRole("alertdialog");
+    for (const phrase of [/usage history/i, /cost data/i, /audit log/i]) {
+      expect(dialog).toHaveAccessibleDescription(phrase);
+    }
+  });
+
+  it("confirming it POSTs the LiteLLM-id user route, no body, and reports $0.00 (D-RS4)", async () => {
+    const calls = stub({ items: [A] });
+    const { user } = await openWith({ oid: ADA.oid, userReset: true });
+    const option = await group();
+    await user.click(
+      within(option).getByRole("button", {
+        name: "Reset user spend in all of LiteLLM",
+      }),
+    );
+    await waitFor(() =>
+      expect(option).toHaveTextContent("Spend reset to $0.00"),
+    );
+    expect(calls.posts.map((p) => p.url)).toEqual([userUrl]);
+    expect(calls.posts[0]?.init?.body).toBeUndefined();
+  });
+
+  it("a failed user-level reset shows the server's message in the group (D-RS5 409)", async () => {
+    stub({ items: [A] }, () =>
+      apiError(409, "PRIVILEGED_TARGET", "This LiteLLM user cannot be reset"),
+    );
+    const { user } = await openWith({ oid: ADA.oid, userReset: true });
+    const option = await group();
+    await user.click(
+      within(option).getByRole("button", {
+        name: "Reset user spend in all of LiteLLM",
+      }),
+    );
+    expect(await within(option).findByRole("alert")).toHaveTextContent(
+      "Failed: This LiteLLM user cannot be reset",
+    );
+  });
+
+  it("a person with no app identity (no oid) can still be reset by LiteLLM id (D-RS4, item 18)", async () => {
+    const calls = stub({ items: [] });
+    const { user } = await openWith({ userReset: true });
+    const option = await group();
+    expect(calls.gets).toEqual(["/api/litellm/users/ll-ada/memberships"]);
+    await user.click(
+      within(option).getByRole("button", {
+        name: "Reset user spend in all of LiteLLM",
+      }),
+    );
+    await waitFor(() =>
+      expect(calls.posts.map((p) => p.url)).toEqual([userUrl]),
+    );
+  });
+
+  it("'Reset all listed' sends the team resets only, never the user-level reset (D-RS7)", async () => {
+    const calls = stub({ items: [A, B] });
+    const { user } = await openWith({ oid: ADA.oid, userReset: true });
+    await screen.findByRole("list", { name: "Team memberships" });
+    await user.click(screen.getByRole("button", { name: "Reset all listed" }));
+    await waitFor(() => expect(calls.posts).toHaveLength(2));
+    expect(calls.posts.map((p) => p.url)).not.toContain(userUrl);
+  });
+
+  // Q-B2 (review r1; Design System "absent, never dead", D-RS2): the dialog
+  // takes the enabled operations as a prop `enabledOperations?: string[]`
+  // (omitted = every control, so the existing callers and cases keep working).
+  // Given, the per-team "Reset spend in ${team}" buttons and "Reset all listed"
+  // show only with "resetMemberSpend", the user-level group only with
+  // "resetUserSpend" (with userReset).
+  it.each([
+    [["resetMemberSpend", "resetUserSpend"], true, true],
+    [["resetMemberSpend"], false, true],
+    [["resetUserSpend"], true, false],
+  ] as const)(
+    "enabledOperations %j: user-level %s, per-team reset and 'Reset all listed' %s (Q-B2)",
+    async (enabledOperations, userLevel, perTeam) => {
+      stub({ items: [A, B] });
+      const user = userEvent.setup();
+      renderWithProviders(
+        <ResetMemberSpendDialog
+          {...ADA}
+          userReset
+          enabledOperations={[...enabledOperations]}
+        />,
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Reset spend for Ada Lovelace" }),
+      );
+      const dialog = await screen.findByRole("alertdialog");
+      await within(dialog).findByRole("list", { name: "Team memberships" });
+      expect(
+        within(dialog).queryByRole("group", {
+          name: "User spend (all of LiteLLM)",
+        }) !== null,
+      ).toBe(userLevel);
+      expect(
+        within(dialog).queryByRole("button", {
+          name: "Reset spend in Payments",
+        }) !== null,
+      ).toBe(perTeam);
+      expect(
+        within(dialog).queryByRole("button", { name: "Reset all listed" }) !==
+          null,
+      ).toBe(perTeam);
+    },
+  );
+});

@@ -1011,7 +1011,7 @@ Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
 
 *User request, 2026-11-18; coordinator decisions D1–D7 (Design System — *Reset spend from the LiteLLM users tab and the Users page*, *LiteLLM members with no app membership*; LiteLLM spec — `resetMemberSpend` row). Tests first (Rule 70).*
 
-- [x] *Reset spend* row action on Management → LiteLLM → *LiteLLM users* and Management → Users (linked users), shown only when `resetMemberSpend` is enabled, the row has an `oid` and the caller may write members (D4); a dialog listing the person's resettable team memberships (spend, budget or "No budget") with a confirm per team and *Reset all listed* (one call at a time, a result per team); every reset through the existing reset-spend route
+- [x] *Reset spend* row action on Management → LiteLLM → *LiteLLM users* and Management → Users (linked users), shown only when `resetMemberSpend` is enabled, the row has an `oid` and the caller may write members (D4) (superseded 2026-11-19 for the *LiteLLM users* tab by RS2: every row, by LiteLLM ids); a dialog listing the person's resettable team memberships (spend, budget or "No budget") with a confirm per team and *Reset all listed* (one call at a time, a result per team); every reset through the existing reset-spend route
 - [x] Any new read for the memberships: `GET /api/litellm/users/[litellmUserId]/memberships`, a scoped GET (LD37, route registry, `404` parity)
 - [x] Team page: the note and **Add to team** for LiteLLM members with no app membership (D6); member matching by `litellmUserId` too (D7)
 - [ ] Verify: component tests (shown/absent by toggle, `oid` and role; only resettable teams listed; the D6 note and action); integration (any new GET: `401`, scope, `404` parity; the `litellmUserId` match); e2e, one mocked case per page (open, confirm, the reset-spend POST sent) and axe at 375 with the dialog open; branch gate with `main` merged in (Rule 70.12)
@@ -1024,6 +1024,16 @@ Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
 - [x] `POST /api/teams/[id]/members/pending/[key]/accept` `{ oid, reason }` and `GET …/candidates`; `403` before parsing; registered in `test/route-registry.ts`
 - [x] UI: Accept on each pending member invitation where pending items show (Team page access sections, Settings → Access); dialog with the candidates (and directory search for admin and org-admin), the key-against-UPN/email mismatch, a required reason, an `AlertDialog` naming the person and the team
 - [ ] Verify: the role × action matrix for accept (complete); T-INV1 to T-INV6 each with a test; a happy-path e2e; branch gate green with `main` merged in (Rule 70.12)
+
+### RS2 — Reset any LiteLLM user (`feature/reset-any-litellm-user`)
+
+*User request item 18, 2026-11-18; user answers Q16–Q19, 2026-11-19 (LiteLLM spec — LD39, LT35–LT37, `resetUserSpend` row, API routes; Access Control — *Reset by LiteLLM ids*; Data Model — BudgetReset; Design System — *Reset any LiteLLM user*). Plan: `docs/plans/20261118_teams_users_and_litellm_sync.md` §3 *RS2*. Tests first (Rule 70).*
+
+- [x] Gateway: `resetUserSpend` (`POST /user/update`, body exactly `{ user_id, spend: 0 }` through a strict Zod schema, default off); `/user/delete` stays forbidden
+- [x] Ledger: BudgetReset union on `scope` (`member` | `user`); keys `BRESET#LTEAM#` and `BRESET#LUSER#`, GSI1 only with an `oid`; a legacy item with no `scope` reads as `member`; no task-role change (`BRESET#*`)
+- [x] Routes: `POST /api/litellm/users/[litellmUserId]/reset-spend`, `POST /api/litellm/proxy-teams/[litellmTeamId]/members/[litellmUserId]/reset-spend` and `/reset-budget`, `GET /api/litellm/proxy-teams/[litellmTeamId]/members`; registered in `test/route-registry.ts`
+- [x] UI: Reset spend on every *LiteLLM users* row; the LiteLLM teams table opens a members panel with the two resets; the Team page's unlinked member row gains them; every reset dialog offers "User spend (all of LiteLLM)"
+- [ ] Verify: T-RS1 to T-RS8 each with a test (Access Control — *Reset by LiteLLM ids*, *Tests (T-RS1–T-RS8)*), including the lead's Team-page reset, both scopes; e2e `reset-spend-users` (unlinked users row; a LiteLLM team's members); branch gate green with `main` merged in (Rule 70.12); security review at the merge
 
 ---
 

@@ -202,8 +202,9 @@ const HARD_LIMIT: Array<[string, string]> = [
   ["POST", "/user/bulk_update"],
   ["POST", "/key/regenerate"],
   ["POST", "/key/service-account/generate"],
-  ["POST", "/user/update"],
   ["POST", "/user/delete"],
+  ["PATCH", "/user/update"],
+  ["POST", "/user/update/"],
   ["POST", "/model/new"],
   ["POST", "/model/update"],
   ["POST", "/model/delete"],
@@ -248,6 +249,30 @@ describe("hard-limit denylist (guardrail 3, LT3, LT7, LT14)", () => {
       expect(fake.calls).toHaveLength(0);
     },
   );
+});
+
+// LiteLLM spec - route table (RS2, D-RS1): `/user/update` is allowlisted for
+// resetUserSpend only; the body check lives in the operation (operations
+// test), `/user/delete` stays forbidden (HARD_LIMIT above).
+describe("POST /user/update (RS2, D-RS1)", () => {
+  it("is an allowlisted route: one POST reaches LiteLLM with the actor header", async () => {
+    const { callAllowlisted } = await load();
+    await callAllowlisted(
+      {
+        method: "POST",
+        template: "/user/update",
+        body: { user_id: "jane@company.com", spend: 0 },
+        actor: ACTOR,
+      },
+      opts,
+    );
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0]!.method).toBe("POST");
+    expect(fake.calls[0]!.path).toBe("/user/update");
+    expect(fake.calls[0]!.headers["litellm-changed-by"]).toBe(
+      "llm-usage-lens:jane.doe@company.com",
+    );
+  });
 });
 
 describe("path parameters (guardrail 2)", () => {

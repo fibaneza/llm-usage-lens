@@ -726,6 +726,37 @@ the user 2026-11-15; Design System — *Settings Page*).
 | Configuration (everything else in *Configuration* above) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Request a budget reset for **one's own** member budget (unit M4; MG-D11; user, 2026-11-17) | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | member of a linked team: ✓ own; `internal-auditor` ✗; no member team ✗ |
 | Approve or deny a budget reset request (unit M4; MG-D12) — never one's own request | ✓ | ✓ any team | ✓ teams in scope | ✓ teams in scope | ✗ |
+| Reset a member's spend or budget by LiteLLM ids (`POST /api/litellm/proxy-teams/[litellmTeamId]/members/[litellmUserId]/reset-spend`, `/reset-budget`; unit RS2, user, 2026-11-19; LiteLLM LD39) | ✓ every LiteLLM team, linked or not | ✓ every LiteLLM team, linked or not | ✓ members of the LiteLLM team linked to a team in scope; else `403` | ✓ same | `internal-auditor` ✗ (`403`); member, viewer ✗ |
+| Reset a LiteLLM user's spend across all of LiteLLM (`POST /api/litellm/users/[litellmUserId]/reset-spend`; RS2, user: Q17 "Admin and org-admin" for a user in no team, Q19 "leads too") | ✓ any LiteLLM user (linked or not, in a team or not) | ✓ any LiteLLM user | ✓ only a user who is a member of a LiteLLM team linked to a team in scope; otherwise `404`, the unknown-user body | ✓ same | `internal-auditor` ✗ (`403`); member, viewer ✗ |
+| Read a LiteLLM team's members (`GET /api/litellm/proxy-teams/[litellmTeamId]/members`; RS2, D-RS6) | ✓ | ✓ | ✗ `403` | ✗ `403` | `internal-auditor` ✓ (reads, resets nothing); member, viewer ✗ |
+
+**Reset by LiteLLM ids (unit RS2; added 2026-11-19; LiteLLM spec LD39).**
+The three write routes and the one read above are keyed by LiteLLM ids, so
+a LiteLLM user with no app identity, or a member of an unlinked LiteLLM
+team, can be reset. Each checks, in order: the session (`401`), the matrix
+permission (`403` before parsing, one `denied` record), the path ids, the
+operation toggle, then the target. A target outside the caller's reach is
+the same `404` body as a missing one (LiteLLM LT5): a Lead learns nothing about
+people outside their teams. A privileged LiteLLM user or the service user is
+`409 PRIVILEGED_TARGET` with no write. The `oid` routes (`/api/litellm/teams/[teamId]/members/[oid]/reset-spend`,
+`/reset-budget`) keep their matrix rows and M4's approvals still use them.
+Each reset writes one audit record and one ledger item (Data Model —
+*BudgetReset*); a reset with no `oid` counts for nobody. New audit action
+`litellm.user.reset-spend` (spend before and after), appended to
+`AUDIT_ACTIONS` with the existing `litellm.member.reset-spend`.
+
+*Tests (T-RS1–T-RS8; source: implementation-phases — RS2, plan 2026-11-18 §3 RS2; threat rows LT35–LT37).*
+
+| Test | Proves |
+|---|---|
+| T-RS1 | The gateway sends `/user/update` with exactly `user_id` and `spend: 0`; any other field or value fails the schema and nothing is sent (LT35). A structure test: `/user/update` is used by `resetUserSpend` only, `/user/delete` by nothing |
+| T-RS2 | The user-level route: admin and org-admin `200` for a linked user, an unlinked user and a user in no team; a Lead `200` for a member of a team in their scope, and `404` (the unknown-user body) for a user in no team or only in other teams; an auditor `403` before parsing, with one `denied` record; the operation off `403` |
+| T-RS3 | The member routes: a Lead in scope `200` for a member with no app identity; a Lead out of scope, or on an unlinked LiteLLM team, `403`; org-admin and admin `200` on a linked and on an unlinked team |
+| T-RS4 | A user who is not a member of that team, or an unknown id: `404` with the same body, no LiteLLM write (LT37) |
+| T-RS5 | A privileged LiteLLM user or the service user (by its `proxy_admin` role): `409 PRIVILEGED_TARGET`, no write (LT36) |
+| T-RS6 | Each reset writes one audit record and one ledger item, also with no `oid`; the `oid` routes and M4's approval still pass the ledger contract |
+| T-RS7 | UI: the button on every LiteLLM users row; a LiteLLM team's members with the two actions for admin and org-admin and none for the auditor; no button while the operation is off; the lead's Team-page reset, both scopes |
+| T-RS8 | The members read: admin, org-admin, auditor `200`; a lead `403`; at most 200 members, `truncated: true` above |
 
 **Budget reset requests (unit M4; added 2026-11-17; MG-D11 to MG-D13 in the
 [LiteLLM spec](2026-11-10-litellm.md)).** A request is a new write for a
@@ -1264,6 +1295,7 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/governance/password-sign-in` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin`, **re-auth** |
 | `/api/governance/per-user-approval` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` |
 | `/api/audit`, `/api/access-review` | GET | `internal-admin`, `internal-auditor` (audited) |
+| `/api/litellm/users/[litellmUserId]/reset-spend`, `/api/litellm/proxy-teams/[litellmTeamId]/members/[litellmUserId]/reset-spend`, `/reset-budget` (POST), `/api/litellm/proxy-teams/[litellmTeamId]/members` (GET) (unit RS2, 2026-11-19) | GET, POST | Per *Reset by LiteLLM ids* under *Permission matrix*; LiteLLM spec — *API routes* |
 | `/api/budget-reset-requests`, `/api/budget-reset-requests/mine`, `/api/budget-reset-requests/[id]/approve`, `/deny`, `/api/notifications`, `/api/notifications/read`, `/api/budget-resets` (unit M4, 2026-11-17) | GET, POST | Per *Budget reset requests* under *Permission matrix*; shapes in the [Data Model spec](2026-05-15-data-model.md) — *API Routes* |
 
 **`/api/me` scope fields (agent decision D-R5-3, 2026-11-16).** `GET

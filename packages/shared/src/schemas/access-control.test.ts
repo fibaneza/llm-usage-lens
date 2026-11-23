@@ -303,7 +303,9 @@ describe("audit schemas", () => {
     // M4 adds the three budgetreset.request.* actions; M3 adds identity.litellm-link.set / .remove and litellm.user.create (Access Control - Budget reset requests, LiteLLM user links, Audit log).
     // M2 adds appteam.create (Access Control - Created app teams); INV1 adds
     // affiliation.invite.accept (Access Control - Audit log, Covered).
-    expect(AUDIT_ACTIONS).toHaveLength(74);
+    // RS2 adds litellm.user.reset-spend (Access Control - Audit log; LiteLLM spec LD39).
+    expect(AUDIT_ACTIONS).toHaveLength(75);
+    expect(AUDIT_ACTIONS).toContain("litellm.user.reset-spend");
     expect(AUDIT_ACTIONS).toContain("affiliation.invite.accept");
     for (const action of [
       "appteam.create",

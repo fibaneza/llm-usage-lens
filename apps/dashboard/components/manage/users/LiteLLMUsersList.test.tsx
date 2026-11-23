@@ -73,6 +73,7 @@ type Options = {
   enabledOperations?: string[];
   // undefined omits the field from the response (fail closed).
   mayLink?: boolean | undefined;
+  memberships?: unknown[];
 };
 
 function stub(options: Options = { mayLink: true }) {
@@ -108,6 +109,11 @@ function stub(options: Options = { mayLink: true }) {
               ...(mayLink === undefined ? {} : { mayLink }),
             },
           }),
+        );
+      }
+      if (url.pathname.endsWith("/memberships")) {
+        return Promise.resolve(
+          apiResponse({ data: { items: options.memberships ?? [] } }),
         );
       }
       return Promise.resolve(apiError(404, "NOT_FOUND"));
@@ -322,7 +328,7 @@ describe("LiteLLMUsersList link controls (D16)", () => {
 // `mayLink` absent or false hides the action (fail closed). Accessible name
 // `Reset spend for ${name}` where name = displayName, else email.
 describe("Reset spend row action (RS1)", () => {
-  const ON = ["createUser", "resetMemberSpend"];
+  const ON = ["createUser", "resetMemberSpend", "resetUserSpend"];
   const ROW_LITELLM_ONLY = {
     key: "ll-zed",
     linkState: "none",
@@ -351,12 +357,68 @@ describe("Reset spend row action (RS1)", () => {
     ).toBeInTheDocument();
   });
 
-  it("is absent when resetMemberSpend is not enabled, as on the Team page (D4)", async () => {
-    stub({ enabledOperations: ["createUser"], mayLink: true });
-    renderWithProviders(<LiteLLMUsersList />);
-    await screen.findByText("Ada Lovelace");
-    expect(screen.queryByRole("button", { name: /reset spend/i })).toBeNull();
-  });
+  // R1 (coordinator ruling, review r1; Q-W2) supersedes RS2's "absent when
+  // resetUserSpend is off": the row button shows when either operation is on,
+  // and inside the dialog each control shows exactly when its own operation is
+  // on (D-RS2, Design System "absent, never dead").
+  it.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ] as const)(
+    "resetMemberSpend=%s resetUserSpend=%s: the row button and each dialog control follow their own operation (R1)",
+    async (memberOn, userOn) => {
+      stub({
+        enabledOperations: [
+          "createUser",
+          ...(memberOn ? ["resetMemberSpend"] : []),
+          ...(userOn ? ["resetUserSpend"] : []),
+        ],
+        mayLink: true,
+        memberships: [
+          { teamId: "t1", teamName: "Payments", spend: 6, maxBudget: 10 },
+        ],
+      });
+      const user = userEvent.setup();
+      renderWithProviders(<LiteLLMUsersList />);
+      await screen.findByText("Ada Lovelace");
+      const trigger = screen.queryByRole("button", {
+        name: "Reset spend for Ada Lovelace",
+      });
+      if (!memberOn && !userOn) {
+        expect(trigger).toBeNull();
+        return;
+      }
+      expect(trigger).not.toBeNull();
+      if (!trigger) return;
+      await user.click(trigger);
+      const dialog = await screen.findByRole("alertdialog");
+      if (memberOn) {
+        await within(dialog).findByRole("button", {
+          name: "Reset spend in Payments",
+        });
+      } else {
+        await within(dialog).findByRole("group", {
+          name: "User spend (all of LiteLLM)",
+        });
+      }
+      expect(
+        within(dialog).queryByRole("group", {
+          name: "User spend (all of LiteLLM)",
+        }) !== null,
+      ).toBe(userOn);
+      expect(
+        within(dialog).queryByRole("button", {
+          name: "Reset spend in Payments",
+        }) !== null,
+      ).toBe(memberOn);
+      expect(
+        within(dialog).queryByRole("button", { name: "Reset all listed" }) !==
+          null,
+      ).toBe(memberOn);
+    },
+  );
 
   it.each([
     ["an Auditor (mayLink false)", false],
@@ -371,7 +433,10 @@ describe("Reset spend row action (RS1)", () => {
     },
   );
 
-  it("is absent on a row with no app identity (a LiteLLM-only user) and on a person not in LiteLLM (D4)", async () => {
+  // RS2 supersedes RS1's "linked rows only" (D-RS7, Design System - "Reset any
+  // LiteLLM user"): every row with a LiteLLM user has the action, linked to an
+  // app user or not; a person not in LiteLLM has nothing to reset.
+  it("shows on a LiteLLM-only row (no app identity), named by its email (RS2, item 18)", async () => {
     stub({
       users: [ROW_LITELLM_ONLY, ROW_NONE],
       enabledOperations: ON,
@@ -379,8 +444,37 @@ describe("Reset spend row action (RS1)", () => {
     });
     renderWithProviders(<LiteLLMUsersList />);
     await screen.findByText("Bob Barker");
-    expect(screen.getAllByText("zed@example.com").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Reset spend for zed@example.com" }),
+    ).toBeInTheDocument();
+  });
+
+  it("is absent on a person not in LiteLLM: there is no LiteLLM user to reset (RS2)", async () => {
+    stub({ users: [ROW_NONE], enabledOperations: ON, mayLink: true });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Bob Barker");
     expect(screen.queryByRole("button", { name: /reset spend/i })).toBeNull();
+  });
+
+  it("an unlinked row's dialog offers 'User spend (all of LiteLLM)' and resets by LiteLLM id (D-RS4, D-RS7)", async () => {
+    stub({ users: [ROW_LITELLM_ONLY], enabledOperations: ON, mayLink: true });
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMUsersList />);
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Reset spend for zed@example.com",
+      }),
+    );
+    const option = await screen.findByRole("group", {
+      name: "User spend (all of LiteLLM)",
+    });
+    const fetched = vi.mocked(fetch).mock.calls.map(([u]) => String(u));
+    expect(fetched).toContain("/api/litellm/users/ll-zed/memberships");
+    expect(
+      within(option).getByRole("button", {
+        name: "Reset user spend in all of LiteLLM",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("shows on a 'Match found' row too: it has an oid and a LiteLLM user (D4)", async () => {

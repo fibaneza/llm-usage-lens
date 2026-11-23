@@ -34,6 +34,7 @@ describe("resolveOperationSettings", () => {
   it("with no file and nothing saved, LD10 applies with source 'spec'", () => {
     const r = resolveOperationSettings({ file: null, saved: null });
     expect(r.resetMemberSpend).toEqual({ enabled: false, source: "spec" });
+    expect(r.resetUserSpend).toEqual({ enabled: false, source: "spec" });
     expect(r.deleteKey).toEqual({ enabled: false, source: "spec" });
     expect(r.removeTeamMember).toEqual({ enabled: true, source: "spec" });
     expect(r.createTeam).toEqual({ enabled: true, source: "spec" });

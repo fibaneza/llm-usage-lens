@@ -89,6 +89,10 @@ export const OPERATION_INFO: Record<
     family: "member-writes",
     description: "POST /team/{team_id}/member/{user_id}/reset_spend",
   },
+  resetUserSpend: {
+    family: "member-writes",
+    description: "POST /user/update (spend 0)",
+  },
   resetMemberBudget: {
     family: "member-writes",
     description: "POST /team/{team_id}/member/{user_id}/reset_budget",

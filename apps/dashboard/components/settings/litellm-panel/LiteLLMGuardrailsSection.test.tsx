@@ -96,6 +96,7 @@ const WRITES = [
   "setMemberLimits",
   "resetMemberSpend",
   "resetMemberBudget",
+  "resetUserSpend",
   "disableMember",
   "enableMember",
   "generateMemberKey",
@@ -108,7 +109,11 @@ const WRITES = [
   // Member writes with the resets it asks for).
   "requestBudgetReset",
 ];
-const OFF_BY_DEFAULT = new Set(["resetMemberSpend", "deleteKey"]);
+const OFF_BY_DEFAULT = new Set([
+  "resetMemberSpend",
+  "resetUserSpend",
+  "deleteKey",
+]);
 
 type Source = "ui" | "file" | "spec";
 type Ops = Record<string, { enabled: boolean; source: Source }>;
@@ -350,6 +355,7 @@ const FAMILIES: Array<[string, string[]]> = [
       "setMemberLimits",
       "resetMemberSpend",
       "resetMemberBudget",
+      "resetUserSpend",
       "disableMember",
       "enableMember",
       "requestBudgetReset",

@@ -206,6 +206,14 @@ describe("LD10 defaults: destructive operations are off, everything else on", ()
     expect(fake.calls).toHaveLength(0);
   });
 
+  it("resetUserSpend is disabled by default (RS2, D-RS2; LD10): 403 OPERATION_DISABLED, no call", async () => {
+    const ops = await load();
+    await expect(
+      ops.resetUserSpend!({ litellmUserId: USER_ID }, CTX),
+    ).rejects.toMatchObject(DISABLED);
+    expect(fake.calls).toHaveLength(0);
+  });
+
   it("deleteKey is disabled by default: 403 OPERATION_DISABLED, no call", async () => {
     const ops = await load();
     await expect(

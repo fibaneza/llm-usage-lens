@@ -7,6 +7,7 @@ import {
   LiteLLMMembersResponseSchema,
   LiteLLMModelsResponseSchema,
   LiteLLMOrgResponseSchema,
+  LiteLLMProxyTeamMembersResponseSchema,
   LiteLLMSpendLogsResponseSchema,
   LiteLLMTeamDetailResponseSchema,
   MemberSumCoverageSchema,
@@ -455,6 +456,15 @@ describe("LiteLLMMembersResponseSchema", () => {
       }).success,
     ).toBe(true);
   });
+  it("accepts the connected response with litellmTeamId (RS2 spec row, 2026-11-23)", () => {
+    const parsed = LiteLLMMembersResponseSchema.safeParse({
+      connected: true,
+      litellmTeamId: "ll-t1",
+      items: [],
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && "litellmTeamId" in parsed.data).toBe(true);
+  });
   it("rejects a member without a userId (members route)", () => {
     expect(
       LiteLLMMembersResponseSchema.safeParse({
@@ -462,6 +472,66 @@ describe("LiteLLMMembersResponseSchema", () => {
         items: [{ email: "a@company.com", spend: 1 }],
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("LiteLLMProxyTeamMembersResponseSchema (RS2 spec row, D-RS6, LD23)", () => {
+  const item = {
+    userId: "u-1",
+    email: "a@company.com",
+    spend: 1,
+    maxBudget: null,
+    person: { oid: "oid-1", name: "A" },
+  };
+  const base = {
+    litellmTeamId: "ll-t1",
+    enabledOperations: ["resetMemberSpend"],
+    items: [item],
+  };
+  it("accepts a linked person, a null person and a null budget", () => {
+    expect(
+      LiteLLMProxyTeamMembersResponseSchema.safeParse({
+        ...base,
+        items: [item, { ...item, userId: "u-2", person: null }],
+      }).success,
+    ).toBe(true);
+  });
+  it("accepts items without spend and maxBudget (Organisation cap, LD23)", () => {
+    const capped = {
+      userId: item.userId,
+      email: item.email,
+      person: item.person,
+    };
+    expect(
+      LiteLLMProxyTeamMembersResponseSchema.safeParse({
+        ...base,
+        items: [capped],
+      }).success,
+    ).toBe(true);
+  });
+  it("accepts an optional boolean truncated and rejects a non-boolean (R2; LD34)", () => {
+    const parse = (v: unknown) =>
+      LiteLLMProxyTeamMembersResponseSchema.safeParse(v).success;
+    expect(parse({ ...base, truncated: true })).toBe(true);
+    expect(parse({ ...base, truncated: false })).toBe(true);
+    expect(parse(base)).toBe(true);
+    expect(parse({ ...base, truncated: "yes" })).toBe(false);
+  });
+  it.each([
+    ["no litellmTeamId", { ...base, litellmTeamId: undefined }],
+    ["no enabledOperations", { ...base, enabledOperations: undefined }],
+    [
+      "an item without userId",
+      { ...base, items: [{ ...item, userId: undefined }] },
+    ],
+    [
+      "an item without person",
+      { ...base, items: [{ ...item, person: undefined }] },
+    ],
+  ])("rejects %s", (_n, value) => {
+    expect(LiteLLMProxyTeamMembersResponseSchema.safeParse(value).success).toBe(
+      false,
+    );
   });
 });
 

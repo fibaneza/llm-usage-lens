@@ -130,7 +130,14 @@ async function storeToggles(toggles: Record<string, boolean>) {
 
 let fake: ReturnType<typeof createFakeLiteLLM>;
 function install(opts: GatewayFakeOptions = {}) {
-  fake = createFakeLiteLLM(gatewayHandler(opts));
+  // The shared gateway fake does not know POST /user/update (RS2); answer it
+  // here so the test does not depend on a fake edit.
+  const base = gatewayHandler(opts);
+  fake = createFakeLiteLLM((call, attempt) =>
+    call.method === "POST" && call.path === "/user/update"
+      ? { status: 200, body: {} }
+      : base(call, attempt),
+  );
   vi.stubGlobal("fetch", fake.fetch);
 }
 
@@ -138,7 +145,11 @@ beforeAll(ensureTestTable);
 beforeEach(async () => {
   await clearTable();
   await storeConnection();
-  await storeToggles({ deleteKey: true, resetMemberSpend: true });
+  await storeToggles({
+    deleteKey: true,
+    resetMemberSpend: true,
+    resetUserSpend: true,
+  });
   install();
 });
 afterEach(() => {
@@ -760,6 +771,21 @@ const CASES: Case[] = [
         template: "/team/{team_id}/member/{user_id}/reset_spend",
         path: RESET_PATH("reset_spend"),
         body: { reset_to: 0 },
+      },
+    ],
+  },
+  {
+    // LiteLLM spec - Writes, resetUserSpend (RS2, D-RS1; T-RS1): exactly
+    // { user_id, spend: 0 } to POST /user/update.
+    name: "resetUserSpend",
+    write: true,
+    run: (o) => o.resetUserSpend!({ litellmUserId: USER_ID }, CTX),
+    calls: [
+      {
+        method: "POST",
+        template: "/user/update",
+        path: "/user/update",
+        body: { user_id: USER_ID, spend: 0 },
       },
     ],
   },
@@ -1390,6 +1416,7 @@ describe("strict input schemas: unknown or forbidden fields are rejected before 
     },
     resetMemberSpend: { litellmTeamId: TEAM_ID, litellmUserId: USER_ID },
     resetMemberBudget: { litellmTeamId: TEAM_ID, litellmUserId: USER_ID },
+    resetUserSpend: { litellmUserId: USER_ID },
     disableMember: { litellmTeamId: TEAM_ID, litellmUserId: USER_ID },
     enableMember: { litellmTeamId: TEAM_ID, litellmUserId: USER_ID },
     generateMemberKey: {
@@ -1492,6 +1519,71 @@ describe("strict input schemas: unknown or forbidden fields are rejected before 
     const { ops } = await load();
     await expect(ops.blockKey!({ tokenId: TOKEN_A })).rejects.toThrow();
     expect(fake.calls).toHaveLength(0);
+  });
+});
+
+// LiteLLM spec - Writes, resetUserSpend (D-RS1; T-RS1; LT35 a wider body): the
+// outgoing body is parsed by a strict schema (`spend: z.literal(0)`) before the
+// send; a later field is a spec change, never a pass-through.
+describe("resetUserSpend sends exactly { user_id, spend: 0 } (T-RS1, D-RS1)", () => {
+  it("the body has exactly the keys user_id and spend, and spend is the number 0", async () => {
+    const { ops } = await load();
+    await ops.resetUserSpend!({ litellmUserId: USER_ID }, CTX);
+    const posts = fake.calls.filter((c) => c.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(Object.keys(posts[0]!.body as object).sort()).toEqual([
+      "spend",
+      "user_id",
+    ]);
+    expect((posts[0]!.body as { spend: unknown }).spend).toBe(0);
+  });
+
+  it.each([
+    ["a nonzero spend", { spend: 5 }],
+    ["a negative spend", { spend: -1 }],
+    ["spend: null", { spend: null }],
+    ["max_budget", { max_budget: 100 }],
+    ["user_role", { user_role: "proxy_admin" }],
+    ["user_email", { user_email: "x@y.com" }],
+    ["teams", { teams: ["t"] }],
+    ["blocked", { blocked: true }],
+    ["models", { models: ["*"] }],
+    ["metadata", { metadata: { a: 1 } }],
+    ["budget_duration", { budget_duration: "30d" }],
+    ["a second user id", { user_id: "bob@company.com" }],
+  ])("%s in the input is refused and nothing is sent", async (_n, extra) => {
+    const { ops } = await load();
+    await expect(
+      ops.resetUserSpend!({ litellmUserId: USER_ID, ...extra }, CTX),
+    ).rejects.toThrow();
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it.each([
+    ["no user id", {}],
+    ["an empty user id", { litellmUserId: "" }],
+    ["a user id that is not a string", { litellmUserId: 7 }],
+    ["a path-like user id", { litellmUserId: "../x" }],
+  ])("%s is refused and nothing is sent", async (_n, input) => {
+    const { ops } = await load();
+    await expect(ops.resetUserSpend!(input, CTX)).rejects.toThrow();
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("a call without an actor is refused with no call (Audit item 2)", async () => {
+    const { ops } = await load();
+    await expect(
+      ops.resetUserSpend!({ litellmUserId: USER_ID }),
+    ).rejects.toThrow();
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("uses no other LiteLLM route (LT35, LT37: no user delete): no /user/delete, no /team/*, no read of the user first", async () => {
+    const { ops } = await load();
+    await ops.resetUserSpend!({ litellmUserId: USER_ID }, CTX);
+    expect(fake.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "POST /user/update",
+    ]);
   });
 });
 

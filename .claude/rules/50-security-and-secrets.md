@@ -44,6 +44,10 @@
    unit INV1: `POST /api/teams/[id]/members/pending/[key]/accept` with the
    add-member roles, never on one's own invite, Access Control — *Accept a
    pending invite*, 2026-11-18;
+   unit RS2 (user, 2026-11-19): the three LiteLLM-id reset routes follow the
+   matrix (Lead in scope, `internal-org-admin`, `internal-admin`; `403` before
+   parsing), the user-level reset by a Lead only for a member of a team in
+   their scope, otherwise `404`, LiteLLM LD39;
    the Access Control spec's permission matrix from Phase 4R), before any
    DynamoDB call. Global roles are never granted by group mappings; only an
    `internal-admin` grants `internal-admin` or `internal-org-admin` in the

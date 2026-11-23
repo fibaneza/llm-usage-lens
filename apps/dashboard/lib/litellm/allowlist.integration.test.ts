@@ -56,6 +56,8 @@ const EXPECTED: Record<string, [Kind, boolean, string[]]> = {
     false,
     ["POST /team/{team_id}/member/{user_id}/reset_spend"],
   ],
+  // RS2, D-RS1/D-RS2 (LiteLLM spec - Writes): off by default (LD10).
+  resetUserSpend: ["write", false, ["POST /user/update"]],
   resetMemberBudget: [
     "write",
     true,
@@ -110,12 +112,12 @@ describe("the gateway registry matches the allowlist table", () => {
     },
   );
 
-  it("LD10: only resetMemberSpend and deleteKey default off (L7 operations land in L7)", () => {
+  it("LD10: only resetMemberSpend, resetUserSpend and deleteKey default off (L7 operations land in L7)", () => {
     const off = Object.entries(LITELLM_OPERATIONS)
       .filter(([, op]) => !op.defaultEnabled)
       .map(([n]) => n)
       .sort();
-    expect(off).toEqual(["deleteKey", "resetMemberSpend"]);
+    expect(off).toEqual(["deleteKey", "resetMemberSpend", "resetUserSpend"]);
   });
 
   it("LT7/LT14: no bulk, model-write, config, organization, agent, delete-team or passthrough route", () => {

@@ -105,15 +105,27 @@ function RowLink({
   );
 }
 
-// RS1 (D4): only where the Team page would show it - the toggle is on, the
-// caller may write (mayLink) and the row has an app identity and a LiteLLM user.
-function RowReset({ row, show }: { row: UsersListRow; show: boolean }) {
-  if (!show || !row.appUser || !row.litellmUser) return null;
+// RS2 (D-RS7, supersedes RS1 D4): the resetUserSpend toggle is on, the caller
+// may write (mayLink) and the row has a LiteLLM user, linked to an app user or not.
+function RowReset({
+  row,
+  show,
+  enabledOperations,
+}: {
+  row: UsersListRow;
+  show: boolean;
+  enabledOperations: string[];
+}) {
+  if (!show || !row.litellmUser) return null;
+  const name =
+    row.appUser?.displayName ?? row.appUser?.email ?? row.litellmUser.email;
   return (
     <ResetMemberSpendDialog
-      oid={row.appUser.oid}
+      {...(row.appUser ? { oid: row.appUser.oid } : {})}
       litellmUserId={row.litellmUser.userId}
-      name={row.appUser.displayName ?? row.appUser.email ?? row.appUser.oid}
+      name={name}
+      userReset
+      enabledOperations={enabledOperations}
     />
   );
 }
@@ -168,7 +180,9 @@ function List({
   if (users.length === 0 && page === 1) return <Empty>No users found</Empty>;
   const canCreate = enabledOperations.includes("createUser");
   const canReset =
-    mayLink === true && enabledOperations.includes("resetMemberSpend");
+    mayLink === true &&
+    (enabledOperations.includes("resetMemberSpend") ||
+      enabledOperations.includes("resetUserSpend"));
   const refresh = () =>
     void queryClient.invalidateQueries({ queryKey: ["litellm", "users-list"] });
 
@@ -244,7 +258,11 @@ function List({
                     canCreate={canCreate}
                     onChanged={refresh}
                   />
-                  <RowReset row={row} show={canReset} />
+                  <RowReset
+                    row={row}
+                    show={canReset}
+                    enabledOperations={enabledOperations}
+                  />
                 </div>
               </li>
             );
@@ -293,7 +311,11 @@ function List({
                         canCreate={canCreate}
                         onChanged={refresh}
                       />
-                      <RowReset row={row} show={canReset} />
+                      <RowReset
+                        row={row}
+                        show={canReset}
+                        enabledOperations={enabledOperations}
+                      />
                     </div>
                   </TableCell>
                 </TableRow>

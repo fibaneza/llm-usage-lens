@@ -48,6 +48,8 @@ describe("LITELLM_OPERATION_NAMES", () => {
         "setMemberBudget",
         "setMemberLimits",
         "resetMemberSpend",
+        // RS2 (LiteLLM spec - Writes, D-RS1): POST /user/update { user_id, spend: 0 }.
+        "resetUserSpend",
         "resetMemberBudget",
         "disableMember",
         "enableMember",
@@ -74,7 +76,13 @@ describe("LiteLLMGatewayConfigSchema", () => {
     expect(parse({ ...ok, wildcardWarning: false }).success).toBe(false);
   });
 
-  it.each(["createTeam", "resetMemberSpend", "deleteKey", "getTeam"])(
+  it.each([
+    "createTeam",
+    "resetMemberSpend",
+    "resetUserSpend",
+    "deleteKey",
+    "getTeam",
+  ])(
     "rejects enabled:true for %s: the file can only switch an operation off",
     (op) => {
       expect(parse({ operations: { [op]: { enabled: true } } }).success).toBe(

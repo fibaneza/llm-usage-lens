@@ -127,21 +127,35 @@ export const DenyBudgetResetResponseSchema = z.object({
 });
 
 export const BUDGET_RESET_TRIGGERS = ["direct", "request"] as const;
-export const BudgetResetSchema = z.strictObject({
+// Data Model - BudgetReset (amended 2026-11-19, RS2, D-RS8): a union on
+// `scope`; oid, teamId and departmentId exist only where the person or team
+// is known to the app. A user-scope reset has no LiteLLM team.
+const BudgetResetCommon = {
   resetId: z.uuid(),
-  oid: z.string().min(1),
-  teamId: z.string().min(1),
-  departmentId: z.string().min(1),
-  litellmTeamId: z.string().min(1),
+  oid: z.string().min(1).optional(),
+  teamId: z.string().min(1).optional(),
+  departmentId: z.string().min(1).optional(),
   litellmUserId: z.string().min(1),
-  operation: z.enum(["spend", "budget"]),
   amount: z.number().min(0),
   budget: z.number().min(0).nullable(),
   trigger: z.enum(BUDGET_RESET_TRIGGERS),
   actorOid: z.string().min(1),
   requestId: z.string().min(1),
   timestamp: Iso8601Schema,
-});
+};
+export const BudgetResetSchema = z.discriminatedUnion("scope", [
+  z.strictObject({
+    scope: z.literal("member"),
+    ...BudgetResetCommon,
+    litellmTeamId: z.string().min(1),
+    operation: z.enum(["spend", "budget"]),
+  }),
+  z.strictObject({
+    scope: z.literal("user"),
+    ...BudgetResetCommon,
+    operation: z.literal("spend"),
+  }),
+]);
 export type BudgetReset = z.infer<typeof BudgetResetSchema>;
 
 // Open for L7 to append its own kinds; nothing here is key-specific.
