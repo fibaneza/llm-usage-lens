@@ -194,6 +194,7 @@ describe("GET /api/litellm/connection", () => {
         version: 1,
         edition: "oss",
         serviceKeyConfigured: true,
+        defaultBaseUrl: "http://localhost:4000", // D-ST4
       });
       await expectNoLeak(res);
       expect(fake.calls).toHaveLength(0);
@@ -221,6 +222,7 @@ describe("GET /api/litellm/connection", () => {
       version: 0,
       edition: "oss",
       serviceKeyConfigured: false,
+      defaultBaseUrl: "http://localhost:4000", // D-ST4
     });
   });
 
@@ -630,5 +632,41 @@ describe("internal-org-admin on /api/litellm/connection (LD24)", () => {
     const res = await GET(get(), ctx);
     expect(res.status).toBe(200);
     await expectNoLeak(res);
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md (connection), D-ST4; docs/guides/litellm-admin.md
+// (LLM_LENS_LITELLM_BASE_URL: offered, never saved by itself; the allowed-hosts
+// rule still applies, so localhost is refused where it is not allowed).
+describe("LLM_LENS_LITELLM_BASE_URL default (D-ST4)", () => {
+  it("GET offers the default as defaultBaseUrl and writes nothing", async () => {
+    const { GET } = await load({
+      LLM_LENS_LITELLM_BASE_URL: "http://localhost:4000",
+    });
+    const res = await GET(get(), ctx);
+    expect(res.status).toBe(200);
+    const data = (await res.json()).data;
+    expect(data.baseUrl).toBeNull();
+    expect(data.defaultBaseUrl).toBe("http://localhost:4000");
+    expect(await storedUrl()).toBeUndefined();
+  });
+
+  it("GET offers http://localhost:4000 when the variable is unset", async () => {
+    const { GET } = await load();
+    const data = (await (await GET(get(), ctx)).json()).data;
+    expect(data.defaultBaseUrl).toBe("http://localhost:4000");
+  });
+
+  it("PUT of the default host is still refused when it is not in the allowlist", async () => {
+    const { PUT } = await load({ APP_ENV: "prod" });
+    const res = await PUT(
+      send("PUT", CONN_URL, {
+        baseUrl: "http://localhost:4000",
+        version: null,
+      }),
+      ctx,
+    );
+    await expectError(res, 400, "BAD_REQUEST");
+    expect(await storedUrl()).toBeUndefined();
   });
 });

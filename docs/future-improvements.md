@@ -521,6 +521,33 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 - **References:** [LiteLLM spec](specs/2026-11-10-litellm.md) — *Caching*,
   *Network*.
 
+### Rename a shared team or department
+
+- **Status:** Deferred.
+- **What:** Rename a team or department that several AWS accounts share, in one
+  action that updates every account's name copy.
+- **Why deferred:** Each `AccountMeta` item stores its own `teamName` and
+  `departmentName`, so a rename touches many items; Edit account only picks an
+  existing team or department (unit ST1, 2026-11-24).
+- **Adopt when:** an admin needs to correct a team or department name that
+  more than one account carries, and picking another id is not enough.
+- **References:** [Design System](specs/2026-05-15-design-system.md) —
+  *Settings Page*; [Data Model](specs/2026-05-15-data-model.md) — *API Routes*,
+  *Entity: AccountMeta*.
+
+### Validate picked account ids on PATCH
+
+- **Status:** Deferred (accepted limit, coordinator ruling 2026-11-24).
+- **What:** `PATCH /api/accounts/[id]` checks that a sent `departmentId` and
+  `teamId` exist in the registry and that the team belongs to the department.
+- **Why deferred:** the route is `internal-admin` only and Edit account sends
+  only ids picked from existing departments and from the picked department's
+  teams (unit ST1); the PATCH schema stays unchanged.
+- **Adopt when:** a second writer of `AccountMeta` appears (an API client, an
+  import, the Phase 6 collector) or an inconsistent id is found in the table.
+- **References:** [Data Model](specs/2026-05-15-data-model.md) — *API Routes*
+  (the PATCH row), *Entity: AccountMeta*.
+
 ### Opus 4.8 dynamic workflows
 
 - **Status:** Deferred (analysis complete; not adopted in v1).

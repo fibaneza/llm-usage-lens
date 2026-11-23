@@ -305,12 +305,11 @@ const DEPT = { id: "dept-eng" };
 const teamAccount = accounts[0];
 const ACCOUNT_ID = teamAccount ? teamAccount.accountId : "000000000000";
 
+// D-ST5: POST /api/accounts takes names only; the server generates the ids.
 const newAccount = {
   accountId: "111122223333",
   accountName: "new-account",
-  departmentId: "dept-finance",
   departmentName: "Finance",
-  teamId: "team-ledger",
   teamName: "Ledger",
   region: "ap-southeast-2",
 };

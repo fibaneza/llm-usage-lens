@@ -51,6 +51,22 @@ describe("LiteLLMConnectionStatusSchema", () => {
     edition: "oss",
     serviceKeyConfigured: true,
   };
+  // D-ST4 (plan unit ST1): optional defaultBaseUrl; the old shape still parses.
+  it("accepts an optional URL defaultBaseUrl and rejects a non-URL", () => {
+    expect(
+      LiteLLMConnectionStatusSchema.safeParse({
+        ...status,
+        defaultBaseUrl: "http://localhost:4000",
+      }).success,
+    ).toBe(true);
+    expect(
+      LiteLLMConnectionStatusSchema.safeParse({
+        ...status,
+        defaultBaseUrl: "not a url",
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts a configured and an unconfigured status", () => {
     expect(LiteLLMConnectionStatusSchema.safeParse(status).success).toBe(true);
     expect(

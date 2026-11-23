@@ -21,6 +21,7 @@ import { seedIdentity } from "@/test/support/matrix-route-support";
 import { signInAs } from "@/test/fixtures/scope-fixtures";
 import type { CallerName } from "@/test/fixtures/scope-fixtures";
 import { ctxAt, ok } from "@/test/support/access-test-support";
+import { putRaw } from "@/test/support/test-support";
 
 // Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)"
 // (`GET /api/identities/directory`: internal-admin, internal-org-admin and
@@ -253,6 +254,102 @@ describe("GET /api/identities/directory", () => {
       await expectError(withMatch.res, 503, "LITELLM_UNAVAILABLE");
       expect((await list()).res.status).toBe(200);
     });
+  });
+
+  // Source: docs/specs/2026-11-10-access-control.md - API routes, row
+  // /api/identities/directory (D-ST2): `q` is 1-100 characters,
+  // matches name, email or UPN, returns at most 10 results; a lead is 403 (D37).
+  // The 400 shape itself belongs to the route-contract suite.
+  describe("q search (D-ST2)", () => {
+    it.each([
+      ["empty", ""],
+      ["101 characters", "a".repeat(101)],
+    ])("400 for q of %s", async (_n, q) => {
+      signInAs("admin");
+      const { res } = await list(`?q=${q}`);
+      await expectError(res, 400, "BAD_REQUEST");
+    });
+
+    it("accepts q of exactly 100 characters", async () => {
+      signInAs("admin");
+      const { res } = await list(`?q=${"a".repeat(100)}`);
+      expect(res.status).toBe(200);
+    });
+
+    it("returns at most 10 results, with no cursor to a second page", async () => {
+      await seedMany(15);
+      signInAs("admin");
+      const { res, body } = await list("?q=company.com");
+      expect(res.status).toBe(200);
+      expect(rows(body)).toHaveLength(10);
+    });
+
+    it("matches by display name, case-insensitively", async () => {
+      await seedIdentity(oidN(90), {
+        email: "zz1@company.com",
+        name: "Zelda Quokka",
+      });
+      signInAs("admin");
+      const { body } = await list("?q=quokka");
+      expect(rows(body).map((r) => r.oid)).toEqual([oidN(90)]);
+    });
+
+    it("matches by email", async () => {
+      await seedIdentity(oidN(91), {
+        email: "uniq.mail.token@company.com",
+        name: "Plain",
+      });
+      signInAs("admin");
+      const { body } = await list("?q=uniq.mail.token");
+      expect(rows(body).map((r) => r.oid)).toEqual([oidN(91)]);
+    });
+
+    it("matches by UPN", async () => {
+      await seedIdentity(oidN(92), { email: "other@company.com", name: "U" });
+      await putRaw({
+        PK: `IDENT#${oidN(92)}`,
+        SK: "META",
+        gsi1pk: "IDENTS",
+        gsi1sk: `IDENT#${oidN(92)}`,
+        oid: oidN(92),
+        tid: "00000000-0000-4000-8000-0000000000ff",
+        email: "other@company.com",
+        upn: "upn-only-token@tenant.onmicrosoft.com",
+        displayName: "U",
+        lastSignInAt: "2026-01-01T00:00:00.000Z",
+        lastSeenRoles: ["internal-viewer"],
+        authMethod: "entra",
+        version: 1,
+      });
+      signInAs("admin");
+      const { body } = await list("?q=upn-only-token");
+      expect(rows(body).map((r) => r.oid)).toEqual([oidN(92)]);
+    });
+
+    it("returns an empty list when nothing matches", async () => {
+      signInAs("admin");
+      const { res, body } = await list("?q=no-such-person-xyz");
+      expect(res.status).toBe(200);
+      expect(rows(body)).toEqual([]);
+    });
+
+    it.each(["admin", "orgAdmin", "auditor"] as CallerName[])(
+      "%s may search",
+      async (who) => {
+        signInAs(who);
+        const { res } = await list("?q=company");
+        expect(res.status).toBe(200);
+      },
+    );
+
+    it.each(["teamAdminA", "memberA"] as const)(
+      "%s (a lead or member) gets 403 on q (D37)",
+      async (who) => {
+        signInAs(who);
+        const { res } = await list("?q=alice");
+        await expectError(res, 403, "FORBIDDEN");
+      },
+    );
   });
 
   it("is never cached: a link written between two reads is visible on the second (Rule 60.10)", async () => {

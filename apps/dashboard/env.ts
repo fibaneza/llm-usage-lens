@@ -19,6 +19,8 @@ import {
 // uses non-secret placeholders) validate, so missing vars fail the build.
 // Entra ID is optional; sign-in provider rules are cross-checked by
 // resolveSignInProviders.
+export const DEFAULT_LITELLM_BASE_URL = "http://localhost:4000";
+
 export const env = createEnv({
   server: {
     AUTH_SECRET: z.string().min(1),
@@ -43,6 +45,7 @@ export const env = createEnv({
     AUDIT_LOG_GROUP_NAME: z.string().min(1).optional(),
     LITELLM_SERVICE_KEY: z.string().min(1).optional(),
     LITELLM_ALLOWED_HOSTS: z.string().optional(),
+    LLM_LENS_LITELLM_BASE_URL: z.url().default(DEFAULT_LITELLM_BASE_URL),
     NODE_ENV: z.enum(["development", "test", "production"]).optional(),
     NEXT_PHASE: z.string().optional(),
     AWS_REGION: z.string().default(COLLECTOR_REGION),

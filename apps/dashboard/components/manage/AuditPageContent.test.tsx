@@ -76,6 +76,42 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// T-ST6 (unit ST1, D-ST6; Design System - Audit page header; Rule 40.9): the
+// access review export moves to the page header as a secondary button.
+describe("AuditPageContent export (T-ST6, D-ST6)", () => {
+  it("T-ST6: Export access review (CSV) is in the page header as a secondary, not filled primary, control", () => {
+    stubAudit();
+    renderWithProviders(<AuditPageContent sources={BOTH} app={APP} />);
+
+    const exportControl = screen.getByRole("link", {
+      name: /export access review \(csv\)/i,
+    });
+    expect(exportControl).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/api\/access-review$/),
+    );
+    expect(["outline", "secondary", "ghost"]).toContain(
+      exportControl.getAttribute("data-variant"),
+    );
+    // The header, not the bottom: outside the App source content and before it.
+    expect(screen.getByTestId("app-source")).not.toContainElement(
+      exportControl,
+    );
+    expect(
+      exportControl.compareDocumentPosition(screen.getByTestId("app-source")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("T-ST6: the App source keeps its own content below the header", () => {
+    stubAudit();
+    renderWithProviders(<AuditPageContent sources={BOTH} app={APP} />);
+    expect(screen.getByTestId("app-source")).toHaveTextContent(
+      "dashboard audit log",
+    );
+  });
+});
+
 describe("AuditPageContent source toggle (Management pages - Audit)", () => {
   it("offers App and Gateway as a segmented toggle with App pressed by default, and mounts only App", async () => {
     const calls = stubAudit();

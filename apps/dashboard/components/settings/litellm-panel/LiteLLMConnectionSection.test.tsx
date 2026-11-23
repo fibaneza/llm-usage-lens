@@ -365,3 +365,68 @@ describe("LiteLLMConnectionSection wildcard warning", () => {
     expect(within(w).queryByRole("alert")).toBeNull();
   });
 });
+
+// Source: plan unit ST1, T-ST4 / D-ST4; Design System - "Settings small UX" >
+// "LiteLLM connection result": after Test connection, a check icon and
+// "LiteLLM connection is ok", or a cross icon and the error, in an aria-live
+// region, icon and text together (never colour alone). The Base URL field
+// offers `defaultBaseUrl` (from LLM_LENS_LITELLM_BASE_URL, default
+// http://localhost:4000, served by GET /api/litellm/connection) when nothing is
+// saved, and saves nothing until the user submits.
+describe("LiteLLMConnectionSection test result (T-ST4, D-ST4)", () => {
+  const UNSAVED = {
+    baseUrl: null,
+    version: 0,
+    edition: "oss" as const,
+    serviceKeyConfigured: true,
+    defaultBaseUrl: "http://localhost:4000",
+  };
+
+  async function runTest(testData: unknown) {
+    stubLiteLLM(CONFIGURED, testData);
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMConnectionSection canEdit />);
+    await screen.findByText("https://litellm.example.internal");
+    await user.click(screen.getByRole("button", { name: /test connection/i }));
+  }
+
+  it("success: a check icon and 'LiteLLM connection is ok' in an aria-live region", async () => {
+    await runTest({ result: "ok", message: "Connected", warnings: [] });
+    const text = await screen.findByText("LiteLLM connection is ok");
+    const live = text.closest("[aria-live], [role='status'], [role='alert']");
+    expect(live).not.toBeNull();
+    expect(
+      live?.querySelector("svg.lucide-check, svg.lucide-circle-check"),
+    ).not.toBeNull();
+  });
+
+  it("failure: a cross icon and the error text in an aria-live region", async () => {
+    await runTest({ result: "unreachable", message: "Cannot reach LiteLLM" });
+    const text = await screen.findByText("Cannot reach LiteLLM");
+    const live = text.closest("[aria-live], [role='status'], [role='alert']");
+    expect(live).not.toBeNull();
+    expect(
+      live?.querySelector("svg.lucide-x, svg.lucide-circle-x"),
+    ).not.toBeNull();
+    expect(screen.queryByText("LiteLLM connection is ok")).toBeNull();
+  });
+
+  it("offers the default Base URL when nothing is saved, and PUTs nothing until Save", async () => {
+    const calls = stubLiteLLM(UNSAVED as Status);
+    renderWithProviders(<LiteLLMConnectionSection canEdit />);
+    const field = await screen.findByLabelText(/base url/i);
+    expect(field).toHaveValue("http://localhost:4000");
+    expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
+  });
+
+  it("a saved connection wins over the default", async () => {
+    stubLiteLLM({
+      ...CONFIGURED,
+      defaultBaseUrl: "http://localhost:4000",
+    } as Status);
+    renderWithProviders(<LiteLLMConnectionSection canEdit />);
+    expect(await screen.findByLabelText(/base url/i)).toHaveValue(
+      "https://litellm.example.internal",
+    );
+  });
+});

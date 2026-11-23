@@ -43,6 +43,17 @@ async function open(page: Page, path: string) {
 const heading = (page: Page, name: string) =>
   page.getByRole("heading", { level: 2, name, exact: true });
 const PENDING = "Pending and stale access";
+// D-ST6: the export is on the Audit page twice - a header action (outside any
+// section) and the Access review section's own link (inside its region).
+const EXPORT_LINK = /export access review \(csv\)/i;
+// The header action precedes every section in the DOM, so it is the first
+// match; the section link is scoped by its region.
+const headerExport = (page: Page) =>
+  page.getByRole("link", { name: EXPORT_LINK }).first();
+const sectionExport = (page: Page) =>
+  page
+    .getByRole("region", { name: "Access review" })
+    .getByRole("link", { name: EXPORT_LINK });
 
 // Which sections each tab shows for an admin (Design System sub-tab table).
 const ADMIN_TABS: [string, string[]][] = [
@@ -105,10 +116,123 @@ test.describe("settings access tabs - internal-admin", () => {
   test("Audit offers the access review export", async ({ page }) => {
     await mockApi(page);
     await open(page, AUDIT);
-    await expect(
-      page.getByRole("link", { name: /export access review/i }),
-    ).toHaveAttribute("href", "/api/access-review");
+    await expect(page.getByRole("link", { name: EXPORT_LINK })).toHaveCount(2);
+    await expect(headerExport(page)).toHaveAttribute(
+      "href",
+      "/api/access-review",
+    );
+    await expect(sectionExport(page)).toHaveAttribute(
+      "href",
+      "/api/access-review",
+    );
   });
+
+  // D-ST6 ( Design System - Audit page header): the export is a header
+  // action, above the sections, as a secondary (not filled primary) control.
+  test("the export sits in the Audit page header above the sections, not as a filled primary", async ({
+    page,
+  }) => {
+    await mockApi(page);
+    await open(page, AUDIT);
+    const exportLink = headerExport(page);
+    const log = heading(page, "Audit log");
+    const linkBox = await exportLink.boundingBox();
+    const logBox = await log.boundingBox();
+    expect(linkBox && logBox && linkBox.y < logBox.y).toBe(true);
+    await expect(exportLink).not.toHaveAttribute("data-variant", "default");
+    await expect(heading(page, "Access review")).toBeVisible();
+  });
+
+  // D-ST2 ( Design System - Identity pickers): a search box, at least 2
+  // characters, results by name or email, picked with the keyboard or mouse.
+  test("the Identity links Person picker is a search box that finds a person by name", async ({
+    page,
+  }) => {
+    await mockApi(page);
+    const queries: string[] = [];
+    await page.route(/\/api\/identities\/directory(\?|$)/, (route) => {
+      const q = new URL(route.request().url()).searchParams.get("q") ?? "";
+      queries.push(q);
+      return route.fulfill({
+        json: {
+          data: {
+            items: [
+              {
+                oid: "oid-alice",
+                displayName: "Alice Adams",
+                email: "alice@example.com",
+                authMethod: "entra",
+                memberTeamId: null,
+                litellm: { state: "none" },
+                linkVersion: 0,
+              },
+            ],
+          },
+        },
+      });
+    });
+    await open(page, IDENTITIES);
+    const search = page.getByRole("combobox", { name: "Person" });
+    await search.fill("a");
+    await expect.poll(() => queries.length).toBe(0);
+    await search.fill("ali");
+    await page
+      .getByRole("option", { name: "Alice Adams (alice@example.com)" })
+      .click();
+    expect(queries).toEqual(["ali"]);
+    // D-ST2: the picked person's editor loaded (Alice's usage identity).
+    await expect(
+      page.getByRole("region", { name: "Identity links" }).getByRole("button", {
+        name: "Remove usage identity alice@example.com",
+      }),
+    ).toBeVisible();
+  });
+
+  // Standing gate for a new interaction (Design System - Layout, 375 / 1440;
+  // Identity pickers, D-ST2): the open search result list is axe clean and
+  // does not widen the page.
+  for (const width of [375, 1440]) {
+    test(`the Identity links search results at ${width}px: no serious or critical axe violations and no horizontal scroll`, async ({
+      page,
+    }) => {
+      await mockApi(page);
+      await page.route(/\/api\/identities\/directory(\?|$)/, (route) =>
+        route.fulfill({
+          json: {
+            data: {
+              items: [
+                {
+                  oid: "oid-alice",
+                  displayName: "Alice Adams With A Rather Long Display Name",
+                  email: "alice.adams.with.a.long.address@example.com",
+                  authMethod: "entra",
+                  memberTeamId: null,
+                  litellm: { state: "none" },
+                  linkVersion: 0,
+                },
+              ],
+            },
+          },
+        }),
+      );
+      await open(page, IDENTITIES);
+      await page.setViewportSize({ width, height: 900 });
+      await page.getByRole("combobox", { name: "Person" }).fill("ali");
+      await expect(page.getByRole("option").first()).toBeVisible();
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa"])
+        .analyze();
+      expect(
+        results.violations.filter((v) =>
+          ["serious", "critical"].includes(v.impact ?? ""),
+        ),
+      ).toEqual([]);
+      const fits = await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      );
+      expect(fits).toBe(true);
+    });
+  }
 
   test("the pending and stale lists show the pending invitation and the idle access with their reasons", async ({
     page,
@@ -305,9 +429,8 @@ test.describe("settings access tabs - other roles", () => {
       page.getByRole("switch", { name: "Password sign-in" }),
     ).toBeDisabled();
     await open(page, AUDIT);
-    await expect(
-      page.getByRole("link", { name: /export access review/i }),
-    ).toBeVisible();
+    // D-ST6: read-only roles still see the header export.
+    await expect(headerExport(page)).toBeVisible();
   });
 
   test("internal-org-admin sees Members, Team admins and Visibility only", async ({

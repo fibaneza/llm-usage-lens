@@ -1,16 +1,8 @@
-import { screen, within } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  ALICE,
-  BOB,
-  fail,
-  identityItem,
-  ok,
-  page,
-  stubAccessApi,
-} from "@/test/fakes/access-ui-stubs";
+import { fail, ok, page, stubAccessApi } from "@/test/fakes/access-ui-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { IdentityLinksSection } from "./IdentityLinksSection";
@@ -26,10 +18,18 @@ import { IdentityLinksSection } from "./IdentityLinksSection";
 // the opaque cursor (Rule 20.6). The rules editor and suggestions (D27) are a
 // separate unit.
 //
+// Unit ST1 / T-ST2 (D-ST2; Design System - Settings, "Identity pickers
+// (D-ST2)"; Access Control - API routes, /api/identities/directory `q`): the
+// Person picker is a search box, not a list of every user.
+//
 // Module under test: `components/settings/access/IdentityLinksSection.tsx`
 //   <IdentityLinksSection canEdit={boolean} />
-// - Native <select> "Person" (options "<display name> (<email>)"), first
-//   preselected, "Load more people" button when the list has a cursor.
+// - A combobox named "Person" (a text input, no native <select>), with its
+//   results as role="option" named "<display name> (<email>)". Nothing is
+//   chosen until the admin picks a result: the editor appears after a pick.
+// - Typing sends GET /api/identities/directory?q=<text> (trimmed) only from
+//   2 characters, debounced (at most ~500 ms), showing at most 10 results.
+//   GET /api/identities (the full list) is no longer requested.
 // - Lists "Usage identities" and "Aliases" (each key with a remove button
 //   "Remove usage identity <key>" / "Remove alias <key>"), inputs "New usage
 //   identity" / "New alias" with "Add usage identity" / "Add alias" buttons,
@@ -37,6 +37,29 @@ import { IdentityLinksSection } from "./IdentityLinksSection";
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+const DEBOUNCE_MS = 500;
+const DIRECTORY = "GET /api/identities/directory";
+
+function dirRow(o: { oid: string; email: string; displayName: string }) {
+  return {
+    ...o,
+    authMethod: "entra" as const,
+    memberTeamId: null,
+    litellm: { state: "none" as const },
+    linkVersion: 0,
+  };
+}
+const D_ALICE = dirRow({
+  oid: "oid-alice",
+  email: "alice@example.com",
+  displayName: "Alice Adams",
+});
+const D_BOB = dirRow({
+  oid: "oid-bob",
+  email: "bob@example.com",
+  displayName: "Bob Brown",
 });
 
 const LINK = {
@@ -50,7 +73,7 @@ const LINK = {
 
 function routes(extra: Record<string, unknown> = {}) {
   return {
-    "GET /api/identities": page([ALICE, BOB]),
+    [DIRECTORY]: page([D_ALICE, D_BOB]),
     "GET /api/identities/oid-alice/links": LINK,
     "GET /api/identities/oid-bob/links": {
       oid: "oid-bob",
@@ -63,14 +86,24 @@ function routes(extra: Record<string, unknown> = {}) {
   };
 }
 
+async function choose(
+  user: ReturnType<typeof userEvent.setup>,
+  query: string,
+  label: string,
+) {
+  await user.type(screen.getByRole("combobox", { name: "Person" }), query);
+  await user.click(await screen.findByRole("option", { name: label }));
+}
+const ALICE_LABEL = "Alice Adams (alice@example.com)";
+const BOB_LABEL = "Bob Brown (bob@example.com)";
+
 describe("IdentityLinksSection", () => {
-  it("shows the first person's usage identities, aliases and LiteLLM user", async () => {
+  it("shows the chosen person's usage identities, aliases and LiteLLM user", async () => {
+    const user = userEvent.setup();
     stubAccessApi(routes());
     renderWithProviders(<IdentityLinksSection canEdit />);
+    await choose(user, "ali", ALICE_LABEL);
     expect(await screen.findByText("alice-sso")).toBeInTheDocument();
-    expect(screen.getByLabelText("Person")).toHaveDisplayValue(
-      "Alice Adams (alice@example.com)",
-    );
     // Access Control spec - LiteLLM user links (amended 2026-11-18, M3 review
     // B1): the id is read-only here and changes only on the LiteLLM users tab.
     expect(screen.queryByLabelText("LiteLLM user ID")).not.toBeInTheDocument();
@@ -95,14 +128,8 @@ describe("IdentityLinksSection", () => {
       }),
     );
     renderWithProviders(<IdentityLinksSection canEdit />);
-    await user.selectOptions(
-      await screen.findByLabelText("Person"),
-      "Bob Brown (bob@example.com)",
-    );
-    await vi.waitFor(() =>
-      expect(screen.queryByText("alice-sso")).not.toBeInTheDocument(),
-    );
-    await user.type(screen.getByLabelText("New alias"), "bob-sso");
+    await choose(user, "bob", BOB_LABEL);
+    await user.type(await screen.findByLabelText("New alias"), "bob-sso");
     await user.click(screen.getByRole("button", { name: "Add alias" }));
     await user.click(screen.getByRole("button", { name: "Save links" }));
     await vi.waitFor(() =>
@@ -120,6 +147,7 @@ describe("IdentityLinksSection", () => {
     const user = userEvent.setup();
     const api = stubAccessApi(routes());
     renderWithProviders(<IdentityLinksSection canEdit />);
+    await choose(user, "ali", ALICE_LABEL);
     await screen.findByText("alice-sso");
     await user.type(screen.getByLabelText("New alias"), "  Alice-Work ");
     await user.click(screen.getByRole("button", { name: "Add alias" }));
@@ -139,6 +167,7 @@ describe("IdentityLinksSection", () => {
       }),
     );
     renderWithProviders(<IdentityLinksSection canEdit />);
+    await choose(user, "ali", ALICE_LABEL);
     await screen.findByText("alice-sso");
     await user.type(
       screen.getByLabelText("New usage identity"),
@@ -179,6 +208,7 @@ describe("IdentityLinksSection", () => {
       }),
     );
     renderWithProviders(<IdentityLinksSection canEdit />);
+    await choose(user, "ali", ALICE_LABEL);
     await screen.findByText("alice-sso");
     await user.type(screen.getByLabelText("New alias"), "alice-work");
     await user.click(screen.getByRole("button", { name: "Add alias" }));
@@ -191,10 +221,8 @@ describe("IdentityLinksSection", () => {
       version: 2,
     });
 
-    await user.selectOptions(
-      screen.getByLabelText("Person"),
-      "Bob Brown (bob@example.com)",
-    );
+    await user.clear(screen.getByRole("combobox", { name: "Person" }));
+    await choose(user, "bob", BOB_LABEL);
     await vi.waitFor(() =>
       expect(screen.queryByText("alice-sso")).not.toBeInTheDocument(),
     );
@@ -211,6 +239,7 @@ describe("IdentityLinksSection", () => {
       }),
     );
     renderWithProviders(<IdentityLinksSection canEdit />);
+    await choose(user, "ali", ALICE_LABEL);
     await screen.findByText("alice-sso");
     await user.type(screen.getByLabelText("New alias"), "taken-alias");
     await user.click(screen.getByRole("button", { name: "Add alias" }));
@@ -222,8 +251,10 @@ describe("IdentityLinksSection", () => {
   });
 
   it("is read-only for an auditor: values shown, no inputs, no save", async () => {
+    const user = userEvent.setup();
     stubAccessApi(routes());
     renderWithProviders(<IdentityLinksSection canEdit={false} />);
+    await choose(user, "ali", ALICE_LABEL);
     expect(await screen.findByText("alice-sso")).toBeInTheDocument();
     expect(screen.queryByLabelText("New alias")).not.toBeInTheDocument();
     expect(
@@ -235,37 +266,92 @@ describe("IdentityLinksSection", () => {
     expect(screen.getAllByText("alice@example.com").length).toBeGreaterThan(0);
   });
 
-  it("pages the people list with the opaque cursor", async () => {
+  // T-ST2; Design System - Identity pickers (D-ST2): a search box, not a list.
+  it("T-ST2: the Person picker is a search box: a combobox, no native select, no full-list request, no editor before a pick", async () => {
+    const api = stubAccessApi(routes());
+    renderWithProviders(<IdentityLinksSection canEdit />);
+    expect(
+      screen.getByRole("combobox", { name: "Person" }),
+    ).toBeInTheDocument();
+    expect(document.querySelector("select")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save links" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /load more people/i }),
+    ).toBeNull();
+    expect(api.to("GET /api/identities")).toEqual([]);
+    expect(api.to(DIRECTORY)).toEqual([]);
+  });
+
+  describe("debounce (fake timers, Rule 60.24)", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    // D-ST2: fireEvent + advanceTimersByTimeAsync; userEvent hangs under fake timers.
+    it("T-ST2: no request under 2 characters, however long we wait (D-ST2)", async () => {
+      const api = stubAccessApi(routes());
+      renderWithProviders(<IdentityLinksSection canEdit />);
+      fireEvent.change(screen.getByRole("combobox", { name: "Person" }), {
+        target: { value: "a" },
+      });
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS * 4);
+      expect(api.to(DIRECTORY)).toEqual([]);
+    });
+
+    it("T-ST2: debounced: nothing before the pause, one request with the whole text after it (D-ST2)", async () => {
+      const api = stubAccessApi(routes());
+      renderWithProviders(<IdentityLinksSection canEdit />);
+      const box = screen.getByRole("combobox", { name: "Person" });
+      const step = Math.floor(DEBOUNCE_MS / 4);
+      for (const value of ["bo", " bob@", " bob@example.com "]) {
+        fireEvent.change(box, { target: { value } });
+        await vi.advanceTimersByTimeAsync(step);
+      }
+      expect(api.to(DIRECTORY)).toEqual([]);
+      // act: the timer sets state that enables the query.
+      await act(() => vi.advanceTimersByTimeAsync(DEBOUNCE_MS));
+      const calls = api.to(DIRECTORY);
+      expect(calls).toHaveLength(1);
+      expect(new URLSearchParams(calls[0]?.search).get("q")).toBe(
+        "bob@example.com",
+      );
+    });
+  });
+
+  it("T-ST2: shows at most 10 results even if more come back (D-ST2)", async () => {
     const user = userEvent.setup();
-    const api = stubAccessApi(
-      routes({
-        "GET /api/identities": (call: { search: string }) =>
-          call.search.includes("cursor=c1")
-            ? ok(
-                page([
-                  identityItem({
-                    oid: "oid-cy",
-                    email: "cy@example.com",
-                    displayName: "Cy Cole",
-                  }),
-                ]),
-              )
-            : ok(page([ALICE, BOB], "c1")),
+    const many = Array.from({ length: 12 }, (_, n) =>
+      dirRow({
+        oid: `oid-${n}`,
+        email: `p${n}@example.com`,
+        displayName: `Person ${n}`,
       }),
     );
+    stubAccessApi(routes({ [DIRECTORY]: page(many) }));
     renderWithProviders(<IdentityLinksSection canEdit />);
-    await screen.findByText("alice-sso");
-    await user.click(screen.getByRole("button", { name: /load more people/i }));
-    expect(
-      await screen.findByRole("option", { name: "Cy Cole (cy@example.com)" }),
-    ).toBeInTheDocument();
-    expect(
-      api.calls.some(
-        (c) => c.path === "/api/identities" && c.search.includes("cursor=c1"),
-      ),
-    ).toBe(true);
-    expect(
-      within(screen.getByLabelText("Person")).getAllByRole("option"),
-    ).toHaveLength(3);
+    await user.type(screen.getByRole("combobox", { name: "Person" }), "per");
+    await screen.findAllByRole("option");
+    expect(screen.getAllByRole("option")).toHaveLength(10);
+  });
+
+  it("T-ST2: says so when nothing matches", async () => {
+    const user = userEvent.setup();
+    stubAccessApi(routes({ [DIRECTORY]: page([]) }));
+    renderWithProviders(<IdentityLinksSection canEdit />);
+    await user.type(screen.getByRole("combobox", { name: "Person" }), "zzz");
+    expect(await screen.findByText(/no people match/i)).toBeVisible();
+  });
+
+  it("T-ST2: a result is reachable and chosen from the keyboard, then loads that person's links", async () => {
+    const user = userEvent.setup();
+    const api = stubAccessApi(routes());
+    renderWithProviders(<IdentityLinksSection canEdit />);
+    await user.type(screen.getByRole("combobox", { name: "Person" }), "br");
+    await screen.findByRole("option", { name: BOB_LABEL });
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(await screen.findByRole("button", { name: "Save links" })).toBe(
+      screen.getByRole("button", { name: "Save links" }),
+    );
+    expect(api.to("GET /api/identities/oid-bob/links")).not.toHaveLength(0);
+    expect(api.to("GET /api/identities/oid-alice/links")).toHaveLength(0);
   });
 });

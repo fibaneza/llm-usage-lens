@@ -44,6 +44,7 @@ export const DirectoryPageSchema = z.object({
 export const DirectoryQuerySchema = z.object({
   cursor: z.string().min(1).max(2048).optional(),
   include: z.literal("litellmMatch").optional(),
+  q: z.string().trim().min(1).max(100).optional(),
 });
 
 // ---- PUT / DELETE /api/identities/[oid]/litellm-link ------------------------

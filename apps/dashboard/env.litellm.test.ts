@@ -71,6 +71,42 @@ describe("env.ts LiteLLM variables", () => {
   });
 });
 
+describe("env.ts LLM_LENS_LITELLM_BASE_URL (D-ST4)", () => {
+  // Source: docs/guides/litellm-admin.md (optional URL, default
+  // http://localhost:4000) and Design System - Settings small UX (D-ST4).
+  beforeEach(() => vi.resetModules());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("defaults to http://localhost:4000 when unset", async () => {
+    stub({});
+    const { env } = await import("@/env");
+    expect(env.LLM_LENS_LITELLM_BASE_URL).toBe("http://localhost:4000");
+  });
+
+  it("passes a configured URL through", async () => {
+    stub({ LLM_LENS_LITELLM_BASE_URL: "https://litellm.example.internal" });
+    const { env } = await import("@/env");
+    expect(env.LLM_LENS_LITELLM_BASE_URL).toBe(
+      "https://litellm.example.internal",
+    );
+  });
+
+  it("rejects a value that is not a URL", async () => {
+    stub({ LLM_LENS_LITELLM_BASE_URL: "not a url" });
+    await expect(import("@/env")).rejects.toThrow();
+  });
+
+  it("stays server-only (not in the client schema)", () => {
+    const src = readFileSync(join(HERE, "env.ts"), "utf8");
+    expect(src).toContain("LLM_LENS_LITELLM_BASE_URL");
+    const client = /client:\s*\{[\s\S]*?\n {2}\},/.exec(src)?.[0] ?? "";
+    expect(client).not.toContain("LLM_LENS_LITELLM_BASE_URL");
+  });
+});
+
 describe("LiteLLM configuration files", () => {
   it(".env.example documents the local connection with an empty key (LD17)", () => {
     const example = readFileSync(join(HERE, ".env.example"), "utf8");

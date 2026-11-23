@@ -7,7 +7,7 @@
     "node": ">=24.22.3 <25"
   },
   "scripts": {
-    "dev": "pnpm --dir apps/dashboard exec next dev",
+    "dev": "node scripts/dev.mjs",
     "build": "pnpm --filter @llm-usage-lens/dashboard build",
     "lint": "eslint .",
     "typecheck": "pnpm -r --if-present typecheck && tsc -p tsconfig.scripts.json",

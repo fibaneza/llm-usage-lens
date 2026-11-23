@@ -36,6 +36,44 @@ export function listIdentities(
   });
 }
 
+const SEARCH_CAP = 10;
+
+// ST1 D-ST2 (Access Control spec - API routes, directory `q`): case-insensitive
+// substring of display name, email or UPN over the IDENTS partition, paging
+// on LastEvaluatedKey (Rule 20.6) until `limit` rows (at most 10) or the end.
+export async function searchIdentities(
+  q: string,
+  limit: number,
+): Promise<IdentityListItem[]> {
+  const needle = q.trim().toLowerCase();
+  const cap = Math.min(limit, SEARCH_CAP);
+  const found: IdentityListItem[] = [];
+  if (!needle || cap <= 0) return found;
+  const has = (field: string | null | undefined) =>
+    field?.toLowerCase().includes(needle) ?? false;
+  let startKey: Record<string, unknown> | undefined;
+  do {
+    const res = await getDocumentClient().send(
+      new QueryCommand({
+        TableName: getTableName(),
+        IndexName: GSI1_NAME,
+        KeyConditionExpression: "gsi1pk = :pk AND begins_with(gsi1sk, :sk)",
+        ExpressionAttributeValues: { ":pk": IDENTS_GSI1PK, ":sk": "IDENT#" },
+        ...(startKey ? { ExclusiveStartKey: startKey } : {}),
+      }),
+    );
+    for (const item of res.Items ?? []) {
+      const record = IdentityRecordSchema.parse(item);
+      if (has(record.displayName) || has(record.email) || has(record.upn)) {
+        found.push(IdentityListItemSchema.parse(record));
+        if (found.length >= cap) return found;
+      }
+    }
+    startKey = res.LastEvaluatedKey;
+  } while (startKey);
+  return found;
+}
+
 export async function identityExists(oid: string): Promise<boolean> {
   return (await getItem(identPk(oid), META_SK)) !== null;
 }

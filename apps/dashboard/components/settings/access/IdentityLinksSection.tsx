@@ -1,33 +1,22 @@
 "use client";
 
-import { IdentityLinkSchema } from "@llm-usage-lens/shared";
-import type { IdentityLink } from "@llm-usage-lens/shared";
 import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+  DirectoryPageSchema,
+  IdentityLinkSchema,
+} from "@llm-usage-lens/shared";
+import type { DirectoryRow, IdentityLink } from "@llm-usage-lens/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { KeyboardEvent } from "react";
 
-import { EmptyState } from "@/components/display/EmptyState";
 import { accessErrorMessage } from "@/components/settings/access/access-error-message";
-import {
-  idPath,
-  personLabel,
-} from "@/components/settings/access/access-queries";
-import {
-  IdentityItemSchema,
-  pageOf,
-} from "@/components/settings/access/access-schemas";
+import { idPath } from "@/components/settings/access/access-queries";
 import {
   FormError,
   FormField,
   FormStatus,
-  NativeSelect,
 } from "@/components/settings/access/form-controls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,7 +69,7 @@ function KeyEditor({
         <ul className="flex flex-col gap-1">
           {keys.map((key) => (
             <li key={key} className="flex items-center gap-2 text-sm">
-              <span className="font-mono">{key}</span>
+              <span className="min-w-0 font-mono break-all">{key}</span>
               {canEdit ? (
                 <Button
                   type="button"
@@ -245,24 +234,45 @@ function LiteLLMUserIdReadOnly({
   );
 }
 
+const MIN_QUERY_LENGTH = 2;
+const DEBOUNCE_MS = 400;
+const MAX_RESULTS = 10;
+
+function directoryLabel(row: DirectoryRow): string {
+  const name = row.displayName ?? row.email ?? row.oid;
+  return row.email && row.displayName ? `${name} (${row.email})` : name;
+}
+
+// Design System - Settings, Identity pickers (D-ST2): a search box over
+// GET /api/identities/directory?q= (2+ characters, debounced, 10 results),
+// never the full list; the editor appears after a pick.
 export function IdentityLinksSection({ canEdit }: { canEdit: boolean }) {
-  const people = useInfiniteQuery({
-    queryKey: ["access", "identity-people"],
-    queryFn: ({ pageParam }) =>
+  const listId = useId();
+  const [text, setText] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [oid, setOid] = useState<string | undefined>();
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(text.trim()), DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [text]);
+
+  const searching = debounced.length >= MIN_QUERY_LENGTH;
+  const directory = useQuery({
+    queryKey: ["access", "identity-directory", debounced],
+    queryFn: () =>
       fetchApi(
-        pageParam
-          ? `/api/identities?cursor=${encodeURIComponent(pageParam)}`
-          : "/api/identities",
-        pageOf(IdentityItemSchema),
+        `/api/identities/directory?q=${encodeURIComponent(debounced)}`,
+        DirectoryPageSchema,
       ),
-    initialPageParam: "",
-    getNextPageParam: (last) => last.cursor,
+    enabled: searching,
   });
-  const pages = sectionData(people);
-  const [chosen, setChosen] = useState<string | null>(null);
-  const identities = pages?.pages.flatMap((p) => p.items) ?? [];
-  const oid =
-    identities.find((i) => i.oid === chosen)?.oid ?? identities[0]?.oid;
+  const results = searching
+    ? (directory.data?.items.slice(0, MAX_RESULTS) ?? [])
+    : [];
+  const showList = open && searching && directory.data !== undefined;
 
   const linkQuery = useQuery({
     queryKey: ["access", "identity-links", oid],
@@ -275,42 +285,90 @@ export function IdentityLinksSection({ canEdit }: { canEdit: boolean }) {
   });
   const link = sectionData(linkQuery);
 
-  if (pages === undefined) return <Skeleton className="h-40 w-full" />;
-  if (oid === undefined) return <EmptyState title="No people yet." />;
+  function pick(row: DirectoryRow) {
+    setOid(row.oid);
+    setText(directoryLabel(row));
+    setOpen(false);
+    setActive(-1);
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key === "ArrowDown" && results.length > 0) {
+      e.preventDefault();
+      setOpen(true);
+      setActive((a) => Math.min(a + 1, results.length - 1));
+    } else if (e.key === "ArrowUp" && results.length > 0) {
+      e.preventDefault();
+      setActive((a) => Math.max(a - 1, 0));
+    } else if (e.key === "Enter" && showList && active >= 0) {
+      e.preventDefault();
+      const row = results[active];
+      if (row) pick(row);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex max-w-[72ch] items-end gap-2">
-        <div className="flex-1">
-          <FormField label="Person">
-            {(props) => (
-              <NativeSelect
-                {...props}
-                value={oid}
-                onChange={(e) => setChosen(e.target.value)}
-              >
-                {identities.map((identity) => (
-                  <option key={identity.oid} value={identity.oid}>
-                    {personLabel(identity)}
-                  </option>
-                ))}
-              </NativeSelect>
-            )}
-          </FormField>
-        </div>
-        {people.hasNextPage ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={people.isFetchingNextPage}
-            onClick={() => void people.fetchNextPage()}
-          >
-            Load more people
-          </Button>
+      <div className="relative max-w-[72ch]">
+        <FormField
+          label="Person"
+          hint="Type at least 2 characters of a name or email."
+        >
+          {(props) => (
+            <Input
+              {...props}
+              role="combobox"
+              aria-expanded={showList}
+              aria-controls={listId}
+              aria-autocomplete="list"
+              aria-activedescendant={
+                active >= 0 ? `${listId}-${active}` : undefined
+              }
+              autoComplete="off"
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                setOpen(true);
+                setActive(-1);
+              }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={onKeyDown}
+            />
+          )}
+        </FormField>
+        {showList ? (
+          results.length === 0 ? (
+            <p className="text-muted-foreground mt-1 text-sm">
+              No people match.
+            </p>
+          ) : (
+            <ul
+              id={listId}
+              role="listbox"
+              aria-label="People"
+              className="bg-popover mt-1 flex flex-col rounded-md border shadow-md"
+            >
+              {results.map((row, index) => (
+                <li
+                  key={row.oid}
+                  id={`${listId}-${index}`}
+                  role="option"
+                  aria-selected={index === active}
+                  className="data-[active=true]:bg-accent cursor-pointer px-3 py-2 text-sm break-words"
+                  data-active={index === active}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(row)}
+                >
+                  {directoryLabel(row)}
+                </li>
+              ))}
+            </ul>
+          )
         ) : null}
       </div>
-      {link === undefined ? (
+      {oid === undefined ? null : link === undefined ? (
         <Skeleton className="h-32 w-full" />
       ) : (
         <LinksEditor key={oid} link={link} canEdit={canEdit} />

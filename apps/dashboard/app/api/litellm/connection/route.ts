@@ -7,7 +7,7 @@ import {
 import { z } from "zod";
 
 import { auth } from "@/auth";
-import { env } from "@/env";
+import { DEFAULT_LITELLM_BASE_URL, env } from "@/env";
 import {
   jsonData,
   jsonError,
@@ -32,6 +32,8 @@ import { litellmReadRefusal, openModeRefusal } from "@/lib/litellm/route-guard";
 
 export const dynamic = "force-dynamic";
 
+// The fallback covers the skipped-validation test and build paths where the
+// env.ts default is not applied.
 const PutBodySchema = z.strictObject({
   baseUrl: z.string(),
   version: z.number().int().min(1).nullable(),
@@ -43,6 +45,7 @@ function status(baseUrl: string | null, version: number) {
     version,
     edition: liteLLMEdition(env.APP_ENV),
     serviceKeyConfigured: isServiceKeyConfigured(),
+    defaultBaseUrl: env.LLM_LENS_LITELLM_BASE_URL ?? DEFAULT_LITELLM_BASE_URL,
   });
 }
 

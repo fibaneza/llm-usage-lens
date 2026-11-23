@@ -125,7 +125,7 @@ export default function SignInPage() {
 pnpm dev
 ```
 
-Run from the repo root (workspace script targets `apps/dashboard`) or from `apps/dashboard`. Visit `/dashboard` → redirected to `/sign-in` → "Sign in with Microsoft" → Entra login → back to `/dashboard`.
+Run from the repo root (workspace script targets `apps/dashboard`) or from `apps/dashboard`. The root `pnpm dev` runs `scripts/dev.mjs`, which first prints `Local: <NEXT_PUBLIC_APP_URL>` (with the base path, if any) and then starts `next dev`; Next's own `Local:` line stays and cannot be changed (unit ST1, D-ST1; user, 2026-11-18). The script reads `process.env` directly (Rule 50.2 exception for `scripts/**`). Visit `/dashboard` → redirected to `/sign-in` → "Sign in with Microsoft" → Entra login → back to `/dashboard`.
 
 ---
 

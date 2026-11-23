@@ -87,7 +87,36 @@ test.describe("settings LiteLLM section", () => {
     await expect(page.getByLabel(/service key|api key|secret/i)).toHaveCount(0);
 
     await page.getByRole("button", { name: /test connection/i }).click();
-    await expect(page.getByText("Connection ok")).toBeVisible();
+    // D-ST4 ( Design System - Settings, LiteLLM connection): a green
+    // check and the text, in an aria-live region (never colour alone).
+    const live = page.locator("[aria-live]", {
+      hasText: "LiteLLM connection is ok",
+    });
+    await expect(live).toBeVisible();
+    await expect(live.locator("svg")).not.toHaveCount(0);
+  });
+
+  test("a failed connection test shows a red cross and the error text in an aria-live region", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.route(/\/api\/litellm\/connection\/test$/, (route) =>
+      route.fulfill({
+        json: {
+          data: { result: "unreachable", message: "Gateway unreachable" },
+        },
+      }),
+    );
+    await openSettings(page);
+    await page.getByRole("button", { name: /test connection/i }).click();
+    const live = page.locator("[aria-live]", {
+      hasText: "Gateway unreachable",
+    });
+    await expect(live).toBeVisible();
+    await expect(live.locator("svg")).not.toHaveCount(0);
+    await expect(page.getByText("LiteLLM connection is ok")).toHaveCount(0);
   });
 
   // Unit D: the panel is its own tab. Slice B2 (B2-10): Settings is closed to a
@@ -127,6 +156,34 @@ test.describe("settings LiteLLM section", () => {
 // Admin-set in Settings, versioned), implementation-phases L1.
 test.describe("settings LiteLLM base URL entry", () => {
   const NEW_URL = "https://litellm-b.example.internal";
+
+  // LiteLLM spec - GET /api/litellm/connection `defaultBaseUrl` (the
+  // LLM_LENS_LITELLM_BASE_URL default): an unsaved connection pre-fills the
+  // Base URL field with it.
+  test("an unsaved connection pre-fills the Base URL field with the default", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.route(/\/api\/litellm\/connection$/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            baseUrl: null,
+            defaultBaseUrl: "https://litellm.default.internal",
+            version: 0,
+            edition: "oss",
+            serviceKeyConfigured: true,
+          },
+        },
+      }),
+    );
+    await openSettings(page);
+    await expect(page.getByLabel(/base url/i)).toHaveValue(
+      "https://litellm.default.internal",
+    );
+  });
 
   test("an admin saves a new base URL with the current version and sees it", async ({
     page,

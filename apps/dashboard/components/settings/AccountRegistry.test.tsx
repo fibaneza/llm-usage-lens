@@ -1,5 +1,8 @@
 import type { AccountMeta } from "@llm-usage-lens/shared";
-import { CreateAccountInputSchema } from "@llm-usage-lens/shared";
+import {
+  CreateAccountRequestSchema,
+  UpdateAccountPatchSchema,
+} from "@llm-usage-lens/shared";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -143,6 +146,8 @@ describe("AccountRegistry -- admin gating", () => {
   });
 });
 
+// D-ST5: the add form takes department and team names (no Department ID /
+// Team ID inputs) and labels the typed number "AWS account ID".
 describe("AccountRegistry -- add account", () => {
   async function openAdd() {
     const user = userEvent.setup();
@@ -167,13 +172,13 @@ describe("AccountRegistry -- add account", () => {
     renderWithProviders(<AccountRegistry isAdmin />);
     const { user, dialog } = await openAdd();
 
-    await fill(user, dialog, { "Account ID": "123" });
+    await fill(user, dialog, { "AWS account ID": "123" });
     await user.click(
       within(dialog).getByRole("button", { name: "Create account" }),
     );
 
     expect(await within(dialog).findAllByRole("alert")).not.toHaveLength(0);
-    expect(within(dialog).getByLabelText("Account ID")).toBeInvalid();
+    expect(within(dialog).getByLabelText("AWS account ID")).toBeInvalid();
     expect(within(dialog).getByLabelText("Account name")).toBeInvalid();
     expect(api.writes()).toHaveLength(0);
   });
@@ -192,11 +197,9 @@ describe("AccountRegistry -- add account", () => {
     const { user, dialog } = await openAdd();
 
     await fill(user, dialog, {
-      "Account ID": "000000000000",
+      "AWS account ID": "000000000000",
       "Account name": "New Account",
-      "Department ID": "dept-data",
       "Department name": "Data Science",
-      "Team ID": "team-ml",
       "Team name": "ML",
     });
     await user.click(
@@ -207,12 +210,17 @@ describe("AccountRegistry -- add account", () => {
     const [call] = api.writes();
     expect(call?.method).toBe("POST");
     expect(call?.path).toBe("/api/accounts");
-    expect(CreateAccountInputSchema.safeParse(call?.body).success).toBe(true);
+    // D-ST5: the body is names + region, validated by the request schema.
+    expect(CreateAccountRequestSchema.safeParse(call?.body).success).toBe(true);
     expect(call?.body).toMatchObject({
       accountId: "000000000000",
       accountName: "New Account",
+      departmentName: "Data Science",
+      teamName: "ML",
       region: "ap-southeast-2",
     });
+    expect(call?.body).not.toHaveProperty("departmentId"); // D-ST5
+    expect(call?.body).not.toHaveProperty("teamId");
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
@@ -226,11 +234,9 @@ describe("AccountRegistry -- add account", () => {
     renderWithProviders(<AccountRegistry isAdmin />);
     const { user, dialog } = await openAdd();
     await fill(user, dialog, {
-      "Account ID": "123456789012",
+      "AWS account ID": "123456789012",
       "Account name": "Dup",
-      "Department ID": "d",
       "Department name": "D",
-      "Team ID": "t",
       "Team name": "T",
     });
     await user.click(
@@ -250,11 +256,9 @@ describe("AccountRegistry -- add account", () => {
     renderWithProviders(<AccountRegistry isAdmin />);
     const { user, dialog } = await openAdd();
     await fill(user, dialog, {
-      "Account ID": "000000000000",
+      "AWS account ID": "000000000000",
       "Account name": "N",
-      "Department ID": "d",
       "Department name": "D",
-      "Team ID": "t",
       "Team name": "T",
     });
     await user.click(
@@ -282,11 +286,9 @@ describe("AccountRegistry -- non-API failures", () => {
     await user.click(screen.getByRole("button", { name: /add account/i }));
     const dialog = await screen.findByRole("dialog");
     for (const [label, value] of Object.entries({
-      "Account ID": "123456789012",
+      "AWS account ID": "123456789012",
       "Account name": "X",
-      "Department ID": "d",
       "Department name": "D",
-      "Team ID": "t",
       "Team name": "T",
     })) {
       await user.type(within(dialog).getByLabelText(label), value);
@@ -329,7 +331,7 @@ describe("AccountRegistry -- edit account", () => {
     );
     const sheet = await screen.findByRole("dialog");
 
-    const id = within(sheet).getByLabelText("Account ID");
+    const id = within(sheet).getByLabelText(/account id/i);
     expect(id).toHaveValue("123456789012");
     expect(id).toHaveAttribute("readonly");
     expect(within(sheet).getByLabelText("Account name")).toHaveValue(
@@ -371,13 +373,151 @@ describe("AccountRegistry -- edit account", () => {
       screen.getByRole("button", { name: "Edit Payments Prod" }),
     );
     const sheet = await screen.findByRole("dialog");
-    await user.clear(within(sheet).getByLabelText("Team name"));
+    await user.clear(within(sheet).getByLabelText("Account name"));
     await user.click(
       within(sheet).getByRole("button", { name: "Save changes" }),
     );
 
-    expect(within(sheet).getByLabelText("Team name")).toBeInvalid();
+    expect(within(sheet).getByLabelText("Account name")).toBeInvalid();
     expect(api.writes()).toHaveLength(0);
+  });
+
+  // Design System - Add account (D-ST5), Edit: coordinator decision 2026-11-24
+  //: Edit has the same Existing department / Existing team
+  // picks as Add and PATCHes the picked ids (UpdateAccountPatchSchema); the
+  // name fields follow the pick and are not free text (no rename of a shared
+  // team from one account).
+  it("Edit moves an account to another existing team and sends the picked ids", async () => {
+    const other = account({
+      accountId: "111122223333",
+      accountName: "Billing Prod",
+      departmentId: "dept-fin",
+      departmentName: "Finance",
+      teamId: "team-bill",
+      teamName: "Billing",
+    });
+    const api = stubAccounts([ACTIVE, other]);
+    renderWithProviders(<AccountRegistry isAdmin />);
+    const user = userEvent.setup();
+    await screen.findByRole("table");
+    await user.click(
+      screen.getByRole("button", { name: "Edit Payments Prod" }),
+    );
+    const sheet = await screen.findByRole("dialog");
+
+    await user.selectOptions(
+      within(sheet).getByLabelText(/existing department/i),
+      "Finance",
+    );
+    await user.selectOptions(
+      within(sheet).getByLabelText(/existing team/i),
+      "Billing",
+    );
+    await user.click(
+      within(sheet).getByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => expect(api.writes()).toHaveLength(1));
+    const [call] = api.writes();
+    expect(call?.method).toBe("PATCH");
+    expect(call?.path).toBe("/api/accounts/123456789012");
+    expect(call?.body).toMatchObject({
+      departmentId: "dept-fin",
+      teamId: "team-bill",
+    });
+    expect(UpdateAccountPatchSchema.safeParse(call?.body).success).toBe(true);
+  });
+
+  // R2-B1: Design System - Add account (Existing team lists only the picked
+  // department's teams, as on create, Q-B1) and Data Model - API Routes (the
+  // PATCH takes departmentId/teamId; the UI keeps the pair consistent).
+  const crossDept = () => [
+    ACTIVE,
+    account({
+      accountId: "111122223333",
+      accountName: "Fin Ledger Prod",
+      departmentId: "dept-fin",
+      departmentName: "Finance",
+      teamId: "team-fin-ledger",
+      teamName: "Ledger",
+    }),
+    account({
+      accountId: "000000000000",
+      accountName: "Sales Ledger Prod",
+      departmentId: "dept-sales",
+      departmentName: "Sales",
+      teamId: "team-sales-ledger",
+      teamName: "Ledger",
+    }),
+  ];
+
+  async function openEditAndPickDepartment(department: string) {
+    const api = stubAccounts(crossDept());
+    renderWithProviders(<AccountRegistry isAdmin />);
+    const user = userEvent.setup();
+    await screen.findByRole("table");
+    await user.click(
+      screen.getByRole("button", { name: "Edit Payments Prod" }),
+    );
+    const sheet = await screen.findByRole("dialog");
+    await user.selectOptions(
+      within(sheet).getByLabelText(/existing department/i),
+      department,
+    );
+    return { api, user, sheet };
+  }
+
+  it("Edit lists only the picked department's teams, with no duplicate names", async () => {
+    const { sheet } = await openEditAndPickDepartment("Finance");
+    const names = within(within(sheet).getByLabelText(/existing team/i))
+      .getAllByRole("option")
+      .map((o) => o.textContent ?? "");
+    expect(names).toContain("Ledger");
+    expect(names).not.toContain("Payments");
+    expect(names.filter((n) => n === "Ledger")).toHaveLength(1);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("Edit cannot save a department-only change and sends nothing", async () => {
+    const { api, user, sheet } = await openEditAndPickDepartment("Sales");
+    const save = within(sheet).getByRole("button", { name: "Save changes" });
+    expect(save).toBeDisabled();
+    await user.click(save);
+    expect(api.writes()).toHaveLength(0);
+  });
+
+  it("Edit sends the new department's teamId once a team in it is picked", async () => {
+    const { api, user, sheet } = await openEditAndPickDepartment("Sales");
+    await user.selectOptions(
+      within(sheet).getByLabelText(/existing team/i),
+      "Ledger",
+    );
+    const save = within(sheet).getByRole("button", { name: "Save changes" });
+    expect(save).toBeEnabled();
+    await user.click(save);
+
+    await waitFor(() => expect(api.writes()).toHaveLength(1));
+    expect(api.writes()[0]?.body).toMatchObject({
+      departmentId: "dept-sales",
+      teamId: "team-sales-ledger",
+    });
+  });
+
+  it("Edit's department and team name inputs are not free text", async () => {
+    stubAccounts([ACTIVE]);
+    renderWithProviders(<AccountRegistry isAdmin />);
+    const user = userEvent.setup();
+    await screen.findByRole("table");
+    await user.click(
+      screen.getByRole("button", { name: "Edit Payments Prod" }),
+    );
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getByLabelText(/^department name/i)).toHaveAttribute(
+      "readonly",
+    );
+    expect(within(sheet).getByLabelText(/^team name/i)).toHaveAttribute(
+      "readonly",
+    );
   });
 });
 

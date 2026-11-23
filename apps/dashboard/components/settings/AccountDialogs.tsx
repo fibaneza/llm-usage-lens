@@ -2,16 +2,22 @@
 
 import {
   COLLECTOR_REGION,
-  CreateAccountInputSchema,
+  AccountMetaSchema,
+  CreateAccountRequestSchema,
+  type CreateAccountRequest,
   UpdateAccountPatchSchema,
   type AccountMeta,
   type UpdateAccountPatch,
 } from "@llm-usage-lens/shared";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
 import {
   AccountForm,
   EMPTY_ACCOUNT_VALUES,
   type AccountFormValues,
+  type AccountPickedIds,
+  type RegistryPick,
 } from "@/components/settings/AccountForm";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,12 +35,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useAccounts } from "@/hooks/useAccounts";
 import {
-  useCreateAccount,
   useDeactivateAccount,
   useUpdateAccount,
 } from "@/hooks/useAccountMutations";
-import { ApiRequestError } from "@/lib/query/fetch-api";
+import { ApiRequestError, mutateApi } from "@/lib/query/fetch-api";
 
 type CloseProps = { onClose: () => void };
 
@@ -45,8 +51,23 @@ function errorMessage(error: Error | null): string | null {
     : "Request failed — try again";
 }
 
+// The body carries names; the server generates departmentId and teamId (D-ST5).
+function useCreateAccountRequest() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateAccountRequest) =>
+      mutateApi("/api/accounts", "POST", input, AccountMetaSchema),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["accounts"] }),
+  });
+}
+
+function distinct(names: readonly string[]): string[] {
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+}
+
 export function AddAccountDialog({ onClose }: CloseProps) {
-  const create = useCreateAccount();
+  const create = useCreateAccountRequest();
+  const accounts = useAccounts().data ?? [];
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
@@ -58,10 +79,12 @@ export function AddAccountDialog({ onClose }: CloseProps) {
         </DialogHeader>
         <AccountForm
           initial={EMPTY_ACCOUNT_VALUES}
-          schema={CreateAccountInputSchema.omit({ region: true })}
+          schema={CreateAccountRequestSchema.omit({ region: true })}
           submitLabel="Create account"
           pending={create.isPending}
           serverError={errorMessage(create.error)}
+          existingDepartments={distinct(accounts.map((a) => a.departmentName))}
+          existingTeams={distinct(accounts.map((a) => a.teamName))}
           onSubmit={(values) =>
             create.mutate(
               { ...values, region: COLLECTOR_REGION },
@@ -74,32 +97,63 @@ export function AddAccountDialog({ onClose }: CloseProps) {
   );
 }
 
-const EDITABLE_KEYS = [
-  "accountName",
-  "departmentId",
-  "departmentName",
-  "teamId",
-  "teamName",
-] as const;
+function distinctPicks(
+  rows: ReadonlyArray<{ id: string; name: string }>,
+): RegistryPick[] {
+  const byId = new Map(rows.map((r) => [r.id, r.name]));
+  return [...byId]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function distinctTeamPicks(
+  rows: ReadonlyArray<{ id: string; name: string; departmentId: string }>,
+): RegistryPick[] {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export function EditAccountSheet({
   account,
   onClose,
 }: CloseProps & { account: AccountMeta }) {
   const update = useUpdateAccount(account.accountId);
+  const accounts = useAccounts().data ?? [];
+  const departments = distinctPicks([
+    { id: account.departmentId, name: account.departmentName },
+    ...accounts.map((a) => ({ id: a.departmentId, name: a.departmentName })),
+  ]);
+  const teams = distinctTeamPicks([
+    {
+      id: account.teamId,
+      name: account.teamName,
+      departmentId: account.departmentId,
+    },
+    ...accounts.map((a) => ({
+      id: a.teamId,
+      name: a.teamName,
+      departmentId: a.departmentId,
+    })),
+  ]);
   const initial: AccountFormValues = {
     accountId: account.accountId,
     accountName: account.accountName,
-    departmentId: account.departmentId,
     departmentName: account.departmentName,
-    teamId: account.teamId,
     teamName: account.teamName,
   };
 
-  function submit(values: AccountFormValues) {
+  function submit(values: AccountFormValues, ids?: AccountPickedIds) {
     const patch: UpdateAccountPatch = {};
-    for (const key of EDITABLE_KEYS) {
-      if (values[key] !== account[key]) patch[key] = values[key];
+    if (values.accountName !== account.accountName) {
+      patch.accountName = values.accountName;
+    }
+    if (ids && ids.departmentId !== account.departmentId) {
+      patch.departmentId = ids.departmentId;
+      patch.departmentName = values.departmentName;
+    }
+    if (ids && ids.teamId !== account.teamId) {
+      patch.teamId = ids.teamId;
+      patch.teamName = values.teamName;
     }
     if (Object.keys(patch).length === 0) {
       onClose();
@@ -123,6 +177,12 @@ export function EditAccountSheet({
             schema={UpdateAccountPatchSchema}
             submitLabel="Save changes"
             accountIdReadOnly
+            registryDepartments={departments}
+            registryTeams={teams}
+            initialIds={{
+              departmentId: account.departmentId,
+              teamId: account.teamId,
+            }}
             pending={update.isPending}
             serverError={errorMessage(update.error)}
             onSubmit={submit}

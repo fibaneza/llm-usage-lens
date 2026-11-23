@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import type { ReactNode } from "react";
 
@@ -7,6 +8,7 @@ import { AuditSection } from "@/components/litellm/AuditSection";
 import { LiteLLMSection } from "@/components/litellm/LiteLLMSection";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
+import { withBasePath } from "@/lib/base-path";
 
 const SOURCES = ["app", "gateway"] as const;
 type AuditSource = (typeof SOURCES)[number];
@@ -33,7 +35,19 @@ export function AuditPageContent({
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader description="Who changed what, in the dashboard and in the LiteLLM gateway.">
+      <PageHeader
+        description="Who changed what, in the dashboard and in the LiteLLM gateway."
+        actions={
+          sources.includes("app") ? (
+            <Button asChild variant="outline" size="sm">
+              <a href={withBasePath("/api/access-review")} download>
+                <Download aria-hidden />
+                Export access review (CSV)
+              </a>
+            </Button>
+          ) : undefined
+        }
+      >
         {sources.length > 1 ? (
           <div role="group" aria-label="Audit source" className="flex gap-1">
             {sources.map((source) => (

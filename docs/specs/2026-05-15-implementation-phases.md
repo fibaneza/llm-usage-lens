@@ -559,6 +559,7 @@ Tag coverage per team is Phase 4.9b (deferred).
 **Tasks:**
 - [x] Build account registry table with add/edit/deactivate actions
   - Add account form (shadcn Dialog): account ID, name, department ID/name, team ID/name. `region` is not an input: it is fixed to `COLLECTOR_REGION` (`ap-southeast-2`) and `AccountMetaSchema` rejects any other value (System Architecture — *Region*; decided 2026-11-10)
+  - *Amended 2026-11-24 (unit ST1, D-ST5; review round 1):* the Add account form takes the AWS account ID typed (12 digits), and the department and team by name or by picking an existing one; `departmentId` and `teamId` are generated server-side and the strict body refuses them (`400`). The Edit form picks existing departments and teams the same way and sends the picked ids in the unchanged PATCH (Design System — *Settings Page*). Data Model — *API Routes* has the id rules.
   - Edit account form (shadcn Sheet)
   - Deactivate with confirmation dialog
   - Zod validation on all form inputs
@@ -1291,6 +1292,7 @@ Phase 4 (all sub-phases complete).
 - [ ] Deploy to the observability account via `sam build && sam deploy` (CD `deploy` job, OIDC-assumed role)
 - [ ] Verify: Lambda runs on schedule, DailyRollup items appear in DynamoDB, SyncStatus updates
 - [ ] Switch Next.js app from DynamoDB Local to the production DynamoDB table
+- [ ] Settings → Sync: a **Refresh now** button that starts a collection on demand (`internal-admin`; user, 2026-11-18)
 
 ### Dependencies
 

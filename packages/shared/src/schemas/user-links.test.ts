@@ -161,6 +161,14 @@ describe("directory schemas (API routes: 25 a page, opaque cursor, D15)", () => 
     rejects(DirectoryQuerySchema)({ cursor: "" });
     rejects(DirectoryQuerySchema)({ cursor: "c".repeat(2049) });
   });
+
+  // ST1 (plan unit ST1): optional search term q, 1-100 characters.
+  it("accepts an optional q of 1-100 characters and rejects 0 and 101", () => {
+    accepts(DirectoryQuerySchema)({ q: "a" });
+    accepts(DirectoryQuerySchema)({ q: "a".repeat(100) });
+    rejects(DirectoryQuerySchema)({ q: "" });
+    rejects(DirectoryQuerySchema)({ q: "a".repeat(101) });
+  });
 });
 
 describe("CreateLiteLLMUserBodySchema (LiteLLM spec createUser: only the oid)", () => {

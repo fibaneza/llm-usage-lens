@@ -103,6 +103,18 @@ function baseRoutes(): RouteTable {
     "GET /api/access/stale": page([]),
     "GET /api/group-mappings": page([groupMappingItem()]),
     "GET /api/role-grants": page([roleGrantItem()]),
+    // D-ST2: the Person picker searches the directory; nothing loads on mount.
+    "GET /api/identities/directory": page([
+      {
+        oid: "oid-alice",
+        email: "alice@example.com",
+        displayName: "Alice Adams",
+        authMethod: "entra",
+        memberTeamId: null,
+        litellm: { state: "none" },
+        linkVersion: 0,
+      },
+    ]),
     "GET /api/identities/oid-alice/links": {
       oid: "oid-alice",
       usageIdentities: [],
@@ -120,6 +132,14 @@ function baseRoutes(): RouteTable {
 function renderSections(viewer: AccessViewer) {
   return renderWithProviders(
     <AccessSections viewer={viewer} stepUp={stepUp} />,
+  );
+}
+
+// D-ST2: the links editor appears only after a pick from the search box.
+async function pickAlice(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByRole("combobox", { name: "Person" }), "ali");
+  await user.click(
+    await screen.findByRole("option", { name: /alice@example\.com/ }),
   );
 }
 
@@ -199,8 +219,10 @@ describe("AccessSections - role gating", () => {
   });
 
   it("gives an internal-admin the write controls", async () => {
+    const user = userEvent.setup();
     stubAccessApi(baseRoutes());
     renderSections(ADMIN);
+    await pickAlice(user); // D-ST2: Save links shows after a pick
     for (const name of [
       /add mapping/i,
       /^grant role$/i,
@@ -303,11 +325,6 @@ describe("AccessSections - one failure never breaks the others (Rule 40.4)", () 
     ],
     ["role-grants", "GET /api/role-grants", /couldn't load .*role grants/i],
     [
-      "identity-links",
-      "GET /api/identities/oid-alice/links",
-      /couldn't load .*identity links/i,
-    ],
-    [
       "password-users",
       "GET /api/password-users",
       /couldn't load .*password users/i,
@@ -343,6 +360,26 @@ describe("AccessSections - one failure never breaks the others (Rule 40.4)", () 
     },
   );
 
+  // D-ST2: identity links load only after a pick, so the failure is triggered by one.
+  it("identity-links: a failing request after a pick shows that section's alert and Retry", async () => {
+    const user = userEvent.setup();
+    stubAccessApi({
+      ...baseRoutes(),
+      "GET /api/identities/oid-alice/links": () => fail(500, "INTERNAL"),
+    });
+    renderSections(ADMIN);
+    await pickAlice(user);
+    const alert = await screen.findByText(/couldn't load .*identity links/i);
+    const failed = document.getElementById("identity-links") as HTMLElement;
+    expect(failed).toContainElement(alert);
+    expect(
+      within(failed).getByRole("button", { name: "Retry" }),
+    ).toBeInTheDocument();
+    for (const other of ALL.filter((s) => s !== "identity-links")) {
+      expect(headingOf(other)).toBeInTheDocument();
+    }
+  });
+
   it("Retry refetches the failed section", async () => {
     const user = userEvent.setup();
     let calls = 0;
@@ -365,7 +402,10 @@ describe("AccessSections - one failure never breaks the others (Rule 40.4)", () 
   it("shows a Skeleton in every visible section while data loads", () => {
     vi.stubGlobal("fetch", vi.fn(NEVER));
     renderSections(ADMIN);
-    for (const slug of ALL.filter((s) => s !== "access-review")) {
+    // D-ST2: identity links load nothing on mount (search box, no list).
+    for (const slug of ALL.filter(
+      (s) => s !== "access-review" && s !== "identity-links",
+    )) {
       const section = document.getElementById(slug) as HTMLElement;
       expect(section.querySelector('[data-slot="skeleton"]')).not.toBeNull();
     }

@@ -88,12 +88,11 @@ const ACCOUNT = {
   createdAt: "2026-05-15T08:00:00.000Z",
   updatedAt: "2026-05-15T08:00:00.000Z",
 };
+// D-ST5: names only; the server generates the ids.
 const CREATE_BODY = {
   accountId: acct(42),
   accountName: "new-account",
-  departmentId: "dept-finance",
   departmentName: "Finance",
-  teamId: "team-ledger",
   teamName: "Ledger",
   region: "ap-southeast-2",
 };
@@ -236,7 +235,9 @@ describe("account writes invalidate the accounts tag", () => {
     auth.mockResolvedValue(ADMIN_SESSION);
   });
 
-  async function warmThenWrite(run: () => Promise<Response>) {
+  // Create reads the account list uncached to generate ids (Data Model -
+  // API Routes, POST /api/accounts), so a POST adds one direct read.
+  async function warmThenWrite(run: () => Promise<Response>, ownReads = 0) {
     await callGet(getAccounts, "/api/accounts");
     expect(data.getAllAccounts).toHaveBeenCalledTimes(1);
     const res = await run();
@@ -247,11 +248,32 @@ describe("account writes invalidate the accounts tag", () => {
       profile: { expire: 0 },
     });
     await callGet(getAccounts, "/api/accounts");
-    expect(data.getAllAccounts).toHaveBeenCalledTimes(2);
+    expect(data.getAllAccounts).toHaveBeenCalledTimes(2 + ownReads);
   }
 
   it("POST /api/accounts", () =>
-    warmThenWrite(() => POST(write("POST", CREATE_BODY))));
+    warmThenWrite(() => POST(write("POST", CREATE_BODY)), 1));
+
+  // Data Model - API Routes, POST /api/accounts: ids are unique even when the
+  // cached account list is stale (an account created elsewhere since the warm).
+  it("POST /api/accounts generates unique ids from the live list, not a stale cache", async () => {
+    await callGet(getAccounts, "/api/accounts");
+    data.getAllAccounts.mockResolvedValue([
+      ACCOUNT,
+      {
+        ...ACCOUNT,
+        accountId: acct(2),
+        teamId: "team-ledger",
+        teamName: "Ledger",
+      },
+    ]);
+    const res = await POST(
+      write("POST", { ...CREATE_BODY, teamName: "Ledger-" }),
+    );
+    expect(res.status).toBe(200);
+    const sent = data.createAccount.mock.calls[0]?.[0] as { teamId: string };
+    expect(sent.teamId).not.toBe("team-ledger");
+  });
 
   it("PATCH /api/accounts/[id]", () =>
     warmThenWrite(() =>

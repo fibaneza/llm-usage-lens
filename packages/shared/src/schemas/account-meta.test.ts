@@ -4,6 +4,7 @@ import { COLLECTOR_REGION } from "../region";
 import {
   AccountMetaSchema,
   CreateAccountInputSchema,
+  CreateAccountRequestSchema,
   UpdateAccountPatchSchema,
 } from "./account-meta";
 
@@ -124,4 +125,50 @@ describe("reserved appteam- teamId (T-MI3)", () => {
         .success,
     ).toBe(true);
   });
+});
+
+// D-ST5 (plan unit ST1): the POST /api/accounts body takes names; the server
+// generates departmentId and teamId. Strict, so a typed id is rejected.
+describe("CreateAccountRequestSchema (D-ST5)", () => {
+  const REQUEST = {
+    accountId: "000000000000",
+    accountName: "payments-team-prod",
+    departmentName: "Engineering",
+    teamName: "Payments",
+    region: "ap-southeast-2",
+  };
+
+  it("accepts names without ids", () => {
+    expect(CreateAccountRequestSchema.safeParse(REQUEST).success).toBe(true);
+  });
+
+  it.each([
+    ["departmentId", { departmentId: "dept-x" }],
+    ["teamId", { teamId: "team-x" }],
+    ["an unknown key", { extra: 1 }],
+  ])("rejects %s (strict body)", (_n, extra) => {
+    expect(
+      CreateAccountRequestSchema.safeParse({ ...REQUEST, ...extra }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["accountId", { accountId: "123" }],
+    ["departmentName empty", { departmentName: "" }],
+    ["teamName empty", { teamName: "" }],
+    ["region", { region: "us-east-1" }],
+  ])("rejects an invalid %s", (_n, over) => {
+    expect(
+      CreateAccountRequestSchema.safeParse({ ...REQUEST, ...over }).success,
+    ).toBe(false);
+  });
+
+  it.each(["departmentName", "teamName", "accountName"])(
+    "rejects a missing %s",
+    (key) => {
+      const body: Record<string, unknown> = { ...REQUEST };
+      delete body[key];
+      expect(CreateAccountRequestSchema.safeParse(body).success).toBe(false);
+    },
+  );
 });

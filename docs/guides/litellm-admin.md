@@ -147,6 +147,8 @@ aws ssm put-parameter --name /llm-usage-lens/<env>/litellm/service-key \
    spend, delete key) and self-service key requests start **off**; remove
    member starts **on** (LiteLLM spec LD10, amended 2026-11-14).
 
+**`LLM_LENS_LITELLM_BASE_URL`** (optional URL, default `http://localhost:4000`; unit ST1, D-ST4, user, 2026-11-18): the value the Base URL field offers when no connection is saved. It is only offered, never saved by itself, and the allowed-hosts rule (`LITELLM_ALLOWED_HOSTS`) still applies, so `localhost` is refused in production.
+
 ## 6. Rotate the service key
 
 1. Create a new service key (§2 step 2) with the same `allowed_routes`.

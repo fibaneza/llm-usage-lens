@@ -27,11 +27,13 @@ export {
 export {
   AccountMetaSchema,
   CreateAccountInputSchema,
+  CreateAccountRequestSchema,
   UpdateAccountPatchSchema,
 } from "./schemas/account-meta";
 export type {
   AccountMeta,
   CreateAccountInput,
+  CreateAccountRequest,
   UpdateAccountPatch,
 } from "./schemas/account-meta";
 

@@ -10,7 +10,7 @@ import { z } from "zod";
 import { accessErrorResponse, cursorSecret } from "@/lib/api/access-route";
 import { jsonData, parseSearchParams, withRoute } from "@/lib/api/respond";
 import { getAffiliation } from "@/lib/data/access/affiliations";
-import { listIdentities } from "@/lib/data/access/identities";
+import { listIdentities, searchIdentities } from "@/lib/data/access/identities";
 import { getIdentityLink } from "@/lib/data/access/identity-links";
 import { isLiteLLMConfigured } from "@/lib/litellm/client";
 import { findUserByEmail } from "@/lib/litellm/operations";
@@ -30,6 +30,10 @@ import {
 export const dynamic = "force-dynamic";
 
 const LOOKUP_CONCURRENCY = 5;
+const SEARCH_LIMIT = 10;
+
+// ST1 D-ST2: `q` is a case-insensitive substring of name, email or UPN
+// across every page; at most 10 results, no cursor.
 
 export const GET = withRoute(async (request, _ctx, session) => {
   const forbidden = await litellmReadRefusal(session);
@@ -43,11 +47,19 @@ export const GET = withRoute(async (request, _ctx, session) => {
     if (refused) return refused;
   }
 
-  const page = await listIdentities({
-    cursorSecret: cursorSecret(),
-    limit: USER_LINKS_PAGE_SIZE,
-    ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
-  });
+  const page = query.q
+    ? {
+        ok: true as const,
+        value: {
+          items: await searchIdentities(query.q, SEARCH_LIMIT),
+          cursor: undefined,
+        },
+      }
+    : await listIdentities({
+        cursorSecret: cursorSecret(),
+        limit: USER_LINKS_PAGE_SIZE,
+        ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+      });
   if (!page.ok) return accessErrorResponse(page.code);
 
   const items: DirectoryRow[] = await Promise.all(

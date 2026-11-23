@@ -24,6 +24,7 @@ export const LiteLLMConnectionStatusSchema = z.strictObject({
   version: z.number().int().min(0),
   edition: z.enum(LITELLM_EDITIONS),
   serviceKeyConfigured: z.boolean(),
+  defaultBaseUrl: z.url().optional(),
 });
 export type LiteLLMConnectionStatus = z.infer<
   typeof LiteLLMConnectionStatusSchema

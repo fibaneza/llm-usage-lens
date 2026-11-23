@@ -36,12 +36,11 @@ vi.mock("next/cache", async () => {
 });
 
 const existing = makeAccount(1);
+// D-ST5: the POST body carries names only; the server generates the ids.
 const body = {
   accountId: acct(42),
   accountName: "new-account",
-  departmentId: "dept-finance",
   departmentName: "Finance",
-  teamId: "team-ledger",
   teamName: "Ledger",
   region: "ap-southeast-2",
 };
@@ -132,10 +131,11 @@ describe("POST /api/accounts", () => {
     const res = await POST(json("POST", body));
     expect(res.status).toBe(200);
     const { data } = await res.json();
-    expect(AccountMetaSchema.parse(data)).toMatchObject({
-      ...body,
-      active: true,
-    });
+    // D-ST5: the stored account carries the names and generated ids.
+    const parsed = AccountMetaSchema.parse(data);
+    expect(parsed).toMatchObject({ ...body, active: true });
+    expect(parsed.departmentId.length).toBeGreaterThan(0);
+    expect(parsed.teamId.length).toBeGreaterThan(0);
     expect(await getAccountMeta(body.accountId)).toEqual(data);
   });
 });

@@ -32,6 +32,17 @@ export const CreateAccountInputSchema = AccountMetaSchema.omit({
   updatedAt: true,
 }).extend({ teamId: RegistryTeamIdSchema });
 
+// D-ST5: POST /api/accounts takes names; the server generates the ids.
+export const CreateAccountRequestSchema = z.strictObject({
+  accountId: AccountIdSchema,
+  accountName: z.string().min(1),
+  departmentName: z.string().min(1),
+  teamName: z.string().min(1),
+  region: z.literal(COLLECTOR_REGION),
+});
+
+export type CreateAccountRequest = z.infer<typeof CreateAccountRequestSchema>;
+
 export type CreateAccountInput = z.infer<typeof CreateAccountInputSchema>;
 
 export const UpdateAccountPatchSchema = AccountMetaSchema.omit({

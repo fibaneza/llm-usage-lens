@@ -177,8 +177,18 @@ variable); `components/settings/AccountForm.tsx`, `AccountDialogs.tsx`,
 | T-ST1 | Item 1: the script prints the URL with the base path |
 | T-ST2 | Item 6: `q` under 1 or over 100 characters → `400`; at most 10 results; a lead → `403` |
 | T-ST4 | Item 12: success and failure states with icon and text; the default is offered and not saved; a host outside the allowlist is still refused |
-| T-ST5 | Item 13: a body with `departmentId` or `teamId` is ignored or `400` (strict body); two teams with the same name get different ids; the AWS account ID is still validated as 12 digits |
+| T-ST5 | Item 13: a body with `departmentId` or `teamId` is ignored or `400` (strict body); ~~two teams with the same name get different ids~~ (superseded 2026-11-24 by the department-scoped same-name rule, Data Model — *API Routes*: the same normalised team name in the same department reuses one id, in two departments it gets two); the AWS account ID is still validated as 12 digits |
 | T-ST6 | Item 17: the export button is in the page header |
+
+**Ownership change (coordinator rulings, 2026-11-23).** ST1 also touched
+shared files, as append-only additions: `packages/shared` (`user-links.ts`
+`q`; `account-meta.ts` `CreateAccountRequestSchema`; `litellm.ts`
+`defaultBaseUrl`; the `index.ts` export), `lib/data/access/identities.ts`
+(`searchIdentities`), and `hooks/useAccountMutations.ts` (the dead
+`useCreateAccount` removed, 2026-11-24). The strict create body broke these
+tests on purpose, and they were updated: `accounts-write.integration`,
+`route-caching`, `AccountRegistry`, `AccessSections` and
+`test/route-registry.ts` (`newAccount`).
 
 **Spec:** Design System — Settings (LiteLLM connection, Accounts), Audit
 page header; Data Model — *API Routes* (generated ids); Access Control —

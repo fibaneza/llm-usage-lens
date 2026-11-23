@@ -2,7 +2,6 @@
 
 import {
   AccountMetaSchema,
-  type CreateAccountInput,
   type UpdateAccountPatch,
 } from "@llm-usage-lens/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,15 +13,6 @@ import { mutateApi } from "@/lib/query/fetch-api";
 function useInvalidateAccounts() {
   const client = useQueryClient();
   return () => client.invalidateQueries({ queryKey: ["accounts"] });
-}
-
-export function useCreateAccount() {
-  const invalidate = useInvalidateAccounts();
-  return useMutation({
-    mutationFn: (input: CreateAccountInput) =>
-      mutateApi("/api/accounts", "POST", input, AccountMetaSchema),
-    onSuccess: invalidate,
-  });
 }
 
 export function useUpdateAccount(accountId: string) {

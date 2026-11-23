@@ -5,6 +5,7 @@ import {
   LiteLLMConnectionStatusSchema,
 } from "@llm-usage-lens/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, X } from "lucide-react";
 import { useState } from "react";
 
 import { PanelSkeleton } from "@/components/settings/litellm-panel/PanelSkeleton";
@@ -23,13 +24,15 @@ const STATUS_KEY = ["litellm", "connection"] as const;
 
 function BaseUrlForm({
   stored,
+  offered,
   version,
 }: {
   stored: string | null;
+  offered: string;
   version: number;
 }) {
   const queryClient = useQueryClient();
-  const [value, setValue] = useState(stored ?? "");
+  const [value, setValue] = useState(stored ?? offered);
   const save = useMutation({
     mutationFn: () =>
       mutateApi(
@@ -123,6 +126,7 @@ export function LiteLLMConnectionSection({ canEdit }: { canEdit: boolean }) {
           <BaseUrlForm
             key={`${s.version}:${s.baseUrl ?? ""}`}
             stored={s.baseUrl}
+            offered={s.defaultBaseUrl ?? ""}
             version={s.version}
           />
           <div className="flex flex-wrap items-center gap-3">
@@ -134,23 +138,42 @@ export function LiteLLMConnectionSection({ canEdit }: { canEdit: boolean }) {
             >
               Test connection
             </Button>
-            {test.data ? (
-              <p
-                role="status"
-                className={
-                  test.data.result === "ok"
-                    ? "text-sm"
-                    : "text-destructive text-sm"
-                }
-              >
-                {test.data.message}
-              </p>
-            ) : null}
-            {test.isError ? (
-              <p role="alert" className="text-destructive text-sm">
-                {test.error.message}
-              </p>
-            ) : null}
+            <div aria-live="polite">
+              {test.data ? (
+                <p
+                  className={
+                    test.data.result === "ok"
+                      ? "text-success-text flex items-center gap-1.5 text-sm"
+                      : "text-destructive flex items-center gap-1.5 text-sm"
+                  }
+                >
+                  {test.data.result === "ok" ? (
+                    <Check aria-hidden className="text-success size-4" />
+                  ) : (
+                    <X aria-hidden className="size-4" />
+                  )}
+                  {test.data.result === "ok" ? (
+                    <>
+                      <span>LiteLLM connection is ok</span>
+                      <span className="text-muted-foreground">
+                        {test.data.message}
+                      </span>
+                    </>
+                  ) : (
+                    <span>{test.data.message}</span>
+                  )}
+                </p>
+              ) : null}
+              {test.isError ? (
+                <p
+                  role="alert"
+                  className="text-destructive flex items-center gap-1.5 text-sm"
+                >
+                  <X aria-hidden className="size-4" />
+                  <span>{test.error.message}</span>
+                </p>
+              ) : null}
+            </div>
           </div>
         </>
       ) : null}
