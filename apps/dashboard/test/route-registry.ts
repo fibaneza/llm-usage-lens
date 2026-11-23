@@ -364,9 +364,9 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
 
   // ---- core reads ----
   read("access-review/route.ts"),
-  read("access/org-units/route.ts", { frozen: true }),
-  read("access/pending/route.ts", { frozen: true }),
-  read("access/stale/route.ts", { frozen: true }),
+  read("access/org-units/route.ts"),
+  read("access/pending/route.ts"),
+  read("access/stale/route.ts"),
   read("accounts/route.ts"),
   read("audit/route.ts", { badQuery: "day=not-a-day" }),
   // Unit M4 (Data Model - API Routes): every role may call these; the rows they
@@ -435,10 +435,9 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   // ---- litellm reads (the gateway is faked; LiteLLM spec - API routes) ----
   read("litellm/audit/route.ts", { family: "litellm" }),
   read("litellm/connection/route.ts", { family: "litellm" }),
-  read("litellm/me/route.ts", { family: "litellm", frozen: true }),
+  read("litellm/me/route.ts", { family: "litellm" }),
   read("litellm/org/route.ts", {
     family: "litellm",
-    frozen: true,
     query: RANGE,
     badQuery: BAD_RANGE,
   }),

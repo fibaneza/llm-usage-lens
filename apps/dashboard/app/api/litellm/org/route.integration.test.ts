@@ -51,7 +51,7 @@ import { holdFetch, macrotask, trackSettled } from "@/test/support/fetch-hold";
 //   query parsing and before any LiteLLM call.
 const authMock = vi.hoisted(() => vi.fn());
 // Counts membership reads per team and lets a test change what a later read
-// returns (Q2: membership is read once per team, LD34). Plain functions, so
+// returns (membership is read once per team, LD34). Plain functions, so
 // vi.restoreAllMocks cannot unset the pass-through.
 const membership = vi.hoisted(() => ({
   reads: [] as string[],
@@ -95,13 +95,6 @@ const get = async (query = `?${DATES}`) => {
 };
 
 describe("GET /api/litellm/org", () => {
-  it("401 without a session, no-store (Rule 10.3)", async () => {
-    signInAs(null);
-    const { res } = await get();
-    await expectError(res, 401, "UNAUTHORIZED");
-    expect(state.fake.calls).toHaveLength(0);
-  });
-
   it.each([
     ["orgAdmin", true],
     ["admin", true],
@@ -146,7 +139,7 @@ describe("GET /api/litellm/org", () => {
   //   LiteLLM team row; an unlinked team's is its member sum (coverage given);
   //   unlinked teams are summed smallest first within 200 member reads in all,
   //   and a team that does not fit is `spend: null, reason: "open-team"`.
-  // Amended 2026-11-17 (LD36, L4b round 1): the rows are range spend from one
+  // Amended 2026-11-17 (LD36): the rows are range spend from one
   // getTeamDailySpend read per proxy team, so the old single all-teams call
   // is no longer the contract. Reads stay UTC and in the selected range (LD20).
   it("range spend is read per proxy team, linked or not, in UTC for the range, one listProxyTeams (AT5; LD20; LD36)", async () => {
@@ -172,10 +165,10 @@ describe("GET /api/litellm/org", () => {
     );
   });
 
-  // Q1 (LD36; app-teams - Organisation view; LT27): every Spend figure is the
+  // (LD36; app-teams - Organisation view; LT27): every Spend figure is the
   // selected range. The views fake's team_info.spend is 12.5 for every team, so
   // the budget-period figure cannot pass for a range figure.
-  it("Q1: totals.spend equals the sum of the LiteLLM teams rows for the range, and each row is that team's range spend, not team_info.spend (LD36; LT27)", async () => {
+  it("totals.spend equals the sum of the LiteLLM teams rows for the range, and each row is that team's range spend, not team_info.spend (LD36; LT27)", async () => {
     withRangeSpend();
     signInAs("orgAdmin");
     const { body } = await get();
@@ -198,7 +191,7 @@ describe("GET /api/litellm/org", () => {
     expect(body.data).not.toHaveProperty("teams");
   });
 
-  it("Q1: a linked app team row carries its LiteLLM team's range spend from getTeamDailySpend, not team_info.spend (LD36; Organisation view)", async () => {
+  it("a linked app team row carries its LiteLLM team's range spend from getTeamDailySpend, not team_info.spend (LD36; Organisation view)", async () => {
     withRangeSpend();
     signInAs("auditor");
     const { body } = await get();
@@ -429,12 +422,12 @@ describe("GET /api/litellm/org", () => {
     });
   });
 
-  // Q2 (LD34 amended 2026-11-17): membership is read once per team and the
+  // (LD34 amended 2026-11-17): membership is read once per team and the
   // list is passed to the sum, so a team that crosses 200 between two reads is
   // judged on the one read. The override makes any second read return 201
   // members; the old code's second read threw TOO_MANY_MEMBERS (a 422 for the
   // whole Organisation view).
-  it("Q2: membership is read once per team; a second read that would show 201 members changes nothing, no 422 (LD34; Organisation view)", async () => {
+  it("membership is read once per team; a second read that would show 201 members changes nothing, no 422 (LD34; Organisation view)", async () => {
     await seedUnlinkedTeam("team-w", 7);
     await seedLinkedMembers("team-w", 150);
     membership.override = (teamId, nth) =>
@@ -453,7 +446,7 @@ describe("GET /api/litellm/org", () => {
     expect(w).not.toHaveProperty("reason");
   });
 
-  it("Q2: a team seen at 201 members by its one read is an open-team row, never a 422 (LD34)", async () => {
+  it("a team seen at 201 members by its one read is an open-team row, never a 422 (LD34)", async () => {
     await seedUnlinkedTeam("team-w", 7);
     membership.override = (teamId, nth) =>
       teamId === "team-w" && nth === 1
@@ -470,11 +463,11 @@ describe("GET /api/litellm/org", () => {
     expect(w).toMatchObject({ spend: null, reason: "open-team" });
   });
 
-  // Q3 (LD34 amended): the 200 counts every LiteLLM call. Each member below has
+  // (LD34 amended): the 200 counts every LiteLLM call. Each member below has
   // no stored LiteLLM user id, so reading one costs a findUserByEmail and a
   // spend read. 50 + 60 members is 110 spend reads (fits a spend-only count)
   // but 220 calls with the lookups (does not).
-  it("Q3: email lookups and per-team daily reads count toward the 200-call budget; the team that does not fit is open-team and the request stays within 200 calls (LD34)", async () => {
+  it("email lookups and per-team daily reads count toward the 200-call budget; the team that does not fit is open-team and the request stays within 200 calls (LD34)", async () => {
     const emailLookup: Record<string, { user_id: string; user_email: string }> =
       {};
     const seedLookupTeam = async (
@@ -508,17 +501,17 @@ describe("GET /api/litellm/org", () => {
     expect(state.fake.calls.length).toBeLessThanOrEqual(200);
   });
 
-  // L6 review round 1, Q3 (LD34 amended; LiteLLM spec - Combined usage ->
+  // (LD34 amended; LiteLLM spec - Combined usage ->
   // LiteLLM reads used, Person): getUserDailySpend pages (page_size 1000,
   // has_more), and every page is one LiteLLM call against the 200 of a request.
   // Each member below has a stored LiteLLM user id and 3 pages of daily rows.
   // team-big (70 members) needs 210 page reads: it cannot fit in 200 under any
   // counting, so it is an open-team row (no partial sum) and the request stays
-  // within 200 calls (LD34 amended 2026-11-17, L6 review round 2: the per-member
+  // within 200 calls (LD34 amended 2026-11-17: the per-member
   // reservation in the sum bounds the request; a team that runs out partway is
   // open-team with no partial sum). team-small (2 members, 6 pages) always fits and is summed
   // over every page.
-  describe("Q3: pages count toward the 200-call budget (LD34)", () => {
+  describe("pages count toward the 200-call budget (LD34)", () => {
     it("a team whose paged member reads would exceed 200 calls is open-team, never a partial sum, and the request makes at most 200 calls", async () => {
       await seedUnlinkedTeam("team-small", 7);
       await seedUnlinkedTeam("team-big", 8);

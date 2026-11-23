@@ -58,13 +58,6 @@ const me = async (query = `?${DATES}`) =>
   call(await load(), `/api/litellm/me${query}`);
 
 describe("GET /api/litellm/me", () => {
-  it("401 without a session, no-store (Rule 10.3)", async () => {
-    signInAs(null);
-    const { res } = await me();
-    await expectError(res, 401, "UNAUTHORIZED");
-    expect(state.fake.calls).toHaveLength(0);
-  });
-
   it.each(["auditor", "admin"] as const)(
     "%s with no stored link and no LiteLLM user for their email gets the empty 'unlinked' state; the only call is the email lookup (Views: Own usage without a stored link)",
     async (who) => {
@@ -289,7 +282,7 @@ describe("GET /api/litellm/me", () => {
     expect(state.fake.calls).toHaveLength(0);
   });
 
-  // B4: a bare call must never 400 (Rule 20.1, 20.8; LD20). The default is the
+  // A bare call must never 400 (Rule 20.1, 20.8; LD20). The default is the
   // app's standard range, defaultDateRange (30 UTC days ending today); the
   // clock is frozen at 2026-11-14.
   it("no dateFrom/dateTo defaults to the last 30 UTC days ending today, not 400 (Rule 20.1)", async () => {

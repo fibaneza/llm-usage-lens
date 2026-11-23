@@ -101,12 +101,6 @@ describe("GET /api/litellm/models", () => {
     await expectError(res, 403, "OPERATION_UNAVAILABLE");
   });
 
-  it("a 200 carries Cache-Control private, no-store (API routes)", async () => {
-    signInAs("admin");
-    const { res } = await get();
-    expect(res.headers.get("cache-control")).toBe("private, no-store");
-  });
-
   // Rule 50.4; Access Control - Roles: global roles include stored RoleGrants.
   it("a stored internal-org-admin grant opens the route for a session whose claim lacks the role (Rule 50.4)", async () => {
     await signInWithRoles([]);

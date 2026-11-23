@@ -58,11 +58,6 @@ describe("GET /api/health", () => {
     });
   });
 
-  it("sets Cache-Control: private, no-store", async () => {
-    const res = await call();
-    expect(res.headers.get("cache-control")).toBe("private, no-store");
-  });
-
   it("returns 200 degraded when DynamoDB is unreachable", async () => {
     dynamo.override = "unreachable";
     const res = await call();
