@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { releaseUserSyncLease } from "@/lib/data/litellm/user-sync-lock";
 import { currentRunId, runLiteLLMUserSync } from "@/lib/litellm-user-sync/run";
+import { writeSyncSummary } from "@/lib/litellm-user-sync/summary";
 
 import { runSyncJob } from "./sync-litellm-users";
 
@@ -27,9 +28,32 @@ vi.mock("@/lib/data/litellm/user-sync-lock", async (importOriginal) => ({
   releaseUserSyncLease: vi.fn(async () => undefined),
 }));
 
+vi.mock("@/lib/litellm-user-sync/summary", () => ({
+  writeSyncSummary: vi.fn(async () => undefined),
+}));
+// A unit test never reaches DynamoDB (Rule 60.22: the data layer is proved
+// against DynamoDB Local in integration tests); fail loudly if one does.
+vi.mock("@/lib/dynamodb", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/dynamodb")>()),
+  getDocumentClient: () => {
+    throw new Error("unit test reached DynamoDB");
+  },
+}));
+
 const run = vi.mocked(runLiteLLMUserSync);
+const summary = vi.mocked(writeSyncSummary);
 const currentId = vi.mocked(currentRunId);
 const release = vi.mocked(releaseUserSyncLease);
+
+// Platform - Toggle and lease at run time: a skipped run leaves one summary
+// record with `skipped`; the stop path leaves the same record with `lost-lease`.
+const lostLeaseSummary = (runId: string) =>
+  [
+    expect.objectContaining({ actor: "system", requestId: runId }),
+    runId,
+    "schedule",
+    { skipped: "lost-lease" },
+  ] as const;
 
 const DEADLINE_MS = 10 * 60_000;
 const SECRET = "sk-job-test-secret-123";
@@ -61,6 +85,8 @@ beforeEach(() => {
   currentId.mockReset();
   currentId.mockReturnValue("run-held");
   release.mockClear();
+  summary.mockReset();
+  summary.mockImplementation(async () => undefined);
 });
 
 afterEach(() => {
@@ -145,7 +171,7 @@ describe("sync-litellm-users job", () => {
     },
   );
 
-  it("the 10-minute deadline releases the lease and exits non-zero (T-SY8; Platform - Exit and deadline; V13)", async () => {
+  it("the 10-minute deadline releases the lease and exits non-zero (T-SY8; Platform - Exit and deadline; V13; lost-lease summary per Platform - Toggle and lease at run time)", async () => {
     vi.useFakeTimers();
     run.mockReturnValue(new Promise(() => undefined));
     let code: number | undefined;
@@ -162,9 +188,11 @@ describe("sync-litellm-users job", () => {
     expect(code).toBeDefined();
     expect(code).not.toBe(0);
     expect(release).toHaveBeenCalledWith("run-held");
+    expect(summary).toHaveBeenCalledTimes(1);
+    expect(summary).toHaveBeenCalledWith(...lostLeaseSummary("run-held"));
   });
 
-  it("SIGTERM releases the lease and exits non-zero (T-SY8; Platform - Exit and deadline; V13)", async () => {
+  it("SIGTERM releases the lease and exits non-zero (T-SY8; Platform - Exit and deadline; V13; lost-lease summary per Platform - Toggle and lease at run time)", async () => {
     vi.useFakeTimers();
     run.mockReturnValue(new Promise(() => undefined));
     const job = runSyncJob();
@@ -174,9 +202,11 @@ describe("sync-litellm-users job", () => {
 
     expect(await job).not.toBe(0);
     expect(release).toHaveBeenCalledWith("run-held");
+    expect(summary).toHaveBeenCalledTimes(1);
+    expect(summary).toHaveBeenCalledWith(...lostLeaseSummary("run-held"));
   });
 
-  it("the deadline with no run holding the lease does not release (currentRunId undefined; Platform - Scheduled job: release only what the run holds)", async () => {
+  it("the deadline with no run holding the lease does not release (currentRunId undefined; Platform - Scheduled job: release only what the run holds; no summary either)", async () => {
     vi.useFakeTimers();
     currentId.mockReturnValue(undefined);
     run.mockReturnValue(new Promise(() => undefined));
@@ -190,6 +220,7 @@ describe("sync-litellm-users job", () => {
 
     expect(code).not.toBe(0);
     expect(release).not.toHaveBeenCalled();
+    expect(summary).not.toHaveBeenCalled();
   });
 
   it("SIGTERM with no run holding the lease does not release (currentRunId undefined; T-SY8)", async () => {
@@ -203,10 +234,11 @@ describe("sync-litellm-users job", () => {
 
     expect(await job).not.toBe(0);
     expect(release).not.toHaveBeenCalled();
+    expect(summary).not.toHaveBeenCalled();
   });
 
   it.each(["deadline", "sigterm"] as const)(
-    "a failed lease release on %s logs stop_failed with the error name and code, never the message, a secret or an email (review sync2 r1 nit; Rule 50.6; Access Control - Records)",
+    "a failed lease release on %s logs stop_failed with the error name and code, never the message, a secret or an email (Rule 50.6; Access Control - Records)",
     async (reason) => {
       vi.useFakeTimers();
       const failure = Object.assign(
