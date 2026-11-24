@@ -7,6 +7,8 @@ import {
   LINK_SK,
   LOCALUSERS_GSI1PK,
   OWNER_SK,
+  PENDINGLITELLMLINKS_GSI1PK,
+  PENDING_LITELLMLINK_SK,
   ROLEGRANTS_GSI1PK,
   adminScopeSk,
   APPTEAMS_GSI1PK,
@@ -87,5 +89,19 @@ describe("access-control key builders", () => {
     expect(appTeamNamePk("  Platform GUILD ")).toBe(
       "APPTEAMNAME#platform guild",
     );
+  });
+
+  // Source: Access Control - "Data model additions" (PendingLiteLLMLink:
+  // PENDING#{email} or PENDING#{oid} / LITELLMLINK, GSI1 PENDINGLITELLMLINKS /
+  // PENDING#{emailOrOid}); "LiteLLM user sync" - Pending LiteLLM links
+  // (lower-cased key, shared partition with the pending items).
+  it("builds the pending LiteLLM link keys on the shared pending partition", () => {
+    expect(PENDING_LITELLMLINK_SK).toBe("LITELLMLINK");
+    expect(PENDINGLITELLMLINKS_GSI1PK).toBe("PENDINGLITELLMLINKS");
+    expect(pendingPk("Ada@Example.COM")).toBe("PENDING#ada@example.com");
+    expect(pendingPk("00000000-0000-4000-8000-00000000AAAA")).toBe(
+      "PENDING#00000000-0000-4000-8000-00000000aaaa",
+    );
+    expect(PENDING_LITELLMLINK_SK).not.toBe(AFFILIATION_SK);
   });
 });

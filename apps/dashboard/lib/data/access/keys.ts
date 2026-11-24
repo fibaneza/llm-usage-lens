@@ -15,6 +15,10 @@ export const PASSWORD_SIGNIN_SK = "PASSWORD_SIGNIN";
 export const ROLEGRANTS_GSI1PK = "ROLEGRANTS";
 export const GROUPMAPS_GSI1PK = "GROUPMAPS";
 export const LOCALUSERS_GSI1PK = "LOCALUSERS";
+// PendingLiteLLMLink shares the PENDING#{key} partition (Access Control - Data
+// model additions); readers of that partition skip this sort key.
+export const PENDING_LITELLMLINK_SK = "LITELLMLINK";
+export const PENDINGLITELLMLINKS_GSI1PK = "PENDINGLITELLMLINKS";
 
 const scopeTag = (t: ScopeType): string => (t === "team" ? "TEAM" : "DEPT");
 

@@ -78,6 +78,10 @@ const EXPECTED: Record<string, [Kind, boolean, string[]]> = {
   // M4, MG-D11a: dashboard-only, no LiteLLM route; on by default (a request
   // alone changes nothing in LiteLLM).
   requestBudgetReset: ["write", true, []],
+  // SYNC1, LiteLLM spec - `syncLiteLLMUsers` (user, 2026-11-18): dashboard-only,
+  // no LiteLLM route (the sync reads through searchUsers, getTeam and getUser),
+  // on by default (LD10: it only adds to the dashboard).
+  syncLiteLLMUsers: ["write", true, []],
 };
 
 const routeKey = (r: { method: string; template: string }) =>

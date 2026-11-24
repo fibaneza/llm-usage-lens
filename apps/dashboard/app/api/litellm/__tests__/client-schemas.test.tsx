@@ -3,6 +3,7 @@ import {
   LiteLLMProxyTeamMembersResponseSchema,
   LiteLLMUserDetailResponseSchema,
   LiteLLMUserSearchResponseSchema,
+  PendingLinksPageSchema,
   UsersListResponseSchema,
 } from "@llm-usage-lens/shared";
 import { screen } from "@testing-library/react";
@@ -11,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
 
 import { UserSearch } from "@/components/litellm/UserSearch";
+import { PendingLinksList } from "@/components/manage/users/PendingLinksList";
 import { LiteLLMUsersList } from "@/components/manage/users/LiteLLMUsersList";
 import { apiError, apiResponse } from "@/test/fakes/api-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
@@ -245,5 +247,23 @@ describe("LiteLLM clients parse each route's answer with the schema that route e
         ),
       ),
     ).toEqual(new Set([LiteLLMUserDetailResponseSchema]));
+  });
+
+  // Rule 10.4 / D-LF1: GET /api/identities/pending-links is parsed with the
+  // shared page schema, not a component-local copy (SYNC1, Green C finding 4).
+  it("PendingLinksList: the pending-links page", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(apiResponse({ data: { items: [] } }))),
+    );
+    renderWithProviders(<PendingLinksList canRemove />);
+    await screen.findByRole("region", { name: "Not signed in yet" });
+    expect(
+      new Set(
+        asked((u) => u.pathname === "/api/identities/pending-links").map(
+          (s) => s.schema,
+        ),
+      ),
+    ).toEqual(new Set([PendingLinksPageSchema]));
   });
 });

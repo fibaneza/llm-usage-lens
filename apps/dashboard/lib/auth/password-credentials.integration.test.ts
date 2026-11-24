@@ -98,6 +98,23 @@ describe("authorizePasswordUser", { timeout: 60_000 }, () => {
     });
   });
 
+  // Access Control - Match keys per sign-in mode: the identity's email is the stored record's, and a
+  // padded submitted email never finds one (no lookup drift; T-SM4).
+  it("returns the stored email, and refuses a whitespace-padded submitted email", async () => {
+    const { email } = await activeUser();
+    const signedIn = await authorizePasswordUser(
+      { email: email.toUpperCase(), password: GOOD_PASSWORD },
+      at(MIN),
+    );
+    expect(signedIn?.email).toBe((await getPasswordCredential(email))?.email);
+    expect(
+      await authorizePasswordUser(
+        { email: ` ${email} `, password: GOOD_PASSWORD },
+        at(2 * MIN),
+      ),
+    ).toBeNull();
+  });
+
   // D29: the identity carries the stored
   // credentialVersion so the session can be matched against it per request.
   it("returns the stored credentialVersion, which an own password change raises (F7)", async () => {

@@ -61,6 +61,9 @@ describe("LITELLM_OPERATION_NAMES", () => {
         "rotateKey",
         // M4 (LiteLLM spec - MG-D11a): the route-less dashboard operation.
         "requestBudgetReset",
+        // SYNC1 (LiteLLM spec - syncLiteLLMUsers, LD40): the route-less
+        // dashboard operation that switches the user sync on and off.
+        "syncLiteLLMUsers",
       ].sort(),
     );
   });

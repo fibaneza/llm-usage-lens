@@ -1113,6 +1113,24 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     action: "litellm.user.create",
     validBody: { oid: alice.oid },
   }),
+
+  // ---- unit SYNC1 (Access Control - "LiteLLM user sync", "API routes
+  // (additions)", Permission matrix; threat T-SY9): the sync preview and apply
+  // and the pending LiteLLM links. The sync routes reach LiteLLM only for
+  // reads, so they register in the `litellm` family (a refused call makes no
+  // LiteLLM call). Admin and org-admin write; the auditor reads the pending
+  // list only. The lead and route-specific cases live in each route's file.
+  read("identities/litellm-sync/route.ts", { family: "litellm" }),
+  matrixWrite("POST", "identities/litellm-sync/route.ts", {
+    family: "litellm",
+    action: "litellm.user.sync",
+    validBody: { planHash: "0".repeat(64) },
+  }),
+  read("identities/pending-links/route.ts"),
+  matrixWrite("DELETE", "identities/pending-links/route.ts", {
+    action: "identity.litellm-pending.remove",
+    validBody: { email: "pending.person@company.com", version: 1 },
+  }),
 ];
 
 export const registryKeys = (): string[] => ROUTE_REGISTRY.map((e) => e.key);

@@ -15,6 +15,7 @@ import { z } from "zod";
 
 import { Panel } from "@/components/display/Panel";
 import { ResetMemberSpendDialog } from "@/components/litellm/ResetMemberSpendDialog";
+import { LiteLLMSyncButton } from "@/components/manage/users/LiteLLMSyncButton";
 import { LiteLLMLinkCell } from "@/components/manage/users/LiteLLMLinkCell";
 import type { LinkState } from "@/components/manage/users/LiteLLMLinkCell";
 import { AddUserDialog } from "@/components/manage/users/AddUserDialog";
@@ -332,12 +333,14 @@ type PanelProps = {
   stepUp: StepUpActions;
   litellmConfigured: boolean;
   canResetSpend: boolean;
+  canSync?: boolean;
 };
 
 function PeoplePanel({
   canCreate,
   litellmConfigured,
   canResetSpend,
+  canSync = false,
   steps,
   ownOid,
   authMethod,
@@ -376,6 +379,7 @@ function PeoplePanel({
               className="pl-8"
             />
           </div>
+          {canSync ? <LiteLLMSyncButton /> : null}
           {canAdd ? (
             <Button type="button" size="sm" onClick={() => setAdding(true)}>
               <Plus aria-hidden />
@@ -418,15 +422,18 @@ export function UsersPeoplePanel({
   canCreate,
   litellmConfigured = true,
   canResetSpend = false,
+  canSync = false,
   ...rest
-}: Omit<PanelProps, "litellmConfigured" | "canResetSpend"> & {
+}: Omit<PanelProps, "litellmConfigured" | "canResetSpend" | "canSync"> & {
   // Absent: derived from the list route's enabledOperations (edition and toggle).
   canCreate?: boolean;
   litellmConfigured?: boolean;
   // RS1: resolved by the page (configured, toggle on, caller may write).
   canResetSpend?: boolean;
+  // SYNC1: resolved by the page; the route decides the write again.
+  canSync?: boolean;
 }) {
-  const props = { ...rest, litellmConfigured, canResetSpend };
+  const props = { ...rest, litellmConfigured, canResetSpend, canSync };
   return canCreate === undefined ? (
     <DerivedPeoplePanel {...props} />
   ) : (

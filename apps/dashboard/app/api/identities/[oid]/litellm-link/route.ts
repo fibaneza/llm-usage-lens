@@ -18,6 +18,7 @@ import {
 import type { RouteContext } from "@/lib/api/respond";
 import { identityExists, ownEmail } from "@/lib/data/access/identities";
 import { writeLiteLLMUserLink } from "@/lib/data/access/identity-links";
+import { matchLiteLLMUser } from "@/lib/data/access/litellm-match";
 import { liteLLMResponse } from "@/lib/litellm/read-views";
 import {
   openModeRefusal,
@@ -84,7 +85,19 @@ export const PUT = withRoute(
       if (!target.ok) return target.response;
       if (body.mode === "match") {
         const email = await ownEmail(oid);
-        if (!email || target.email !== email) {
+        const same =
+          email !== null &&
+          matchLiteLLMUser(
+            { oid, authMethod: "entra", email },
+            {
+              userId: body.litellmUserId,
+              email: target.email,
+              ssoUserId: null,
+            },
+            null,
+            { storedEmail: true },
+          ).email;
+        if (!same) {
           return jsonError(
             409,
             "CONFLICT",

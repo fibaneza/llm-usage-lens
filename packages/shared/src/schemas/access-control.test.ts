@@ -304,7 +304,16 @@ describe("audit schemas", () => {
     // M2 adds appteam.create (Access Control - Created app teams); INV1 adds
     // affiliation.invite.accept (Access Control - Audit log, Covered).
     // RS2 adds litellm.user.reset-spend (Access Control - Audit log; LiteLLM spec LD39).
-    expect(AUDIT_ACTIONS).toHaveLength(75);
+    // SYNC1 adds litellm.user.sync, identity.litellm-pending.set and
+    // identity.litellm-pending.remove (Access Control - Audit log, Covered).
+    expect(AUDIT_ACTIONS).toHaveLength(78);
+    for (const action of [
+      "litellm.user.sync",
+      "identity.litellm-pending.set",
+      "identity.litellm-pending.remove",
+    ]) {
+      expect(AUDIT_ACTIONS).toContain(action);
+    }
     expect(AUDIT_ACTIONS).toContain("litellm.user.reset-spend");
     expect(AUDIT_ACTIONS).toContain("affiliation.invite.accept");
     for (const action of [
@@ -513,6 +522,25 @@ describe("sanitizeAuditSnapshot (T17)", () => {
       accountIds: ["123456789012"],
     };
     expect(sanitizeAuditSnapshot(lists)).toEqual(lists);
+  });
+  // Access Control - LiteLLM user sync, Records: every record of a run carries
+  // its runId; the summary carries trigger, truncated, plan hash and skipped;
+  // a link's record carries the matched key. T17: only listed keys survive;
+  // T-SY1: sso_user_id is never stored.
+  it("keeps the sync record fields and drops sso_user_id", () => {
+    const fields = {
+      runId: "run-1",
+      trigger: "schedule",
+      truncated: false,
+      planHash: "a".repeat(64),
+      skipped: "locked",
+      matchedKey: "oid",
+      litellmUserId: "lu-1",
+      mode: "sync",
+    };
+    expect(
+      sanitizeAuditSnapshot({ ...fields, sso_user_id: "entra-1" }),
+    ).toEqual(fields);
   });
   // Access Control - LiteLLM user links (agent decision, 2026-11-18, unit M3): the record carries mode, both ids and the reason (T17, T-MI1).
   it("keeps the LiteLLM link mode, both ids and the reason", () => {

@@ -257,11 +257,18 @@ One session, in order; each unit starts when the one before it is on
 - `apps/dashboard/app/api/identities/litellm-sync/**`,
   `apps/dashboard/app/api/identities/pending-links/**`
 - `apps/dashboard/components/manage/users/LiteLLMSyncDialog.tsx`,
+  `LiteLLMSyncButton.tsx` (new, opens the dialog; added 2026-11-24),
   `PendingLinksList.tsx`, and their tests
 - `apps/dashboard/e2e/users-litellm-sync.spec.ts`
 - M: `apps/dashboard/components/manage/users/UsersPeoplePanel.tsx`,
   `apps/dashboard/app/dashboard/manage/users/page.tsx`, and their tests
   (RS1 edits them too; that is why SYNC1 waits for RS1)
+  *Ownership change, coordinator 2026-11-24 (overlap sync1):*
+  `apps/dashboard/auth.ts` (one call to applyPasswordSignInLink after a
+  verified password sign-in; security-critical) and
+  `components/manage/users/UsersPeoplePanel.tsx` (the server-computed canSync
+  prop), `apps/dashboard/lib/auth/master-user.ts` (SignedInIdentity authMethod derived from the shared Zod enum, which admits password; coordinator 2026-11-24).
+  `apps/dashboard/components/display/Panel.tsx` (`max-w-full` on the actions wrapper so the actions row wraps at 375px; coordinator 2026-11-24).
 - M: `apps/dashboard/lib/data/access/sign-in-sync.ts` (bind a pending
   link), `identity-links.ts` (mode `sync`, a claim held by a pending
   link), `access-review.ts` and `pending-stale.ts` (pending links in the

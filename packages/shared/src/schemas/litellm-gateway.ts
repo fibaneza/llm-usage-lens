@@ -43,6 +43,7 @@ export const LITELLM_OPERATION_NAMES = [
   "deleteKey",
   "rotateKey",
   "requestBudgetReset",
+  "syncLiteLLMUsers",
 ] as const;
 
 export const LiteLLMOperationNameSchema = z.enum(LITELLM_OPERATION_NAMES);

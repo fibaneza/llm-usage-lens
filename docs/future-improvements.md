@@ -295,6 +295,14 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ## LiteLLM
 
+### LiteLLM user sync — leavers
+
+- **Status:** Deferred (user, 2026-11-18: "It should not remove users from litellm"; unit SYNC1).
+- **What:** when a person leaves LiteLLM, remove their dashboard access: unlink the LiteLLM user, remove the team membership, disable the sign-in. Today the sync only reports such people as drift and never removes a link or a membership.
+- **Why deferred:** deleting must keep spend and usage (Access Control S22), and removing access on a LiteLLM fault would remove people in bulk; the quarterly access review and the drift list already show leavers.
+- **Trigger:** a request to remove dashboard access when a person leaves LiteLLM.
+- **References:** [Access Control](specs/2026-11-10-access-control.md) — *LiteLLM user sync* (clean-up of dashboard placeholders, drift), S22; [LiteLLM spec](specs/2026-11-10-litellm.md) — LD40.
+
 ### A LiteLLM team list view on Management → LiteLLM → LiteLLM teams
 
 - **Status:** Deferred (coordinator decision, 2026-11-18, M1 review; Design System D2 amended).

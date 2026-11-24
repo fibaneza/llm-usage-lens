@@ -7,6 +7,7 @@ import {
   DirectoryRowSchema,
   LINK_REASON_MAX,
   LiteLLMLinkDeleteBodySchema,
+  LiteLLMLinkModeSchema,
   LiteLLMLinkPutBodySchema,
   LiteLLMLinkResultSchema,
   USER_LINKS_PAGE_SIZE,
@@ -76,6 +77,27 @@ describe("LiteLLMLinkPutBodySchema (T-MI1)", () => {
     rejects(LiteLLMLinkPutBodySchema)({ ...ok, version: 1.5 });
     rejects(LiteLLMLinkPutBodySchema)({ ...ok, version: undefined });
     rejects(LiteLLMLinkPutBodySchema)({ ...ok, email: "a@b.c" });
+  });
+});
+
+// Access Control - "LiteLLM user sync" (the link's `mode` gains "sync", written
+// only by the sync and the sign-in link), T-MI1 ("no automatic link outside
+// the LiteLLM user sync"), T-SY1 (audit record carries mode `sync`).
+describe("LiteLLMLinkModeSchema (mode sync)", () => {
+  it.each(["match", "manual", "sync"])("accepts the stored mode %s", (mode) => {
+    accepts(LiteLLMLinkModeSchema)(mode);
+  });
+
+  it("rejects an unknown mode", () => {
+    rejects(LiteLLMLinkModeSchema)("auto");
+  });
+
+  it("rejects mode sync in a PUT body: a caller cannot claim an automatic link", () => {
+    rejects(LiteLLMLinkPutBodySchema)({
+      litellmUserId: "lu-1",
+      mode: "sync",
+      version: 0,
+    });
   });
 });
 

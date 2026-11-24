@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 
 import { TransactionCanceledException } from "@aws-sdk/client-dynamodb";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { trace } from "@opentelemetry/api";
 import { auditCategory } from "@llm-usage-lens/shared";
 import type {
   AdminScope,
@@ -29,6 +30,11 @@ import { listAdminScopes } from "./admin-scopes";
 import { getAffiliation } from "./affiliations";
 import { listGroupMappings } from "./group-mappings";
 import {
+  getIdentityLink,
+  getLiteLLMUserOwner,
+  writeLiteLLMUserLink,
+} from "./identity-links";
+import {
   AFFILIATION_SK,
   adminScopeSk,
   adminsGsi1pk,
@@ -36,7 +42,18 @@ import {
   membersGsi1pk,
   pendingPk,
 } from "./keys";
+import {
+  SSO_KEY_PREFIX,
+  emailKeyOf,
+  entraIdOf,
+  normalizeEmail,
+  ssoPendingKey,
+} from "./litellm-match";
 import { listPendingFor } from "./pending";
+import {
+  getPendingLiteLLMLink,
+  removePendingLiteLLMLink,
+} from "./pending-litellm-links";
 import type { AccessResult, AuditContext, Page } from "./result";
 import { getItem } from "./store";
 import { bindPasswordUserOnEntraSignIn } from "./sso-binding";
@@ -357,6 +374,85 @@ function isConditionFailure(error: unknown): boolean {
   );
 }
 
+// Source: docs/specs/2026-11-10-access-control.md - "LiteLLM user sync",
+// *Pending LiteLLM links* and *Match keys per sign-in mode* (SM2-SM5; S19;
+// T-SY6, T-SM3, T-SM4): the link at sign-in comes from the pending link the
+// sync wrote, read from DynamoDB; sign-in makes no LiteLLM call. The bind is
+// one transaction (link, claim moved, placeholder deleted, one record with
+// actor `system` and mode `sync`). Never overwrites another link. A sign-in
+// never fails because of a pending link: a refusal leaves the placeholder
+// and an unexpected error is recorded on the span.
+async function linkFromPending(
+  oid: string,
+  keys: readonly string[],
+  ctx: AuditContext,
+): Promise<void> {
+  try {
+    for (const key of keys) {
+      const pending = await getPendingLiteLLMLink(key);
+      if (!pending) continue;
+      const link = await getIdentityLink(oid);
+      if (link?.litellmUserId) {
+        await removePendingLiteLLMLink(
+          {
+            emailOrOid: pending.emailOrOid,
+            version: pending.version,
+            runId: ctx.requestId,
+            keepClaim: link.litellmUserId === pending.litellmUserId,
+          },
+          ctx,
+        );
+        return;
+      }
+      const owner = await getLiteLLMUserOwner(pending.litellmUserId);
+      if (owner !== null && owner !== pending.emailOrOid) return;
+      await writeLiteLLMUserLink(
+        {
+          oid,
+          version: link?.version ?? null,
+          write: {
+            kind: "set",
+            litellmUserId: pending.litellmUserId,
+            mode: "sync",
+            matchedKey: key.startsWith(SSO_KEY_PREFIX) ? "oid" : "email",
+          },
+          pending: { key: pending.emailOrOid, version: pending.version },
+        },
+        ctx,
+      );
+      return;
+    }
+  } catch (error) {
+    trace
+      .getActiveSpan()
+      ?.recordException(error instanceof Error ? error : String(error));
+  }
+}
+
+// A password sign-in links from `PENDING#{email}` and binds no invite (SM8).
+export async function applyPasswordSignInLink(input: {
+  identity: { oid: string; email?: string | null };
+  requestId: string;
+  now: Date;
+  sequence?: { next: number };
+}): Promise<void> {
+  const email = emailKeyOf(
+    {
+      oid: input.identity.oid,
+      authMethod: "password",
+      email: input.identity.email,
+    },
+    null,
+  );
+  if (!email) return;
+  await linkFromPending(input.identity.oid, [email], {
+    actor: SYSTEM,
+    requestId: input.requestId,
+    now: input.now,
+    sequence: input.sequence ?? { next: 0 },
+  });
+}
+
 export async function applySignInResolution(input: {
   identity: SignedInIdentity;
   groups: readonly string[];
@@ -395,7 +491,7 @@ export async function applySignInResolution(input: {
       getAffiliation(identity.oid),
       readAll<AdminScope>((c) => listAdminScopes(identity.oid, options(c))),
       inTenant && identity.upn
-        ? listPendingFor([identity.upn])
+        ? listPendingFor([normalizeEmail(identity.upn)])
         : Promise.resolve([]),
       getItem(identPk(identity.oid), "META"),
     ]);
@@ -461,6 +557,19 @@ export async function applySignInResolution(input: {
     }
     ctx.sequence.next = base + records.length;
     for (const record of records) await deliverAuditLine(record);
+    if (inTenant) {
+      const entra = { ...identity, authMethod: "entra" };
+      const oidKey = entraIdOf(entra);
+      const upnKey = emailKeyOf(entra, expectedTid);
+      await linkFromPending(
+        identity.oid,
+        [
+          ...(oidKey ? [ssoPendingKey(oidKey)] : []),
+          ...(upnKey ? [upnKey] : []),
+        ],
+        ctx,
+      );
+    }
     return plan;
   }
 }

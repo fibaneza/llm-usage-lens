@@ -38,6 +38,7 @@ vi.mock("@/lib/data/access/password-credentials-store", () => passwordStore);
 const r2m = vi.hoisted(() => ({
   upsertIdentity: vi.fn(),
   applySignInResolution: vi.fn(),
+  applyPasswordSignInLink: vi.fn(),
   recordSignIn: vi.fn(),
   recordSignOut: vi.fn(),
   recordSecurityEvent: vi.fn(),
@@ -1667,6 +1668,7 @@ describe("auth.ts callbacks: Entra sync, audit records, session token (Access Co
     }));
     vi.doMock("@/lib/data/access/sign-in-sync", () => ({
       applySignInResolution: r2m.applySignInResolution,
+      applyPasswordSignInLink: r2m.applyPasswordSignInLink,
     }));
     vi.doMock("@/lib/data/access/session-audit", () => ({
       recordSignIn: r2m.recordSignIn,
@@ -1692,6 +1694,7 @@ describe("auth.ts callbacks: Entra sync, audit records, session token (Access Co
     r2m.parseSessionToken.mockImplementation(realParseSessionToken);
     r2m.upsertIdentity.mockResolvedValue(undefined);
     r2m.applySignInResolution.mockResolvedValue({});
+    r2m.applyPasswordSignInLink.mockResolvedValue(undefined);
     r2m.recordSignIn.mockResolvedValue(undefined);
     r2m.recordSignOut.mockResolvedValue(undefined);
     r2m.recordSecurityEvent.mockResolvedValue(undefined);
@@ -2016,6 +2019,123 @@ describe("auth.ts callbacks: Entra sync, audit records, session token (Access Co
       email: "ada@example.com",
       authMethod: "password",
     };
+
+    // Access Control - Match keys per
+    // sign-in mode ("Password sign-in makes the link from PENDING#{email}"),
+    // T-SM4 (no LiteLLM call), the master-user line ("the master user and a
+    // dev login are never matched", LiteLLM user links item 3), Rule 60.17.
+    describe("password sign-in makes the PENDING link (T-SM4)", () => {
+      const signInAs = (
+        cfg: Config,
+        user: Rec,
+        provider = "password",
+      ): Promise<boolean> =>
+        cfg.callbacks.signIn({ user, account: { provider } });
+
+      it.each(["password", "password-setup"])(
+        "a %s sign-in applies the link once, with the stored email verbatim, after the upsert and the sign-in record",
+        async (provider) => {
+          const cfg = await load({ ...MASTER });
+          const stored = { ...passwordUser, email: "Ada.Stored@Example.com" };
+          expect(await signInAs(cfg, stored, provider)).toBe(true);
+          expect(r2m.applyPasswordSignInLink).toHaveBeenCalledTimes(1);
+          const input = r2m.applyPasswordSignInLink.mock.calls[0]?.[0] as Rec;
+          expect(input).toMatchObject({
+            identity: {
+              oid: "password:ada@example.com",
+              email: "Ada.Stored@Example.com",
+            },
+          });
+          expect(input.requestId).toEqual(expect.any(String));
+          expect(input.now).toBeInstanceOf(Date);
+          const link = r2m.applyPasswordSignInLink.mock.invocationCallOrder[0];
+          expect(r2m.upsertIdentity.mock.invocationCallOrder[0]).toBeLessThan(
+            link ?? 0,
+          );
+          expect(r2m.recordSignIn.mock.invocationCallOrder[0]).toBeLessThan(
+            link ?? 0,
+          );
+        },
+      );
+
+      it("does not link when the sign-in itself fails (upsert or record error)", async () => {
+        const cfg = await load({ ...MASTER });
+        r2m.upsertIdentity.mockRejectedValueOnce(new Error("ddb down"));
+        expect(await signInAs(cfg, passwordUser)).toBe(false);
+        r2m.recordSignIn.mockRejectedValueOnce(new Error("put failed"));
+        expect(await signInAs(cfg, passwordUser)).toBe(false);
+        expect(r2m.applyPasswordSignInLink).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ["master", "master-user", { ...masterUser, email: "root@example.com" }],
+        [
+          "local (dev login)",
+          "dev-login",
+          {
+            oid: "local:dev@localhost",
+            tid: "local",
+            email: "dev@localhost",
+            roles: ["internal-viewer"],
+            authMethod: "local",
+          },
+        ],
+      ])(
+        "never links a %s sign-in, even one carrying an email",
+        async (_n, provider, user) => {
+          const cfg = await load({ ...MASTER, AUTH_DEV_LOGIN: "true" });
+          expect(await signInAs(cfg, user, provider)).toBe(true);
+          expect(r2m.applyPasswordSignInLink).not.toHaveBeenCalled();
+        },
+      );
+
+      it("never links an Entra sign-in (the sync owns it)", async () => {
+        const cfg = await load(ENTRA);
+        await cfg.callbacks.signIn({
+          user: {},
+          account: entraAccount,
+          profile: entraProfile(),
+        });
+        expect(r2m.applyPasswordSignInLink).not.toHaveBeenCalled();
+      });
+
+      it("never links in the jwt callback, at sign-in or on a refresh", async () => {
+        const cfg = await load({ ...MASTER });
+        const token = await cfg.callbacks.jwt({
+          token: {},
+          account: { provider: "password" },
+          user: passwordUser,
+        });
+        await cfg.callbacks.jwt({ token: token as Rec });
+        expect(r2m.applyPasswordSignInLink).not.toHaveBeenCalled();
+      });
+
+      // Rule 60.17: recorded, not swallowed; Rule 50.6: no secrets.
+      it("an error in the link leaves the sign-in successful and is recorded on the span", async () => {
+        installFakeOtel();
+        recordedSpans.length = 0;
+        const failure = new Error("link failed");
+        r2m.applyPasswordSignInLink.mockRejectedValue(failure);
+        const cfg = await load({ ...MASTER });
+        const ok = await trace
+          .getTracer("test")
+          .startActiveSpan("sign-in", async (span) => {
+            try {
+              return await signInAs(cfg, passwordUser);
+            } finally {
+              span.end();
+            }
+          });
+        expect(ok).toBe(true);
+        expect(r2m.recordSignIn).toHaveBeenCalledTimes(1);
+        expect(r2m.recordSecurityEvent).not.toHaveBeenCalled();
+        expect(
+          recordedSpans.filter((s) => s.exceptions.includes(failure)),
+        ).toHaveLength(1);
+        const attrs = JSON.stringify(recordedSpans.map((s) => s.attributes));
+        expect(attrs).not.toContain("ada@example.com");
+      });
+    });
 
     it("registers the password and password-setup providers", async () => {
       const cfg = (await load({ ...MASTER })) as unknown as {

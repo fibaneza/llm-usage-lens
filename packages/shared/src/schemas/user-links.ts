@@ -66,12 +66,13 @@ export const DirectoryQuerySchema = z.object({
 
 // ---- PUT / DELETE /api/identities/[oid]/litellm-link ------------------------
 
-export const LiteLLMLinkModeSchema = z.enum(["match", "manual"]);
+export const LiteLLMLinkModeSchema = z.enum(["match", "manual", "sync"]);
 
 export const LiteLLMLinkPutBodySchema = z
   .strictObject({
     litellmUserId: LiteLLMIdSchema,
-    mode: LiteLLMLinkModeSchema,
+    // "sync" is written only by the sync and the sign-in link (T-MI1, T-SY1).
+    mode: z.enum(["match", "manual"]),
     reason: z.string().trim().min(1).max(LINK_REASON_MAX).optional(),
     version: z.number().int().min(0),
   })

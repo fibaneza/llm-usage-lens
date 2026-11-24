@@ -5,7 +5,15 @@ import type { IdentityLink } from "@llm-usage-lens/shared";
 
 import { getTableName } from "@/lib/dynamodb";
 
-import { LINK_SK, OWNER_SK, identPk, litellmUserPk, usageKeyPk } from "./keys";
+import {
+  LINK_SK,
+  OWNER_SK,
+  PENDING_LITELLMLINK_SK,
+  identPk,
+  litellmUserPk,
+  pendingPk,
+  usageKeyPk,
+} from "./keys";
 import type { AccessResult, AuditContext } from "./result";
 import type { AuditSpec } from "./store";
 import type { TransactItem } from "./audit";
@@ -146,8 +154,12 @@ async function commitLink(args: {
   // Mode and reason of the LiteLLM link, kept on the item so a remove can
   // audit them.
   linkMeta?: { mode: string; reason?: string };
+  // The claim of a pending LiteLLM link moves to this identity: the pending
+  // key that owns it may hold it too (Access Control - LiteLLM user sync,
+  // Pending LiteLLM links).
+  claimFrom?: string;
 }) {
-  const { existing, value, extra, audit, ctx, linkMeta } = args;
+  const { existing, value, extra, audit, ctx, linkMeta, claimFrom } = args;
   const oid = value.oid;
   const claim: TransactItem[] = [];
   if (value.litellmUserId) {
@@ -160,9 +172,14 @@ async function commitLink(args: {
           litellmUserId: value.litellmUserId,
           oid,
         },
-        ConditionExpression: "attribute_not_exists(PK) OR #oid = :oid",
+        ConditionExpression: claimFrom
+          ? "attribute_not_exists(PK) OR #oid = :oid OR #oid = :from"
+          : "attribute_not_exists(PK) OR #oid = :oid",
         ExpressionAttributeNames: { "#oid": "oid" },
-        ExpressionAttributeValues: { ":oid": oid },
+        ExpressionAttributeValues: {
+          ":oid": oid,
+          ...(claimFrom ? { ":from": claimFrom } : {}),
+        },
       },
     });
   }
@@ -228,15 +245,27 @@ export type LiteLLMLinkWrite =
   | {
       kind: "set";
       litellmUserId: string;
-      mode: "match" | "manual";
+      mode: "match" | "manual" | "sync";
       reason?: string;
+      // The key the sync matched on (audit only; Access Control - LiteLLM
+      // user sync, Records).
+      matchedKey?: "oid" | "email";
+      // The sync run that wrote the link (audit only; Access Control - Records).
+      runId?: string;
     }
   | { kind: "remove" };
 
 // `version` is the stored link version (null: no link item yet). A LiteLLM
 // user already claimed by another identity is CONFLICT; so is a stale version.
 export async function writeLiteLLMUserLink(
-  input: { oid: string; version: number | null; write: LiteLLMLinkWrite },
+  input: {
+    oid: string;
+    version: number | null;
+    write: LiteLLMLinkWrite;
+    // A pending LiteLLM link bound by this write: deleted on its version, its
+    // claim moves to the identity, in the same transaction.
+    pending?: { key: string; version: number };
+  },
   ctx: AuditContext,
 ): Promise<AccessResult<IdentityLink>> {
   const { oid, write } = input;
@@ -275,10 +304,26 @@ export async function writeLiteLLMUserLink(
           : {}),
       }
     : undefined;
+  const pending = input.pending;
   const result = await commitLink({
     existing,
     value,
-    extra: [],
+    extra: pending
+      ? [
+          {
+            Delete: {
+              TableName: getTableName(),
+              Key: {
+                PK: pendingPk(pending.key),
+                SK: PENDING_LITELLMLINK_SK,
+              },
+              ConditionExpression: "version = :pv",
+              ExpressionAttributeValues: { ":pv": pending.version },
+            },
+          },
+        ]
+      : [],
+    ...(pending ? { claimFrom: pending.key.toLowerCase() } : {}),
     audit:
       write.kind === "set"
         ? {
@@ -290,6 +335,8 @@ export async function writeLiteLLMUserLink(
               litellmUserId: write.litellmUserId,
               mode: write.mode,
               ...(write.reason ? { reason: write.reason } : {}),
+              ...(write.matchedKey ? { matchedKey: write.matchedKey } : {}),
+              ...(write.runId ? { runId: write.runId } : {}),
               version: value.version,
             },
           }

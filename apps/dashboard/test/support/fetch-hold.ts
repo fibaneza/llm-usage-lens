@@ -39,6 +39,8 @@ export function holdFetch(match: (url: URL) => boolean): FetchHold {
         : input instanceof URL
           ? input.href
           : input.url,
+      // fetchApi sends relative /api/... paths; a base makes them parseable.
+      "http://localhost",
     );
     if (taken || !match(url)) return inner(input, init);
     taken = true;

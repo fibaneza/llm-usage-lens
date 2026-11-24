@@ -20,6 +20,7 @@ import {
   AFFILIATION_SK,
   IDENTS_GSI1PK,
   META_SK,
+  PENDING_LITELLMLINK_SK,
   adminScopeSk,
   adminsGsi1pk,
   identPk,
@@ -161,6 +162,9 @@ export async function listPendingFor(
         }),
       );
       for (const item of page.Items ?? []) {
+        // A PendingLiteLLMLink shares this partition (Access Control - Data
+        // model additions); it is not a pending member or admin item.
+        if (item.SK === PENDING_LITELLMLINK_SK) continue;
         found.push(PendingItemSchema.parse(item));
       }
       startKey = page.LastEvaluatedKey;

@@ -11,3 +11,5 @@ export const teamLinkGsi1sk = (teamId: string): string => `TEAM#${teamId}`;
 export const teamLinkClaimPk = (litellmTeamId: string): string =>
   `LITELLM#LTEAM#${litellmTeamId}`;
 export const LITELLM_GATEWAY_SK = "GATEWAY";
+export const LITELLM_USERSYNC_PK = "LITELLM#USERSYNC";
+export const LITELLM_USERSYNC_LOCK_SK = "LOCK";

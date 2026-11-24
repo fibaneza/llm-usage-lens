@@ -14,6 +14,7 @@ import {
 import { getDocumentClient, getTableName } from "@/lib/dynamodb";
 
 import { IDENTS_GSI1PK, LOCALUSERS_GSI1PK, identPk } from "./keys";
+import { listPendingLiteLLMLinks } from "./pending-litellm-links";
 import type { AuditContext } from "./result";
 import { recordAuditedRead } from "./store";
 
@@ -23,6 +24,9 @@ import { recordAuditedRead } from "./store";
 // Enforcement item 4 (never cached), Rule 20.6 (paginate). Secrets and
 // lockout state never leave the identity schema pick below.
 const STALE_AFTER_MS = 90 * 86_400_000;
+// A pending LiteLLM link not bound after 30 days is stale (Access Control -
+// LiteLLM user sync, Pending LiteLLM links; T-SY6).
+const PENDING_LINK_STALE_AFTER_MS = 30 * 86_400_000;
 const READ_CONCURRENCY = 20;
 
 export type AccessReviewFlag =
@@ -154,6 +158,27 @@ async function buildRow(
   };
 }
 
+export type PendingLiteLLMLinkReviewRow = {
+  key: string;
+  litellmUserId: string;
+  createdAt: string;
+  flags: "stale"[];
+};
+
+export async function listPendingLiteLLMLinkRows(
+  now: Date,
+): Promise<PendingLiteLLMLinkReviewRow[]> {
+  return (await listPendingLiteLLMLinks()).map((p) => ({
+    key: p.emailOrOid,
+    litellmUserId: p.litellmUserId,
+    createdAt: p.createdAt,
+    flags:
+      now.getTime() - Date.parse(p.createdAt) > PENDING_LINK_STALE_AFTER_MS
+        ? ["stale"]
+        : [],
+  }));
+}
+
 export async function listAccessReviewRows(
   now: Date,
 ): Promise<AccessReviewRow[]> {
@@ -175,10 +200,15 @@ export async function listAccessReviewRows(
 
 // The export is audited (spec - Access review): one record per export, after
 // the rows were read.
-export async function exportAccessReview(
-  ctx: AuditContext,
-): Promise<{ date: string; rows: AccessReviewRow[] }> {
-  const rows = await listAccessReviewRows(ctx.now);
+export async function exportAccessReview(ctx: AuditContext): Promise<{
+  date: string;
+  rows: AccessReviewRow[];
+  pendingLiteLLMLinks: PendingLiteLLMLinkReviewRow[];
+}> {
+  const [rows, pendingLiteLLMLinks] = await Promise.all([
+    listAccessReviewRows(ctx.now),
+    listPendingLiteLLMLinkRows(ctx.now),
+  ]);
   const date = ctx.now.toISOString().slice(0, 10);
   await recordAuditedRead(
     {
@@ -187,5 +217,5 @@ export async function exportAccessReview(
     },
     ctx,
   );
-  return { date, rows };
+  return { date, rows, pendingLiteLLMLinks };
 }

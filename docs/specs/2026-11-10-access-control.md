@@ -733,6 +733,9 @@ the user 2026-11-15; Design System — *Settings Page*).
 | Create an app team (`POST /api/teams`; management improvements D6, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Create, approve or remove a person's LiteLLM user link (`litellmUserId`; never on their own identity; D16, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Create a LiteLLM user and link it (`POST /api/litellm/users`; D16; OSS only, and only when SSO is not enabled — user, 2026-11-18, unit LW1; with SSO enabled `403 OPERATION_UNAVAILABLE` after the permission check) | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Preview and run the LiteLLM user sync (`GET`/`POST /api/identities/litellm-sync`; units SYNC1, SYNC2; user, 2026-11-18: "On demand and scheduled"; the scheduled run is actor `system`) | ✓ | ✓ | ✗ | ✗ | ✗ (`internal-auditor` ✗ `403`) |
+| Read pending LiteLLM links (`GET /api/identities/pending-links`; SYNC1) | ✓ | ✓ | ✗ | ✗ | `internal-auditor` ✓ read |
+| Remove a pending LiteLLM link (`DELETE /api/identities/pending-links`; SYNC1) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Configuration (everything else in *Configuration* above) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Request a budget reset for **one's own** member budget (unit M4; MG-D11; user, 2026-11-17) | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | member of a linked team: ✓ own; `internal-auditor` ✗; no member team ✗ |
 | Approve or deny a budget reset request (unit M4; MG-D12) — never one's own request | ✓ | ✓ any team | ✓ teams in scope | ✓ teams in scope | ✗ |
@@ -852,8 +855,21 @@ path for the link, so the rules below always hold:
 - **Match** (`mode: "match"`): the LiteLLM user's `user_email`, read by
   the server with `getUser`, equals the identity's verified canonical email,
   else `409`. It is shown as a suggestion and written only after an
-  approval click in a dialog that names both sides; nothing is linked
-  automatically (D27).
+  approval click in a dialog that names both sides; ~~nothing is linked
+  automatically (D27)~~. *Amended 2026-11-18 (user: "the user from litellm
+  must be sync to management users"; "On demand and scheduled"; "If the
+  user from sso exists in litellm with same email or id, it should be
+  automatically linked because it is the same user").* The **LiteLLM user
+  sync** (below) and the sign-in link also write links, with no click per
+  person, on an exact match only. Everywhere else nothing is linked
+  automatically, and this route's **Match** keeps its approval click. The
+  match comparison is **one function**, shared by this route and the sync
+  (agent decision, 2026-11-18, review change V6; reason: two comparisons
+  drift apart, T-SY1). On `main` the route compares the two emails inline
+  (`ownEmail(oid)` against the target's email in
+  `app/api/identities/[oid]/litellm-link/route.ts`); unit SYNC1 moves that
+  comparison into one function in `lib/data/access/` that the route and
+  the sync both call, and records its name here.
 - **Manual** (`mode: "manual"`, emails differ): a written reason of 1–280
   characters is required (`400` without it) and stored in the audit record.
 - **Privileged targets refused:** a LiteLLM user whose `user_role` is not
@@ -871,6 +887,288 @@ path for the link, so the rules below always hold:
 - (agent decision, 2026-11-18, unit M3: the own-`oid` refusal of the link routes reads the path `oid` in the permission step, before the body is parsed, and writes one `denied` record; `POST /api/litellm/users` does it after parsing, the `oid` being in the body.)
 - (agent decision, 2026-11-18, unit M3: each directory row carries `linkVersion`, the `IdentityLink` version the link writes must send; an unlinked row reads 0.)
 - (agent decision, 2026-11-18, unit M3: like every LiteLLM route, the link writes answer `403 OPERATION_UNAVAILABLE` in open access mode, LT11.)
+
+**LiteLLM user sync (user, 2026-11-18: "the user from litellm must be sync to management users"; "On demand and scheduled"; units SYNC1, SYNC2).**
+The sync reads LiteLLM's users (`searchUsers`, page by page; `getUser` to
+confirm one user) and the linked LiteLLM teams (`getTeam`), and brings them
+into the dashboard. One server-only function, `runLiteLLMUserSync`
+(`lib/litellm-user-sync/run.ts`, with no `next/*` import in its module
+graph), serves the on-demand routes and the scheduled job, so both apply the
+same rules.
+
+**The user's rules (user, 2026-11-18; relayed by the coordinator,
+2026-11-24).**
+- **The sync never writes to LiteLLM** ("It should not remove users from
+  litellm"; "this app should not remove or add user to litellm"). It calls
+  only the read operations `searchUsers`, `getTeam` and `getUser`, and never
+  removes, creates or edits a LiteLLM user, team, membership, key or budget
+  (S16; T-SY11). The shipped operations `addTeamMember`, `removeTeamMember`
+  and `createUser` are outside the sync and unchanged (user, 2026-11-18:
+  "ok"; `createUser` only without SSO, unit LW1).
+- **A person is linked automatically by Entra id or email** ("If the user
+  from sso exists in litellm with same email or id, it should be
+  automatically linked because it is the same user"), on an exact match
+  only (S20, S21; *Same person* below).
+- **A person is placed in a team only if that team is linked to an existing
+  LiteLLM team** (user, 2026-11-18; *Teams* below). An unlinked app
+  team, an app team whose LiteLLM team no longer exists, and a team unknown
+  to the directory place nobody.
+- **Deleting keeps spend and usage (user, 2026-11-18).** No delete in the
+  dashboard — a password user, a link, a placeholder, a membership —
+  deletes usage rollups, LiteLLM spend, the budget-reset ledger or an audit
+  record. LiteLLM spend is read live from LiteLLM, so what LiteLLM itself
+  deletes is outside the dashboard's control (`docs/future-improvements.md`).
+  (S22; Design System — *Deleting is not erasing*.)
+
+**Decided by the user (2026-11-18).** The sync creates no sign-in: a LiteLLM
+user with no dashboard identity is added as a pending link, "with option to
+invite" (the option is unit INV2). A person in two or more linked LiteLLM
+teams gets no team automatically. There is no schedule until the deploy
+input is set.
+
+*Who.* `internal-admin` and `internal-org-admin` run it on demand
+(`GET`/`POST /api/identities/litellm-sync`); the scheduled run has the actor
+`system`. The operation `syncLiteLLMUsers` (LiteLLM spec) switches both off.
+
+**The two sign-in modes (user, 2026-11-18, relay P15).** The user's
+description:
+
+> there are two ways to login to the app: SSO enabled: user creation is
+> automatic when they log in the first time with the correct SSO values. But
+> it allows adding new users to the app, and when a user comes via SSO, the
+> user profile/record is updated with the Entra ID. User/password (no Entra
+> ID enabled): standard user/password login and manual creation of users.
+
+Checked against *Pre-SSO mode*, *Password users*, *SSO reference and
+binding* and the Joiner rule: the sync contradicts neither mode. The rules
+below tighten the match; they open nothing (agent decisions SM1–SM9,
+2026-11-18, with the reason given in each).
+- **SM1 — One definition of the mode.** "SSO enabled" means Entra ID
+  sign-in is configured in this deployment: `isSsoEnabled()` in
+  `lib/auth/sso-mode.ts` (unit LW1; LiteLLM spec — `createUser`). The sync,
+  the invite actions and the user page call it on the server and hand the UI
+  plain flags; no route or component reads the variable. The password
+  sign-in switch (D24) does not change the mode: with SSO on and the switch
+  on, password users still exist until they are bound, and SM4 and SM5 cover
+  them.
+- **SM2 — SSO mode, first sign-in.** Unchanged: the first Entra sign-in
+  creates the person. The order inside that sign-in is fixed: (1) *SSO
+  reference and binding* (D25) for a user added by hand, (2) the Joiner for
+  a pending invite, (3) the LiteLLM link. Reason: the link must see the
+  identity after it has been merged.
+- **SM3 — The email key depends on how the person signs in** (pins "the
+  identity's verified canonical email"). For an Entra identity it is the
+  **UPN** (`preferred_username`), tenant-checked; a guest UPN (`#EXT#`) and
+  the token's `email` claim never match. For a password user it is the
+  **sign-in email** an `internal-admin` typed. Reason: the spec already
+  refuses the `email` claim as a bind key (Joiner, amended R2 2026-11-12;
+  D25; T2): it is not verified or unique in Entra, so the sync and the
+  sign-in link must not be weaker than the invite binding.
+- **SM4 — The Entra id key.** For an Entra identity it is `oid`. For a
+  password user not yet bound it is the reserved `sso.expectedOid`, when an
+  admin set one. A `local:` id is never compared with a LiteLLM id. Reason:
+  without it the sync would show a person added by hand a second time, as
+  "Not signed in yet".
+- **SM5 — A user added by hand, then SSO (the existing binding).** The bind
+  transaction already moves the person's LiteLLM link to the Entra `oid`;
+  the link step then finds a link and writes none. The pending link is
+  removed when the identity already has another LiteLLM user (the claim is
+  kept when the link is that same user); nothing is overwritten (amended
+  2026-11-24, reason: the spec said a placeholder for another LiteLLM user
+  stays, the code and T-SY6 remove it, so the sign-in never leaves a stale
+  placeholder). When the binding refuses to merge
+  (conflict), the separate Entra identity gets no automatic link to a
+  LiteLLM user the `local:` identity already holds (`claimed`).
+- **SM6 — "Not signed in yet", per mode.** Same label in both. *SSO mode:*
+  the person appears at their first SSO sign-in with no step from an admin;
+  the row offers **Invite** (unit INV2). *Password mode:* nobody signs in
+  until an `internal-admin` adds them, so the row offers **Add user**: the
+  existing Add user dialog with the email filled in (existing route and
+  permission, nothing new), and the hint "Add them as a user to let them sign
+  in". The link is made at their first password sign-in from
+  `PENDING#{email}` (no LiteLLM call) or by the next sync run.
+- **SM7 — Password mode has no Entra id**, so the sync and the links match
+  by email only (SM3), and *Create and link* stays allowed on OSS (unit LW1).
+- **SM8 — Invites in password mode: unchanged.** A pending invite binds only
+  at an SSO sign-in (`applySignInResolution`: in-tenant and a UPN). In
+  password mode the path is **Add user**, then **Add to team**, or the next
+  sync run places the person when exactly one team fits. **Invite** stays
+  available with the hint "Joins at first SSO sign-in". Binding an invite on
+  a password user's email would change the Joiner rule; the user decided
+  against it (2026-11-18: "No, keep as today").
+- **SM9 — Controls per mode in the other units.** The Add user steps already
+  follow the mode (`addUserStepsFor`: the password step only without SSO,
+  `internal-admin` only; unit US1 keeps them). The user page shows how the
+  person signs in; for a password user it also shows, read-only, the SSO
+  reference (expected UPN, expected Entra id) and, once bound, "Signs in with
+  SSO since <date>" (unit US2, T-US10). Password reset, TOTP reset, disable
+  and delete stay in Settings → Access → Password users (one place for the
+  step-up).
+
+**Match keys per sign-in mode** (the user's description of the two modes,
+2026-11-18; agent decisions SM3–SM5, 2026-11-18):
+- **Email key.** For an Entra identity: the UPN (`preferred_username`),
+  tenant-checked; never a guest UPN, never the `email` claim (as the Joiner,
+  R2, and D25; T2). For a password user: the sign-in email.
+- **Entra id key.** For an Entra identity: `oid`. For a password user not
+  yet bound: the reserved `sso.expectedOid`, when set. A `local:` id is never
+  compared.
+- **Order at an Entra sign-in:** SSO binding (D25), then the Joiner, then the
+  LiteLLM link. A link moved by the binding is kept and no second link is
+  written; an identity the binding refused to merge gets no automatic link to
+  a LiteLLM user the `local:` identity holds.
+- **Password sign-in** makes the link from `PENDING#{email}`; it binds no
+  invite (unchanged: an invite binds only at an SSO sign-in).
+
+*Same person (user, 2026-11-18: "If the user from sso exists in litellm with
+same email or id, it should be automatically linked because it is the same
+user").* Match keys, in order: the **Entra id** (the LiteLLM user's `user_id`
+or `sso_user_id` equals the identity's `oid`), then the **email** (the
+LiteLLM `user_email`, trimmed and case-folded, equals the identity's email
+key above, compared by the one function of the `match` mode in *LiteLLM user
+links*; there is no second comparison). When the two keys point at different
+people, nothing is linked (`ambiguous-identity`). An exact match is linked
+by the on-demand Apply, by the scheduled run and at sign-in, with mode
+`sync`, the matched key in the audit record, and actor `system` outside a
+manual Apply. Still refused: a LiteLLM admin user or the service user
+(LT18), a LiteLLM user claimed by someone else, an identity that already has
+another link (never overwritten), two LiteLLM users or two identities
+sharing a key. `sso_user_id` is compared server-side only: never returned,
+logged or stored in clear. A reference with no email is stored only as a
+hash in the placeholder key, `PENDING#sso:<sha256 hex of the trimmed,
+lower-cased sso_user_id>`; the hash is never returned by the pending-links
+route or shown in the panel; audit records name the row by its hashed key, and a
+non-email row in "Not signed in yet" shows the LiteLLM user id (coordinator
+ruling 2026-11-24, reason: S20 and T-SY1; the earlier `PENDING#{oid}` key
+kept the reference in clear). This amends D27 and T-MI1 ("nothing is linked
+automatically") by the user's decision; a manual link with different emails
+still needs its written reason.
+
+*Users.* For each LiteLLM user, in this order:
+
+| Case | Outcome |
+|---|---|
+| Exactly one identity has the Entra id or the email key, and has no LiteLLM link | `link-existing`: the link is written with `mode: "sync"`, with its `LiteLLMUserClaim` and its `identity.litellm-link.set` record (the matched key, the run's `runId`), in one transaction |
+| No identity has either key | `create-pending`: a `PendingLiteLLMLink` holding the claim, stored under `PENDING#{email}` or, when LiteLLM gives an Entra id, `PENDING#sso:<sha256 of the lower-cased id>` (amended 2026-11-24); the sync creates no sign-in |
+| The identity already has this link, or a pending link exists | `already-linked`, `already-pending` |
+| No valid email and no identity with the Entra id; two LiteLLM users share the key; two identities share a key, or the two keys point at different people | `skip`: `no-email`, `duplicate-email`, `ambiguous-identity` — no side is linked |
+| `user_role` is not `internal_user` or `internal_user_viewer`; the service user | `skip`: `privileged`, `service-user` (LT18) |
+| The LiteLLM user is claimed by someone else; the identity has another LiteLLM user | `skip`: `claimed`, `identity-linked-elsewhere` — never overwritten |
+| The caller's own identity (on demand) | `skip`: `own-identity` |
+
+The sync never grants a role, a lead or an admin scope, and never creates an
+identity, a password user, a credential or a setup link.
+
+*Pending LiteLLM links.* A pending link is a dashboard placeholder for a
+person not signed in yet. It grants nothing and is never a bind key for
+anything but the LiteLLM link. **Sign-in makes no LiteLLM call (user,
+2026-11-18; S19; reason: sign-in must not depend on LiteLLM being up).** The
+link at sign-in comes from the pending link the sync wrote, read from
+DynamoDB: sign-in looks up `PENDING#{email key}` and `PENDING#sso:<sha256 of the lower-cased oid>`. A
+person who signs in before the sync has seen them is linked by the next run.
+There is no approved or unapproved state. At the person's first Entra
+sign-in the link is bound in the order above, under the Joiner rule's own
+conditions: the tenant is the configured one and the lower-cased UPN equals
+the key (or the key is the `oid`); a guest UPN is never bound; the `email`
+claim is never a bind key. At a password sign-in the link is made from
+`PENDING#{email}`. The bind is one transaction — the link, the claim moved
+to the `oid` (or kept for a password user's identity), the pending item
+deleted, one `identity.litellm-link.set` record with actor `system` and
+`mode: "sync"`. If the identity already has another LiteLLM user, the pending
+link is removed and nothing is overwritten. A sign-in never fails because of
+a pending link. `internal-admin` and `internal-org-admin` may remove one by
+hand. A pending link not bound after 30 days is stale and the access review
+lists it. Known limit: where a person's UPN differs from their LiteLLM
+email, the link stays pending and is made by hand.
+
+*Links are never removed by the sync (user, 2026-11-18: spend and usage are
+kept for audit).* A linked LiteLLM user that is gone from LiteLLM keeps its
+link record and is shown as "Not in LiteLLM".
+
+*Clean-up of dashboard placeholders.* A pending link the sync wrote is
+removed only after a direct `getUser` confirms that the LiteLLM user is
+gone, has another email or became privileged. If a run would remove more than
+20 pending links, or more than 10 % of them, it removes none and reports
+`removal-guard` (agent decision, 2026-11-18, review change V2: a LiteLLM
+fault must not remove people in bulk). The removal writes one
+`identity.litellm-pending.remove` record. People removed from LiteLLM who
+already have a link or a membership are reported as drift and left alone;
+removing them is out of scope (`docs/future-improvements.md`).
+
+*Teams.* A person is a candidate for an app team when the team has a team
+link, is in the team directory, its LiteLLM team exists, and the person is in
+that team's `members_with_roles` and is linked or pending. A person has at
+most one member team, so: no affiliation and exactly one candidate team →
+member (`affiliation.add`; a pending affiliation for a pending person); two
+or more candidates → none (`multiple-teams`); an affiliation elsewhere → not
+moved (`other-team`); an SSO-sourced affiliation is never touched; the
+caller is never added. A LiteLLM team `admin` becomes a member, never a lead.
+The sync never removes or moves a membership; a member of the app team who is
+not in the LiteLLM team is reported as drift. The result names the people the
+sync did not place (`multiple-teams`, `other-team`, no linked team), for an
+admin to place by hand (unit INV2; S14, S15).
+
+*Scheduled run (user, 2026-11-18: "Yes, place them"; S17).* It does what an
+on-demand Apply does, with actor `system`: it adds "Not signed in yet"
+people, links exact matches, places a person when exactly one team fits, and
+cleans up placeholders. The membership limits hold: two or more teams place
+nobody, nobody is moved, nobody becomes a lead, an SSO-sourced membership is
+never touched. There is no `placeTeams` option: one code path (T-SY12).
+
+*Preview and apply.* The GET returns the plan and a `planHash`; the POST
+takes `{ planHash }`, recomputes the plan and applies it only when the hash
+is equal, else `409 PLAN_CHANGED` with nothing written. One run at a time: a
+lease item (5 minutes), taken with a conditional write, renewed before each
+batch of writes with a condition on the run's own id, and released with a
+conditional delete; a run that has lost its lease stops. A second apply gets
+`409 SYNC_RUNNING`. Bounds on demand: 80 `/user/list` pages, 2,000
+identities, 5 concurrent LiteLLM reads, 500 changes per apply (the response
+carries `remaining`). **A truncated plan is never applied** (agent decision,
+2026-11-18, review change V1: an incomplete read cannot see a shared email
+or a removed user): the plan is returned marked `truncated`, and the POST
+returns `409 PLAN_TRUNCATED`. The scheduled run reads up to 400 pages
+(Platform spec). A refused single change is a result row; a DynamoDB or
+LiteLLM failure stops the run and writes no summary.
+
+*Records.* One audit record per change (`identity.litellm-link.set`,
+`identity.litellm-pending.set`, `identity.litellm-pending.remove`,
+`affiliation.add`) and one `litellm.user.sync` summary with the counts, the
+trigger (`manual` or `schedule`), `truncated`, the plan hash and, when the
+run did nothing, `skipped` (`disabled` or `locked`). Each change's record and
+the summary carry the run's `runId` (review change V5), so an admin can list
+and undo by hand what one run did. Logs and metrics carry ids and counts,
+never an email (review change V7; Rule 50.6 covers secrets, this covers
+personal data).
+
+*Storage.* A pending link is a `PendingLiteLLMLink` and the lease is
+`LITELLM#USERSYNC` / `LOCK` (*Data model additions*; LiteLLM spec — *Data
+model additions*). The sync writes only under `PENDING#*`, `IDENT#*`,
+`LITELLM#*` and `LITELLMUSER#*`, which the task role's write keys already
+list.
+
+*Tests (T-SY1–T-SY12, T-SM1–T-SM4; source: this section, implementation-phases — SYNC1 and SYNC2, plan 2026-11-18 §6 and revision 2; threat rows T-SY1–T-SY12).* T-SY10 has no
+threat row: it is the records and logs rule above. T-SM5 (INV2) and T-US10
+(US2) belong to those units.
+
+| Test | Proves |
+|---|---|
+| T-SY1 | Match keys and refusals (one-to-one). The Entra id key is tried first, then the email: a different case links; a prefix, a suffix, another domain and a display-name match do not; the two keys pointing at different people link nothing (`ambiguous-identity`); `duplicate-email` and `ambiguous-identity` skip both sides; `proxy_admin`, `proxy_admin_viewer`, an unknown role and the service user are `skip` with no link, no pending link and no claim; a claimed LiteLLM user is `claimed` and an identity with another link is `identity-linked-elsewhere`, neither overwritten; the audit record carries mode `sync` and the matched key; `sso_user_id` is never returned, logged or stored in clear; `link-existing` uses the one match function of *LiteLLM user links* |
+| T-SY2 | No privilege: no role grant, no admin scope and no lead for a LiteLLM team `admin` (a member); a structure test: the sync modules import no role-grant, admin-scope or password-user write |
+| T-SY3 | Teams: an unlinked team, a missing LiteLLM team and an app team unknown to the directory → no membership; two candidate teams → `multiple-teams`; an affiliation elsewhere → `other-team`, not moved; an SSO-sourced affiliation untouched; nothing is ever removed; the people not placed are named in the result |
+| T-SY4 | The caller's own identity is `own-identity` for the link and for the membership |
+| T-SY5 | A stale or repeated apply: another `planHash` → `409 PLAN_CHANGED`, nothing written; the lease held → `409 SYNC_RUNNING`; two applies at once → one wins; the lease is renewed before each batch and a run that lost it stops |
+| T-SY6 | A pending link binds only to its owner: binds on the UPN rule and on the `oid`; not for a guest UPN, another tenant or a matching `email` claim alone; both placeholder keys (`PENDING#{email}`, `PENDING#sso:<sha256>`); no LiteLLM call at sign-in; an identity with another link keeps it and the pending link is removed (never overwritten); a password sign-in links from `PENDING#{email}`; a pending link is removed only after `getUser` confirms (gone, other email, privileged); a pending link not bound after 30 days is stale in the access review |
+| T-SY7 | Bounds: three pages are read; page 81 is not, and `truncated` is true; the POST of a truncated plan is `409 PLAN_TRUNCATED` with nothing written; LiteLLM unavailable → an error and no write, no summary; 21 removals (or more than 10 % of the pending links) → none removed and `removal-guard` |
+| T-SY8 (SYNC2) | CDK: the schedule and its `RunTask` target, retry policy of 2 attempts and 1 hour, the role's two statements and nothing else, `iam:PassRole` limited to the two roles and `ecs-tasks`, the trust condition, no schedule when the input is absent or `off`, the rule and the missing-run alarm on the topic. Job, unit: toggle off → skip, exit 0; lease held → skip, exit 0; a failure or the 10-minute deadline → non-zero; a truncated plan → non-zero. Job, integration: the bundled entry runs against DynamoDB Local and the fake LiteLLM |
+| T-SY9 | Who may call: lead, user and auditor `403` on the sync routes (the POST before parsing, one `denied` record `litellm.user.sync`); the auditor reads the pending list only; `401`; `no-store`; LiteLLM not configured → `200`, `configured: false`, no LiteLLM call (LiteLLM spec LD37) |
+| T-SY10 | Records and logs: one audit record per change and one summary with the counts, trigger, `truncated` and plan hash; the same `runId` on every record of a run; no email in any log line or metric (a test on the logger calls) |
+| T-SY11 | Read only: a structure test on the imports (only `searchUsers`, `getTeam` and `getUser` come from the gateway; the scheduled job adds none); the fake LiteLLM records zero write calls in every sync test |
+| T-SY12 | The schedule places no more freely than Apply: the S4 cases with actor `system` and trigger `schedule` (exactly one team → placed; two or more → nobody; never moved; never a lead; an SSO-sourced membership untouched); the job calls the one function with no extra option |
+| T-SM1 | An Entra identity matches by `oid` and by UPN; the `email` claim and a guest UPN never match |
+| T-SM2 | A password user matches by sign-in email and by a reserved `expectedOid`; a `local:` id is never compared |
+| T-SM3 | Entra sign-in order: bind, invite, link. A moved link is kept and no second link is written; a bind conflict gets no automatic link |
+| T-SM4 | A password sign-in makes the link from `PENDING#{email}` with no LiteLLM call |
+| UI (no id) | Component and mocked e2e per Design System — *Sync from LiteLLM*: the action is absent for a lead and with the toggle off; the dialog shows counts, skips, drift and the unplaced people; **Continue** appears with `remaining`; **Apply** is disabled for a truncated plan; the three `409` states; axe at 375 with the dialog open |
 
 **Created app teams (management improvements D5, D6, 2026-11-17; unit M2).**
 `POST /api/teams` creates an `AppTeam` (*Data model additions*):
@@ -934,7 +1232,9 @@ belongs to a person when it equals their canonical email or is in their
 every identity with global roles and sources, member team and admin scopes
 with sources, `lastSignInAt`, aliases, the LiteLLM link and flags
 (ambiguous, overage, stale, Entra role removed while an in-app grant
-remains). The export is audited.
+remains). From unit SYNC1 (2026-11-18) it also lists the pending LiteLLM
+links (*LiteLLM user sync*), with one not bound after 30 days flagged stale
+(`pending-stale.ts`). The export is audited.
 
 ## Enforcement
 
@@ -1177,7 +1477,10 @@ password).
   and the LiteLLM user links and user creation
   (`identity.litellm-link.set`, `identity.litellm-link.remove`,
   `litellm.user.create`, with the snapshot keys `mode` and `reason`;
-  unit M3, 2026-11-18). No snapshot holds a secret or a key value
+  unit M3, 2026-11-18), the link's `mode` gaining `"sync"`, and the
+  LiteLLM user sync (`litellm.user.sync`, `identity.litellm-pending.set`,
+  `identity.litellm-pending.remove`; units SYNC1 and SYNC2, 2026-11-18;
+  *LiteLLM user sync* — *Records*). No snapshot holds a secret or a key value
   (`createUser` sends `auto_create_key: false`).
 - **Atomicity:** a successful write's audit item is written **in the same
   `TransactWriteItems`** as the change, so neither exists without the
@@ -1226,6 +1529,7 @@ Same table `bedrock-usage`; no new GSI (new GSI1 prefixes never collide with
 | AppTeam (management improvements D5, 2026-11-17) | `APPTEAM#{teamId}` | `META` | `APPTEAMS` | `APPTEAM#{teamId}` |
 | AppTeamNameClaim (uniqueness of the name) | `APPTEAMNAME#{lower(trim(name))}` | `OWNER` | — | — |
 | LiteLLMUserClaim (uniqueness of `litellmUserId`, D16) | `LITELLMUSER#{litellmUserId}` | `OWNER` | — | — |
+| PendingLiteLLMLink (LiteLLM user sync, 2026-11-18) | `PENDING#{email}` or `PENDING#sso:<sha256>` | `LITELLMLINK` | `PENDINGLITELLMLINKS` | `PENDING#{emailOrOid}` |
 
 `{nn}` is the record's two-digit index within its **request** (amended R2,
 2026-11-12; "request" rather than "transaction" amended 2026-11-13, R2a):
@@ -1252,6 +1556,76 @@ PK=APPTEAM#{teamId}`. An `AppTeam` holds `teamId`, `name`, `departmentId`,
 `createdAt` and `version`; it goes through the storage boundary below
 (`lib/data/access/app-teams.ts`). Unique usage keys use `UsageKeyClaim` in the same
 `TransactWriteItems` with `attribute_not_exists(PK)`.
+
+A `PendingLiteLLMLink` holds the lower-cased `emailOrOid` key,
+`litellmUserId`, `source: "sync"`, `version`, `createdAt`, `createdBy` and
+`lastValidatedAt`. Its `LiteLLMUserClaim` names the pending key as owner
+until the bind moves it to the `oid` (agent decision, 2026-11-18: the worker
+fixes the claim's owner shape and records it here). It shares the partition
+of the pending items of the same key (`PENDING#{key}`), so every reader that
+queries a pending partition (`listPendingFor`, the Joiner bind) must skip
+`SK = LITELLMLINK` rather than parse it as a pending member or admin scope;
+the bind of the LiteLLM link reads it with a `GetItem` (agent decision,
+2026-11-24, spec for SYNC1; reason: on `main` `listPendingFor` parses every
+item of the partition as a `PendingItem`, so the new item would fail it). The
+sync's lease is in the LiteLLM spec — *Data model additions*.
+
+*Agent decisions, 2026-11-24, unit SYNC1 Green A (names the spec left open;
+reason: every later unit imports them).* (1) The claim's owner is the pending
+key itself (the lower-cased email or the `oid`), stored in the claim's `oid`
+field, so `getLiteLLMUserOwner` returns the key until the bind moves it.
+(2) The shared module is `packages/shared/src/schemas/litellm-user-sync.ts`;
+the plan's user outcomes are `link-existing` (with `oid` and `matchedKey`
+`oid` or `email`), `create-pending`, `already-linked`, `already-pending`,
+`remove-pending` (the clean-up of a placeholder, with `reason: removal-guard`
+when the guard holds it back) and `skip` (with one reason from the Users
+table); the plan also carries `memberships`, `drift`, `notPlaced`, `counts`,
+`truncated` and `planHash`; the apply result is `{ runId, results, remaining }`
+whose change rows are `{ litellmUserId, outcome, status: applied | refused,
+reason? }`. No row carries `sso_user_id`. (3) The key constants are
+`PENDING_LITELLMLINK_SK` and `PENDINGLITELLMLINKS_GSI1PK`
+(`lib/data/access/keys.ts`); the lease's keys are in `lib/data/litellm/keys.ts`.
+(4) `LiteLLMLinkModeSchema` gains `sync`, while the `PUT` body keeps `match` and
+`manual` only, so a caller cannot claim an automatic link (T-MI1, T-SY1). (5) The
+lease's `expiresAt` is `leaseUntil` plus one hour, for clean-up only; a renew
+checks the owner only, so a run whose lease passed but was not taken may renew.
+(6) The audit snapshot keys `runId`, `trigger`, `truncated`, `planHash`,
+`skipped` and `matchedKey` are kept; `sso_user_id` never is.
+
+*Agent decisions, 2026-11-24, unit SYNC1 Green B (rules the spec left open;
+reason: the domain function and the sign-in link need them, and the tests
+pin their effects).* (1) The link route's `match` mode calls the one match
+function with `{ storedEmail: true }`: it compares the identity's stored
+email, as before, because an admin confirms the pair in a dialog (T-MI1);
+the automatic paths (the sync, the sign-in link) use the SM3 keys (UPN, never
+the `email` claim). Reason: the existing M3 route tests and behaviour stay
+unchanged and the comparison is still one function. (2) `searchUsers` returns
+the reduced rows it always did (LiteLLM spec — *Reads*, L3b); the sync asks
+for `user_role` and `sso_user_id` with `withIdentity: true`, the one caller
+that does. (3) The sync's people are the Entra identities (by UPN and `oid`)
+and the password users not yet bound (by sign-in email and the reserved
+`expectedOid`); the master user and a dev login are never matched. (4) The
+audit snapshot also keeps `counts` (a string list such as `applied=3`),
+for the summary record. (5) The plan hash covers the user rows, the
+placeholder removals and the membership rows, not the drift. (6) A manual
+apply on a held lease is `SYNC_RUNNING`; a scheduled one returns the
+`locked` skip with its summary. The `syncLiteLLMUsers` switch is read by the
+scheduled run; the routes read it before calling (`403 OPERATION_DISABLED`).
+(7) A pending person placed in a team gets a pending affiliation through the
+existing `createPendingItem` (audit action `pending.create`, keyed by the
+person's email), not `affiliation.add`, which is the action for a person
+with an identity. (8) A placeholder whose LiteLLM user now has another email
+is `claimed` in that run (its claim is still the old key), is removed after
+`getUser` confirms, and the next run creates the new one. (9) The apply
+makes its changes in this order — placeholder removals, links and pending
+links, memberships — takes the first 500, and renews the lease before each
+batch of 25. (10) At a sign-in a refused or failed link step (another owner
+of the claim, a version conflict, a DynamoDB error) leaves the placeholder and
+never fails the sign-in; an unexpected error is recorded on the span.
+(11) The plan row's `matchedKey` is `oid` or `email` everywhere: the shared
+response schema, the audit record and the route use the same value, with no
+mapping (supersedes the earlier `entra-id` value; coordinator and tdd ruling,
+2026-11-24).
 
 **Storage boundary (D26, amended 2026-11-14).** The access-control store is
 replaceable (D21: DynamoDB now, Aurora later):
@@ -1305,6 +1679,8 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/identities`, `/api/identities/[oid]/links` | GET, PUT | `internal-admin` (GET also `internal-auditor`); never opened to scoped admins (D37) |
 | `/api/identities/directory` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor`; everyone else `403`. From 2026-11-23 (unit ST1, D-ST2; user, 2026-11-18) the route takes `q` (Zod, trimmed, 1–100 characters), a search by name, email or UPN that returns at most 10 results, for the same callers, through `searchIdentities(q, limit)` in `lib/data/access/identities.ts` (server cap 10; GSI1 `IDENTS` pages until the limit, never a Scan; only rows the unfiltered directory shows; no cursor; agent decision with the coordinator's ruling, 2026-11-23, reason: the route stays off access keys and store internals); a lead still gets no people search (D37) and is `403`. Reason: the Settings identity pickers become a search box. The people list of Management → Users and the LiteLLM users tab (management improvements D15, D16, 2026-11-17; *LF1, 2026-11-24: the tab no longer reads this route's link state — it shows the link state in the selected user's detail from the `GET /api/litellm/users` list rows, and the directory serves Management → Users*): per identity `oid`, `displayName`, `email`, `authMethod`, `memberTeamId`, and the LiteLLM link state (`linked` with `litellmUserId`, or `none`); with `?include=litellmMatch` each unlinked row on the page also carries `match` from `findUserByEmail` on its verified email (read only, nothing written). 25 rows a page, opaque cursor; no usage identities or aliases. Agent decision: org-admin approves LiteLLM user links (user, Q4) and needs to see whom it links; it already manages every team, and D37's restriction is about scoped admins. From 2026-11-24 (unit US1, D-US3, D-US3a; user, 2026-11-18): the list takes `sort` (Zod enum `name`, `email`, `createdAt`, `lastSignInAt`, `team`; default `name`) and `dir` (`asc`, `desc`; default `asc`); any other value is `400`. The route reads at most 2,000 identities per request, sorts them in memory with a stable tie-break on `oid` (the precedent of Rule 20.7 for bounded lists), then pages 25 rows; over the bound the response carries `truncated: true` (otherwise `false`). A row without the sort value (no `createdAt` on a record written before US2, no team for `team`) sorts last in both directions. `team` sorts by the team's display name, else its id. The cursor encodes the sort and the direction, so a cursor from another sort or direction is `400`. Each row also carries `createdAt` (when the record has it) and `lastSignInAt`. `q` keeps its own search path (at most 10, no cursor) and takes no `sort`. Nothing of the list is cached (Rule 60.10); a lead is still `403`. Agent decisions (2026-11-24, US1): the empty-sort-value rule, the team sort value, and `q` without sort, because a search result of at most 10 needs no order and the bound keeps the in-memory sort cheap. The cursor is a signed offset into the list as sorted on each request (no snapshot), so a person added or removed between two page reads can shift a row by one place; accepted, because the list is bounded, read by three roles and refreshed on the next load (agent decision, 2026-11-24, US1). `sort=team` reads each listed person's affiliation (at most 2,000, 20 at a time) to order by team; the other sorts read affiliations only for the 25 rows of the page. When `truncated` is `true`, the order is partial: only the first 2,000 identities in GSI1 `IDENTS` order are sorted, and the panel says so (agent decision, 2026-11-24, US1 round 2). **D-US2a** (planner decision, 2026-11-23, Rule 00.3): a person's record carries `createdAt`, written once at the first sign-in and never changed (written since unit US2); a record written before that has none, its Created cell reads "—" and it sorts last in both directions. No backfill, because the true date is unknown and `lastSignInAt` is not it. **D-US3a** (planner decision, 2026-11-23): the record has no `updatedAt`, so that sort key is dropped (superseding the plan's D-US3 list) and `lastSignInAt`, which every record has, replaces it; the keys are `name`, `email`, `createdAt`, `lastSignInAt`, `team`, each a column the three readers see. |
 | `/api/identities/[oid]` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor`; everyone else `403`; an unknown `oid` `404` (unit US2, D-US6, 2026-11-23). One person for the user page (Design System — *Management pages*, *The user page*): `oid`, `displayName`, `email`, `upn`, `authMethod`, `createdAt`, `lastSignInAt`, the team membership and lead scope, the LiteLLM link state, usage identities and aliases and global role grants (admin, auditor, and org-admin read-only: the user, 2026-11-23, D-US11), and — **absent otherwise (D-US12)** — a password user's SSO reference and bound date (admin, auditor; not in an org-admin's body). Never a password hash, a TOTP secret, a lockout state, a setup token or the tenant id. Read per request, never cached (Rule 60.10). The response carries the caller's allowed actions on that person, computed on the server from the effective roles, so the page offers only those, and the `version` of each item a write route takes (agent decision, 2026-11-24, US2). |
+| `/api/identities/litellm-sync` | GET; POST `{ planHash }` | `internal-admin`, `internal-org-admin`; everyone else `403` (the POST before parsing, with one `denied` record `litellm.user.sync`). GET: the plan — users, memberships, drift, the people not placed, counts, `truncated`, `planHash`; LiteLLM not configured → `200` with `configured: false` and no LiteLLM call (LD37). POST: applies when the hash is equal, else `409 PLAN_CHANGED`; a truncated plan `409 PLAN_TRUNCATED`; a run in progress `409 SYNC_RUNNING`; returns the results and `remaining`. Never cached. Rules in *LiteLLM user sync* (units SYNC1, SYNC2) |
+| `/api/identities/pending-links` | GET; DELETE `{ email, version }` or `{ litellmUserId, version }` (a non-email row; GET returns `email` only for an email key) | GET: `internal-admin`, `internal-org-admin`, `internal-auditor`; 25 rows a page, opaque cursor; feeds the **Not signed in yet** panel of Management → Users (Design System — *Sync from LiteLLM*). DELETE: `internal-admin`, `internal-org-admin`; removes the pending link and releases its claim; audited `identity.litellm-pending.remove` |
 | `/api/identities/[oid]/litellm-link` | PUT `{ litellmUserId, mode: "match" \| "manual", reason?, version }`, DELETE `{ version }` | `internal-admin`, `internal-org-admin`; own `oid` `403`; rules in *LiteLLM user links* (D16) |
 | `/api/teams` | POST `{ name, departmentId }` | `internal-admin`, `internal-org-admin`; `201` with the `AppTeam`; rules in *Created app teams* (D5, D6). `GET /api/teams` stays the Bedrock team list (Data Model — *API Routes*) |
 | `/api/governance/identity-map-rules` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` (versioned, audited; D27) |
@@ -1402,7 +1778,7 @@ on the member-sum view; LiteLLM spec, L4b, LD34), and from the [System Architect
 | D20 | Managing users without SSO | dev-only local users / password users | **Password users in every environment**, admin-created, with the SSO reference stored for later binding (user, 2026-11-14) |
 | D21 | Where password users and the access-control data live | Aurora Serverless v2 / DynamoDB | **DynamoDB now, Aurora later** (user, 2026-11-14): the same table as written above; the user accepts Aurora's resume delay and may move the access-control data to it. The move and every action it needs are parked in `docs/future-improvements.md` — *Aurora Serverless v2 for access-control data*; the storage boundary (D26) keeps it a one-layer change |
 | D26 | Keeping the store replaceable | DynamoDB-shaped code / storage boundary | **Storage boundary** (*Data model additions*): every access-control read and write goes through domain functions in `apps/dashboard/lib/data/access/**`; nothing outside it sees a key, item or query (user, 2026-11-14) |
-| D27 | Session names that are not emails | manual aliases only / fuzzy matching / admin mapping rules | **Admin mapping rules that suggest exact aliases**, confirmed one by one or per rule (user, 2026-11-14) — fast for many users, still exact and auditable |
+| D27 | Session names that are not emails | manual aliases only / fuzzy matching / admin mapping rules | **Admin mapping rules that suggest exact aliases**, confirmed one by one or per rule (user, 2026-11-14) — fast for many users, still exact and auditable. *Amended 2026-11-18 (user):* the LiteLLM user sync and the sign-in link link a LiteLLM user on an exact Entra id or email match without a click per person (*LiteLLM user links* — *LiteLLM user sync*). Usage-identity aliases are unchanged: still suggested and confirmed one by one |
 | D22 | First password | admin-set temporary password / one-time setup link | **One-time setup link** (72 h, single use, fragment, hash stored); the admin never knows the password (user, 2026-11-14) |
 | D23 | TOTP for password users | everyone / admin roles / none | **Required for any role above `internal-viewer` or any admin scope**, optional otherwise (user, 2026-11-14) |
 | D24 | Password sign-in once Entra is configured | stop at once / switch | **Admin switch, on by default**; bound users are always refused; access review flags enabled password users (user, 2026-11-14) |
@@ -1483,10 +1859,21 @@ organisation administrators and auditors. Usage rollups are kept for
 | T41 | Redirect: an open redirect out of the prefix or the host through `redirectTo`, `callbackUrl` or the step-up return path (added 2026-11-17, unit BP) | The custom `redirect` callback accepts only same-origin URLs inside the prefix, else `<prefix>/dashboard` (BP-D11); `pages.*` carry the prefix | BP T7 (sign-in lands on `<prefix>/dashboard`, sign-out on `<prefix>/sign-in`, step-up and callback stay inside the prefix; an outside path, another origin and `/llm-lens-other` are refused) |
 | T42 | Spoofing / disclosure: a password setup link leaves the prefix or trusts a forged host (added 2026-11-17, unit BP) | `setupLink()` builds `https://<request Host><prefix>/account/setup#<token>`; the token stays in the fragment (T24) | BP T4 (prefix present, request `Host` still used) |
 | T43 | Bypass: an unauthenticated API call under the prefix is redirected to an unprefixed page instead of the JSON `401` (added 2026-11-17, unit BP) | `authorized` strips the prefix itself and returns an explicit prefixed sign-in redirect for pages; API paths keep the `401` JSON shape (BP-D10) | BP T6 (API route `401` JSON; page redirect to `<prefix>/sign-in`; with and without `AUTH_URL`) |
-| T-MI1 | Disclosure: a wrong LiteLLM user link shows one person another person's LiteLLM spend and key metadata (management improvements D16, 2026-11-17) — more likely now that org-admin may link | Verified canonical email for a match; approval click in a dialog naming both sides; a required reason for a manual link; one-to-one `LiteLLMUserClaim`; no self-link; privileged targets refused; admin and org-admin only; audited with the reason | M3: org-admin and admin may link, auditor and lead `403`; own `oid` `403` with one `denied`; no automatic link; match with another email `409`; manual without reason `400`; duplicate `409`; a `proxy_admin`, `proxy_admin_viewer` or service-user target `409 PRIVILEGED_TARGET` with no link written; the audit record carries the mode, both ids and the reason (manual) for set and remove; usage aliases stay admin-only |
+| T-MI1 | Disclosure: a wrong LiteLLM user link shows one person another person's LiteLLM spend and key metadata (management improvements D16, 2026-11-17) — more likely now that org-admin may link | Verified canonical email for a match; approval click in a dialog naming both sides; a required reason for a manual link; one-to-one `LiteLLMUserClaim`; no self-link; privileged targets refused; admin and org-admin only; audited with the reason. *Amended 2026-11-18 (user):* the LiteLLM user sync links only on an exact Entra id or case-folded email equality, skips both sides of a duplicate, and is covered by T-SY1 and T-SY6 | M3: org-admin and admin may link, auditor and lead `403`; own `oid` `403` with one `denied`; no automatic link outside the LiteLLM user sync; match with another email `409`; manual without reason `400`; duplicate `409`; a `proxy_admin`, `proxy_admin_viewer` or service-user target `409 PRIVILEGED_TARGET` with no link written; the audit record carries the mode, both ids and the reason (manual) for set and remove; usage aliases stay admin-only |
 | T-MI2 | Elevation: the team lead sign-in (D14; was "dev lead sign-in", renamed at the user's direction, 2026-11-18) exists outside dev, or a typed value supplies a scope or role | The option is part of the dev login: env-rejected in `prod` and with Entra configured (T7); the scope comes only from the stored identity's admin-scope item, per request | M3: the option signs in with the stored scope and none from typed text; refused in `prod` and with Entra configured |
 | T-MI3 | Tampering: a created app team takes a registry team's id or name, inheriting its members, scopes or spend (D5) | Server-generated `appteam-<uuid>` id; the registry refuses the reserved prefix; name claim and registry name check (`409`), both ways: the account routes refuse a created team's name (`409`) | M2: id never equals a registry team; duplicate name `409` (against created and registry teams); body id refused (`400`, strict body; agent decision, 2026-11-18, M2 build — stronger than "ignored"); `POST /api/accounts` and `PATCH /api/accounts/[id]` with a created team's name `409`, no write |
 | T-MI4 | Disclosure: Team usage shows a lead another team's spend (D7) | `teamUsage` and the team list come from `resolveScope` per request; a team outside the scope is the missing-page `404`; only a global reader gets every team (MI-D7, coordinator decision) | M2: leak test (a lead sees only teams in scope; another team's id `404`); a global reader without a scope sees every team; a user with no scope `404` |
+| T-SY1 | Disclosure: the sync links a person to another person's LiteLLM user (units SYNC1, SYNC2; user, 2026-11-18) | Entra id, then exact verified canonical email, one function shared with the `match` mode; the two keys disagreeing links nothing; duplicates, claimed, privileged and service users refused on both sides; one-to-one claim; never overwritten; `mode: "sync"` and the matched key in the audit record; the link can be removed by hand | SYNC1: case differs → linked; prefix, suffix, other domain, display name → not; the keys disagree → `ambiguous-identity`; duplicates skipped; privileged and service user skipped with no claim; `claimed` and `identity-linked-elsewhere` not overwritten |
+| T-SY2 | Elevation: the sync gives a role, a lead or an admin scope | It writes only links, pending links and member affiliations; a structure test forbids the role-grant, admin-scope and password-user writes in the sync modules | SYNC1: a LiteLLM team `admin` is a member; no grant or scope exists after a run |
+| T-SY3 | Elevation: the sync puts a person in a team it should not | Only linked teams that exist in LiteLLM and in the directory; one candidate team only; never moved; additive | SYNC1: unlinked, missing and unknown teams → none; two candidates → `multiple-teams`; elsewhere → `other-team`; SSO-sourced untouched; nothing removed |
+| T-SY4 | Elevation: a caller uses the sync on themselves | The caller's own identity is skipped for the link and the membership | SYNC1: `own-identity` on both |
+| T-SY5 | Tampering: a stale or repeated apply writes what the caller did not see | `planHash` recomputed at apply; the lease, renewed and checked | SYNC1: another hash → `409 PLAN_CHANGED`, nothing written; lease held → `409 SYNC_RUNNING`; two applies at once → one wins |
+| T-SY6 | Spoofing: a pending link binds to the wrong sign-in, or outlives its reason | The Joiner rule's conditions; no LiteLLM call at sign-in; removal only after `getUser` confirms, capped; removal by hand; stale after 30 days; never overwrites | SYNC1: binds on the UPN or the `oid`; not for a guest, another tenant or an `email` claim alone; both placeholder keys; no LiteLLM call at sign-in; an identity with another link keeps it; a now-privileged target is removed by the next run |
+| T-SY7 | Denial: the sync overloads LiteLLM or the request, or removes people in bulk on a LiteLLM fault | 80 pages, 2,000 identities, 5 concurrent reads, 500 changes per apply, one run at a time; a truncated plan is not applied; removals confirmed and capped | SYNC1: page 81 is not read and `truncated` is set, the POST is `409 PLAN_TRUNCATED` and writes nothing; LiteLLM unavailable → error, no write; 21 removals → none removed |
+| T-SY8 | Elevation: the scheduled run is a way into the account or the data | The scheduler role may only run that task definition and pass its two roles to `ecs-tasks`; no endpoint; no secret in the command or the logs; the toggle is read at run time; a failure alarms | SYNC2: the CDK assertions; the job's unit and integration tests |
+| T-SY9 | Disclosure: the preview shows LiteLLM users to someone who may not see them | `internal-admin` and `internal-org-admin` only; `no-store` | SYNC1: lead, user and auditor `403`; the auditor reads the pending list only |
+| T-SY11 | Tampering: the sync changes or removes something in LiteLLM (user, 2026-11-18: "It should not remove users from litellm") | The sync's module graph imports only `searchUsers`, `getTeam` and `getUser` from the gateway; the scheduled job adds no other call | Structure test on the imports; the fake LiteLLM records zero write calls in every sync test |
+| T-SY12 | Elevation: the schedule places people more freely than a person would | The scheduled run uses the same function and rules as Apply: exactly one candidate team, never two or more, never a move, never a lead, never an SSO-sourced membership | SYNC1: the S4 cases with actor `system` and trigger `schedule`. SYNC2: the job calls the one function with no extra option |
 | T-US1 | Disclosure: the user page aggregates one person's access (roles, links, sign-in reference) and shows a reader more than Settings would (unit US2, 2026-11-23) | One read for the three global readers only; each block follows the capability that guards it in Settings, except the org-admin read of global roles and usage identities that the user decided for this page (D-US11, 2026-11-23; read only); the SSO reference stays absent for an org-admin (D-US12), and an absent block is absent from the response, not hidden in the page; no credential, hash, secret, lockout state or tenant id in any body; every write goes to its existing route with its own check; no own-role or own-link edit | US2: admin, org-admin, auditor `200`, lead and user `403`, unknown `oid` `404`; an org-admin body has the global roles and usage identities and no SSO reference, and the write routes behind them answer an org-admin `403`; no hash, secret, lockout or tenant id for any role; own page offers no role or link write; no LiteLLM user or member add or remove (zero calls on the fake) |
 
 **Budget reset requests (unit M4; added 2026-11-17).** Each item has its

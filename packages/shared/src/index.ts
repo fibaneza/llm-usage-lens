@@ -405,3 +405,4 @@ export {
 } from "./schemas/budget-reset-counts";
 export type { BudgetResetCounts } from "./schemas/budget-reset-counts";
 export * from "./schemas/user-links";
+export * from "./schemas/litellm-user-sync";

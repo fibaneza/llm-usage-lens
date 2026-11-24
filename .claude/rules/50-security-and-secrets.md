@@ -48,6 +48,10 @@
    matrix (Lead in scope, `internal-org-admin`, `internal-admin`; `403` before
    parsing), the user-level reset by a Lead only for a member of a team in
    their scope, otherwise `404`, LiteLLM LD39;
+   unit SYNC1 (user, 2026-11-18): `POST /api/identities/litellm-sync` and
+   `DELETE /api/identities/pending-links` accept `internal-admin` or
+   `internal-org-admin` (`403` before parsing; Access Control — *LiteLLM user
+   sync*), and the sync never writes to LiteLLM;
    the Access Control spec's permission matrix from Phase 4R), before any
    DynamoDB call. Global roles are never granted by group mappings; only an
    `internal-admin` grants `internal-admin` or `internal-org-admin` in the

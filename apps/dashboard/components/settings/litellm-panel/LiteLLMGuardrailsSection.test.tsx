@@ -109,6 +109,9 @@ const WRITES = [
   // M4, MG-D11a: the route-less request toggle, default on (listed under
   // Member writes with the resets it asks for).
   "requestBudgetReset",
+  // SYNC1 (LiteLLM spec LD40): the route-less syncLiteLLMUsers toggle,
+  // default on, listed under Member writes next to requestBudgetReset.
+  "syncLiteLLMUsers",
 ];
 const OFF_BY_DEFAULT = new Set([
   "resetMemberSpend",
@@ -365,6 +368,7 @@ const FAMILIES: Array<[string, string[]]> = [
       "disableMember",
       "enableMember",
       "requestBudgetReset",
+      "syncLiteLLMUsers",
     ],
   ],
   [
@@ -862,7 +866,7 @@ describe("LiteLLMGuardrailsSection read-only issues no write (LD24)", () => {
 
 // Source: LiteLLM spec - the LW1 paragraph after `createUser` (~276-298:
 // "Settings -> LiteLLM shows 'Not available with SSO' with the switch disabled
-// (no change of who may switch, LD24)" and the coordinator ruling that one
+// (no change of who may switch, LD24)" and the same paragraph: one
 // predicate serves the gate, `enabledOperations()` and the toggles view), test
 // T-LW1; Design System ~633 ("Create and link follows the gate"). Contract:
 // the panel renders each row's `unavailable` label from the view and disables
@@ -953,5 +957,39 @@ describe("an operation's `unavailable` label from the view (LW1, T-LW1)", () => 
     await ready();
     expect(screen.getByRole("switch", { name: "createUser" })).toBeEnabled();
     expect(screen.queryByText(SSO_LABEL)).toBeNull();
+  });
+});
+
+// SYNC1 (LiteLLM spec - Allowlist "Writes" table and LD40: `syncLiteLLMUsers`
+// has no LiteLLM route, writes nothing to LiteLLM, defaults on; Design System -
+// Sync from LiteLLM: the sync never writes to LiteLLM). The row is the
+// operation's switch and a description that says it is dashboard-only.
+describe("LiteLLMGuardrailsSection syncLiteLLMUsers row (SYNC1, LD40)", () => {
+  it("shows the switch on by default and enabled for an editor, with a dashboard-only description", async () => {
+    stub({ toggles: toggles() });
+    renderWithProviders(<LiteLLMGuardrailsSection canEdit />);
+    await ready();
+    expect(
+      screen.getByRole("switch", { name: "syncLiteLLMUsers" }),
+    ).toBeChecked();
+    expect(
+      within(screen.getByTestId("litellm-op-syncLiteLLMUsers")).getByTestId(
+        "litellm-op-desc-syncLiteLLMUsers",
+      ).textContent,
+    ).toMatch(/dashboard only/i);
+    expect(
+      screen.getByRole("switch", { name: "syncLiteLLMUsers" }),
+    ).toBeEnabled();
+  });
+
+  it("a read-only caller sees the row and no switch", async () => {
+    stub({ toggles: toggles() });
+    renderWithProviders(<LiteLLMGuardrailsSection canEdit={false} />);
+    expect(
+      await screen.findByTestId("litellm-op-syncLiteLLMUsers"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: "syncLiteLLMUsers" }),
+    ).toBeNull();
   });
 });

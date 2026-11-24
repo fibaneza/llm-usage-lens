@@ -21,6 +21,9 @@ export const API_ERROR_CODES = [
   "WEAK_PASSWORD",
   "CONFIG_FILE_LOCKED",
   "TOO_MANY_MEMBERS",
+  "PLAN_CHANGED",
+  "SYNC_RUNNING",
+  "PLAN_TRUNCATED",
 ] as const;
 
 export const ApiErrorCodeSchema = z.enum(API_ERROR_CODES);

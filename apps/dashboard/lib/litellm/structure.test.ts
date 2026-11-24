@@ -228,23 +228,32 @@ describe("the service key is read only inside lib/litellm and env.ts (LT1, Rule 
 
 // Source: docs/specs/2026-11-10-litellm.md - MG-D11a (`requestBudgetReset` is a
 // route-less dashboard operation, default on, in both lists; no LiteLLM call
-// exists for it) and MG-D8 (the BudgetReset ledger is append-only: written
-// only through `budgetResetPutItem`, never updated or deleted except by TTL).
-describe("the route-less requestBudgetReset operation (MG-D11a)", () => {
-  it("is the only operation without a LiteLLM route, a default-on write, and has no gateway function", async () => {
+// exists for it), the `syncLiteLLMUsers` paragraph (amended 2026-11-18, units
+// SYNC1, SYNC2: "a second route-less operation", dashboard-only, the sync reads
+// through `searchUsers`, `getTeam` and `getUser`) and MG-D8 (the BudgetReset
+// ledger is append-only: written only through `budgetResetPutItem`, never
+// updated or deleted except by TTL). Amended in SYNC1: the route-less set was
+// one operation and is now these two.
+describe("the route-less operations requestBudgetReset and syncLiteLLMUsers (MG-D11a, SYNC1)", () => {
+  it("are the only operations without a LiteLLM route, default-on writes, and have no gateway function", async () => {
     const { LITELLM_OPERATIONS } = await import("./allowlist");
     const { LITELLM_OPERATION_NAMES } = await import("@llm-usage-lens/shared");
     const routeless = LITELLM_OPERATION_NAMES.filter(
       (n) => LITELLM_OPERATIONS[n].routes.length === 0,
     );
-    expect(routeless).toEqual(["requestBudgetReset"]);
-    expect(LITELLM_OPERATIONS.requestBudgetReset).toMatchObject({
-      kind: "write",
-      defaultEnabled: true,
-    });
-    expect(read(join(litellmDir, "operations.ts"))).not.toMatch(
-      /\brequestBudgetReset\b/,
-    );
+    expect([...routeless].sort()).toEqual([
+      "requestBudgetReset",
+      "syncLiteLLMUsers",
+    ]);
+    for (const name of routeless) {
+      expect(LITELLM_OPERATIONS[name], name).toMatchObject({
+        kind: "write",
+        defaultEnabled: true,
+      });
+      expect(read(join(litellmDir, "operations.ts")), name).not.toMatch(
+        new RegExp(`\\b${name}\\b`),
+      );
+    }
   });
 });
 
@@ -442,7 +451,7 @@ describe("one lib/auth function answers 'SSO enabled' (T-LW4, LW1)", () => {
     expect(src).toMatch(/\bisSsoEnabled\(\)/);
   });
 
-  // LW1 coordinator ruling (2026-11-24): the server gate is the enforcement;
+  // LiteLLM spec - the LW1 paragraph after `createUser` (T-LW1): the server gate is the enforcement;
   // enabledOperations() and the toggles view use the same predicate, never a
   // second hand-written copy of the edition / ossOnly / ssoOffOnly clauses.
   it("enabledOperations uses operationUnavailable from operations and holds no clause of its own", () => {

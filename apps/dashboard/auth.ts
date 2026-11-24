@@ -352,6 +352,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             requestId,
             now,
           });
+          if (identity.authMethod === "password") {
+            try {
+              const { applyPasswordSignInLink } =
+                await import("@/lib/data/access/sign-in-sync");
+              await applyPasswordSignInLink({
+                identity: { oid: identity.oid, email: identity.email },
+                requestId,
+                now,
+                sequence,
+              });
+            } catch (linkError) {
+              trace
+                .getActiveSpan()
+                ?.recordException(
+                  linkError instanceof Error ? linkError : String(linkError),
+                );
+            }
+          }
         }
       } catch (error) {
         const span = trace.getActiveSpan();

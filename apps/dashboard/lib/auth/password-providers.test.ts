@@ -4,6 +4,8 @@ const authorizePasswordUser = vi.hoisted(() => vi.fn());
 const completePasswordSetup = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth/password-credentials", () => ({ authorizePasswordUser }));
 vi.mock("@/lib/auth/password-setup", () => ({ completePasswordSetup }));
+const applyPasswordSignInLink = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/data/access/sign-in-sync", () => ({ applyPasswordSignInLink }));
 
 import {
   createPasswordProvider,
@@ -39,6 +41,7 @@ const IDENTITY = {
 beforeEach(() => {
   authorizePasswordUser.mockReset();
   completePasswordSetup.mockReset();
+  applyPasswordSignInLink.mockReset();
 });
 
 describe("createPasswordProvider", () => {
@@ -61,6 +64,29 @@ describe("createPasswordProvider", () => {
     expect(
       await authorizeOf(createPasswordProvider() as Provider)({ email: "a" }),
     ).toBeNull();
+  });
+});
+
+// Access Control - Match keys per sign-in mode: the link belongs to auth.ts signIn (once per
+// sign-in, after the session is accepted), not to the provider's authorize,
+// which also runs for refused and replayed attempts (T-SM4; Access Control -
+// Match keys per sign-in mode).
+describe("providers never apply the PENDING link themselves", () => {
+  it.each([
+    ["a refused password sign-in", null],
+    ["an accepted password sign-in", IDENTITY],
+  ])("%s", async (_n, result) => {
+    authorizePasswordUser.mockResolvedValue(result);
+    await authorizeOf(createPasswordProvider() as Provider)({
+      email: "a@example.com",
+      password: "x",
+    });
+    completePasswordSetup.mockResolvedValue({ ok: true, identity: IDENTITY });
+    await authorizeOf(createPasswordSetupProvider() as Provider)({
+      token: "t",
+      password: "p",
+    });
+    expect(applyPasswordSignInLink).not.toHaveBeenCalled();
   });
 });
 

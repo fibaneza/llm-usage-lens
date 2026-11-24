@@ -54,6 +54,21 @@ describe("resolveOperationSettings", () => {
     ).toEqual({ enabled: false, source: "file" });
   });
 
+  // LiteLLM spec - `syncLiteLLMUsers` (SYNC1, user 2026-11-18): the sync only
+  // adds to the dashboard, so the toggle defaults on (LD10); the file can still
+  // switch it off (narrow only), which stops the on-demand and the scheduled run.
+  it("syncLiteLLMUsers defaults on (source 'spec') and the file can switch it off", () => {
+    expect(
+      resolveOperationSettings({ file: null, saved: null }).syncLiteLLMUsers,
+    ).toEqual({ enabled: true, source: "spec" });
+    expect(
+      resolveOperationSettings({
+        file: file({ syncLiteLLMUsers: { enabled: false } }),
+        saved: null,
+      }).syncLiteLLMUsers,
+    ).toEqual({ enabled: false, source: "file" });
+  });
+
   it("reads default on (source 'spec')", () => {
     const r = resolveOperationSettings({ file: null, saved: null });
     for (const name of [

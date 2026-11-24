@@ -105,6 +105,10 @@ export const LITELLM_OPERATIONS = {
   // MG-D11a: a dashboard-only operation (no LiteLLM route); a request alone
   // changes nothing in LiteLLM, hence on by default.
   requestBudgetReset: write(true),
+  // LD40 (units SYNC1, SYNC2): dashboard-only, like requestBudgetReset. The
+  // sync reads through searchUsers, getTeam and getUser and writes nothing to
+  // LiteLLM; on by default (LD10: it only adds to the dashboard).
+  syncLiteLLMUsers: write(true),
 } as const satisfies Record<LiteLLMOperationName, OperationDefinition>;
 
 const ROUTE_INDEX: ReadonlyMap<string, AllowlistedRoute> = new Map(

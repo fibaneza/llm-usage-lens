@@ -364,3 +364,80 @@ describe("listAccessReviewRows", () => {
     expect(json).not.toContain("failedAttempts");
   });
 });
+
+// Source: docs/specs/2026-11-10-access-control.md - "Access review" (from unit
+// SYNC1 the review also lists the pending LiteLLM links, one not bound after 30
+// days flagged stale) and "LiteLLM user sync" (*Pending LiteLLM links*: a
+// pending link not bound after 30 days is stale and the access review lists
+// it; the partition `PENDING#{key}` is shared with pending members and admin
+// scopes), threat T-SY6. Assumed API (the developers build to it):
+//   exportAccessReview(ctx) returns `{ date, rows, pendingLiteLLMLinks }`, one
+//   entry per pending link `{ key, litellmUserId, createdAt, flags }` with
+//   `flags` `["stale"]` when `createdAt` is more than 30 days before `ctx.now`
+//   and `[]` otherwise. The CSV layout of these entries is not pinned: the spec
+//   does not give it.
+describe("pending LiteLLM links in the access review (T-SY6)", () => {
+  const seedPending = (key: string, litellmUserId: string, createdAt: string) =>
+    putRaw({
+      PK: `PENDING#${key}`,
+      SK: "LITELLMLINK",
+      gsi1pk: "PENDINGLITELLMLINKS",
+      gsi1sk: `PENDING#${key}`,
+      emailOrOid: key,
+      litellmUserId,
+      source: "sync",
+      version: 1,
+      createdAt,
+      createdBy: "system",
+      lastValidatedAt: createdAt,
+    });
+
+  // One export is one audited read keyed by its request id, so each call
+  // needs its own id (a repeat collides on the audit key).
+  let exportSeq = 0;
+  async function exported() {
+    const { exportAccessReview } = await import("./access-review");
+    exportSeq += 1;
+    return (
+      await exportAccessReview(ctxAt(REVIEW_NOW, `req-review-${exportSeq}`))
+    ).pendingLiteLLMLinks;
+  }
+
+  it("lists each pending link, flags one older than 30 days as stale and not one of 29 days", async () => {
+    await seedPending("old@corp.example", "lu-old", daysAgo(31));
+    await seedPending("new@corp.example", "lu-new", daysAgo(29));
+    const listed = await exported();
+    const byKey = Object.fromEntries(listed.map((p) => [p.key, p]));
+    expect(Object.keys(byKey).sort()).toEqual([
+      "new@corp.example",
+      "old@corp.example",
+    ]);
+    expect(byKey["old@corp.example"]).toMatchObject({
+      litellmUserId: "lu-old",
+      createdAt: daysAgo(31),
+      flags: ["stale"],
+    });
+    expect(byKey["new@corp.example"]).toMatchObject({
+      litellmUserId: "lu-new",
+      flags: [],
+    });
+  });
+
+  it("is empty with no pending link, and a pending member of the same email is not listed as one", async () => {
+    expect(await exported()).toEqual([]);
+    await putRaw({
+      PK: "PENDING#old@corp.example",
+      SK: "AFFILIATION",
+      gsi1pk: "MEMBERS#team-a",
+      gsi1sk: "PENDING#old@corp.example",
+      kind: "affiliation",
+      emailOrUpn: "old@corp.example",
+      teamId: "team-a",
+      version: 1,
+      createdAt: daysAgo(40),
+      createdBy: "system",
+    });
+    await seedPending("old@corp.example", "lu-old", daysAgo(2));
+    expect((await exported()).map((p) => p.key)).toEqual(["old@corp.example"]);
+  });
+});

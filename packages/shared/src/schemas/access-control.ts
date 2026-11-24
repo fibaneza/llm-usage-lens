@@ -303,6 +303,9 @@ export const AUDIT_ACTIONS = [
   "litellm.key.rotate",
   "litellm.team.create",
   "litellm.user.create",
+  "litellm.user.sync",
+  "identity.litellm-pending.set",
+  "identity.litellm-pending.remove",
   "litellm.user.reset-spend",
   "litellm.team.budget",
   "litellm.team.limits",
@@ -443,6 +446,13 @@ const SNAPSHOT_KEYS: ReadonlySet<string> = new Set([
   "rules",
   "principals",
   "accountIds",
+  "runId",
+  "trigger",
+  "truncated",
+  "planHash",
+  "skipped",
+  "matchedKey",
+  "counts",
 ]);
 
 export function sanitizeAuditSnapshot(

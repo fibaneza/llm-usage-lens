@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { auth, enabledSignInProviders } from "@/auth";
+import { PendingLinksList } from "@/components/manage/users/PendingLinksList";
 import { UsersPeoplePanel } from "@/components/manage/users/UsersPeoplePanel";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { isLiteLLMConfigured } from "@/lib/litellm/client";
@@ -29,6 +30,7 @@ export default async function UsersManagePage() {
   const canCreate = enabled.includes("createUser");
   // RS1: the Reset spend row action needs the toggle and the link/write step.
   const canResetSpend = page.steps.link && enabled.includes("resetMemberSpend");
+  const canSync = page.steps.link && enabled.includes("syncLiteLLMUsers");
   return (
     <div className="flex flex-col gap-4">
       <PageHeader description="People, their teams and LiteLLM links." />
@@ -38,6 +40,7 @@ export default async function UsersManagePage() {
         canCreate={canCreate}
         litellmConfigured={litellmConfigured}
         canResetSpend={canResetSpend}
+        canSync={canSync}
         authMethod={page.authMethod}
         stepUp={{
           entra: stepUpWithEntra,
@@ -45,6 +48,7 @@ export default async function UsersManagePage() {
           devLogin: stepUpWithDevLogin,
         }}
       />
+      <PendingLinksList canRemove={page.steps.link} />
     </div>
   );
 }

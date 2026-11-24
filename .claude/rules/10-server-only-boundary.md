@@ -74,7 +74,13 @@ credentials must never reach the browser.
      and `/reset-budget`) follow the matrix (`matrixWrite`: a Lead in scope,
      `internal-org-admin`, `internal-admin`; `403` before parsing); the
      user-level reset by a Lead only for a member of a team in their scope,
-     otherwise `404`; the auditor resets nothing.
+     otherwise `404`; the auditor resets nothing. Unit SYNC1 (user,
+     2026-11-18; Access Control — *LiteLLM user sync*): `POST
+     /api/identities/litellm-sync` and `DELETE /api/identities/pending-links`
+     accept `internal-admin` or `internal-org-admin` (`403` before parsing,
+     one `denied` record; registered in `test/route-registry.ts`); the two
+     `GET`s are read-only (the pending list also for `internal-auditor`),
+     and the sync never writes to LiteLLM.
    - Validate query/body with Zod (`400` on failure).
    - Return `{ data: T }` on success, `{ error: { code, message } }` on failure.
    - Use the `DateRangeQuerySchema` 90-day cap on custom ranges.

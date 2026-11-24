@@ -4,6 +4,8 @@ import { trace } from "@opentelemetry/api";
 import { argon2Verify } from "hash-wasm";
 import { z } from "zod";
 
+import type { IdentityRecord } from "@llm-usage-lens/shared";
+
 import { MASTER_OID_PREFIX } from "@/lib/auth/master-oid";
 import { verifyTotp } from "@/lib/auth/totp";
 import { recordSecurityEvent } from "@/lib/auth/security-events";
@@ -29,7 +31,7 @@ export type SignedInIdentity = {
   upn?: string;
   displayName?: string;
   roles: string[];
-  authMethod: "entra" | "master" | "local";
+  authMethod: IdentityRecord["authMethod"];
 };
 
 export type MasterUserDeps = {

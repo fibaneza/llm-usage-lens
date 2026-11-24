@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiResponse } from "@/test/fakes/api-stubs";
@@ -246,6 +247,119 @@ describe("Users management page (/dashboard/manage/users)", () => {
       renderWithProviders(await UsersManagePage());
       await screen.findByText("Ada Lovelace");
       expect(resetButton()).toBeNull();
+    });
+  });
+
+  // Unit SYNC1 (Design System - Sync from LiteLLM; role-impact SYNC1): the page
+  // resolves on the server whether the caller sees the Sync from LiteLLM button
+  // (configured, syncLiteLLMUsers enabled, caller has the link/write step:
+  // admin and org-admin, not the auditor) and mounts the "Not signed in yet"
+  // panel (the three global readers). The dialog and the panel are tested in
+  // their own files; the routes decide each permission again (T-SY9).
+  describe("Sync from LiteLLM wiring (SYNC1)", () => {
+    const PENDING = {
+      email: "waiting@example.com",
+      litellmUserId: "lu-wait",
+      version: 1,
+      createdAt: "2026-11-20T10:00:00.000Z",
+    };
+    const syncButton = () =>
+      screen.queryByRole("button", { name: "Sync from LiteLLM" });
+
+    function stubWithPending() {
+      const urls = stubFetch();
+      const inner = globalThis.fetch;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+          const url = new URL(String(input), "http://localhost");
+          if (url.pathname === "/api/identities/pending-links") {
+            urls.push(url);
+            return Promise.resolve(apiResponse({ data: { items: [PENDING] } }));
+          }
+          return inner(input, init);
+        }),
+      );
+      return urls;
+    }
+
+    it("shows the button in the People panel and the Not signed in yet panel under it, with Remove, for a caller who may write", async () => {
+      litellm(true, ["createUser", "syncLiteLLMUsers"]);
+      stubWithPending();
+      renderWithProviders(await UsersManagePage());
+      const people = await screen.findByRole("region", { name: "People" });
+      expect(
+        within(people).getByRole("button", { name: "Sync from LiteLLM" }),
+      ).toBeInTheDocument();
+      const pending = await screen.findByRole("region", {
+        name: "Not signed in yet",
+      });
+      expect(
+        await within(pending).findByText("waiting@example.com"),
+      ).toBeInTheDocument();
+      expect(
+        within(pending).getByRole("button", {
+          name: "Remove waiting@example.com",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        within(people).queryByText("waiting@example.com"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("the button opens the dialog", async () => {
+      litellm(true, ["syncLiteLLMUsers"]);
+      stubWithPending();
+      renderWithProviders(await UsersManagePage());
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Sync from LiteLLM" }),
+      );
+      expect(
+        await screen.findByRole("dialog", { name: "Sync from LiteLLM" }),
+      ).toBeInTheDocument();
+    });
+
+    it.each([
+      ["the toggle is off", true, ["createUser"], ACCESS.steps],
+      [
+        "the caller has no link/write step (Auditor)",
+        true,
+        ["syncLiteLLMUsers"],
+        { password: false, team: false, link: false },
+      ],
+      [
+        "LiteLLM is not configured (LD37)",
+        false,
+        ["syncLiteLLMUsers"],
+        ACCESS.steps,
+      ],
+    ])(
+      "shows no Sync from LiteLLM button when %s",
+      async (_n, configured, ops, steps) => {
+        litellm(configured, ops);
+        usersPageAccessFor.mockResolvedValue({ ...ACCESS, steps });
+        stubWithPending();
+        renderWithProviders(await UsersManagePage());
+        await screen.findByText("Cy Young");
+        expect(syncButton()).toBeNull();
+      },
+    );
+
+    it("the auditor still reads the Not signed in yet panel, with no Remove button (Permission matrix)", async () => {
+      litellm(true, ["syncLiteLLMUsers"]);
+      usersPageAccessFor.mockResolvedValue({
+        ...ACCESS,
+        steps: { password: false, team: false, link: false },
+      });
+      stubWithPending();
+      renderWithProviders(await UsersManagePage());
+      const pending = await screen.findByRole("region", {
+        name: "Not signed in yet",
+      });
+      await within(pending).findByText("waiting@example.com");
+      expect(
+        within(pending).queryByRole("button", { name: /remove/i }),
+      ).toBeNull();
     });
   });
 });

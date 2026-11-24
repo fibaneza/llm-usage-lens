@@ -109,6 +109,11 @@ export const OPERATION_INFO: Record<
     family: "member-writes",
     description: "Dashboard only: records a budget reset request",
   },
+  syncLiteLLMUsers: {
+    family: "member-writes",
+    description:
+      "Dashboard only: brings LiteLLM users and teams into Management, writes nothing to LiteLLM",
+  },
   generateMemberKey: {
     family: "key-writes",
     description: "POST /key/generate",

@@ -270,14 +270,25 @@ const UserListResponse = z.object({
   ),
   ...Paging,
 });
+const UserSearchRow = z.object({
+  user_id: z.string(),
+  user_email: z.string().nullish(),
+  spend: z.number().nullish(),
+  max_budget: z.number().nullish(),
+  teams: z.array(z.string()).nullish(),
+});
 const UserSearchResponse = z.object({
+  users: z.array(UserSearchRow),
+  ...Paging,
+});
+// The LiteLLM user sync also compares the role and the Entra id on the server
+// (Access Control - LiteLLM user sync, Same person and Users; S20). No other
+// caller asks for them: the default rows stay reduced (Reads - searchUsers).
+const UserSearchIdentityResponse = z.object({
   users: z.array(
-    z.object({
-      user_id: z.string(),
-      user_email: z.string().nullish(),
-      spend: z.number().nullish(),
-      max_budget: z.number().nullish(),
-      teams: z.array(z.string()).nullish(),
+    UserSearchRow.extend({
+      user_role: z.string().nullish(),
+      sso_user_id: z.string().nullish(),
     }),
   ),
   ...Paging,
@@ -454,12 +465,21 @@ const SearchUsersInput = z.strictObject({
   page: PageNumber.optional(),
   pageSize: z.number().int().min(1).max(25).optional(),
   litellmTeamId: LiteLLMId.optional(),
+  withIdentity: z.boolean().optional(),
   // Unit SRT1 (D-SR1): set by the route from its own enum, never a client string.
   sortBy: z.enum(["user_email", "spend"]).optional(),
   sortOrder: z.enum(["asc", "desc"]).optional(),
 });
 
-export async function searchUsers(input: z.input<typeof SearchUsersInput>) {
+type SearchUsersCall = z.input<typeof SearchUsersInput>;
+
+export async function searchUsers(
+  input: SearchUsersCall & { withIdentity: true },
+): Promise<z.output<typeof UserSearchIdentityResponse>>;
+export async function searchUsers(
+  input: SearchUsersCall,
+): Promise<z.output<typeof UserSearchResponse>>;
+export async function searchUsers(input: SearchUsersCall) {
   await gate("searchUsers");
   const i = SearchUsersInput.parse(input);
   return read(
@@ -472,7 +492,7 @@ export async function searchUsers(input: z.input<typeof SearchUsersInput>) {
       sort_by: i.sortBy,
       sort_order: i.sortOrder,
     },
-    UserSearchResponse,
+    i.withIdentity ? UserSearchIdentityResponse : UserSearchResponse,
   );
 }
 
