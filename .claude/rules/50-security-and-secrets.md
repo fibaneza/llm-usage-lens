@@ -34,8 +34,8 @@
    returns `403` without its required permission (the `internal-admin` role today,
    or `internal-admin`/`internal-org-admin` for the LiteLLM toggles and team
    links, LiteLLM spec LD24; `internal-admin`/`internal-org-admin` for app
-   team creation and the LiteLLM user links (create-and-link on OSS only),
-   never on one's own identity,
+   team creation and the LiteLLM user links (create-and-link on OSS only, and only when SSO is not enabled (user,
+   2026-11-18)), never on one's own identity,
    management improvements D6 and D16, 2026-11-17; the LiteLLM team writes
    follow the LiteLLM spec's *Allowlist → Writes* roles; unit M4: `POST
    /api/budget-reset-requests` for a member of a linked team on their own

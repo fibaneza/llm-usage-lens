@@ -6,6 +6,7 @@ import type { Session } from "next-auth";
 import { z } from "zod";
 
 import { env } from "@/env";
+import { isSsoEnabled } from "@/lib/auth/sso-mode";
 import {
   NOT_FOUND_MESSAGE,
   jsonError,
@@ -88,12 +89,10 @@ export function accessErrorResponse(code: AccessErrorCode): Response {
   }
 }
 
+// One Entra definition: the client id is set, valid because a partial Entra
+// config is rejected at startup (lib/auth/auth-config.ts). LiteLLM spec - LW1.
 // Spec - Password users D24: password sign-in may be turned off, and the last
 // password admin is no longer protected, only once Entra is configured.
 export function entraConfigured(): boolean {
-  return Boolean(
-    env.AUTH_MICROSOFT_ENTRA_ID_ID &&
-    env.AUTH_MICROSOFT_ENTRA_ID_SECRET &&
-    env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
-  );
+  return isSsoEnabled();
 }

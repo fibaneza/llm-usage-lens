@@ -27,6 +27,8 @@ export type OperationDefinition = {
   // Refused on Enterprise before any request: the person is created by LiteLLM
   // at SSO sign-in (LiteLLM spec - `createUser`, OSS only).
   readonly ossOnly?: true;
+  // Refused when SSO is enabled: the person is created at SSO sign-in (LW1).
+  readonly ssoOffOnly?: true;
 };
 
 const get = (template: string, enterpriseOnly?: true): AllowlistedRoute =>
@@ -79,6 +81,7 @@ export const LITELLM_OPERATIONS = {
   createUser: {
     ...write(true, get("/user/list"), post("/user/new")),
     ossOnly: true,
+    ssoOffOnly: true,
   },
   removeTeamMember: write(true, post("/team/member_delete")),
   setMemberBudget: write(true, post("/team/member_update")),

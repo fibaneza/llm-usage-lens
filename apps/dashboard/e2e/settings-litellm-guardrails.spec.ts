@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
 import { waitForHydration } from "./support/hydration";
@@ -29,6 +30,7 @@ function createFakeToggles(startVersion = 4) {
   const view = () => ({
     version,
     edition: "oss",
+    ssoEnabled: false,
     operations: Object.fromEntries(
       Object.entries(defaults).map(([op, def]) => [
         op,
@@ -224,4 +226,95 @@ test.describe("settings LiteLLM guardrail configuration", () => {
 
     await expect(reset).toBeEnabled();
   });
+
+  // LiteLLM spec - the LW1 paragraph after `createUser` (~276-298: "Settings ->
+  // LiteLLM shows 'Not available with SSO' with the switch disabled (no change
+  // of who may switch, LD24)"; one predicate serves the view, coordinator
+  // ruling 2026-11-24), test T-LW1; Design System ~633 (Create and link
+  // follows the gate). The row's state comes from the view's per-operation
+  // `unavailable` label, not from a client rule (agent contract: `unavailable`
+  // on `operations[name]`).
+  test("SSO on: createUser shows 'Not available with SSO' with its switch disabled, addTeamMember stays live, a click sends no PUT; axe and no scroll at 375 and 1440 (T-LW1)", async ({
+    page,
+  }) => {
+    await mockApi(page, createFakeToggles());
+    const puts: unknown[] = [];
+    // Registered after mockApi, so it takes precedence for this URL.
+    await page.route(/\/api\/litellm\/toggles$/, (route) => {
+      const req = route.request();
+      if (req.method() === "PUT") {
+        puts.push(req.postDataJSON());
+        return route.fulfill({
+          status: 500,
+          json: { error: { code: "INTERNAL", message: "unexpected PUT" } },
+        });
+      }
+      return route.fulfill({
+        json: {
+          data: {
+            version: 4,
+            edition: "oss",
+            ssoEnabled: true,
+            operations: {
+              createUser: {
+                enabled: true,
+                source: "spec",
+                unavailable: "Not available with SSO",
+              },
+              addTeamMember: { enabled: true, source: "spec" },
+              listKeys: { enabled: true, source: "spec" },
+            },
+          },
+        },
+      });
+    });
+    await openPanel(page);
+    await openGuardrails(page);
+
+    const createUser = page.getByRole("switch", { name: "createUser" });
+    await expect(createUser).toBeDisabled();
+    await expect(createUser).toHaveAccessibleDescription(
+      "Not available with SSO",
+    );
+    await expect(page.getByTestId("litellm-op-createUser")).toContainText(
+      "Not available with SSO",
+    );
+    await expect(
+      page.getByRole("switch", { name: "addTeamMember" }),
+    ).toBeEnabled();
+
+    await createUser.click({ force: true });
+    expect(puts).toEqual([]);
+    await expect(createUser).toBeDisabled();
+
+    for (const width of [375, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(createUser).toBeVisible();
+      await expectNoBlockingViolations(page);
+      expect(await noHorizontalScroll(page)).toBe(true);
+    }
+  });
 });
+
+// Project standard (accessibility.spec.ts): WCAG 2 A/AA, serious or critical.
+async function expectNoBlockingViolations(page: Page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+  expect(
+    results.violations
+      .filter((v) => v.impact === "serious" || v.impact === "critical")
+      .map((v) => ({
+        id: v.id,
+        nodes: v.nodes.map((n) => n.target.join(" ")),
+      })),
+  ).toEqual([]);
+}
+
+async function noHorizontalScroll(page: Page) {
+  return page.evaluate(
+    () =>
+      document.documentElement.scrollWidth <=
+      document.documentElement.clientWidth,
+  );
+}

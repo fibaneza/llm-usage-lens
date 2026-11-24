@@ -204,6 +204,127 @@ describe("GET /api/litellm/toggles", () => {
     );
   });
 
+  // Source: LiteLLM spec - the LW1 paragraph after `createUser` ("Settings ->
+  // LiteLLM shows 'Not available with SSO' with the switch disabled"), test
+  // T-LW1; Design System - "Create and link follows the gate". Agent contract:
+  // the view carries `ssoEnabled` (from the one lib/auth function), so the
+  // panel can show the state; the operation's own `enabled`/`source` stay as
+  // saved (no change of who may switch, LD24).
+  it.each([
+    [
+      "AUTH_MICROSOFT_ENTRA_ID_ID set",
+      "00000000-0000-4000-8000-000000000001",
+      true,
+    ],
+    ["AUTH_MICROSOFT_ENTRA_ID_ID empty", "", false],
+  ])(
+    "reports ssoEnabled with %s (T-LW1) and leaves createUser's value alone",
+    async (_n, clientId, expected) => {
+      authMock.mockResolvedValue(ADMIN);
+      const { GET } = await load({ AUTH_MICROSOFT_ENTRA_ID_ID: clientId });
+      const data = (await (await GET(get(), ctx)).json()).data;
+      expect(data.ssoEnabled).toBe(expected);
+      expect(data.operations.createUser).toMatchObject({
+        enabled: true,
+        source: "spec",
+      });
+    },
+  );
+
+  // Source: LiteLLM spec - the LW1 paragraph after `createUser` (lines ~276-
+  // 298: "Coordinator ruling, 2026-11-24: one predicate (`operationUnavailable`
+  // ...) is used by `gate()`, `enabledOperations()` and the toggles view") and
+  // "Settings -> LiteLLM shows 'Not available with SSO' with the switch
+  // disabled"; Design System ~633 (Create and link follows the gate). Agent
+  // contract: each `operations[name]` carries `unavailable?: string`, absent
+  // when available, else a label; the panel renders it and holds no rule of
+  // its own. Labels assumed: SSO -> "Not available with SSO"; Enterprise-only
+  // on OSS -> "Needs LiteLLM Enterprise" (D-LF2 wording, spec ~512); ossOnly on
+  // Enterprise -> any non-empty label (the spec fixes none).
+  describe("per-operation availability (LW1 ruling, T-LW4)", () => {
+    const SSO_ON = "00000000-0000-4000-8000-000000000001";
+    const cells = [
+      { edition: "oss", appEnv: "dev", sso: false },
+      { edition: "oss", appEnv: "dev", sso: true },
+      { edition: "enterprise", appEnv: "prod", sso: false },
+      { edition: "enterprise", appEnv: "prod", sso: true },
+    ] as const;
+
+    it.each(cells)(
+      "$edition, SSO $sso: `unavailable` is present on an operation iff operationUnavailable(name, edition)",
+      async ({ edition, appEnv, sso }) => {
+        const { GET } = await load({
+          APP_ENV: appEnv,
+          AUTH_MICROSOFT_ENTRA_ID_ID: sso ? SSO_ON : "",
+        });
+        const { operationUnavailable } =
+          await import("@/lib/litellm/operations");
+        const data = (await (await GET(get(), ctx)).json()).data;
+        const names = Object.keys(data.operations);
+        expect(names.slice().sort()).toEqual(
+          [...LITELLM_OPERATION_NAMES].sort(),
+        );
+        for (const name of LITELLM_OPERATION_NAMES) {
+          const label = data.operations[name].unavailable;
+          if (operationUnavailable(name, edition)) {
+            expect(label, `${name} must carry a label`).toEqual(
+              expect.any(String),
+            );
+            expect(label.length).toBeGreaterThan(0);
+          } else {
+            expect(
+              "unavailable" in data.operations[name],
+              `${name} must have no unavailable field`,
+            ).toBe(false);
+          }
+        }
+      },
+    );
+
+    it("labels: SSO on OSS -> createUser 'Not available with SSO'; Enterprise-only on OSS -> 'Needs LiteLLM Enterprise'; neither leaks onto an available operation", async () => {
+      const { GET } = await load({
+        APP_ENV: "dev",
+        AUTH_MICROSOFT_ENTRA_ID_ID: SSO_ON,
+      });
+      const ops = (await (await GET(get(), ctx)).json()).data.operations;
+      expect(ops.createUser.unavailable).toBe("Not available with SSO");
+      expect(ops.listProxyAuditLog.unavailable).toBe(
+        "Needs LiteLLM Enterprise",
+      );
+      expect(ops.getGlobalSpendReport.unavailable).toBe(
+        "Needs LiteLLM Enterprise",
+      );
+      expect("unavailable" in ops.addTeamMember).toBe(false);
+      expect("unavailable" in ops.removeTeamMember).toBe(false);
+    });
+
+    it("availability is independent of the stored toggle (a saved off createUser with SSO on still reports the state; enabled stays as saved)", async () => {
+      await testDoc().send(
+        new PutCommand({
+          TableName: TEST_TABLE_NAME,
+          Item: {
+            PK: "LITELLM#CONFIG",
+            SK: "TOGGLES",
+            version: 1,
+            toggles: { createUser: false, addTeamMember: false },
+            updatedAt: "2026-11-14T09:00:00.000Z",
+          },
+        }),
+      );
+      const { GET } = await load({
+        APP_ENV: "dev",
+        AUTH_MICROSOFT_ENTRA_ID_ID: SSO_ON,
+      });
+      const ops = (await (await GET(get(), ctx)).json()).data.operations;
+      expect(ops.createUser).toMatchObject({
+        enabled: false,
+        source: "ui",
+        unavailable: "Not available with SSO",
+      });
+      expect(ops.addTeamMember).toEqual({ enabled: false, source: "ui" });
+    });
+  });
+
   it("shows source 'ui' only for operations that have a saved value", async () => {
     await testDoc().send(
       new PutCommand({

@@ -401,3 +401,91 @@ describe("createUser is pinned to its spec row (LT-MI1, M3 Verify)", () => {
     expect(callers).toEqual(["apps/dashboard/app/api/litellm/users/route.ts"]);
   });
 });
+
+// Source: docs/specs/2026-11-10-litellm.md - the LW1 paragraph after
+// `createUser` ("SSO enabled" is answered by one function in `lib/auth/`; the
+// operation gate refuses `createUser` through `ssoOffOnly`, next to
+// `ossOnly`) and tests T-LW4 / T-LW1; Access Control - "Create and link only
+// without SSO"; Rules 10.3, 50.3 (no provider detail in routes or components).
+// Scope: `app/**` (routes and pages) and `components/**` never read the
+// variable. `lib/api/access-route.ts` (`entraConfigured`, Password users D24:
+// all three Entra variables) and `auth.ts` are neither a route nor a
+// component and answer a different question, so they are out of scope.
+describe("one lib/auth function answers 'SSO enabled' (T-LW4, LW1)", () => {
+  const SSO_FN = "apps/dashboard/lib/auth/sso-mode.ts";
+  const VAR = "AUTH_MICROSOFT_ENTRA_ID_ID";
+  const codeUnder = (dir: string) =>
+    walk(join(ROOT, dir)).filter((f) => isCode(f) && !isTest(rel(f)));
+
+  it("the function is exported from lib/auth/sso-mode.ts and reads the variable through env", () => {
+    const src = read(join(ROOT, SSO_FN));
+    expect(src).toMatch(/export\s+(async\s+)?function\s+isSsoEnabled\b/);
+    expect(src).toContain(`env.${VAR}`);
+  });
+
+  it("no file under app/** or components/** mentions the variable", () => {
+    const offenders = [
+      ...codeUnder("apps/dashboard/app"),
+      ...codeUnder("apps/dashboard/components"),
+    ].filter((f) => read(f).includes(VAR));
+    expect(offenders.map(rel)).toEqual([]);
+  });
+
+  it("no lib/litellm module reads the variable; the gate calls the one function", () => {
+    expect(litellmFiles.filter((f) => read(f).includes(VAR)).map(rel)).toEqual(
+      [],
+    );
+    const src = read(join(litellmDir, "operations.ts"));
+    expect(src).toMatch(
+      /import\s*\{[^}]*\bisSsoEnabled\b[^}]*\}\s*from\s*["']@\/lib\/auth\/sso-mode["']/,
+    );
+    expect(src).toMatch(/\bisSsoEnabled\(\)/);
+  });
+
+  // LW1 coordinator ruling (2026-11-24): the server gate is the enforcement;
+  // enabledOperations() and the toggles view use the same predicate, never a
+  // second hand-written copy of the edition / ossOnly / ssoOffOnly clauses.
+  it("enabledOperations uses operationUnavailable from operations and holds no clause of its own", () => {
+    const src = read(join(litellmDir, "read-views.ts"));
+    expect(src).toMatch(
+      /import\s*\{[^}]*\boperationUnavailable\b[^}]*\}\s*from\s*["']\.\/operations["']/,
+    );
+    const body = src.slice(
+      src.indexOf("export async function enabledOperations"),
+    );
+    expect(body).toMatch(/\boperationUnavailable\(/);
+    expect(src).not.toMatch(/\.ossOnly\b/);
+    expect(src).not.toMatch(/\.ssoOffOnly\b/);
+    expect(src).not.toMatch(/enterpriseOnly/);
+  });
+
+  it("the toggles view computes ssoEnabled by calling isSsoEnabled(), with no env read", () => {
+    const src = read(
+      join(ROOT, "apps/dashboard/app/api/litellm/toggles/route.ts"),
+    );
+    expect(src).toMatch(
+      /import\s*\{[^}]*\bisSsoEnabled\b[^}]*\}\s*from\s*["']@\/lib\/auth\/sso-mode["']/,
+    );
+    expect(src).toMatch(/ssoEnabled\s*:\s*isSsoEnabled\(\)/);
+    expect(src).not.toContain(VAR);
+  });
+
+  it("isSsoEnabled derives only from the validated env: no request, store or toggle import", () => {
+    const src = read(join(ROOT, SSO_FN));
+    expect(src).toContain(`env.${VAR}`);
+    expect(src.match(/\benv\.[A-Z_0-9]+/g)).toEqual([`env.${VAR}`]);
+    const imports = [...src.matchAll(/from\s*["']([^"']+)["']/g)].map(
+      (m) => m[1],
+    );
+    expect(imports).toEqual(["@/env"]);
+    expect(src).not.toMatch(/\b(request|headers|cookies|process\.env)\b/);
+  });
+
+  it("createUser is the only operation marked ssoOffOnly (next to its ossOnly)", () => {
+    const marked = Object.entries(LITELLM_OPERATIONS)
+      .filter(([, op]) => "ssoOffOnly" in op && op.ssoOffOnly === true)
+      .map(([name]) => name);
+    expect(marked).toEqual(["createUser"]);
+    expect(LITELLM_OPERATIONS.createUser.ossOnly).toBe(true);
+  });
+});

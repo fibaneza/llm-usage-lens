@@ -5,6 +5,7 @@ import type { LiteLLMOperationName } from "@llm-usage-lens/shared";
 import { z } from "zod";
 
 import { env } from "@/env";
+import { isSsoEnabled } from "@/lib/auth/sso-mode";
 import { getOperationToggles } from "@/lib/data/litellm/toggles";
 
 import {
@@ -12,6 +13,7 @@ import {
   TOKEN_HASH_RE,
   isValidLiteLLMId,
 } from "./allowlist";
+import type { OperationDefinition } from "./allowlist";
 import { LiteLLMError } from "./client";
 import { callAllowlisted } from "./gateway";
 import type { LiteLLMActor } from "./gateway";
@@ -99,6 +101,37 @@ export type OperationContext = { actor: LiteLLMActor };
 
 // ---- gate and parsing -----------------------------------------------------
 
+// Edition and SSO availability of one operation (LT15, LW1): the one rule. The
+// gate, the toggles view and its labels all come from here (agent decision,
+// 2026-11-24, LW1: the labels sit next to the predicate).
+export function unavailableReason(
+  name: LiteLLMOperationName,
+  edition: ReturnType<typeof liteLLMEdition>,
+): string | undefined {
+  const op: OperationDefinition = LITELLM_OPERATIONS[name];
+  if (
+    op.routes.length > 0 &&
+    op.routes.every((r) => r.enterpriseOnly) &&
+    edition === "oss"
+  ) {
+    return "Needs LiteLLM Enterprise";
+  }
+  if (op.ossOnly === true && edition !== "oss") {
+    return "Not available on LiteLLM Enterprise";
+  }
+  if (op.ssoOffOnly === true && isSsoEnabled()) {
+    return "Not available with SSO";
+  }
+  return undefined;
+}
+
+export function operationUnavailable(
+  name: LiteLLMOperationName,
+  edition: ReturnType<typeof liteLLMEdition>,
+): boolean {
+  return unavailableReason(name, edition) !== undefined;
+}
+
 // Gate order is toggle, then edition, then input validation (Security
 // architecture item 2), so every operation calls this before parsing input.
 async function gate(name: LiteLLMOperationName): Promise<void> {
@@ -110,12 +143,7 @@ async function gate(name: LiteLLMOperationName): Promise<void> {
   if (!settings[name].enabled) {
     throw new LiteLLMOperationRefused("OPERATION_DISABLED");
   }
-  const op = LITELLM_OPERATIONS[name];
-  const edition = liteLLMEdition(env.APP_ENV);
-  if (
-    (op.routes.every((r) => r.enterpriseOnly) && edition === "oss") ||
-    (op.ossOnly === true && edition !== "oss")
-  ) {
+  if (operationUnavailable(name, liteLLMEdition(env.APP_ENV))) {
     throw new LiteLLMOperationRefused("OPERATION_UNAVAILABLE");
   }
 }

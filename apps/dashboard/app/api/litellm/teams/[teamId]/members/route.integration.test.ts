@@ -541,6 +541,26 @@ describe("POST /api/litellm/teams/[teamId]/members", () => {
     expect(JSON.stringify(record)).not.toContain("sk-AUTOCREATED-TRAP");
   });
 
+  // Source: LiteLLM spec - the LW1 paragraph after `createUser`
+  // (`addTeamMember` is unchanged; "Add member still creates a missing
+  // LiteLLM user"), test T-LW3.
+  it("SSO enabled: a missing LiteLLM user is still created, then added, exactly as without SSO (T-LW3)", async () => {
+    useEnv({
+      AUTH_MICROSOFT_ENTRA_ID_ID: "00000000-0000-4000-8000-000000000001",
+    });
+    signInAs("teamAdminA");
+    const { res, body } = await add({ oid: PEOPLE.alice.oid });
+    expect(res.status).toBe(201);
+    expect(body.data).toEqual({
+      oid: PEOPLE.alice.oid,
+      litellmUserId: PEOPLE.alice.email,
+    });
+    expect(writeCalls(state).map((c) => `${c.method} ${c.path}`)).toEqual([
+      "POST /user/new",
+      "POST /team/member_add",
+    ]);
+  });
+
   it("an existing LiteLLM user is added without /user/new, using the id LiteLLM returned (Identity mapping)", async () => {
     signInAs("admin");
     const { res, body } = await add({ oid: PEOPLE.bob.oid });

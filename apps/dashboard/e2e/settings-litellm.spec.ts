@@ -273,6 +273,7 @@ test.describe("settings LiteLLM by role (LD24)", () => {
           data: {
             version: 2,
             edition: "oss",
+            ssoEnabled: false,
             operations: {
               createTeam: { enabled: true, source: "file" },
               getTeam: { enabled: true, source: "file" },
@@ -364,7 +365,14 @@ test.describe("settings LiteLLM route sub-tabs (unit A2)", () => {
     );
     await page.route(/\/api\/litellm\/toggles$/, (route) =>
       route.fulfill({
-        json: { data: { version: 0, edition: "oss", operations: {} } },
+        json: {
+          data: {
+            version: 0,
+            edition: "oss",
+            ssoEnabled: false,
+            operations: {},
+          },
+        },
       }),
     );
   }

@@ -326,7 +326,8 @@ identity):
   automatically.
 - **No LiteLLM user with that email:** link to an existing LiteLLM user
   found by search, with a written reason (the emails differ), or, on OSS
-  only, *Create and link* (`createUser`, `POST /user/new` with
+  only, and only when SSO is not enabled (user, 2026-11-18: "only when SSO is not
+  enable"), *Create and link* (`createUser`, `POST /user/new` with
   `auto_create_key:false`; toggle `createUser`, default on). On Enterprise
   the person signs in to LiteLLM once, then the admin retries the match.
 - A LiteLLM user already linked to someone else, or holding a proxy role

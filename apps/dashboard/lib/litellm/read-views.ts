@@ -23,11 +23,12 @@ import { listAppTeams } from "@/lib/data/access/app-teams";
 import { getOperationToggles } from "@/lib/data/litellm/toggles";
 import { getTeamLink, listTeamLinks } from "@/lib/data/litellm/team-links";
 
-import { LITELLM_OPERATIONS, isValidLiteLLMId } from "./allowlist";
+import { isValidLiteLLMId } from "./allowlist";
 import { LiteLLMError } from "./client";
 import { LiteLLMOperationRefused } from "./gateway";
 import { loadGatewayConfig } from "./gateway-config";
 import { resolveOperationSettings } from "./operation-settings";
+import { operationUnavailable } from "./operations";
 import { globalRolesFor, liteLLMErrorResponse } from "./route-guard";
 
 // Source: docs/specs/2026-11-10-litellm.md — "Allowlist -> Reads" (who may
@@ -60,16 +61,9 @@ export async function enabledOperations(): Promise<LiteLLMOperationName[]> {
     file: loadGatewayConfig(),
     saved: saved?.toggles ?? null,
   });
-  const oss = liteLLMEdition(env.APP_ENV) === "oss";
+  const edition = liteLLMEdition(env.APP_ENV);
   return LITELLM_OPERATION_NAMES.filter(
-    (name) =>
-      settings[name].enabled &&
-      !(LITELLM_OPERATIONS[name].ossOnly === true && !oss) &&
-      !(
-        oss &&
-        LITELLM_OPERATIONS[name].routes.length > 0 &&
-        LITELLM_OPERATIONS[name].routes.every((r) => r.enterpriseOnly)
-      ),
+    (name) => settings[name].enabled && !operationUnavailable(name, edition),
   );
 }
 

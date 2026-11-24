@@ -50,7 +50,8 @@ credentials must never reach the browser.
      team creation stay `internal-admin` only. App team creation
      (`POST /api/teams`) and the LiteLLM user link writes
      (`PUT`/`DELETE /api/identities/[oid]/litellm-link`, and
-     `POST /api/litellm/users`, create and link on OSS) accept
+     `POST /api/litellm/users`, create and link on OSS and only when SSO is not
+     enabled (user, 2026-11-18)) accept
      `internal-admin` or `internal-org-admin`; a link write on the caller's
      own identity is `403`; the usage-identity and alias writes
      (`PUT /api/identities/[oid]/links`) stay `internal-admin` only (user,

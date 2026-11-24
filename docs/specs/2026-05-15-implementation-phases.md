@@ -921,7 +921,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [x] Dev sign-in **Team lead** option through the stored-identity path; the seed stores `local:team-lead@localhost` with a team scope
 - [x] Management → Users: the people list (`GET /api/identities/directory`) and **Add user** composing the existing password-user, member and link writes, each step shown only to a caller who may do it *(built 2026-11-18: steps 1–2 in the dialog; the link step is the row's link action once the person exists — Design System D15 note)*
 - [x] `PUT`/`DELETE /api/identities/[oid]/litellm-link` (admin, org-admin; never own `oid`; match, manual with a reason; `LiteLLMUserClaim`; privileged targets refused; audited); `PUT /api/identities/[oid]/links` writes `litellmUserId` through the same domain function
-- [x] `createUser` allowlist row, toggle (default on), builder and structural test entry; `POST /api/litellm/users` (create and link, OSS only); `/user/new` confirmed in `allowed_routes`
+- [x] `createUser` allowlist row, toggle (default on), builder and structural test entry; `POST /api/litellm/users` (create and link, OSS only (LW1 amends));  `/user/new` confirmed in `allowed_routes`
 - [x] `searchUsers` with optional search text; `GET /api/litellm/users` without `q` and with `team=`; the *LiteLLM users* tab list (All users / Members of one team) with link states
 - [ ] Verify (one test pass at the end; Access Control — *Dev login*, *LiteLLM user links*, *API routes*, T-MI1, T-MI2; LiteLLM spec — `createUser`, *Views as Management routes*, LT-MI1, LT-MI2; Design System — *Management improvements*): team lead sign-in gets a real scope from the store and none from typed text; off in production and with Entra configured (T-MI2); Add user shows only the steps the caller may do; link: admin and org-admin may link, auditor and lead `403`, nobody links their own identity (on `POST /api/litellm/users` the own-`oid` `403` comes after parsing and is tested by the route's own file), usage aliases stay admin-only, no automatic link, approval needed, manual link needs a reason, duplicate `409`, a privileged target (`proxy_admin`, `proxy_admin_viewer`, the service user) `409 PRIVILEGED_TARGET` with no link written, the audit record of a set and a remove carries the mode, both ids and the reason, no user creation on Enterprise, body has `auto_create_key: false` (T-MI1, LT-MI1); the LiteLLM users list: all users pages on the server (25 a page) with no search text, the team filter shows exactly that team's members, "not in LiteLLM" is never `$0`, per-user cost is hidden under the cap, and a lead or a user gets `404` (LT-MI2); full e2e once at the green gate (shared files); branch gate green with `main` merged in
 
@@ -1034,6 +1034,16 @@ Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
 - [x] Routes: `POST /api/litellm/users/[litellmUserId]/reset-spend`, `POST /api/litellm/proxy-teams/[litellmTeamId]/members/[litellmUserId]/reset-spend` and `/reset-budget`, `GET /api/litellm/proxy-teams/[litellmTeamId]/members`; registered in `test/route-registry.ts`
 - [x] UI: Reset spend on every *LiteLLM users* row; the LiteLLM teams table opens a members panel with the two resets; the Team page's unlinked member row gains them; every reset dialog offers "User spend (all of LiteLLM)"
 - [ ] Verify: T-RS1 to T-RS8 each with a test (Access Control — *Reset by LiteLLM ids*, *Tests (T-RS1–T-RS8)*), including the lead's Team-page reset, both scopes; e2e `reset-spend-users` (unlinked users row; a LiteLLM team's members); branch gate green with `main` merged in (Rule 70.12); security review at the merge
+
+### LW1 — Create and link only when SSO is not enabled (`feature/litellm-create-user-sso-gate`)
+
+*User, 2026-11-18: create and link "only when SSO is not enable"; Add member and remove member stay. LiteLLM spec — `createUser` (the SSO paragraph), *Tests (T-LW1–T-LW4)*; Access Control — D16 and threat row T-LW1.*
+
+- [x] Gate: `ssoOffOnly` flag on `createUser`; the gate refuses it with `OPERATION_UNAVAILABLE` before any request when SSO is enabled; `POST /api/litellm/users` answers `403 OPERATION_UNAVAILABLE` (the permission check first)
+- [x] One function in `lib/auth/` answers "SSO enabled" (`AUTH_MICROSOFT_ENTRA_ID_ID` set); no route or component reads the variable
+- [x] UI: the "Create and link" button is absent when the operation is unavailable (LiteLLM users tab, Management → Users people rows); Settings → LiteLLM shows "Not available with SSO" with the switch disabled
+- [x] Spec rows: LiteLLM spec, Access Control D16 and matrix, threat row T-LW1, Rule 10.3, Rule 50.4, Design System
+- [ ] Verify: T-LW1 to T-LW4 each with a test (LiteLLM spec — *Tests (T-LW1–T-LW4)*)
 
 ---
 

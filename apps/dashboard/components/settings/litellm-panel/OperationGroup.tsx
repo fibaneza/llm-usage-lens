@@ -1,6 +1,11 @@
 import { OPERATION_INFO } from "./operation-families";
 
-type Op = { name: string; enabled: boolean; source: string };
+type Op = {
+  name: string;
+  enabled: boolean;
+  source: string;
+  unavailable?: string;
+};
 
 function OperationRow({
   op,
@@ -16,7 +21,7 @@ function OperationRow({
   // Source `file` means config.yaml sets the operation: shown, never edited
   // here (System Architecture — Configuration file, A6; the server refuses a
   // write regardless, T39).
-  const locked = op.source === "file";
+  const locked = op.source === "file" || op.unavailable !== undefined;
   const description =
     OPERATION_INFO[op.name]?.description ?? "Unknown operation";
   return (
@@ -39,7 +44,7 @@ function OperationRow({
           data-testid={`litellm-op-source-${op.name}`}
           className="bg-secondary text-secondary-foreground rounded-full px-2 py-0.5 text-xs"
         >
-          {locked ? "Set in config.yaml" : op.source}
+          {op.unavailable ?? (locked ? "Set in config.yaml" : op.source)}
         </span>
         {canEdit ? (
           <button

@@ -399,3 +399,190 @@ describe("enabledOperations and createUser (LT-MI1)", () => {
     expect(await enabled("dev")).not.toContain("createUser");
   });
 });
+
+// Source: docs/specs/2026-11-10-litellm.md - the LW1 paragraph after
+// `createUser` (`ssoOffOnly`, next to `ossOnly`: with SSO enabled the gate
+// refuses createUser with OPERATION_UNAVAILABLE before any LiteLLM call, and
+// "enabledOperations" no longer lists it; addTeamMember and removeTeamMember
+// are unchanged), Access Control - "Create and link only without SSO"; threat
+// T-LW1 (Access Control); Security architecture item 2 (toggle -> edition ->
+// validation).
+describe("createUser with SSO enabled (LW1, T-LW1)", () => {
+  const SSO = {
+    AUTH_MICROSOFT_ENTRA_ID_ID: "00000000-0000-4000-8000-000000000001",
+  };
+  const input = { email: "jane@company.com" };
+
+  it("is 403 OPERATION_UNAVAILABLE on OSS with no LiteLLM call at all, not even the lookup", async () => {
+    const ops = await load(SSO);
+    await expect(ops.createUser!(input, CTX)).rejects.toMatchObject(
+      UNAVAILABLE,
+    );
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("the SSO refusal comes before input validation, as the edition refusal does", async () => {
+    const ops = await load(SSO);
+    await expect(ops.createUser!({}, CTX)).rejects.toMatchObject(UNAVAILABLE);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("a saved off toggle is still reported first: OPERATION_DISABLED (toggle, then the availability gates)", async () => {
+    await storeToggles({ createUser: false });
+    const ops = await load(SSO);
+    await expect(ops.createUser!(input, CTX)).rejects.toMatchObject(DISABLED);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("SSO off (the variable empty) still creates the user on OSS (T-LW2: works as today)", async () => {
+    install({ userExists: false });
+    const ops = await load({ AUTH_MICROSOFT_ENTRA_ID_ID: "" });
+    await ops.createUser!(input, CTX);
+    expect(fake.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "GET /user/list",
+      "POST /user/new",
+    ]);
+  });
+
+  it("enabledOperations omits createUser with SSO on and keeps addTeamMember and removeTeamMember (T-LW1 button absent; T-LW3)", async () => {
+    await load({ APP_ENV: "dev", ...SSO });
+    const { enabledOperations } = await import("./read-views");
+    const enabled = await enabledOperations();
+    expect(enabled).not.toContain("createUser");
+    expect(enabled).toContain("addTeamMember");
+    expect(enabled).toContain("removeTeamMember");
+  });
+
+  it("enabledOperations lists createUser with SSO off on OSS (T-LW2: the button is offered)", async () => {
+    await load({ APP_ENV: "dev", AUTH_MICROSOFT_ENTRA_ID_ID: "" });
+    const { enabledOperations } = await import("./read-views");
+    expect(await enabledOperations()).toContain("createUser");
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - the LW1 paragraph after
+// `createUser`, tests T-LW1 / T-LW4; LW1 coordinator ruling (2026-11-24): the
+// gate is the enforcement and enabledOperations() answers from the same
+// predicate (`operationUnavailable`), so the view can never disagree with it.
+describe("enabledOperations is pinned to the gate (LW1 ruling, T-LW4)", () => {
+  const SSO_ON = "00000000-0000-4000-8000-000000000001";
+  const cases = [
+    { edition: "oss", appEnv: "dev", sso: false },
+    { edition: "oss", appEnv: "dev", sso: true },
+    { edition: "enterprise", appEnv: "prod", sso: false },
+    { edition: "enterprise", appEnv: "prod", sso: true },
+  ] as const;
+
+  it.each(cases)(
+    "$edition, SSO $sso: lists an operation iff its toggle is on and operationUnavailable is false",
+    async ({ appEnv, sso }) => {
+      const { LITELLM_OPERATION_NAMES } =
+        await import("@llm-usage-lens/shared");
+      // Alternate on and off so both toggle states are crossed with the gate.
+      const toggles = Object.fromEntries(
+        LITELLM_OPERATION_NAMES.map((name, i) => [name, i % 2 === 0]),
+      );
+      await storeToggles(toggles);
+      const ops = (await load(
+        {
+          APP_ENV: appEnv,
+          AUTH_MICROSOFT_ENTRA_ID_ID: sso ? SSO_ON : "",
+        },
+        {},
+      )) as unknown as {
+        operationUnavailable: (n: string, e: string) => boolean;
+      };
+      const { enabledOperations } = await import("./read-views");
+      const enabled = await enabledOperations();
+      const edition = appEnv === "prod" ? "enterprise" : "oss";
+      const expected = LITELLM_OPERATION_NAMES.filter(
+        (name) =>
+          toggles[name] === true && !ops.operationUnavailable(name, edition),
+      );
+      expect(enabled.slice().sort()).toEqual(expected.slice().sort());
+    },
+  );
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - MG-D11a (`requestBudgetReset` is a
+// route-less dashboard operation, default on; `enabledOperations()` must not
+// treat an operation with no routes as Enterprise-only on OSS, because
+// `[].every(...)` is true) and the LW1 coordinator ruling (one predicate, so
+// the view never disagrees with the gate).
+describe("route-less requestBudgetReset stays available (MG-D11a, LW1 ruling)", () => {
+  const SSO_ON = "00000000-0000-4000-8000-000000000001";
+  const cells = [
+    { edition: "oss", appEnv: "dev", sso: false },
+    { edition: "oss", appEnv: "dev", sso: true },
+    { edition: "enterprise", appEnv: "prod", sso: false },
+    { edition: "enterprise", appEnv: "prod", sso: true },
+  ] as const;
+
+  it.each(cells)(
+    "$edition, SSO $sso: enabledOperations() lists requestBudgetReset with its default-on toggle",
+    async ({ appEnv, sso }) => {
+      await load({
+        APP_ENV: appEnv,
+        AUTH_MICROSOFT_ENTRA_ID_ID: sso ? SSO_ON : "",
+      });
+      const { enabledOperations } = await import("./read-views");
+      expect(await enabledOperations()).toContain("requestBudgetReset");
+    },
+  );
+
+  it("a saved off toggle removes it (toggles narrow only)", async () => {
+    await storeToggles({ requestBudgetReset: false });
+    await load({ APP_ENV: "dev" });
+    const { enabledOperations } = await import("./read-views");
+    expect(await enabledOperations()).not.toContain("requestBudgetReset");
+  });
+
+  it.each(["oss", "enterprise"] as const)(
+    "operationUnavailable(requestBudgetReset, %s) is false, with and without SSO",
+    async (edition) => {
+      for (const sso of ["", SSO_ON]) {
+        const ops = (await load({
+          APP_ENV: edition === "oss" ? "dev" : "prod",
+          AUTH_MICROSOFT_ENTRA_ID_ID: sso,
+        })) as unknown as {
+          operationUnavailable: (n: string, e: string) => boolean;
+        };
+        expect(ops.operationUnavailable("requestBudgetReset", edition)).toBe(
+          false,
+        );
+      }
+    },
+  );
+
+  // Independent of operationUnavailable: a hand-listed set per cell, so the
+  // pinned table above cannot pass by comparing the predicate with itself.
+  // Allowlist facts: listProxyAuditLog and getGlobalSpendReport have only
+  // Enterprise routes; createUser is ossOnly + ssoOffOnly; rotateKey has an
+  // OSS route, so it is available on OSS.
+  const ENTERPRISE_ONLY = ["getGlobalSpendReport", "listProxyAuditLog"];
+  it.each(cells)(
+    "$edition, SSO $sso: with every toggle on, enabledOperations() equals the hand-listed set",
+    async ({ edition, appEnv, sso }) => {
+      const { LITELLM_OPERATION_NAMES } =
+        await import("@llm-usage-lens/shared");
+      await storeToggles(
+        Object.fromEntries(LITELLM_OPERATION_NAMES.map((n) => [n, true])),
+      );
+      await load(
+        {
+          APP_ENV: appEnv,
+          AUTH_MICROSOFT_ENTRA_ID_ID: sso ? SSO_ON : "",
+        },
+        {},
+      );
+      const { enabledOperations } = await import("./read-views");
+      const missing = new Set<string>();
+      if (edition === "oss") ENTERPRISE_ONLY.forEach((n) => missing.add(n));
+      if (edition === "enterprise" || sso) missing.add("createUser");
+      const expected = LITELLM_OPERATION_NAMES.filter((n) => !missing.has(n));
+      expect((await enabledOperations()).slice().sort()).toEqual(
+        expected.slice().sort(),
+      );
+    },
+  );
+});

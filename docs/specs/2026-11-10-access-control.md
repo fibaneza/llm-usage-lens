@@ -77,6 +77,11 @@ the **LiteLLM user link** (`litellmUserId`) is also writable by
 `internal-admin` only (agent decision: the user's answer was about the
 LiteLLM link of item 13). App team creation is not configuration: it is a
 team write for `internal-admin` and `internal-org-admin` (D6, user).
+*Amended 2026-11-18 (user, unit LW1):* create-and-link of a LiteLLM user
+(`createUser`, D16) is available only on OSS and only when SSO is not
+enabled ("only when SSO is not enable"); with SSO enabled
+`POST /api/litellm/users` answers `403 OPERATION_UNAVAILABLE` (LiteLLM
+spec — *`createUser`*).
 
 - **Union.** Effective permission = global role grants ∪ admin-scope grants,
   then narrowed by inheritance.
@@ -727,6 +732,7 @@ the user 2026-11-15; Design System — *Settings Page*).
 | Read one person's global roles and usage identities on the user page (`GET /api/identities/[oid]`; unit US2, D-US11 — **the user's decision, 2026-11-23**; read only: the writes stay in the `internal-admin` rows; `internal-auditor` reads too) | ✓ | ✓ read only | ✗ | ✗ | ✗ (auditor ✓ read) |
 | Create an app team (`POST /api/teams`; management improvements D6, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Create, approve or remove a person's LiteLLM user link (`litellmUserId`; never on their own identity; D16, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Create a LiteLLM user and link it (`POST /api/litellm/users`; D16; OSS only, and only when SSO is not enabled — user, 2026-11-18, unit LW1; with SSO enabled `403 OPERATION_UNAVAILABLE` after the permission check) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Configuration (everything else in *Configuration* above) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Request a budget reset for **one's own** member budget (unit M4; MG-D11; user, 2026-11-17) | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | ✓ own, as a member of a linked team | member of a linked team: ✓ own; `internal-auditor` ✗; no member team ✗ |
 | Approve or deny a budget reset request (unit M4; MG-D12) — never one's own request | ✓ | ✓ any team | ✓ teams in scope | ✓ teams in scope | ✗ |
@@ -810,6 +816,15 @@ person-kind alias, the own email included; non-person keys are accepted
 (agent decision, 2026-11-16: a stored unowned email would show its
 holder that person's usage once they sign in, T16; confirmed D27). Links show a
 person their own usage and **never grant access**.
+
+**Create and link only without SSO (D16, user, 2026-11-18, unit LW1).**
+Create-and-link (`createUser`) is offered only when SSO is not enabled
+(the user: "only when SSO is not enable"; "enabled" means Entra ID sign-in
+is configured, `AUTH_MICROSOFT_ENTRA_ID_ID` set, read by one function in
+`lib/auth/`; agent decision, 2026-11-18). The gate refuses it with
+`OPERATION_UNAVAILABLE` before any LiteLLM call; the permission check
+runs first. Link, Unlink, `addTeamMember` and `removeTeamMember` are
+unchanged.
 
 **LiteLLM user links (management improvements D16, 2026-11-17; unit M3).**
 *Amends "per `oid`, `internal-admin` only" for `litellmUserId`.* The
@@ -1354,8 +1369,9 @@ identities read-only; scoped admins still never read `/api/identities`.
 15 minutes; *Recent authentication*), `BAD_REQUEST` (400), `NOT_FOUND` (404), `CONFLICT`,
 `MANAGED_BY_SSO`, `ALREADY_AFFILIATED`, `SSO_BOUND` (409, the password user is bound to Entra; amended 2026-11-14), `WEAK_PASSWORD` (400), `INTERNAL` (500), and from the
 [LiteLLM spec](2026-11-10-litellm.md): `OPERATION_DISABLED` (403, operation
-toggle off), `OPERATION_UNAVAILABLE` (403, Enterprise-only on OSS, or any
-LiteLLM route in `open` mode), `LITELLM_UNAVAILABLE` (503, not configured,
+toggle off), `OPERATION_UNAVAILABLE` (403, Enterprise-only on OSS, an OSS-only
+operation on Enterprise, or an SSO-off-only operation with SSO enabled (LW1),
+or any LiteLLM route in `open` mode), `LITELLM_UNAVAILABLE` (503, not configured,
 unreachable or rejected upstream), `PRIVILEGED_TARGET` (409, target LiteLLM
 user holds a proxy role), `TOO_MANY_MEMBERS` (422, an app team above 200 members
 on the member-sum view; LiteLLM spec, L4b, LD34), and from the [System Architecture spec](2026-05-15-system-architecture.md) — *Configuration file*: `CONFIG_FILE_LOCKED` (409, the setting is set in `config.yaml`; added 2026-11-17, unit CFG). A new code is added here first. A bad or foreign list cursor returns `400` `BAD_REQUEST`; `BAD_CURSOR` is internal to `lib/data/access` and never reaches a response (decided 2026-11-14).
@@ -1493,6 +1509,7 @@ test in the M4 Verify list (implementation-phases — *M4*).
 | T-INV4 | Tampering: a stale or replayed accept binds twice | conditional delete on the pending `version`; affiliation written only if none | INV1: a second accept `409 CONFLICT`; two concurrent accepts bind once, the other `409`; one affiliation, one audit |
 | T-INV5 | Disclosure / elevation: a lead accepts for a team outside its scope, or probes keys | the matrix row; out-of-scope team or unknown key the same `404` | INV1: a lead of another team `404`, same body as a missing key |
 | T-INV6 | Tampering: accept overrides SSO-managed membership | `409 MANAGED_BY_SSO`; `409 ALREADY_AFFILIATED` | INV1: both, no write |
+| T-LW1 | Tampering: with SSO, the dashboard creates LiteLLM users that sign-in would create, or duplicates them (unit LW1, 2026-11-18) | The gate refuses `createUser` when SSO is enabled, before any LiteLLM call | Gate and route tests; zero LiteLLM calls |
 | BR10 | Disclosure: reset counts and amounts reveal another person's or another team's usage | One scoped read, filtered after the read; per-member figures only with the per-user approval in `prod`; visibility rules apply | M4 slice B leak tests (a user never sees another person's, a Lead never another team's; only team totals before the approval) |
 
 ## Residual risks

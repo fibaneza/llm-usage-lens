@@ -85,7 +85,9 @@ export const OperationTogglesViewSchema = z.object({
     z.object({
       enabled: z.boolean(),
       source: z.enum(["ui", "file", "spec"]),
+      unavailable: z.string().optional(),
     }),
   ),
+  ssoEnabled: z.boolean(),
 });
 export type OperationTogglesView = z.infer<typeof OperationTogglesViewSchema>;

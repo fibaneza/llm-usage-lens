@@ -78,7 +78,12 @@ function TogglesSection({ canEdit }: { canEdit: boolean }) {
       .filter(
         ([op]) => (OPERATION_INFO[op]?.family ?? OTHER_FAMILY.id) === family.id,
       )
-      .map(([name, v]) => ({ name, enabled: v.enabled, source: v.source })),
+      .map(([name, v]) => ({
+        name,
+        enabled: v.enabled,
+        source: v.source,
+        unavailable: v.unavailable,
+      })),
   }));
   return (
     <div className="flex max-w-[72ch] flex-col gap-4">

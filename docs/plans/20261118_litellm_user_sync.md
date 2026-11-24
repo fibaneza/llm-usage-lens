@@ -246,6 +246,8 @@ One session, in order; each unit starts when the one before it is on
 | SYNC1 | `feature/litellm-user-sync` | `.claude/worktrees/sync1` | RS1 and INV1 are on `main` | **yes** (changes T-MI1's mitigation) |
 | SYNC2 | `feature/litellm-user-sync-schedule` | `.claude/worktrees/sync2` | SYNC1 is on `main` | **yes** (IAM) |
 
+**LW1 owns** (no Owns row existed here; *Ownership change, coordinator 2026-11-24:* `lib/litellm/read-views.ts` (enabledOperations uses the gate's predicate), `app/api/litellm/toggles/route.ts` (`ssoEnabled`), `components/settings/litellm-panel/OperationGroup.tsx` (the unavailable state), `packages/shared/src/schemas/litellm-gateway.ts` (`ssoEnabled`, append-only), with the owned `lib/auth/sso-mode.ts`, `lib/litellm/allowlist.ts`, `lib/litellm/operations.ts`, `LiteLLMGuardrailsSection.tsx`. *Overlap notes (kind B, stubs carry `ssoEnabled`; review round 2):* `e2e/support/settings-api.ts`, `e2e/settings-litellm.spec.ts`, `e2e/settings-litellm-guardrails.spec.ts`, `e2e/manage-litellm.spec.ts`, `e2e/manage-litellm-teams.spec.ts`; and the T-LW3 cases in the two members route tests.
+
 **SYNC1 owns** (new unless marked M):
 
 - `packages/shared/src/schemas/litellm-user-sync.ts` and its test

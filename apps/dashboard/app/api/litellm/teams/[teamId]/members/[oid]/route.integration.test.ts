@@ -15,6 +15,7 @@ import {
   stubLiteLLMEnv,
   writeCalls,
 } from "@/test/support/litellm-member-writes-support";
+import { useEnv } from "@/test/fakes/fake-litellm-views";
 
 // Contract for the developer: see the header of each describe below. Shared
 // role x operation, toggle, outage, scope-404 and unlinked cases come from
@@ -92,6 +93,21 @@ describe("DELETE /api/litellm/teams/[teamId]/members/[oid]", () => {
       teamId: "team-a",
       target: { type: "litellm-user", id: MEMBER_A_LUSER },
     });
+  });
+
+  // Source: LiteLLM spec - the LW1 paragraph after `createUser`
+  // (`removeTeamMember` is unchanged), test T-LW3.
+  it("SSO enabled: removes exactly one member with one POST /team/member_delete, as without SSO (T-LW3)", async () => {
+    useEnv({
+      AUTH_MICROSOFT_ENTRA_ID_ID: "00000000-0000-4000-8000-000000000001",
+    });
+    signInAs("teamAdminA");
+    const { res } = await remove();
+    expect(res.status).toBe(200);
+    const writes = writeCalls(state);
+    expect(writes.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "POST /team/member_delete",
+    ]);
   });
 
   it("a person already removed from the dashboard team can still be removed from LiteLLM (Identity mapping and members: 'also remove from LiteLLM')", async () => {

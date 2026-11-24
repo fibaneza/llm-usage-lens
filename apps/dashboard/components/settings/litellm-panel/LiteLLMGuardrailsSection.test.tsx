@@ -30,6 +30,7 @@ function stubOne() {
           data: {
             version: 2,
             edition: "oss",
+            ssoEnabled: false,
             operations: { createTeam: { enabled: true, source: "spec" } },
           },
         }),
@@ -116,16 +117,20 @@ const OFF_BY_DEFAULT = new Set([
 ]);
 
 type Source = "ui" | "file" | "spec";
-type Ops = Record<string, { enabled: boolean; source: Source }>;
+type Ops = Record<
+  string,
+  { enabled: boolean; source: Source; unavailable?: string }
+>;
 type Toggles = {
   version: number;
   edition: "oss" | "enterprise";
+  ssoEnabled: boolean;
   operations: Ops;
 };
 
 function toggles(
   over: Partial<Omit<Toggles, "operations">> & {
-    ops?: Record<string, { enabled: boolean; source: Source }>;
+    ops?: Ops;
   } = {},
 ): Toggles {
   const operations: Ops = {};
@@ -136,6 +141,7 @@ function toggles(
   return {
     version: over.version ?? 5,
     edition: over.edition ?? "oss",
+    ssoEnabled: over.ssoEnabled ?? false,
     operations,
   };
 }
@@ -459,6 +465,7 @@ describe("LiteLLMGuardrailsSection Guardrails grouped by operation family (G6)",
       toggles: {
         version: 1,
         edition: "oss",
+        ssoEnabled: false,
         operations: {
           getTeam: { enabled: true, source: "spec" },
           createTeam: { enabled: true, source: "spec" },
@@ -850,5 +857,101 @@ describe("LiteLLMGuardrailsSection read-only issues no write (LD24)", () => {
     );
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
+  });
+});
+
+// Source: LiteLLM spec - the LW1 paragraph after `createUser` (~276-298:
+// "Settings -> LiteLLM shows 'Not available with SSO' with the switch disabled
+// (no change of who may switch, LD24)" and the coordinator ruling that one
+// predicate serves the gate, `enabledOperations()` and the toggles view), test
+// T-LW1; Design System ~633 ("Create and link follows the gate"). Contract:
+// the panel renders each row's `unavailable` label from the view and disables
+// its switch from that field alone; it holds no SSO or edition rule.
+const SSO_LABEL = "Not available with SSO";
+const unavailableOps = (name: string, label = SSO_LABEL): Ops => ({
+  [name]: { enabled: true, source: "spec", unavailable: label },
+});
+
+describe("an operation's `unavailable` label from the view (LW1, T-LW1)", () => {
+  it("an editor sees the label on createUser and its switch disabled; other switches stay live", async () => {
+    stub({
+      toggles: toggles({
+        ssoEnabled: true,
+        ops: unavailableOps("createUser"),
+      }),
+    });
+    renderWithProviders(<LiteLLMGuardrailsSection canEdit />);
+    await ready();
+    expect(screen.getByRole("switch", { name: "createUser" })).toBeDisabled();
+    expect(
+      within(screen.getByTestId("litellm-op-createUser")).getByText(SSO_LABEL),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "addTeamMember" })).toBeEnabled();
+    expect(screen.getAllByText(SSO_LABEL)).toHaveLength(1);
+  });
+
+  it("a click on the disabled createUser switch sends no PUT", async () => {
+    const calls = stub({
+      toggles: toggles({
+        ssoEnabled: true,
+        ops: unavailableOps("createUser"),
+      }),
+    });
+    renderWithProviders(<LiteLLMGuardrailsSection canEdit />);
+    await ready();
+    await userEvent.click(screen.getByRole("switch", { name: "createUser" }));
+    expect(putsOf(calls)).toHaveLength(0);
+  });
+
+  it("a read-only caller sees the same label on the row", async () => {
+    stub({
+      toggles: toggles({
+        ssoEnabled: true,
+        ops: unavailableOps("createUser"),
+      }),
+    });
+    renderWithProviders(<LiteLLMGuardrailsSection canEdit={false} />);
+    expect(
+      await within(
+        await screen.findByTestId("litellm-op-createUser"),
+      ).findByText(SSO_LABEL),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
+  it("no client-side rule: the field alone decides (addTeamMember with a label is disabled and labelled even with ssoEnabled false)", async () => {
+    stub({
+      toggles: toggles({
+        ssoEnabled: false,
+        ops: unavailableOps("addTeamMember", "Needs LiteLLM Enterprise"),
+      }),
+    });
+    renderWithProviders(<LiteLLMGuardrailsSection canEdit />);
+    await ready();
+    expect(
+      screen.getByRole("switch", { name: "addTeamMember" }),
+    ).toBeDisabled();
+    expect(
+      within(screen.getByTestId("litellm-op-addTeamMember")).getByText(
+        "Needs LiteLLM Enterprise",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "createUser" })).toBeEnabled();
+  });
+
+  it("no client-side rule: createUser with ssoEnabled true but no `unavailable` field is live and unlabelled", async () => {
+    stub({ toggles: toggles({ ssoEnabled: true }) });
+    renderWithProviders(<LiteLLMGuardrailsSection canEdit />);
+    await ready();
+    expect(screen.getByRole("switch", { name: "createUser" })).toBeEnabled();
+    expect(screen.queryByText(SSO_LABEL)).toBeNull();
+  });
+
+  it("no label and no field (SSO off): every switch is live (T-LW2)", async () => {
+    stub({ toggles: toggles({ ssoEnabled: false }) });
+    renderWithProviders(<LiteLLMGuardrailsSection canEdit />);
+    await ready();
+    expect(screen.getByRole("switch", { name: "createUser" })).toBeEnabled();
+    expect(screen.queryByText(SSO_LABEL)).toBeNull();
   });
 });

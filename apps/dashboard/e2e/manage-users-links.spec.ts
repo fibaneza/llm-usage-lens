@@ -322,6 +322,116 @@ test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
   });
 });
 
+// LiteLLM spec - the LW1 paragraph after `createUser` (~276-298: "The 'Create
+// and link' button is absent ... the list response's `enabledOperations`";
+// SSO enabled removes `createUser` from it) and tests T-LW1 / T-LW2; Design
+// System ~633 and ~652 (Create and link follows the gate; Link to an existing
+// user stays). The list is fulfilled, so the result never depends on a stored
+// connection (Rule 60.24).
+function unlinkedUsersList(enabledOperations: string[]) {
+  return {
+    data: {
+      page: 1,
+      pageSize: 25,
+      hasMore: false,
+      enabledOperations,
+      mayLink: true,
+      users: [
+        {
+          key: "oid-bob",
+          linkState: "none",
+          appUser: {
+            oid: "oid-bob",
+            displayName: "Bob Barker",
+            email: "bob@example.test",
+            version: 0,
+          },
+          litellmUser: null,
+        },
+      ],
+    },
+  };
+}
+
+async function stubUsersTab(page: Page, enabledOperations: string[]) {
+  await page.route(/\/api\/litellm\/team-links/, (route) =>
+    route.fulfill({ json: { data: { items: [] } } }),
+  );
+  await page.route(/\/api\/litellm\/users(\?|$)/, (route) =>
+    route.fulfill({ json: unlinkedUsersList(enabledOperations) }),
+  );
+}
+
+// Below md the list is cards (listitem), from md a table (row).
+function bobRow(page: Page, width: number) {
+  return width < 768
+    ? page.getByRole("listitem").filter({ hasText: "Bob Barker" })
+    : page.getByRole("row", { name: /Bob Barker/ });
+}
+
+test.describe("Management -> LiteLLM users: Create and link follows the gate (LW1, T-LW1, T-LW2)", () => {
+  test("SSO on (enabledOperations without createUser): no Create and link, Link to an existing user stays; axe and no scroll at 375 and 1440 (T-LW1)", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await stubUsersTab(page, []);
+    for (const width of [375, 1440]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/dashboard/manage/litellm/users");
+      await waitForHydration(page);
+      const bob = bobRow(page, width);
+      await expect(bob).toBeVisible();
+      await expect(
+        bob.getByRole("button", { name: "Link to an existing LiteLLM user" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Create and link" }),
+      ).toHaveCount(0);
+      await expectNoBlockingViolations(page);
+      expect(await noHorizontalScroll(page)).toBe(true);
+    }
+  });
+
+  test("SSO off (createUser enabled): Create and link, confirmed, sends exactly one POST /api/litellm/users with the oid (T-LW2)", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await stubUsersTab(page, ["createUser"]);
+    const posts: unknown[] = [];
+    await page.route(/\/api\/litellm\/users$/, (route) => {
+      const req = route.request();
+      if (req.method() !== "POST") return route.fallback();
+      posts.push(req.postDataJSON());
+      return route.fulfill({
+        json: {
+          data: {
+            oid: "oid-bob",
+            litellmUserId: "ll-bob",
+            created: true,
+            version: 1,
+          },
+        },
+      });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/dashboard/manage/litellm/users");
+    await waitForHydration(page);
+
+    const bob = bobRow(page, 1440);
+    await bob.getByRole("button", { name: "Create and link" }).click();
+    const confirm = page.getByRole("alertdialog", {
+      name: "Create a LiteLLM user and link?",
+    });
+    await expect(confirm).toBeVisible();
+    expect(posts).toEqual([]);
+    await confirm.getByRole("button", { name: "Create and link" }).click();
+    await expect(confirm).toHaveCount(0);
+    expect(posts).toEqual([{ oid: "oid-bob" }]);
+  });
+});
+
 // Deterministic in both modes: the list and the search are fulfilled, so the
 // result never depends on a stored connection (Rule 60.24).
 test.describe("Management -> LiteLLM users: link to an existing user (D16, T-MI1)", () => {

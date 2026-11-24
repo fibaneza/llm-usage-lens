@@ -111,6 +111,7 @@ export async function mockApi(
         return data({
           version: 0,
           edition: "oss",
+          ssoEnabled: false,
           operations: { createTeam: { enabled: true, source: "file" } },
         });
       case "/api/litellm/team-links":

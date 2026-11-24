@@ -85,7 +85,12 @@ async function mockApi(page: Page) {
           },
         ],
       },
-      "/api/litellm/toggles": { version: 0, edition: "oss", operations: {} },
+      "/api/litellm/toggles": {
+        version: 0,
+        edition: "oss",
+        ssoEnabled: false,
+        operations: {},
+      },
       "/api/litellm/users": {
         page: 1,
         pageSize: 25,

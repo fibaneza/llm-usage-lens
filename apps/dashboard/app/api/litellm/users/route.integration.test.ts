@@ -1166,6 +1166,63 @@ describe("POST /api/litellm/users (create and link)", () => {
     expect(await linkOf(PEOPLE.alice.oid)).toBeFalsy();
   });
 
+  // Source: LiteLLM spec - the LW1 paragraph after `createUser` (SSO enabled:
+  // 403 OPERATION_UNAVAILABLE, no LiteLLM call; the permission check first),
+  // tests T-LW1 and T-LW2; Access Control - "Create and link only without SSO",
+  // threat T-LW1; Rules 10.3, 50.4.
+  describe("with SSO enabled (LW1)", () => {
+    const SSO_ON = {
+      AUTH_MICROSOFT_ENTRA_ID_ID: "00000000-0000-4000-8000-000000000001",
+    };
+
+    it.each(["admin", "orgAdmin"] as const)(
+      "%s is 403 OPERATION_UNAVAILABLE with no LiteLLM call and nothing linked (T-LW1)",
+      async (who) => {
+        useEnv(SSO_ON);
+        signInAs(who);
+        const { res } = await post(create);
+        await expectError(res, 403, "OPERATION_UNAVAILABLE");
+        expect(res.headers.get("cache-control")).toBe("private, no-store");
+        expect(state.fake.calls).toHaveLength(0);
+        expect(await linkOf(PEOPLE.alice.oid)).toBeFalsy();
+      },
+    );
+
+    it.each(["auditor", "teamAdminA", "deptAdminEng", "memberA"] as const)(
+      "%s is 403 FORBIDDEN, never OPERATION_UNAVAILABLE: the permission check comes first (T-LW2)",
+      async (who) => {
+        useEnv(SSO_ON);
+        signInAs(who);
+        const { res } = await post(create);
+        await expectError(res, 403, "FORBIDDEN");
+        expect(state.fake.calls).toHaveLength(0);
+      },
+    );
+
+    // LW1 ruling (2026-11-24): the gate is the enforcement; a stored toggle
+    // cannot re-enable createUser while SSO is on.
+    it("a stored createUser toggle saved ON does not override SSO: 403 OPERATION_UNAVAILABLE, zero LiteLLM calls (T-LW1)", async () => {
+      await setToggles({ createUser: true });
+      useEnv(SSO_ON);
+      signInAs("admin");
+      const { res } = await post(create);
+      await expectError(res, 403, "OPERATION_UNAVAILABLE");
+      expect(state.fake.calls).toHaveLength(0);
+      expect(await linkOf(PEOPLE.alice.oid)).toBeFalsy();
+    });
+
+    it("SSO off (the variable empty) still creates and links as today (T-LW2)", async () => {
+      useEnv({ AUTH_MICROSOFT_ENTRA_ID_ID: "" });
+      signInAs("admin");
+      const { res } = await post(create);
+      expect(res.status).toBe(201);
+      expect(callsTo(state, "POST /user/new")).toHaveLength(1);
+      expect((await linkOf(PEOPLE.alice.oid))?.litellmUserId).toBe(
+        PEOPLE.alice.email,
+      );
+    });
+  });
+
   it("a disabled createUser toggle is 403 OPERATION_DISABLED before any call (LD19; toggle default is on)", async () => {
     await setToggles({ createUser: false });
     signInAs("admin");

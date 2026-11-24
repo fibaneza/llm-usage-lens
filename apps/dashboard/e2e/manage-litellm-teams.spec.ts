@@ -60,7 +60,9 @@ async function mockApi(
   );
   await page.route(/\/api\/litellm\/toggles$/, (route) =>
     route.fulfill({
-      json: { data: { version: 0, edition: "oss", operations: {} } },
+      json: {
+        data: { version: 0, edition: "oss", ssoEnabled: false, operations: {} },
+      },
     }),
   );
   await page.route(/\/api\/litellm\/team-links(\?|$)/, (route) =>

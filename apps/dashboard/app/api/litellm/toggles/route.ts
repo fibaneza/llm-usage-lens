@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  LITELLM_OPERATION_NAMES,
   LiteLLMOperationNameSchema,
   liteLLMEdition,
 } from "@llm-usage-lens/shared";
@@ -18,6 +19,7 @@ import {
   recordDeniedWrite,
   withRoute,
 } from "@/lib/api/respond";
+import { isSsoEnabled } from "@/lib/auth/sso-mode";
 import { getFileSetKeyPaths, isFileSet } from "@/lib/config/app-config";
 import {
   getOperationToggles,
@@ -25,6 +27,7 @@ import {
   resetOperationToggles,
 } from "@/lib/data/litellm/toggles";
 import { loadGatewayConfig } from "@/lib/litellm/gateway-config";
+import { unavailableReason } from "@/lib/litellm/operations";
 import { resolveOperationSettings } from "@/lib/litellm/operation-settings";
 import {
   litellmReadRefusal,
@@ -71,13 +74,24 @@ function lockedOperations(): string[] {
 
 function view(saved: OperationToggles | null): OperationTogglesView {
   const file = loadGatewayConfig();
+  const edition = liteLLMEdition(env.APP_ENV);
+  const settings = resolveOperationSettings({
+    file,
+    saved: saved?.toggles ?? null,
+  });
+  const operations: OperationTogglesView["operations"] = {};
+  for (const name of LITELLM_OPERATION_NAMES) {
+    const unavailable = unavailableReason(name, edition);
+    operations[name] = {
+      ...settings[name],
+      ...(unavailable === undefined ? {} : { unavailable }),
+    };
+  }
   return {
     version: saved?.version ?? 0,
-    edition: liteLLMEdition(env.APP_ENV),
-    operations: resolveOperationSettings({
-      file,
-      saved: saved?.toggles ?? null,
-    }),
+    edition,
+    ssoEnabled: isSsoEnabled(),
+    operations,
   };
 }
 
