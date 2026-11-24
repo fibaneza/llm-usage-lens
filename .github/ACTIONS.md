@@ -100,9 +100,13 @@ It uses no secrets: the web servers' env is pinned in
 - **`e2e-dev` warm-up (2026-11-17):** before the first test, a Playwright
   `globalSetup` (`apps/dashboard/e2e/support/warm-up.ts`) loads
   `/sign-in` on both dev servers and `/dashboard` on the main one with a
-  forged session. The cold compile then happens outside a test. Only
-  `devServerWarmUp(env)` loads it: `CI` set with `E2E_SERVERS=dev`.
-  Local runs and production servers skip it. The 15 s `expect` timeout
+  forged session. The cold compile then happens outside a test.
+  `devServerWarmUp(env)` loads it. **Reversed 2026-11-24:** it now loads
+  on every `next dev` run, local or CI, and also seeds the role probe and
+  loads the 21 role-probe pages as `r5-admin`. Cold on-demand compilation
+  (about 3 s a route) made `role-landing.spec.ts:232` and
+  `settings-tabs.spec.ts:129` fail on a cold local run (evidence:
+  `docs/guides/testing.md` — *E2E dev-server warm-up*). Production servers never warm up. The 15 s `expect` timeout
   stays as the safety margin. In a local cold run (Next caches moved
   aside), the first dev-login sign-in took 454 ms.
 - **History on `next dev`, 2026-11-16:** run 43882190808 (1 worker)

@@ -54,6 +54,21 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
   spec update), Phase 1 in
   [`implementation-phases.md`](specs/2026-05-15-implementation-phases.md).
 
+### Re-enable the dev FS cache for e2e when Next fixes the panic
+
+- **Status:** Blocked.
+- **What:** Drop `E2E_DEV_NO_FS_CACHE` (`apps/dashboard/next.config.ts`,
+  `playwright.config.ts`) so the e2e `next dev` servers use the persistent
+  Turbopack dev file-system cache again.
+- **Why deferred:** A reused dev FS cache made Turbopack panic with "task ...
+  is missing in memory or persistent storage" and failed e2e runs
+  (2026-11-24). Disabling it costs a cold compile per run, which the e2e
+  warm-up absorbs.
+- **Adopt when:** a Next upgrade fixes the panic; verify with two e2e runs on
+  a reused `.next` / `.next-probe-r5`.
+- **References:** [`testing.md`](guides/testing.md) — *E2E dev-server
+  warm-up*; Rule 70.12 (*E2E budget*).
+
 ---
 
 ## Dashboard & UI

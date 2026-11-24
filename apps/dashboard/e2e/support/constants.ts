@@ -13,13 +13,16 @@ export function productionServers(
   return !!env.CI && env.E2E_SERVERS !== "dev";
 }
 export const E2E_PRODUCTION_SERVERS = productionServers(process.env);
-// The CI e2e-dev job starts `next dev` cold; e2e/support/warm-up.ts compiles
-// /sign-in and /dashboard before the first test (.github/ACTIONS.md — e2e-dev
-// job). Local runs and production servers skip it.
+// Every `next dev` run (local or CI e2e-dev) warms the cold routes before the
+// first test: e2e/support/warm-up.ts compiles /sign-in, /dashboard and the
+// role-probe pages. Cold on-demand compilation (about 3 s a route with the
+// workers compiling at once) made role-landing:232 and settings-tabs:129 fail
+// (2026-11-24; docs/guides/testing.md — E2E dev-server warm-up). Production servers (CI e2e job,
+// E2E_SERVERS unset) compile nothing on request and never warm up.
 export function devServerWarmUp(
   env: Readonly<Record<string, string | undefined>>,
 ): boolean {
-  return !!env.CI && !productionServers(env);
+  return !productionServers(env);
 }
 export const DEV_LOGIN_ONLY_REASON =
   "the dev-only login is refused by production builds; the CI e2e-dev job and local next dev runs cover it";

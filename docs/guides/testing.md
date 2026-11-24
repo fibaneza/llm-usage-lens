@@ -121,6 +121,28 @@ takes the cookie name and path from the same module as the auth config
 origin-only. It starts only when requested (`E2E_BASE_PATH_PROJECT=1` or `--project=base-path`), because Playwright starts every `webServer`; CI does not run it yet (Platform — BP-D15). It runs once, at the green gate (Rule 70.12 — _E2E budget_):
 `pnpm --filter @llm-usage-lens/dashboard exec node ../../scripts/e2e-lock.mjs playwright test --project=base-path`.
 
+### E2E dev-server warm-up
+
+Every `next dev` e2e run, local or CI e2e-dev, warms the cold routes before
+the first test: Playwright `globalSetup` (`e2e/support/warm-up.ts`, gate
+`devServerWarmUp`) compiles `/sign-in`, `/dashboard` and every role-probe
+page (`e2e/support/probe-pages.ts`: add any page a role-probe spec visits),
+after seeding the probe, as `r5-admin`. It then repeats the in-page (RSC)
+navigations the specs do (Settings, Access tab and sub-tabs, each sidebar
+link), because a page load does not compile them. It asserts no behaviour, but
+fails on a status of 500 or more or a Next error overlay. The e2e dev servers
+run with `E2E_DEV_NO_FS_CACHE=1` (`next.config.ts` turns off
+`experimental.turbopackFileSystemCacheForDev`): a reused Turbopack dev cache
+panicked with "task ... is missing in memory or persistent storage"
+(2026-11-24; docs/future-improvements.md — re-enable when Next fixes it). Production servers never warm
+up. Reversal, 2026-11-24: it was CI e2e-dev only; cold on-demand compilation
+made `role-landing.spec.ts:232` and `settings-tabs.spec.ts:129` fail locally:
+with a cold cache both failed in two runs out of two, and after the warm-up
+the probe project passed 81 of 81 twice; the first navigation to an
+uncompiled route took about 3.3 s with seven workers compiling. Axe scans first call `waitForAnimations`
+(`e2e/support/animations.ts`), because a scan mid-transition reads
+interpolated colours.
+
 ### E2E without LiteLLM
 
 CI's e2e job starts from a freshly seeded table (`pnpm db:create-table`,

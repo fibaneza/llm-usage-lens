@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { waitForAnimations } from "./support/animations";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 
@@ -334,6 +335,7 @@ async function open(page: Page, path: string) {
 
 // Project standard (accessibility.spec.ts): WCAG 2 A/AA, serious or critical.
 async function expectNoBlockingViolations(page: Page) {
+  await waitForAnimations(page);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa"])
     .analyze();

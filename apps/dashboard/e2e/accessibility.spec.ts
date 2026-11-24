@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 import { NAV_ITEMS } from "../lib/nav";
+import { waitForAnimations } from "./support/animations";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 
@@ -24,6 +25,7 @@ test.describe("accessibility (axe)", () => {
         page.getByRole("heading", { level: 1, name: item.pageTitle }),
       ).toBeVisible();
 
+      await waitForAnimations(page);
       const results = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa"])
         .analyze();
@@ -56,6 +58,7 @@ test.describe("accessibility (axe) - public pages", () => {
       page.getByRole("heading", { name: "LLM Usage Lens" }),
     ).toBeVisible();
 
+    await waitForAnimations(page);
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa"])
       .analyze();
@@ -88,6 +91,7 @@ const B1_WIDTHS = [375, 768, 1024, 1440] as const;
 async function expectNoBlockingViolations(
   page: import("@playwright/test").Page,
 ) {
+  await waitForAnimations(page);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa"])
     .analyze();

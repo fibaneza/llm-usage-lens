@@ -62,6 +62,11 @@ const nextConfig: NextConfig = {
   devIndicators: { position: "bottom-right" },
   // Agent guidance is CLAUDE.md and .claude/rules; tool-injected agent files are not accepted.
   agentRules: false,
+  // E2E dev servers only (tool config; Rule 50.2): a reused Turbopack dev FS
+  // cache panics "task ... is missing in memory or persistent storage" (2026-11-24).
+  ...(process.env.E2E_DEV_NO_FS_CACHE === "1"
+    ? { experimental: { turbopackFileSystemCacheForDev: false } }
+    : {}),
 };
 
 export default nextConfig;

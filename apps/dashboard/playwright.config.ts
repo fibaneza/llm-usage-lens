@@ -223,6 +223,9 @@ function devServer({
       // Auth.js proxy and authorized() callback run unchanged (no bypass).
       AUTH_SECRET: E2E_AUTH_SECRET,
       NEXT_PUBLIC_APP_URL: baseUrl,
+      // Platform BP-D15: pin "no prefix" (parseBasePath treats "" as none) so a
+      // copied .env.local cannot 404 "/"; prefixedServer() overrides it below.
+      NEXT_PUBLIC_BASE_PATH: "",
       // SKIP_ENV_VALIDATION bypasses the schema default, so server and client
       // would render different sidebar text and fail hydration.
       NEXT_PUBLIC_ORG_NAME: "Organization",
@@ -232,6 +235,8 @@ function devServer({
       LITELLM_SERVICE_KEY: E2E_LITELLM_SERVICE_KEY,
       LITELLM_ALLOWED_HOSTS: E2E_LITELLM_HOST,
       ...(distDir === undefined ? {} : { NEXT_DIST_DIR: distDir }),
+      // next.config.ts: no persistent Turbopack dev cache under e2e (docs/guides/testing.md).
+      ...(E2E_PRODUCTION_SERVERS ? {} : { E2E_DEV_NO_FS_CACHE: "1" }),
       // Named only for the server that needs a fixture; otherwise the loader
       // uses the checked-in config/config.yaml.
       ...(configFile === undefined ? {} : { APP_CONFIG_FILE: configFile }),
