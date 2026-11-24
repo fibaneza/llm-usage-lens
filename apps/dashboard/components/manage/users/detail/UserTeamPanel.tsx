@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Panel } from "@/components/display/Panel";
+import { PersonPlacement } from "@/components/manage/users/PersonPlacement";
 import { MoveTeamDialog } from "@/components/manage/users/detail/MoveTeamDialog";
 import { accessErrorMessage } from "@/components/settings/access/access-error-message";
 import {
@@ -121,7 +122,16 @@ export function UserTeamPanel({
     <Panel title="Team" boundaryTitle="the team">
       <div className="flex flex-col gap-3">
         {memberTeamId === null && leadScopes.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No team.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-muted-foreground text-sm">No team.</p>
+            <PersonPlacement
+              oid={detail.oid}
+              name={name}
+              state={detail.state}
+              invites={detail.invites}
+              onDone={() => router.refresh()}
+            />
+          </div>
         ) : null}
         {memberTeamId !== null ? (
           <div className="flex flex-wrap items-center gap-2">

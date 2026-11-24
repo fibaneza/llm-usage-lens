@@ -467,6 +467,148 @@ describe("LiteLLMMembersResponseSchema", () => {
     expect(parsed.success).toBe(true);
     expect(parsed.success && "litellmTeamId" in parsed.data).toBe(true);
   });
+  // Access Control - "Placing a person by hand": a member row and an add
+  // candidate carry a state for callers who may write members; absent for readers.
+  it.each(["signed-in", "invited", "unknown"])(
+    "keeps the state %s on a member and on a candidate",
+    (state) => {
+      const member = {
+        userId: "u-1",
+        email: "a@company.com",
+        rpmLimit: null,
+        tpmLimit: null,
+        state,
+      };
+      const parsed = LiteLLMMembersResponseSchema.parse({
+        connected: true,
+        items: [member],
+        candidates: [
+          { oid: "oid-1", name: "A", email: "a@company.com", state },
+        ],
+      });
+      expect(parsed.items[0]).toMatchObject({ state });
+      expect(parsed.connected && parsed.candidates?.[0]).toMatchObject({
+        state,
+      });
+    },
+  );
+  it("rejects an unknown state on a member and on a candidate", () => {
+    const member = {
+      userId: "u-1",
+      email: "a@company.com",
+      rpmLimit: null,
+      tpmLimit: null,
+    };
+    const parse = (v: unknown) =>
+      LiteLLMMembersResponseSchema.safeParse(v).success;
+    expect(
+      parse({ connected: true, items: [{ ...member, state: "pending" }] }),
+    ).toBe(false);
+    expect(
+      parse({
+        connected: true,
+        items: [],
+        candidates: [{ oid: "o", name: "A", email: "a@c.com", state: "x" }],
+      }),
+    ).toBe(false);
+  });
+  // Access Control - "Placing a person by hand": a signed-in person who is not a
+  // member of the team carries `identityOid` (a string) for Add to team; absent
+  // for readers (T-IV5).
+  it("keeps an identityOid string on a member and leaves it absent otherwise", () => {
+    const member = {
+      userId: "u-1",
+      email: "a@company.com",
+      rpmLimit: null,
+      tpmLimit: null,
+    };
+    const parsed = LiteLLMMembersResponseSchema.parse({
+      connected: true,
+      items: [{ ...member, identityOid: "oid-9" }, member],
+    });
+    expect(parsed.items[0]).toMatchObject({ identityOid: "oid-9" });
+    expect(parsed.items[1]).not.toHaveProperty("identityOid");
+  });
+  it("rejects a non-string identityOid", () => {
+    expect(
+      LiteLLMMembersResponseSchema.safeParse({
+        connected: true,
+        items: [
+          {
+            userId: "u-1",
+            email: "a@company.com",
+            rpmLimit: null,
+            tpmLimit: null,
+            identityOid: 7,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+  // Access Control - "Same person", "Placing a person by hand" (review B1 of
+  // unit INV2): the Add to team confirm names the matched identity, so a member
+  // row carries `identityName` and `identityEmail` beside `identityOid`, for
+  // callers who may write members only (T-IV5).
+  it("keeps identityName and identityEmail strings on a member and leaves them absent otherwise", () => {
+    const member = {
+      userId: "u-1",
+      email: "a@company.com",
+      rpmLimit: null,
+      tpmLimit: null,
+    };
+    const parsed = LiteLLMMembersResponseSchema.parse({
+      connected: true,
+      items: [
+        {
+          ...member,
+          identityOid: "oid-9",
+          identityName: "Ann Lee",
+          identityEmail: "ann@corp.example.com",
+        },
+        member,
+      ],
+    });
+    expect(parsed.items[0]).toMatchObject({
+      identityName: "Ann Lee",
+      identityEmail: "ann@corp.example.com",
+    });
+    expect(parsed.items[1]).not.toHaveProperty("identityName");
+    expect(parsed.items[1]).not.toHaveProperty("identityEmail");
+  });
+  it.each(["identityName", "identityEmail"])(
+    "rejects a non-string %s",
+    (key) => {
+      expect(
+        LiteLLMMembersResponseSchema.safeParse({
+          connected: true,
+          items: [
+            {
+              userId: "u-1",
+              email: "a@company.com",
+              rpmLimit: null,
+              tpmLimit: null,
+              [key]: 7,
+            },
+          ],
+        }).success,
+      ).toBe(false);
+    },
+  );
+  // Rule 60.17 (no silent failure), review W1 of unit INV2: the response says
+  // when the bounded identity list was cut, as the directory page does (US1).
+  it("keeps a boolean truncated on a connected response and rejects a non-boolean", () => {
+    const base = { connected: true, items: [] };
+    expect(
+      LiteLLMMembersResponseSchema.parse({ ...base, truncated: true }),
+    ).toMatchObject({ truncated: true });
+    expect(LiteLLMMembersResponseSchema.parse(base)).not.toHaveProperty(
+      "truncated",
+    );
+    expect(
+      LiteLLMMembersResponseSchema.safeParse({ ...base, truncated: "yes" })
+        .success,
+    ).toBe(false);
+  });
   it("rejects a member without a userId (members route)", () => {
     expect(
       LiteLLMMembersResponseSchema.safeParse({

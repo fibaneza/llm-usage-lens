@@ -138,12 +138,19 @@ describe("PendingAccessSection", () => {
     expect(screen.queryByText(/couldn't load/i)).not.toBeInTheDocument();
   });
 
-  it("is read-only: it offers no write controls", async () => {
+  // Access Control - Placing a person by hand (INV2): the accept action is
+  // relabelled "Approve and add" and is the one sanctioned write here; every
+  // other remove/revoke/delete/add control stays absent. No write is sent on render.
+  it("offers no remove, revoke, delete or add-member controls (only Approve and add)", async () => {
     const api = stubAccessApi(routes());
     renderWithProviders(<PendingAccessSection viewer={ADMIN} />);
     await screen.findByRole("row", { name: /new\.hire@/ });
     expect(
-      screen.queryByRole("button", { name: /remove|revoke|delete|add/i }),
+      screen.queryByRole("button", {
+        name: (name) =>
+          /remove|revoke|delete|add/i.test(name) &&
+          !/^approve and add/i.test(name),
+      }),
     ).not.toBeInTheDocument();
     expect(api.writes()).toEqual([]);
   });
@@ -184,8 +191,10 @@ describe("PendingAccessSection", () => {
 // INV1): admin and org-admin any team, a lead (team scope) or department
 // admin for teams in scope; never for an admin-scope item; auditor and viewer
 // never. Design System - Management improvements (Accept action per pending
-// member invitation).
-describe("PendingAccessSection - Accept action (INV1)", () => {
+// member invitation). INV2 (Access Control - "Placing a person by hand": the
+// action "replaces the label **Accept invite**"; Design System - Members
+// panel) renames the button to "Approve and add"; the callers are unchanged.
+describe("PendingAccessSection - Approve and add action (INV1; INV2 label)", () => {
   const memberPay = () => pending();
   const memberRisk = () =>
     pending({ emailOrUpn: "risk.hire@example.com", teamId: "team-risk" });
@@ -208,7 +217,7 @@ describe("PendingAccessSection - Accept action (INV1)", () => {
     });
   const accept = (key: RegExp) =>
     screen.queryByRole("button", {
-      name: new RegExp(`accept.*${key.source}`, "i"),
+      name: new RegExp(`approve and add.*${key.source}`, "i"),
     });
 
   it.each([
@@ -222,7 +231,7 @@ describe("PendingAccessSection - Accept action (INV1)", () => {
     expect(accept(/risk\.hire@/)).toBeVisible();
   });
 
-  it("never offers Accept on a pending admin-scope item (matrix: members only)", async () => {
+  it("never offers Approve and add on a pending admin-scope item (matrix: members only)", async () => {
     stubAccessApi(inv());
     renderWithProviders(<PendingAccessSection viewer={ADMIN} />);
     await screen.findByRole("row", { name: /lead@example\.com/ });
@@ -253,12 +262,27 @@ describe("PendingAccessSection - Accept action (INV1)", () => {
   it.each([
     ["internal-auditor", AUDITOR],
     ["internal-viewer", PLAIN_VIEWER],
-  ])("%s gets no Accept action", async (_n, viewer) => {
+  ])("%s gets no Approve and add action", async (_n, viewer) => {
     stubAccessApi(inv());
     renderWithProviders(<PendingAccessSection viewer={viewer} />);
     await screen.findByRole("row", { name: /new\.hire@/ });
     expect(
-      screen.queryByRole("button", { name: /accept/i }),
+      screen.queryByRole("button", { name: /approve and add|accept/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  // INV2 (Access Control - "Placing a person by hand": "It replaces the label
+  // **Accept invite**"): the old label is gone everywhere in the section.
+  it("labels the action 'Approve and add' and shows no 'Accept invite' label (INV2)", async () => {
+    stubAccessApi(inv());
+    renderWithProviders(<PendingAccessSection viewer={ADMIN} />);
+    await screen.findByRole("row", { name: /new\.hire@/ });
+    const button = accept(/new\.hire@/);
+    expect(button).toBeVisible();
+    expect(button).toHaveTextContent("Approve and add");
+    expect(screen.queryByText(/accept invite/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /accept invite/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -283,6 +307,8 @@ describe("PendingAccessSection - Accept action (INV1)", () => {
                 displayName: "Jane Doe",
                 upn: "new.hire@example.com",
                 email: "new.hire@example.com",
+                exact: true,
+                signal: "upn",
               },
             ],
           },
@@ -295,7 +321,9 @@ describe("PendingAccessSection - Accept action (INV1)", () => {
     );
     renderWithProviders(<PendingAccessSection viewer={ADMIN} />);
     await user.click(
-      await screen.findByRole("button", { name: /accept.*new\.hire@/i }),
+      await screen.findByRole("button", {
+        name: /approve and add.*new\.hire@/i,
+      }),
     );
     const dialog = await screen.findByRole("dialog");
     await user.click(

@@ -27,6 +27,11 @@ import { AcceptInviteDialog } from "./AcceptInviteDialog";
 // { data: { items: Candidate[] } } (page shape of every access list).
 // Candidates are radios named by displayName; a textbox "Reason"; button
 // "Confirm" opens an alertdialog whose action is "Add to team".
+// INV2 (Access Control - "Placing a person by hand"): each candidate row also
+// carries `exact` (boolean) and `signal` ("upn" | "guest-upn" | "email" |
+// "litellm-link"); the dialog preselects a candidate only when exactly one is
+// exact, never an email-only one (T-IV2), the reason stays required, and the
+// dialog is titled "Approve and add <key>" (it replaces "Accept invite").
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -41,12 +46,16 @@ const guest = {
   displayName: "Jane Doe",
   upn: "jane_example.com#EXT#@tenant.onmicrosoft.com",
   email: "jane@example.com",
+  exact: false,
+  signal: "guest-upn",
 };
 const exact = {
   oid: "oid-other",
   displayName: "Jane Other",
   upn: "jane@example.com",
   email: "jane@example.com",
+  exact: true,
+  signal: "upn",
 };
 const list = (...items: unknown[]) => ({ items });
 
@@ -94,6 +103,8 @@ describe("AcceptInviteDialog", () => {
         displayName: "Xavier",
         upn: "x@corp.example.com",
         email: "jane.d@example.com",
+        exact: false,
+        signal: "email",
       }),
     });
     await screen.findByRole("radio", { name: /Jane Doe/ });
@@ -126,6 +137,8 @@ describe("AcceptInviteDialog", () => {
                   displayName: "Carol Chen",
                   upn: "carol@corp.example.com",
                   email: "carol@example.com",
+                  exact: false,
+                  signal: "email",
                 })
               : list(guest),
           ),
@@ -253,5 +266,92 @@ describe("AcceptInviteDialog", () => {
     expect(message).toHaveTextContent(/no longer exists/i);
     expect(message).not.toHaveTextContent("NOT_FOUND");
     expect(onAccepted).not.toHaveBeenCalled();
+  });
+});
+
+// INV2: Access Control - "Placing a person by hand" (preselect only when
+// exactly one candidate is exact: a UPN match or the LiteLLM link; the reason
+// stays required) and T-IV2 (an unverified LiteLLM email selects no one: the
+// email alone is shown, never selected).
+describe("AcceptInviteDialog preselection (INV2, T-IV2)", () => {
+  const linked = {
+    oid: "oid-linked",
+    displayName: "Linked Person",
+    upn: "lp@corp.example.com",
+    email: "other@example.com",
+    exact: true,
+    signal: "litellm-link",
+  };
+  const emailOnly = {
+    oid: "oid-mail",
+    displayName: "Mail Only",
+    upn: "mo@corp.example.com",
+    email: KEY,
+    exact: false,
+    signal: "email",
+  };
+
+  it("preselects the one exact candidate, and the reason is still required before Confirm", async () => {
+    const user = userEvent.setup();
+    setup({ [CANDIDATES]: list(guest, exact) });
+    const radio = await screen.findByRole("radio", { name: /Jane Other/ });
+    expect(radio).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Jane Doe/ })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+    await user.type(screen.getByLabelText(/reason/i), "Checked with the lead");
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
+  });
+
+  it("preselects the identity linked to the LiteLLM user (signal litellm-link)", async () => {
+    setup({ [CANDIDATES]: list(emailOnly, linked) });
+    expect(
+      await screen.findByRole("radio", { name: /Linked Person/ }),
+    ).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Mail Only/ })).not.toBeChecked();
+  });
+
+  it("never preselects an email-only candidate, even when it is the only one (T-IV2)", async () => {
+    setup({ [CANDIDATES]: list(emailOnly) });
+    expect(
+      await screen.findByRole("radio", { name: /Mail Only/ }),
+    ).not.toBeChecked();
+  });
+
+  it("preselects no one when two candidates are exact", async () => {
+    setup({ [CANDIDATES]: list(exact, linked) });
+    await screen.findByRole("radio", { name: /Jane Other/ });
+    expect(
+      screen.getAllByRole("radio").some((r) => r.matches(":checked")),
+    ).toBe(false);
+  });
+
+  it("the preselected person is the one sent: the accept posts that oid (T-IV1 stays server-checked)", async () => {
+    const user = userEvent.setup();
+    const { api } = setup({
+      [CANDIDATES]: list(guest, exact),
+      [ACCEPT]: () => ok({ oid: "oid-other", teamId: "team-pay" }),
+    });
+    await screen.findByRole("radio", { name: /Jane Other/ });
+    await user.type(screen.getByLabelText(/reason/i), "Exact UPN");
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Add to team",
+      }),
+    );
+    await waitFor(() => expect(api.writes()).toHaveLength(1));
+    expect(api.writes()[0]?.body).toEqual({
+      oid: "oid-other",
+      reason: "Exact UPN",
+    });
+  });
+
+  it("is titled 'Approve and add <key>' and shows no 'Accept invite' (INV2 label)", async () => {
+    setup({ [CANDIDATES]: list(guest) });
+    const dialog = await screen.findByRole("dialog", {
+      name: /approve and add/i,
+    });
+    expect(dialog).toHaveTextContent(KEY);
+    expect(screen.queryByText(/accept invite/i)).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { PersonStateSchema } from "./access-control";
 import { CombinedMeResponseSchema } from "./combined";
 
 // Source: docs/specs/2026-11-10-litellm.md - "API routes" (read routes) and
@@ -118,6 +119,8 @@ export const LiteLLMTeamDetailResponseSchema = z.union([
   TeamDetailConfiguredSchema,
 ]);
 
+const MemberStateSchema = z.union([PersonStateSchema, z.literal("unknown")]);
+
 const MemberSchema = z.object({
   userId: z.string(),
   email: z.string(),
@@ -129,12 +132,19 @@ const MemberSchema = z.object({
   tpmLimit: z.number().nullable(),
   oid: z.string().optional(),
   name: z.string().optional(),
+  // Unit INV2 (Access Control - Placing a person by hand): for callers who may
+  // write members only; `identityOid` is a signed-in person who is not a member.
+  state: MemberStateSchema.optional(),
+  identityOid: z.string().optional(),
+  identityName: z.string().optional(),
+  identityEmail: z.string().optional(),
 });
 
 const MemberCandidateSchema = z.object({
   oid: z.string(),
   name: z.string(),
   email: z.string(),
+  state: MemberStateSchema.optional(),
 });
 
 export const LiteLLMMembersResponseSchema = z.discriminatedUnion("connected", [
@@ -143,6 +153,7 @@ export const LiteLLMMembersResponseSchema = z.discriminatedUnion("connected", [
     litellmTeamId: z.string().optional(),
     items: z.array(MemberSchema),
     candidates: z.array(MemberCandidateSchema).optional(),
+    truncated: z.boolean().optional(),
   }),
   z.object({ connected: z.literal(false), items: z.array(z.never()) }),
 ]);

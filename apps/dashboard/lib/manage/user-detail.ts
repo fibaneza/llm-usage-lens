@@ -10,6 +10,7 @@ import type { Session } from "next-auth";
 
 import { env } from "@/env";
 import { cursorSecret } from "@/lib/api/access-route";
+import { findPersonInvites } from "@/lib/api/person-invite";
 import { globalRolesOf } from "@/lib/auth/policy";
 import {
   INTERNAL_ADMIN_ROLE,
@@ -123,6 +124,10 @@ export async function loadIdentityDetail(
     grantsOf(oid),
   ]);
   const linkedId = link?.litellmUserId;
+  // Placing a person by hand (T-IV5): state and invite for member writers only.
+  const invites = canWrite
+    ? await findPersonInvites([identity.email, identity.upn])
+    : [];
 
   const canEditName =
     isAdmin && passwordUser !== null && passwordUser.status !== "sso-bound";
@@ -167,6 +172,11 @@ export async function loadIdentityDetail(
       : {}),
     ...(canEditName && passwordUser
       ? { passwordUserVersion: passwordUser.version }
+      : {}),
+    ...(canWrite
+      ? invites.length > 0
+        ? { state: "invited" as const, invites }
+        : { state: "signed-in" as const }
       : {}),
     allowed: {
       editDisplayName: canEditName,

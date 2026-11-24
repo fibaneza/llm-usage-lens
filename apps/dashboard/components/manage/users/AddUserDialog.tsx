@@ -56,12 +56,15 @@ export function AddUserDialog({
   steps,
   authMethod,
   stepUp,
+  initialEmail = "",
   onClose,
   onWritten,
 }: {
   steps: AddUserSteps;
   authMethod: AccessViewer["authMethod"];
   stepUp: StepUpActions;
+  // INV2: the Not signed in yet row fills in the person's email.
+  initialEmail?: string;
   onClose: () => void;
   onWritten: () => void;
 }) {
@@ -70,7 +73,7 @@ export function AddUserDialog({
     queryFn: () => fetchApi("/api/access/org-units", OrgUnitsSchema),
     enabled: steps.team,
   });
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [displayName, setDisplayName] = useState("");
   const [createPassword, setCreatePassword] = useState(steps.password);
   const [teamId, setTeamId] = useState("");

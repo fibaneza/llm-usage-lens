@@ -293,6 +293,14 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 - **Adopt when:** any report of a lockout without a lock (an `auth.master.lockout` event with no stored `lockedUntil`), or DynamoDB write latency over 1 minute.
 - **References:** [Access Control](specs/2026-11-10-access-control.md) — *Master user*, *Lockout*; T20; `apps/dashboard/lib/data/identity.ts` (`reserveMasterAttempt`).
 
+### One read per row in the INV2 person state
+
+- **Status:** Deferred.
+- **What:** The Team page members read and the identity directory compute each row's state and invites with per-row reads: the pending invites, the stored-link owner per non-member row, and in the members read one `getIdentityRecord` per signed-in identity (up to 2,000, 10 at a time) because the bounded list items carry no UPN or tenant. Batch them into one read per request.
+- **Why deferred:** At v1 scale (a team's members, one directory page) the extra reads are small; INV2 review W2, optional (coordinator, 2026-11-25).
+- **Adopt when:** a team or a directory page grows past a few hundred rows, or the read's p95 passes 1 s.
+- **References:** [Access Control](specs/2026-11-10-access-control.md) — *Placing a person by hand*; Rule 60.10 (per request, never cached).
+
 ## LiteLLM
 
 ### LiteLLM user sync — leavers

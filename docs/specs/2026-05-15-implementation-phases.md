@@ -1068,6 +1068,16 @@ Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
 - [x] The deployment and operations guides (the input, the expression and Sydney times, the alarms, the manual run, switching the sync off)
 - [ ] Verify: CDK — the schedule and target, the retry policy of 2 attempts and 1 hour, the flexible window off, the role's two statements only, `iam:PassRole` limited to the two roles and `ecs-tasks`, `ecs:RunTask` on the task-definition family with the cluster condition, the trust condition, nothing created when the input is absent or `off`, the rule and the missing-run alarm on the topic; job, unit — toggle off and lease held skip with exit 0, a failure, a truncated plan and the 10-minute deadline exit non-zero (T-SY8); job, integration — the bundled entry runs against DynamoDB Local and the fake LiteLLM, and the fake records zero write calls (T-SY11, T-SY12); `pnpm test:infra`; `cdk synth` with the example context; branch gate with `main` merged in (Rule 70.12)
 
+### INV2 — Invite, add, approve and add from the Team and Users pages (`feature/invite-approve-add`)
+
+After SYNC1. *User, 2026-11-18: "with option to invite", "also a button to approve the invitation and add user to team with/without user accepting the invitation".* Access Control — *Placing a person by hand*; Design System — Members panel and Management → Users.
+
+- [ ] The candidate signal and `exact` in the candidates read
+- [ ] The row state in the two reads (Team page members, identity directory), for member writers only
+- [ ] The three actions and the team picker, on the Team page, the People table, the "Not signed in yet" panel and the user page, per sign-in mode (SM6)
+- [ ] Preselection and the label **Approve and add** in the accept dialog
+- [ ] Verify: T-IV1–T-IV7 (Access Control — *Threat model*); T-SM5; INV1's route tests unchanged; security review at the merge
+
 ---
 
 ## Decision policy (decided 2026-11-15, user)

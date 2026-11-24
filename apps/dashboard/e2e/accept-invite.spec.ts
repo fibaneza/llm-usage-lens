@@ -72,6 +72,8 @@ async function mockInvite(page: Page) {
             displayName: "Jane Doe",
             upn: "new.hire_example.com#EXT#@tenant.onmicrosoft.com",
             email: "new.hire@example.com",
+            exact: false,
+            signal: "email",
           },
         ],
       }),
@@ -106,7 +108,7 @@ test.describe("accept a pending invite (INV1)", () => {
       name: "Pending and stale access",
     });
     await pending
-      .getByRole("button", { name: /accept.*new\.hire@example\.com/i })
+      .getByRole("button", { name: /approve and add.*new\.hire@example\.com/i })
       .click();
 
     const dialog = page.getByRole("dialog");
@@ -148,7 +150,9 @@ test.describe("accept a pending invite (INV1)", () => {
 
       await page
         .getByRole("region", { name: "Pending and stale access" })
-        .getByRole("button", { name: /accept.*new\.hire@example\.com/i })
+        .getByRole("button", {
+          name: /approve and add.*new\.hire@example\.com/i,
+        })
         .click();
       const dialog = page.getByRole("dialog");
       await dialog.getByRole("radio", { name: /Jane Doe/ }).check();

@@ -1,3 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   afterEach,
   beforeAll,
@@ -17,10 +21,14 @@ import {
   FOREIGN_TENANT,
   JANE_OID,
   KEY,
+  LL_USER,
   OTHER_OID,
   acceptPath,
+  installLiteLLM,
+  linkIdentityToLiteLLMUser,
   seedAdminScopeInvite,
   seedInvite,
+  seedLiteLLMConnection,
   seedSignedIn,
 } from "@/test/support/invite-accept-support";
 import {
@@ -62,6 +70,12 @@ import { POST } from "./route";
 // holds an affiliation on this very team) is 409 CONFLICT, while a key that is
 // pending nowhere stays the same 404 as a missing one; a pending admin scope
 // is not an acceptable invitation (404).
+// INV2 T-IV7: LiteLLM is configured with an in-process fake, so a call from the
+// accept route would be recorded; the variables are set before `@/env` loads.
+vi.hoisted(() => {
+  process.env.LITELLM_SERVICE_KEY = "sk-fake-key-000";
+  process.env.LITELLM_ALLOWED_HOSTS = "litellm.test:4000";
+});
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("next/cache", async () => {
   const mod = await import("@/test/fakes/next-cache-fake");
@@ -595,5 +609,106 @@ describe("T-INV6 - accept never overrides existing membership", () => {
     expect(await affiliationOf(JANE_OID)).toMatchObject({ teamId: "team-c" });
     expect(await listPendingFor([KEY])).toHaveLength(1);
     expect(await acceptRecords()).toEqual([]);
+  });
+});
+
+// Source: Access Control - "Placing a person by hand" (**Approve and add** is
+// the accept route, "the accept route is not changed"; a preselection never
+// widens either set), T-IV1, T-IV4 (INV1's refusals stay: the T-INV2, T-INV3,
+// T-INV4 and T-INV6 describes above run unchanged), T-IV7 (Approve and add
+// uses the app-team routes, which import nothing from `lib/litellm`: zero
+// calls on the fake LiteLLM, and a structure test on the imports).
+describe("Approve and add - the same route, no LiteLLM (T-IV1, T-IV7)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(["admin", "orgAdmin", "teamAdminA", "deptAdminEng"] as const)(
+    "%s accepting makes zero calls on the fake LiteLLM and binds the person (T-IV7)",
+    async (caller) => {
+      await seedLiteLLMConnection();
+      const fake = installLiteLLM([{ id: LL_USER, email: KEY }]);
+      await linkIdentityToLiteLLMUser(JANE_OID, LL_USER);
+      signInAs(caller);
+      await expectData(await acceptJane(), [200, 201]);
+      expect(await affiliationOf(JANE_OID)).toMatchObject({ teamId: "team-a" });
+      expect(fake.calls).toEqual([]);
+    },
+  );
+
+  it.each(["teamAdminA", "deptAdminEng"] as const)(
+    "%s naming an identity that is linked to the LiteLLM user with the key's email but is not a server candidate is the same 404, one denied NOT_FOUND record, and still no LiteLLM call (T-IV1: the link never widens the set)",
+    async (caller) => {
+      await seedLiteLLMConnection();
+      const fake = installLiteLLM([{ id: LL_USER, email: KEY }]);
+      await seedSignedIn(OTHER_OID, {
+        upn: "other@company.com",
+        email: "other@company.com",
+      });
+      await linkIdentityToLiteLLMUser(OTHER_OID, LL_USER);
+      signInAs(caller);
+      const before = await nonAuditItems();
+      await expectError(
+        await accept("team-a", KEY, { oid: OTHER_OID, reason: REASON }),
+        404,
+        "NOT_FOUND",
+      );
+      expect(await nonAuditItems()).toEqual(before);
+      expect(await acceptRecords()).toEqual([]);
+      await expectOneDenied({
+        actor: CALLERS[caller].oid,
+        action: "affiliation.invite.accept",
+        code: "NOT_FOUND",
+      });
+      expect(fake.calls).toEqual([]);
+    },
+  );
+
+  // T-IV7, "a structure test on the imports": nothing the two app-team routes
+  // reach through `@/` or relative imports comes from lib/litellm.
+  it("neither the add-member route nor the accept route reaches lib/litellm through its imports (T-IV7)", () => {
+    const root = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../../../../../..",
+    );
+    const entries = [
+      join(root, "app/api/teams/[id]/members/route.ts"),
+      join(root, "app/api/teams/[id]/members/pending/[key]/accept/route.ts"),
+      join(root, "lib/api/invite-accept.ts"),
+    ];
+    const resolveFile = (from: string, spec: string): string | null => {
+      const base = spec.startsWith("@/")
+        ? join(root, spec.slice(2))
+        : spec.startsWith(".")
+          ? resolve(dirname(from), spec)
+          : null;
+      if (base === null) return null;
+      for (const c of [`${base}.ts`, `${base}.tsx`, join(base, "index.ts")]) {
+        if (existsSync(c)) return c;
+      }
+      return null;
+    };
+    const seen = new Set<string>();
+    const offenders: string[] = [];
+    const visit = (file: string) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const source = readFileSync(file, "utf8");
+      for (const m of source.matchAll(
+        /(?:from|import)\s*\(?\s*["']([^"']+)["']/g,
+      )) {
+        const spec = m[1] ?? "";
+        const target = resolveFile(file, spec);
+        if (
+          /(^|\/)lib\/litellm(\/|$)/.test(spec) ||
+          target?.includes("/lib/litellm/")
+        ) {
+          offenders.push(`${file.replace(root, "")} -> ${spec}`);
+        } else if (target) visit(target);
+      }
+    };
+    entries.forEach(visit);
+    expect(seen.size).toBeGreaterThan(entries.length);
+    expect(offenders).toEqual([]);
   });
 });

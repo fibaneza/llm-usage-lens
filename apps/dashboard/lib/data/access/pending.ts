@@ -8,7 +8,7 @@ import {
 } from "@llm-usage-lens/shared";
 import type {
   IdentityRecord,
-  InviteCandidate,
+  InviteCandidateIdentity,
   MemberAffiliation,
   PendingItem,
 } from "@llm-usage-lens/shared";
@@ -240,7 +240,7 @@ export async function acceptPendingInvite(
 
 const MAX_CANDIDATES = 10;
 
-const toCandidate = (identity: IdentityRecord): InviteCandidate => ({
+const toCandidate = (identity: IdentityRecord): InviteCandidateIdentity => ({
   oid: identity.oid,
   displayName: identity.displayName ?? null,
   upn: identity.upn ?? null,
@@ -249,7 +249,7 @@ const toCandidate = (identity: IdentityRecord): InviteCandidate => ({
 
 // A guest UPN writes the address with "_" for "@": jane@example.com is
 // jane_example.com#EXT#@tenant.onmicrosoft.com.
-function guestUpnPrefix(key: string): string | null {
+export function guestUpnPrefix(key: string): string | null {
   const at = key.lastIndexOf("@");
   if (at < 1) return null;
   return `${key.slice(0, at)}_${key.slice(at + 1)}#ext#@`;
@@ -264,10 +264,10 @@ async function hasMemberTeam(oid: string): Promise<boolean> {
 // member team. Read per request, never cached (Rule 60.10).
 async function collectCandidates(
   matches: (identity: IdentityRecord) => boolean,
-): Promise<InviteCandidate[]> {
+): Promise<InviteCandidateIdentity[]> {
   const tenant = configuredTenant();
   if (!tenant) return [];
-  const found: InviteCandidate[] = [];
+  const found: InviteCandidateIdentity[] = [];
   let startKey: Record<string, unknown> | undefined;
   do {
     const page = await getDocumentClient().send(
@@ -293,7 +293,7 @@ async function collectCandidates(
 
 export function listInviteCandidates(
   emailOrUpn: string,
-): Promise<InviteCandidate[]> {
+): Promise<InviteCandidateIdentity[]> {
   const key = emailOrUpn.toLowerCase();
   const guest = guestUpnPrefix(key);
   return collectCandidates((identity) => {
@@ -308,7 +308,7 @@ export function listInviteCandidates(
 
 export function searchInviteDirectory(
   query: string,
-): Promise<InviteCandidate[]> {
+): Promise<InviteCandidateIdentity[]> {
   const needle = query.trim().toLowerCase();
   if (needle === "") return Promise.resolve([]);
   return collectCandidates((identity) =>

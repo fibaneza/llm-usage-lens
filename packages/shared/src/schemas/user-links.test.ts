@@ -167,6 +167,37 @@ describe("directory schemas (API routes: 25 a page, opaque cursor, D15)", () => 
     rejects(DirectoryRowSchema)({ ...row, authMethod: "saml" });
   });
 
+  // Access Control - "Placing a person by hand": a row carries a state for
+  // callers who may write members; absent for readers (T-IV5).
+  it.each(["signed-in", "invited"])("keeps the state %s on a row", (state) => {
+    expect(DirectoryRowSchema.parse({ ...row, state })).toMatchObject({
+      state,
+    });
+  });
+  it("accepts a row without a state and rejects an unknown one", () => {
+    accepts(DirectoryRowSchema)(row);
+    expect(DirectoryRowSchema.parse(row)).not.toHaveProperty("state");
+    rejects(DirectoryRowSchema)({ ...row, state: "pending" });
+  });
+
+  // Access Control - "Placing a person by hand": an invited row carries
+  // `invites: [{ teamId, key }, ...]` for Approve and add, one per pending
+  // member invite (review W4 of unit INV2); absent for readers (T-IV5).
+  it("keeps invites [{ teamId, key }] (one or several) and rejects a malformed one", () => {
+    const invites = [
+      { teamId: "team-b", key: "carol@company.com" },
+      { teamId: "team-c", key: "carol@company.com" },
+    ];
+    expect(
+      DirectoryRowSchema.parse({ ...row, state: "invited", invites }),
+    ).toMatchObject({ state: "invited", invites });
+    expect(DirectoryRowSchema.parse(row)).not.toHaveProperty("invites");
+    rejects(DirectoryRowSchema)({ ...row, invites: [{ teamId: "team-b" }] });
+    rejects(DirectoryRowSchema)({ ...row, invites: [{ key: "a@b.com" }] });
+    rejects(DirectoryRowSchema)({ ...row, invites: invites[0] });
+    rejects(DirectoryRowSchema)({ ...row, invites: null });
+  });
+
   it("caps a page at 25 rows", () => {
     expect(USER_LINKS_PAGE_SIZE).toBe(25);
     const items = (n: number) =>

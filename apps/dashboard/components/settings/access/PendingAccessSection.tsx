@@ -211,7 +211,7 @@ export function PendingAccessSection({
                             type="button"
                             variant="outline"
                             size="sm"
-                            aria-label={`Accept invite for ${row.emailOrUpn}`}
+                            aria-label={`Approve and add ${row.emailOrUpn}`}
                             onClick={() =>
                               setAccepting({
                                 teamId: row.teamId,
@@ -221,7 +221,7 @@ export function PendingAccessSection({
                               })
                             }
                           >
-                            Accept
+                            Approve and add
                           </Button>
                         ) : null}
                       </TableCell>

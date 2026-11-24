@@ -18,6 +18,7 @@ import { ResetMemberSpendDialog } from "@/components/litellm/ResetMemberSpendDia
 import { LiteLLMSyncButton } from "@/components/manage/users/LiteLLMSyncButton";
 import { LiteLLMLinkCell } from "@/components/manage/users/LiteLLMLinkCell";
 import type { LinkState } from "@/components/manage/users/LiteLLMLinkCell";
+import { PersonPlacement } from "@/components/manage/users/PersonPlacement";
 import { AddUserDialog } from "@/components/manage/users/AddUserDialog";
 import { useLiteLLMQueryState } from "@/components/litellm/use-litellm-query";
 import { useOrgUnits } from "@/components/settings/access/access-queries";
@@ -261,9 +262,22 @@ function People({
                 <TableCell>{day(row.createdAt)}</TableCell>
                 <TableCell>{day(row.lastSignInAt)}</TableCell>
                 <TableCell>
-                  {row.memberTeamId
-                    ? (teamNames.get(row.memberTeamId) ?? row.memberTeamId)
-                    : EMPTY}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span>
+                      {row.memberTeamId
+                        ? (teamNames.get(row.memberTeamId) ?? row.memberTeamId)
+                        : EMPTY}
+                    </span>
+                    {steps.team && !row.memberTeamId ? (
+                      <PersonPlacement
+                        oid={row.oid}
+                        name={name}
+                        state={row.state}
+                        invites={row.invites}
+                        onDone={refresh}
+                      />
+                    ) : null}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-2">

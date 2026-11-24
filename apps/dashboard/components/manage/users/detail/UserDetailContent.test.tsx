@@ -796,3 +796,115 @@ describe("every edit calls the existing route (D-US7, D-US9)", () => {
     expectNoLiteLLMUserOrMemberWrite();
   });
 });
+
+// INV2: Design System - Management -> Users ("Placing a person by hand": "On
+// the People table and the user page, the same row actions as the Team page
+// (Invite, Add to team, Approve and add), from one set of components") and
+// Access Control - "Placing a person by hand" (a caller who may write members
+// gets the person's state; readers get none, T-IV5). Contract addition to
+// IdentityDetail: `state?: "signed-in" | "invited"` and, when invited,
+// `invites: [{ teamId, key }, ...]` (one per pending invite, an action per team
+// named "Approve and add <name> (<team>)"; review W4 of unit INV2); the actions show in the Team panel of a person
+// with no member team.
+describe("UserDetailContent placing a person by hand (INV2)", () => {
+  const noTeam = (over: Record<string, unknown>) =>
+    detailOf({ memberTeamId: null, leadScopes: [], ...over });
+  const teamRegion = () => region("Team");
+
+  it("a signed-in person with no team offers Add to team, which opens the team picker with the server's teams", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    show(noTeam({ state: "signed-in" }));
+    await user.click(
+      await within(teamRegion()).findByRole("button", {
+        name: "Add Alice Anderson to team",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Alice Anderson");
+    expect(
+      await within(dialog).findByRole("option", { name: "Ledger" }),
+    ).toBeInTheDocument();
+    expect(writes()).toEqual([]);
+  });
+
+  it("an invited person with no team offers Approve and add, which opens the accept dialog for the invite's team and key", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    overrides = {
+      "GET /api/teams/team-a/members/pending/alice@company.com/candidates":
+        () =>
+          apiResponse({
+            data: {
+              items: [
+                {
+                  oid: OID,
+                  displayName: "Alice Anderson",
+                  upn: "alice@company.com",
+                  email: "alice@company.com",
+                  exact: true,
+                  signal: "upn",
+                },
+              ],
+            },
+          }),
+    };
+    show(
+      noTeam({
+        state: "invited",
+        invites: [{ teamId: "team-a", key: "alice@company.com" }],
+      }),
+    );
+    await user.click(
+      await within(teamRegion()).findByRole("button", {
+        name: "Approve and add Alice Anderson (Payments)",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /approve and add/i,
+    });
+    expect(dialog).toHaveTextContent("alice@company.com");
+    expect(
+      await within(dialog).findByRole("radio", { name: /Alice Anderson/ }),
+    ).toBeChecked();
+    expect(writes()).toEqual([]);
+  });
+
+  it("two invites give two actions, one per team named (review W4)", async () => {
+    show(
+      noTeam({
+        state: "invited",
+        invites: [
+          { teamId: "team-a", key: "alice@company.com" },
+          { teamId: "team-b", key: "alice@corp.example.com" },
+        ],
+      }),
+    );
+    expect(
+      await within(teamRegion()).findByRole("button", {
+        name: "Approve and add Alice Anderson (Payments)",
+      }),
+    ).toBeVisible();
+    expect(
+      within(teamRegion()).getByRole("button", {
+        name: "Approve and add Alice Anderson (Ledger)",
+      }),
+    ).toBeVisible();
+  });
+
+  it("no state (a reader) and a person who already has a team offer neither action (T-IV5)", async () => {
+    const { unmount } = show(noTeam({ allowed: NONE_ALLOWED }));
+    await within(teamRegion()).findByText("No team.");
+    expect(
+      within(teamRegion()).queryByRole("button", {
+        name: /add .* to team|approve and add|invite/i,
+      }),
+    ).toBeNull();
+    unmount();
+    show(detailOf({ state: "signed-in" }));
+    await within(teamRegion()).findByText("Payments");
+    expect(
+      within(teamRegion()).queryByRole("button", {
+        name: /add .* to team|approve and add|invite/i,
+      }),
+    ).toBeNull();
+  });
+});

@@ -503,6 +503,202 @@ test.describe("journey: lead reset dialog (RS2, D-RS7, Q19)", () => {
   });
 });
 
+// INV2 (Access Control - "Placing a person by hand": Invite, Add to team and
+// Approve and add for "a lead in scope"; Design System - Members panel, each
+// action confirms naming the person and the team, Cancel focused first): the
+// real team-scope Lead (team-admin on team-payments) places three people from
+// the Team page. The other roles' journeys, axe and the 375 px checks are in
+// team-invite-approve.spec.ts; the Lead's scope lives in the probe table, so
+// its journey runs in this project. The LiteLLM API and the three writes are
+// fulfilled from fixtures (Rule 60.24).
+test.describe("journey: lead places a person by hand (INV2)", () => {
+  test("a Lead in scope invites, adds to the team and approves and adds from the Team page", async ({
+    context,
+    page,
+  }) => {
+    const ops = ["addTeamMember", "removeTeamMember"];
+    const written: unknown[] = [];
+    let sam = false;
+    let ivy = false;
+    const base = { spend: 5, maxBudget: 10, rpmLimit: null, tpmLimit: null };
+    await page.route(/\/api\/sync-status(\?|$)/, (route) =>
+      route.fulfill({ json: { data: { state: "never-synced" } } }),
+    );
+    await page.route(/\/api\/litellm\//, (route) => {
+      const url = new URL(route.request().url());
+      const key = `${route.request().method()} ${url.pathname}`;
+      const ok = (data: unknown) => route.fulfill({ json: { data } });
+      switch (key) {
+        case "GET /api/litellm/me":
+          return ok({
+            linked: false,
+            enabledOperations: ops,
+            teams: [
+              {
+                teamId: PROBE_TEAM,
+                teamName: "Payments",
+                linked: true,
+                configurable: true,
+              },
+            ],
+          });
+        case `GET /api/litellm/teams/${PROBE_TEAM}`:
+          return ok({
+            connected: true,
+            spendSource: "litellm-team",
+            team: {
+              alias: "Payments",
+              spend: 10,
+              maxBudget: 500,
+              softBudget: null,
+              budgetDuration: "30d",
+              models: ["claude-sonnet"],
+              rpmLimit: null,
+              tpmLimit: null,
+            },
+            daily: [{ date: "2026-11-14", spend: 10 }],
+            enabledOperations: ops,
+          });
+        case `GET /api/litellm/teams/${PROBE_TEAM}/members`:
+          return ok({
+            connected: true,
+            candidates: [],
+            items: [
+              {
+                ...base,
+                userId: "u-ext1",
+                email: "ext1@example.test",
+                state: "unknown",
+              },
+              sam
+                ? {
+                    ...base,
+                    userId: "u-sam",
+                    oid: "oid-sam",
+                    name: "Sam Rowe",
+                    email: "sam@example.test",
+                  }
+                : {
+                    ...base,
+                    userId: "u-sam",
+                    email: "sam@example.test",
+                    state: "signed-in",
+                    identityOid: "oid-sam",
+                    identityName: "Sam Rowe",
+                    identityEmail: "sam.rowe@corp.example.test",
+                  },
+              ivy
+                ? {
+                    ...base,
+                    userId: "u-ivy",
+                    oid: "oid-ivy",
+                    name: "Ivy Chen",
+                    email: "ivy@example.test",
+                  }
+                : {
+                    ...base,
+                    userId: "u-ivy",
+                    email: "ivy@example.test",
+                    state: "invited",
+                  },
+            ],
+          });
+        case `GET /api/litellm/teams/${PROBE_TEAM}/keys`:
+          return ok({ connected: true, items: [] });
+        default:
+          return route.fulfill({
+            status: 404,
+            json: { error: { code: "NOT_FOUND", message: "not found" } },
+          });
+      }
+    });
+    await page.route(
+      new RegExp(`/api/teams/${PROBE_TEAM}/members$`),
+      (route) => {
+        if (route.request().method() !== "POST") return route.fallback();
+        const body = route.request().postDataJSON() as { oid?: string };
+        written.push(body);
+        if (body.oid === "oid-sam") sam = true;
+        return route.fulfill({ status: 201, json: { data: { ok: true } } });
+      },
+    );
+    await page.route(
+      /\/members\/pending\/ivy(%40|@)example\.test\//,
+      (route) => {
+        if (route.request().method() === "POST") {
+          written.push(route.request().postDataJSON());
+          ivy = true;
+          return route.fulfill({
+            json: { data: { oid: "oid-ivy", teamId: PROBE_TEAM } },
+          });
+        }
+        return route.fulfill({
+          json: {
+            data: {
+              items: [
+                {
+                  oid: "oid-ivy",
+                  displayName: "Ivy Chen",
+                  upn: "ivy@example.test",
+                  email: "ivy@example.test",
+                  exact: true,
+                  signal: "upn",
+                },
+              ],
+            },
+          },
+        });
+      },
+    );
+    await open(
+      page,
+      context,
+      byName("team-admin"),
+      `/dashboard/manage/team/${PROBE_TEAM}`,
+    );
+    const panel = page.getByRole("region", { name: "LiteLLM members" });
+
+    await panel
+      .getByRole("button", { name: "Invite ext1@example.test" })
+      .click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Confirm" })
+      .click();
+    await expect.poll(() => written.length).toBe(1);
+
+    await panel
+      .getByRole("button", { name: "Add sam@example.test to team" })
+      .click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Confirm" })
+      .click();
+    await expect(
+      panel.getByRole("button", { name: "Remove Sam Rowe" }),
+    ).toBeVisible();
+
+    await panel
+      .getByRole("button", { name: "Approve and add ivy@example.test" })
+      .click();
+    const accept = page.getByRole("dialog", { name: /approve and add/i });
+    await accept.getByLabel(/reason/i).fill("Same person");
+    await accept.getByRole("button", { name: "Confirm" }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Add to team" })
+      .click();
+    await expect(
+      panel.getByRole("button", { name: "Remove Ivy Chen" }),
+    ).toBeVisible();
+    expect(written).toEqual([
+      { emailOrUpn: "ext1@example.test" },
+      { oid: "oid-sam" },
+      { oid: "oid-ivy", reason: "Same person" },
+    ]);
+  });
+});
+
 test.describe("journey: user (member)", () => {
   test("lands on My usage, sees the Usage group with My usage only and no Management or Administration, no sync badge", async ({
     context,

@@ -671,11 +671,14 @@ describe("MembersPanel member actions with no operation enabled (review W4)", ()
 // D6-D7)": a LiteLLM member with no `oid` shows the muted note "Not a member of
 // this team in the dashboard - add them to reset or manage." and no row
 // actions; a caller who may write members (the members response carries the
-// `candidates` key, Access: Lead in scope / org-admin / Admin) also gets an
-// "Add to team" action using the existing add-member contract (POST
-// /api/teams/[id]/members { emailOrUpn }, as AddUserDialog sends); an Auditor
-// (no `candidates` key) gets the note only.
-describe("MembersPanel members with no app membership (RS1 D6)", () => {
+// `candidates` key, Access: Lead in scope / org-admin / Admin) also gets a
+// placement action; an Auditor (no `candidates` key) gets the note only.
+// INV2 (Design System - Members panel, "Placing a person by hand"; Access
+// Control - "Placing a person by hand") supersedes RS1 D6's single "Add to
+// team", which always created an invite: the action now follows the row's
+// `state`, and the `unknown` state is "Invite" with the same body
+// { emailOrUpn }. The rows below therefore carry `state: "unknown"`.
+describe("MembersPanel members with no app membership (RS1 D6; INV2 Invite)", () => {
   const NOTE =
     "Not a member of this team in the dashboard — add them to reset or manage.";
   const outsider = {
@@ -685,6 +688,7 @@ describe("MembersPanel members with no app membership (RS1 D6)", () => {
     maxBudget: 10,
     rpmLimit: null,
     tpmLimit: null,
+    state: "unknown",
   };
   const membersWith = (extra: Record<string, unknown>) => ({
     "GET /api/litellm/teams/t1/members": () =>
@@ -716,8 +720,9 @@ describe("MembersPanel members with no app membership (RS1 D6)", () => {
   });
 
   // Source: Design System - "LiteLLM members with no app membership" (coordinator
-  // ruling R3, 2026-11-18; Access Control D27 precedent): the email comes from
-  // LiteLLM and is not verified, so "Add to team" opens a confirm AlertDialog
+  // ruling R3, 2026-11-18; Access Control D27 precedent; relabelled "Invite" by
+  // INV2, Access Control - "Placing a person by hand"): the email comes from
+  // LiteLLM and is not verified, so "Invite" opens a confirm AlertDialog
   // naming the email and the team (the team detail's alias), Cancel focused
   // first; nothing is sent until Confirm, and Cancel or Escape send nothing.
   const addStub = () =>
@@ -730,13 +735,13 @@ describe("MembersPanel members with no app membership (RS1 D6)", () => {
     const row = await outsiderRow();
     await u.click(
       within(row).getByRole("button", {
-        name: "Add ext1@example.test to team",
+        name: "Invite ext1@example.test",
       }),
     );
     return screen.findByRole("alertdialog");
   };
 
-  it("'Add to team' opens a confirm dialog naming the email and the team, Cancel focused first, and sends nothing yet (R3)", async () => {
+  it("'Invite' opens a confirm dialog naming the email and the team, Cancel focused first, and sends nothing yet (R3; INV2)", async () => {
     const api = addStub();
     const u = user();
     renderPanel();
@@ -755,7 +760,7 @@ describe("MembersPanel members with no app membership (RS1 D6)", () => {
     expect(api.writes()).toEqual([]);
   });
 
-  it("Confirm POSTs the existing add-member body to the app-team members route (R3, D6)", async () => {
+  it("Confirm POSTs { emailOrUpn } to the app-team members route (R3, D6; INV2 Invite)", async () => {
     const api = addStub();
     const u = user();
     renderPanel();
@@ -804,26 +809,39 @@ describe("MembersPanel members with no app membership (RS1 D6)", () => {
     expect(api.writes()).toEqual([]);
   });
 
-  it("shows no 'Add to team' on a member that has an oid", async () => {
+  it("shows no placement action on a member that has an oid", async () => {
     stub(ALL_OPS, membersWith({ candidates: [] }));
     renderPanel();
     await outsiderRow();
 
     expect(
       within(rowOf("Ada Lovelace")).queryByRole("button", {
-        name: /add .* to team/i,
+        name: /invite|add .* to team|approve and add/i,
       }),
     ).not.toBeInTheDocument();
   });
 
-  it("a read-only caller (no candidates key) sees the note but no action", async () => {
-    stub(["getUserDailySpend"], membersWith({}));
+  // T-IV5: a reader's response carries no state and no candidates key.
+  it("a read-only caller (no candidates key, no state) sees the note but no action (T-IV5)", async () => {
+    const { state: _state, ...bare } = outsider;
+    void _state;
+    stub(["getUserDailySpend"], {
+      "GET /api/litellm/teams/t1/members": () =>
+        apiResponse({
+          data: {
+            connected: true,
+            items: [member("ada", "Ada Lovelace", 77.1, 150), bare],
+          },
+        }),
+    });
     renderPanel();
     const row = await outsiderRow();
 
     expect(within(row).getByText(NOTE)).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: /add .* to team/i }),
+      screen.queryByRole("button", {
+        name: /invite|add .* to team|approve and add/i,
+      }),
     ).not.toBeInTheDocument();
   });
 });
@@ -1092,4 +1110,233 @@ describe("MembersPanel RS2: resets for members with no app membership and the us
       expect(button !== null).toBe(memberOn || userOn);
     },
   );
+});
+
+// INV2: Design System - Members panel, "Placing a person by hand", and Access
+// Control - "Placing a person by hand". For a caller who may write members each
+// row carries `state` (`signed-in`, `invited`, `unknown`) and the matching
+// action: Invite (unknown; { emailOrUpn }), Add to team (signed-in with no
+// team; { oid }), Approve and add (invited and signed in; opens the accept
+// dialog). Each confirm names the person and the team, Cancel focused first.
+//
+// Contract additions to the members response rows (packages/shared
+// LiteLLMMembersResponseSchema, route members/route.ts), member writers only:
+//   state: "signed-in" | "invited" | "unknown";
+//   identityOid: the signed-in identity to place (state "signed-in"), with
+//   identityName and identityEmail so the confirm names the person (review B1
+//   of unit INV2; Access Control - Same person, T-IV2);
+// pending key to approve (state "invited").
+// The response may carry `truncated: true` (review W1; Rule 60.17).
+describe("MembersPanel placing a person by hand (INV2)", () => {
+  const row = (extra: Record<string, unknown>): Record<string, unknown> => ({
+    userId: "ext-x",
+    email: "x@example.test",
+    spend: 1,
+    maxBudget: 10,
+    rpmLimit: null,
+    tpmLimit: null,
+    ...extra,
+  });
+  const unknown = row({
+    userId: "ext-1",
+    email: "ext1@example.test",
+    state: "unknown",
+  });
+  const signedIn = row({
+    userId: "ext-2",
+    email: "sam@example.test",
+    state: "signed-in",
+    identityOid: "oid-sam",
+    identityName: "Sam Rowe",
+    identityEmail: "sam.rowe@corp.example.com",
+  });
+  const invited = row({
+    userId: "ext-3",
+    email: "ivy@example.test",
+    state: "invited",
+  });
+  const CAND = {
+    oid: "oid-ivy",
+    displayName: "Ivy Chen",
+    upn: "ivy@example.test",
+    email: "ivy@example.test",
+    exact: true,
+    signal: "upn",
+  };
+  const candidates = () => apiResponse({ data: { items: [CAND] } });
+  const withRows = () =>
+    stub(ALL_OPS, {
+      "GET /api/litellm/teams/t1/members": () =>
+        apiResponse({
+          data: {
+            connected: true,
+            candidates: [],
+            items: [
+              member("ada", "Ada Lovelace", 77.1, 150),
+              unknown,
+              signedIn,
+              invited,
+            ],
+          },
+        }),
+      "POST /api/teams/t1/members": () =>
+        apiResponse({ data: { ok: true } }, 201),
+      "GET /api/teams/t1/members/pending/ivy%40example.test/candidates":
+        candidates,
+      "GET /api/teams/t1/members/pending/ivy@example.test/candidates":
+        candidates,
+    });
+  const rowByEmail = (email: string) =>
+    screen.findByRole("row", { name: new RegExp(email.replace(".", "\\.")) });
+  const body = () =>
+    JSON.parse(
+      String(
+        vi.mocked(fetch).mock.calls.find(([, i]) => i?.method === "POST")?.[1]
+          ?.body,
+      ),
+    );
+
+  it("each state offers its own action and no other", async () => {
+    withRows();
+    renderPanel();
+    const names = (r: HTMLElement) =>
+      within(r)
+        .queryAllByRole("button")
+        .map((b) => b.getAttribute("aria-label") ?? b.textContent ?? "")
+        .filter((n) => /invite|add .* to team|approve and add/i.test(n));
+    expect(names(await rowByEmail("ext1@example.test"))).toEqual([
+      "Invite ext1@example.test",
+    ]);
+    expect(names(await rowByEmail("sam@example.test"))).toEqual([
+      "Add sam@example.test to team",
+    ]);
+    expect(names(await rowByEmail("ivy@example.test"))).toEqual([
+      "Approve and add ivy@example.test",
+    ]);
+  });
+
+  it("'Add to team' confirms with the person and the team, Cancel focused first, then sends { oid }", async () => {
+    const api = withRows();
+    const u = user();
+    renderPanel();
+    const r = await rowByEmail("sam@example.test");
+    await u.click(
+      within(r).getByRole("button", { name: "Add sam@example.test to team" }),
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("sam@example.test");
+    expect(dialog).toHaveTextContent("Payments");
+    // B1: the dialog names the identity that will be added (name and email),
+    // and says the LiteLLM email is not verified (T-IV2).
+    expect(dialog).toHaveTextContent("Sam Rowe");
+    expect(dialog).toHaveTextContent("sam.rowe@corp.example.com");
+    expect(dialog).toHaveTextContent(/not verified/i);
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("button", { name: "Cancel" }),
+      ).toHaveFocus(),
+    );
+    expect(api.writes()).toEqual([]);
+
+    await u.click(within(dialog).getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(api.writes()).toHaveLength(1));
+    expect(api.writes()[0]).toMatchObject({
+      method: "POST",
+      path: "/api/teams/t1/members",
+    });
+    expect(body()).toEqual({ oid: "oid-sam" });
+  });
+
+  // Rule 60.17, review W1 of unit INV2: a cut identity list is said, not hidden.
+  it.each([
+    [true, true],
+    [false, false],
+  ])(
+    "truncated: %s in the response shows the truncation note: %s (W1)",
+    async (truncated, shown) => {
+      stub(ALL_OPS, {
+        "GET /api/litellm/teams/t1/members": () =>
+          apiResponse({
+            data: {
+              connected: true,
+              candidates: [],
+              truncated,
+              items: [signedIn],
+            },
+          }),
+      });
+      renderPanel();
+      await rowByEmail("sam@example.test");
+      expect(screen.queryByText(/truncated/i) !== null).toBe(shown);
+    },
+  );
+
+  it("'Approve and add' opens the accept dialog for the invite key and team, and sends nothing yet", async () => {
+    const api = withRows();
+    const u = user();
+    renderPanel();
+    const r = await rowByEmail("ivy@example.test");
+    await u.click(
+      within(r).getByRole("button", {
+        name: "Approve and add ivy@example.test",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /approve and add/i,
+    });
+    expect(dialog).toHaveTextContent("ivy@example.test");
+    expect(dialog).toHaveTextContent("Payments");
+    expect(
+      await within(dialog).findByRole("radio", { name: /Ivy Chen/ }),
+    ).toBeChecked();
+    expect(api.writes()).toEqual([]);
+  });
+
+  it("no action and no state shown to a reader: a response without state or candidates offers none (T-IV5)", async () => {
+    const { state: _s, ...bare } = signedIn;
+    void _s;
+    stub(["getUserDailySpend"], {
+      "GET /api/litellm/teams/t1/members": () =>
+        apiResponse({
+          data: {
+            connected: true,
+            items: [member("ada", "Ada Lovelace", 77.1, 150), bare],
+          },
+        }),
+    });
+    renderPanel();
+    await rowByEmail("sam@example.test");
+    expect(
+      screen.queryByRole("button", {
+        name: /invite|add .* to team|approve and add/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("a 403 from the add route is shown as an error and nothing else is written (T-IV6)", async () => {
+    const api = stub(ALL_OPS, {
+      "GET /api/litellm/teams/t1/members": () =>
+        apiResponse({
+          data: { connected: true, candidates: [], items: [signedIn] },
+        }),
+      "POST /api/teams/t1/members": () =>
+        apiResponse(
+          { error: { code: "FORBIDDEN", message: "Insufficient permission" } },
+          403,
+        ),
+    });
+    const u = user();
+    renderPanel();
+    const r = await rowByEmail("sam@example.test");
+    await u.click(
+      within(r).getByRole("button", { name: "Add sam@example.test to team" }),
+    );
+    await u.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Confirm",
+      }),
+    );
+    expect(await screen.findByText(/insufficient permission/i)).toBeVisible();
+    expect(api.writes()).toHaveLength(1);
+  });
 });

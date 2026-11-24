@@ -21,6 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { AcceptInviteDialog } from "@/components/settings/access/AcceptInviteDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiRequestError, mutateApi } from "@/lib/query/fetch-api";
 import {
@@ -226,6 +227,10 @@ type Member = {
   email: string;
   oid?: string | undefined;
   spend?: number | undefined;
+  state?: "signed-in" | "invited" | "unknown" | undefined;
+  identityOid?: string | undefined;
+  identityName?: string | undefined;
+  identityEmail?: string | undefined;
 };
 
 // G1: the member's daily spend for the URL range, read through the existing
@@ -280,30 +285,33 @@ function MemberDailySpend({ userId, name }: { userId: string; name: string }) {
 const NOT_IN_DASHBOARD =
   "Not a member of this team in the dashboard — add them to reset or manage.";
 
-// RS1 (D6): add the LiteLLM member to the app team through the app-team add
-// route, as the Users page does; offered only to callers who may write members
-// (the members response carries `candidates` for them alone).
-function AddToTeam({
+// INV2 (Access Control - Placing a person by hand; supersedes RS1 D6): the
+// action follows the row's state and is offered only to callers who may write
+// members (the response carries `state` for them alone). The route enforces the
+// matrix again.
+function PlaceAction({
   teamId,
-  email,
+  member,
   teamName,
   onAdded,
 }: {
   teamId: string;
-  email: string;
+  member: Member;
   teamName: string;
   onAdded: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  async function add() {
+  const [approving, setApproving] = useState(false);
+  const { email, state, identityOid, identityName, identityEmail } = member;
+  async function place(body: { oid: string } | { emailOrUpn: string }) {
     setPending(true);
     setError(null);
     try {
       await mutateApi(
         `/api/teams/${encodeURIComponent(teamId)}/members`,
         "POST",
-        { emailOrUpn: email },
+        body,
         z.unknown(),
       );
       await onAdded();
@@ -314,19 +322,62 @@ function AddToTeam({
       setPending(false);
     }
   }
-  return (
-    <>
-      <ConfirmAction
-        label={`Add ${email} to team`}
-        text="Add to team"
-        title="Add to team?"
-        description={`Adds ${email} to ${teamName} in the dashboard. LiteLLM reported this email and it is not verified. Recorded in the audit log.`}
-        disabled={pending}
-        onConfirm={() => void add()}
-      />
-      <WriteError message={error} />
-    </>
-  );
+  if (state === "unknown") {
+    return (
+      <>
+        <ConfirmAction
+          label={`Invite ${email}`}
+          text="Invite"
+          title="Invite to team?"
+          description={`Invites ${email} to ${teamName}; they join when they first sign in. LiteLLM reported this email and it is not verified. Recorded in the audit log.`}
+          disabled={pending}
+          onConfirm={() => void place({ emailOrUpn: email })}
+        />
+        <WriteError message={error} />
+      </>
+    );
+  }
+  if (state === "signed-in" && identityOid) {
+    return (
+      <>
+        <ConfirmAction
+          label={`Add ${email} to team`}
+          text="Add to team"
+          title="Add to team?"
+          description={`Adds ${identityName ?? identityEmail ?? email}${identityEmail ? ` (${identityEmail})` : ""} to ${teamName} in the dashboard. They signed in as this person; LiteLLM reported ${email} and it is not verified. Recorded in the audit log.`}
+          disabled={pending}
+          onConfirm={() => void place({ oid: identityOid })}
+        />
+        <WriteError message={error} />
+      </>
+    );
+  }
+  if (state === "invited") {
+    return (
+      <>
+        <ActionButton
+          label={`Approve and add ${email}`}
+          text="Approve and add"
+          disabled={pending}
+          onClick={() => setApproving(true)}
+        />
+        {approving ? (
+          <AcceptInviteDialog
+            teamId={teamId}
+            teamName={teamName}
+            inviteKey={email}
+            canSearch={false}
+            onClose={() => setApproving(false)}
+            onAccepted={() => {
+              setApproving(false);
+              void onAdded();
+            }}
+          />
+        ) : null}
+      </>
+    );
+  }
+  return null;
 }
 
 // RS2 (D-RS7): the reset-spend confirmation. With resetUserSpend on, it offers
@@ -479,9 +530,9 @@ function MemberActions({
           {NOT_IN_DASHBOARD}
         </span>
         {canAddToTeam ? (
-          <AddToTeam
+          <PlaceAction
             teamId={teamId}
-            email={member.email}
+            member={member}
             teamName={teamName}
             onAdded={onAdded}
           />
@@ -603,7 +654,7 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
     return <NotConnected />;
   }
   const ops = new Set(detail.data.enabledOperations);
-  const { items, candidates, litellmTeamId } = members.data;
+  const { items, candidates, litellmTeamId, truncated } = members.data;
   const teamName = detail.data.team.alias ?? "this team";
   const term = search.trim().toLowerCase();
   const shown = items.filter(
@@ -656,6 +707,12 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
         <div>
           <AddMember teamId={teamId} candidates={candidates ?? []} />
         </div>
+      ) : null}
+      {truncated ? (
+        <p className="text-muted-foreground text-sm">
+          The list of signed-in people is truncated, so some members may not
+          show an Add to team action.
+        </p>
       ) : null}
       {items.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2">

@@ -110,7 +110,7 @@ export function AcceptInviteDialog({
   const queryClient = useQueryClient();
   const [searchText, setSearchText] = useState("");
   const [search, setSearch] = useState("");
-  const [chosenOid, setChosenOid] = useState<string | null>(null);
+  const [pickedOid, setPickedOid] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState(false);
 
@@ -125,6 +125,11 @@ export function AcceptInviteDialog({
     retry: false,
   });
   const candidates = candidatesQuery.data?.items;
+  // Preselect only when exactly one candidate is exact; an email-only match is
+  // shown, never selected (Access Control - Placing a person by hand, T-IV2).
+  const exactOnes = candidates?.filter((c) => c.exact) ?? [];
+  const preselectedOid = exactOnes.length === 1 ? exactOnes[0]?.oid : undefined;
+  const chosenOid = pickedOid ?? preselectedOid ?? null;
   const chosen = candidates?.find((c) => c.oid === chosenOid) ?? null;
   const trimmed = reason.trim();
   const reasonValid = trimmed.length >= 1 && trimmed.length <= REASON_MAX;
@@ -142,7 +147,7 @@ export function AcceptInviteDialog({
   function submitSearch(event: FormEvent) {
     event.preventDefault();
     setSearch(searchText.trim());
-    setChosenOid(null);
+    setPickedOid(null);
   }
 
   const searchBox = canSearch ? (
@@ -166,7 +171,7 @@ export function AcceptInviteDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Accept invite for {inviteKey}</DialogTitle>
+          <DialogTitle>Approve and add {inviteKey}</DialogTitle>
           <DialogDescription>
             Pick the person who has already signed in, so they join {teamName}{" "}
             now.
@@ -196,7 +201,7 @@ export function AcceptInviteDialog({
                   candidate={candidate}
                   inviteKey={inviteKey}
                   checked={candidate.oid === chosen?.oid}
-                  onChoose={() => setChosenOid(candidate.oid)}
+                  onChoose={() => setPickedOid(candidate.oid)}
                 />
               ))}
             </div>

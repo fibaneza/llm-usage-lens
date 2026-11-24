@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -76,7 +76,28 @@ function stub(items: unknown[], cursor?: string) {
           apiResponse({
             data: {
               departments: [],
-              teams: [{ id: "team-a", name: "Team A", departmentId: "d" }],
+              teams: [
+                { id: "team-a", name: "Team A", departmentId: "d" },
+                { id: "team-b", name: "Team B", departmentId: "d" },
+              ],
+            },
+          }),
+        );
+      }
+      if (/\/members\/pending\/.+\/candidates$/.test(url.pathname)) {
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              items: [
+                {
+                  oid: "oid-ivy",
+                  displayName: "Ivy Chen",
+                  upn: "ivy@example.com",
+                  email: "ivy@example.com",
+                  exact: true,
+                  signal: "upn",
+                },
+              ],
             },
           }),
         );
@@ -609,6 +630,168 @@ describe("UsersPeoplePanel users table (unit US1)", () => {
         ).toBe(actions);
         expect(screen.getByText("2026-03-05")).toBeInTheDocument();
       },
+    );
+  });
+});
+
+// INV2: Design System - Management -> Users ("Placing a person by hand": "On
+// the People table and the user page, the same row actions as the Team page
+// (Invite, Add to team, Approve and add), from one set of components"; Add to
+// team opens a team picker) and Access Control - "Placing a person by hand" (a
+// row carries a state for callers who may write members; readers get none,
+// T-IV5). A person on the People table has signed in, so the states are
+// `signed-in` (no team: Add to team) and `invited` (an invite exists:
+// Approve and add). Contract addition to the directory row (packages/shared
+// DirectoryRowSchema): `state?: "signed-in" | "invited"` and, when invited,
+// `invites: [{ teamId, key }, ...]` (one pending team and key per invite to
+// approve; review W4 of unit INV2). Each is its own action, the team named:
+// "Approve and add <name> (<team>)".
+describe("UsersPeoplePanel placing a person by hand (INV2)", () => {
+  const SIGNED_IN = row({
+    oid: "oid-sam",
+    displayName: "Sam Rowe",
+    email: "sam@example.com",
+    match: null,
+    state: "signed-in",
+  });
+  const INVITED = row({
+    oid: "oid-ivy",
+    displayName: "Ivy Chen",
+    email: "ivy@example.com",
+    match: null,
+    state: "invited",
+    invites: [{ teamId: "team-a", key: "ivy@example.com" }],
+  });
+  const TWO_INVITES = row({
+    oid: "oid-ivy",
+    displayName: "Ivy Chen",
+    email: "ivy@example.com",
+    match: null,
+    state: "invited",
+    invites: [
+      { teamId: "team-a", key: "ivy@example.com" },
+      { teamId: "team-b", key: "ivy@corp.example.com" },
+    ],
+  });
+  const WITH_TEAM = row({
+    oid: "oid-tea",
+    displayName: "Tea Maker",
+    email: "tea@example.com",
+    memberTeamId: "team-a",
+    match: null,
+    state: "signed-in",
+  });
+
+  it.each([
+    ["admin", STEPS.admin],
+    ["org-admin", STEPS.orgAdmin],
+  ])(
+    "%s: a signed-in person with no team gets Add to team, an invited one gets Approve and add, a member of a team gets neither",
+    async (_n, steps) => {
+      stub([SIGNED_IN, INVITED, WITH_TEAM]);
+      show(steps);
+      const sam = (await screen.findByText("Sam Rowe")).closest(
+        "tr",
+      ) as HTMLElement;
+      const ivy = screen.getByText("Ivy Chen").closest("tr") as HTMLElement;
+      const tea = screen.getByText("Tea Maker").closest("tr") as HTMLElement;
+      expect(
+        within(sam).getByRole("button", { name: "Add Sam Rowe to team" }),
+      ).toBeVisible();
+      expect(
+        within(sam).queryByRole("button", { name: /approve and add/i }),
+      ).toBeNull();
+      expect(
+        within(ivy).getByRole("button", {
+          name: "Approve and add Ivy Chen (Team A)",
+        }),
+      ).toBeVisible();
+      expect(
+        within(ivy).queryByRole("button", { name: /add .* to team/i }),
+      ).toBeNull();
+      expect(
+        within(tea).queryByRole("button", {
+          name: /add .* to team|approve and add|invite/i,
+        }),
+      ).toBeNull();
+    },
+  );
+
+  it("the auditor's rows carry no state, so no placement action shows (T-IV5)", async () => {
+    stub([LINKED, NONE]);
+    show(STEPS.auditor);
+    await screen.findByText("Ada Lovelace");
+    expect(
+      screen.queryByRole("button", {
+        name: /add .* to team|approve and add|invite/i,
+      }),
+    ).toBeNull();
+  });
+
+  it("Add to team opens the team picker for that person, listing the teams the server returns", async () => {
+    stub([SIGNED_IN]);
+    show();
+    await userEvent
+      .setup()
+      .click(
+        await screen.findByRole("button", { name: "Add Sam Rowe to team" }),
+      );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Sam Rowe");
+    expect(
+      await within(dialog).findByRole("option", { name: "Team A" }),
+    ).toBeInTheDocument();
+  });
+
+  it("Approve and add opens the accept dialog for the invite's key and team, reading that team's candidates", async () => {
+    const urls = stub([INVITED]);
+    show();
+    await userEvent.setup().click(
+      await screen.findByRole("button", {
+        name: "Approve and add Ivy Chen (Team A)",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /approve and add/i,
+    });
+    expect(dialog).toHaveTextContent("ivy@example.com");
+    expect(
+      await within(dialog).findByRole("radio", { name: /Ivy Chen/ }),
+    ).toBeChecked();
+    expect(
+      urls.some((u) =>
+        decodeURIComponent(u.pathname).endsWith(
+          "/api/teams/team-a/members/pending/ivy@example.com/candidates",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("two invites give two actions, one per team named, each opening the accept dialog for its own team and key (review W4)", async () => {
+    const urls = stub([TWO_INVITES]);
+    show();
+    const u = userEvent.setup();
+    const approve = async (team: string) => {
+      await u.click(
+        await screen.findByRole("button", {
+          name: `Approve and add Ivy Chen (${team})`,
+        }),
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: /approve and add/i,
+      });
+      expect(dialog).toHaveTextContent(team);
+      await u.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    };
+    await approve("Team A");
+    await approve("Team B");
+    const paths = urls.map((x) => decodeURIComponent(x.pathname));
+    expect(paths).toContain(
+      "/api/teams/team-a/members/pending/ivy@example.com/candidates",
+    );
+    expect(paths).toContain(
+      "/api/teams/team-b/members/pending/ivy@corp.example.com/candidates",
     );
   });
 });

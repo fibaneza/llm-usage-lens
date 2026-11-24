@@ -3,6 +3,10 @@ import { z } from "zod";
 
 import { IdParamSchema } from "@/lib/api/id-param";
 import { findMemberInvite } from "@/lib/api/invite-accept";
+import {
+  annotateKeyCandidates,
+  annotateSearchRows,
+} from "@/lib/api/invite-candidate-signal";
 import { loadManager, notFoundResponse } from "@/lib/api/matrix-route";
 import { findTeam } from "@/lib/api/org-lookup";
 import {
@@ -48,8 +52,8 @@ const handler = withRoute(async (request, ctx, session) => {
   if (!(await findMemberInvite(teamId, key))) return notFoundResponse();
   const rows =
     q !== undefined && isMatrixWriter(actor.roles)
-      ? await searchInviteDirectory(q)
-      : await listInviteCandidates(key);
+      ? annotateSearchRows(await searchInviteDirectory(q))
+      : await annotateKeyCandidates(await listInviteCandidates(key), key);
   return jsonData({ items: z.array(InviteCandidateSchema).parse(rows) });
 });
 

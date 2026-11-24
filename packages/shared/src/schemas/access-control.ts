@@ -77,14 +77,43 @@ export const AcceptInviteBodySchema = z.strictObject({
 });
 
 // One candidate identity for an invite: the fields the dialog needs to compare
-// the key with the person, nothing else.
-export const InviteCandidateSchema = z.strictObject({
+// the key with the person, nothing else. Unit INV2 (Access Control - Placing a
+// person by hand): `exact` is true only for a UPN equal to the key or the
+// identity linked to the LiteLLM user with that email; `signal` names why the
+// row is a candidate, null for a directory-search row. The LiteLLM user id
+// never leaves the server (threat R1).
+export const InviteCandidateSignalSchema = z.enum([
+  "upn",
+  "guest-upn",
+  "email",
+  "litellm-link",
+]);
+export type InviteCandidateSignal = z.infer<typeof InviteCandidateSignalSchema>;
+
+export const InviteCandidateIdentitySchema = z.strictObject({
   oid: IdSchema,
   displayName: z.string().nullable(),
   upn: z.string().nullable(),
   email: z.string().nullable(),
 });
+export type InviteCandidateIdentity = z.infer<
+  typeof InviteCandidateIdentitySchema
+>;
+
+export const InviteCandidateSchema = InviteCandidateIdentitySchema.extend({
+  exact: z.boolean(),
+  signal: InviteCandidateSignalSchema.nullable(),
+});
 export type InviteCandidate = z.infer<typeof InviteCandidateSchema>;
+
+// Unit INV2: the state of a person's row, for callers who may write members;
+// readers get neither the state nor the invite (T-IV5).
+export const PersonStateSchema = z.enum(["signed-in", "invited"]);
+export const PersonInviteSchema = z.object({
+  teamId: IdSchema,
+  key: IdSchema,
+});
+export type PersonInvite = z.infer<typeof PersonInviteSchema>;
 
 // GET /api/access/stale (Access Control spec - Leaver, D2, D34): a pending
 // item unbound for more than 30 days (`reason: "pending"`, `subject` the email
@@ -554,6 +583,8 @@ export const IdentityDetailSchema = z.object({
     })
     .optional(),
   passwordUserVersion: VersionSchema.optional(),
+  state: PersonStateSchema.optional(),
+  invites: z.array(PersonInviteSchema).optional(),
   allowed: z.object({
     editDisplayName: z.boolean(),
     linkLiteLLM: z.boolean(),

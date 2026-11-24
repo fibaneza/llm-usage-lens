@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   LTEAM,
@@ -26,13 +26,23 @@ import {
 } from "@/test/support/litellm-member-writes-support";
 import { createAppTeam } from "@/lib/data/access/app-teams";
 import { putTeamLink } from "@/lib/data/litellm/team-links";
+import { createPendingItem } from "@/lib/data/access/pending";
 import { ctxAt, ok } from "@/test/support/access-test-support";
 import { seedMember } from "@/test/support/matrix-route-support";
 import { CALLERS, signInAs } from "@/test/fixtures/scope-fixtures";
 import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
 import type { FakeCall } from "@/test/fakes/fake-litellm";
+import type { CallerName } from "@/test/fixtures/scope-fixtures";
 import { memberWritesHandler } from "@/test/support/litellm-member-writes-support";
 import { putRaw } from "@/test/support/test-support";
+import {
+  ENTRA_ISSUER,
+  FOREIGN_TENANT,
+  GUEST_UPN,
+  linkIdentityToLiteLLMUser,
+  seedLiteLLMConnection,
+  seedSignedIn,
+} from "@/test/support/invite-accept-support";
 
 // Source: docs/specs/2026-11-10-litellm.md — "API routes" (/api/litellm/teams/
 // [teamId]/members GET in scope), "Roles and rights" (Lead sees members' spend,
@@ -48,6 +58,26 @@ vi.mock("@/auth", () => ({ auth: authMock }));
 vi.mock("next/cache", async () => {
   const mod = await import("@/test/fakes/next-cache-fake");
   return mod.passThroughNextCache;
+});
+
+// W1 seam (Rule 60.17, review of unit INV2): the identity read keeps its real
+// DynamoDB behaviour; a test lowers the bound so a small table is cut, as the
+// directory's 2,000 bound would be in production (US1, D-US3).
+const identityBound = vi.hoisted(() => ({
+  value: undefined as number | undefined,
+}));
+vi.mock("@/lib/data/access/identities", async (importOriginal) => {
+  const mod =
+    await importOriginal<typeof import("@/lib/data/access/identities")>();
+  return {
+    ...mod,
+    listIdentitiesBounded: (opts: { bound?: number } = {}) =>
+      mod.listIdentitiesBounded(
+        identityBound.value === undefined
+          ? opts
+          : { ...opts, bound: identityBound.value },
+      ),
+  };
 });
 
 const state = setupMemberWritesSuite();
@@ -129,9 +159,54 @@ describe("GET /api/litellm/teams/[teamId]/members - matching an app member (RS1 
 
   // team-a's LiteLLM team lists exactly these members; `email` is what
   // members_with_roles reports (absent: the row's email falls back to user_id).
-  function listMembers(rows: Array<{ id: string; email?: string }>) {
+  // `identity` (B1 round 1b): what GET /user/list reports as `sso_user_id`
+  // per LiteLLM user id, or `fail` to make that read error.
+  function listMembers(
+    rows: Array<{ id: string; email?: string }>,
+    identity: { sso?: Record<string, string>; fail?: boolean } = {},
+  ) {
     const base = memberWritesHandler();
     state.fake = createFakeLiteLLM((call: FakeCall, attempt: number) => {
+      if (call.method === "GET" && call.path === "/user/list") {
+        if (identity.fail) {
+          return { status: 500, body: { detail: "gateway error" } };
+        }
+        const q = new URL(call.url).searchParams;
+        const needle = (
+          q.get("search") ??
+          q.get("user_email") ??
+          q.get("user_id") ??
+          ""
+        ).toLowerCase();
+        const users = rows
+          .filter(
+            (r) =>
+              !needle ||
+              r.id.toLowerCase().includes(needle) ||
+              (r.email ?? "").toLowerCase().includes(needle),
+          )
+          .map((r) => ({
+            user_id: r.id,
+            user_email: r.email ?? r.id,
+            user_role: "internal_user",
+            spend: 0,
+            max_budget: null,
+            teams: [] as string[],
+            ...(identity.sso?.[r.id]
+              ? { sso_user_id: identity.sso[r.id] }
+              : {}),
+          }));
+        return {
+          status: 200,
+          body: {
+            users,
+            total: users.length,
+            page: 1,
+            page_size: 25,
+            total_pages: 1,
+          },
+        };
+      }
       const reply = base(call, attempt);
       if (
         `${call.method} ${call.path}` !== "GET /team/info" ||
@@ -282,6 +357,383 @@ describe("GET /api/litellm/teams/[teamId]/members - matching an app member (RS1 
       expect(r.name).toBeUndefined();
     }
   });
+
+  // Source: Access Control - "Placing a person by hand" (for callers who may
+  // write members, a person's row carries a state: `signed-in`, `invited` or
+  // `unknown`; readers get none), Design System - "Placing a person by hand",
+  // T-IV3 (states only for teams in scope: an invite pending for another team
+  // does not show on this team's rows; an out-of-scope team is the unchanged
+  // 404 of the read contract above), T-IV5 (a reader never sees who is invited).
+  // Agent decision, to be recorded in the spec: the state of a row is about this
+  // team - `invited` is a pending member invite for the row's email on this team;
+  // `signed-in` is a member with an oid or a person matched by the *Same
+  // person* keys (Access Control - Same person; one function, B2 of the INV2
+  // review); otherwise `unknown`.
+  describe("row state (Placing a person by hand; T-IV3, T-IV5)", () => {
+    const INVITED = "Invitee@Vendor.Example";
+    const rowsFor = [
+      { id: "uid-alice", email: PEOPLE.alice.email },
+      { id: "uid-carol", email: PEOPLE.carol.email },
+      { id: "uid-pending", email: INVITED },
+      { id: "uid-stranger", email: "stranger@vendor.example" },
+      { id: "uid-elsewhere", email: "elsewhere@vendor.example" },
+    ];
+    const WRITERS = [
+      "admin",
+      "orgAdmin",
+      "teamAdminA",
+      "deptAdminEng",
+    ] as const;
+
+    // Carol signed in as an Entra identity of the configured tenant whose UPN
+    // is her email (Access Control - Same person: the email key); the tenant
+    // is read from the Entra issuer.
+    beforeEach(async () => {
+      useEnv({
+        AUTH_MICROSOFT_ENTRA_ID_ID: "client-id-test",
+        AUTH_MICROSOFT_ENTRA_ID_ISSUER: ENTRA_ISSUER,
+      });
+      await seedSignedIn(PEOPLE.carol.oid, {
+        upn: PEOPLE.carol.email,
+        email: PEOPLE.carol.email,
+        displayName: PEOPLE.carol.name,
+      });
+    });
+
+    async function read(caller: CallerName) {
+      listMembers(rowsFor);
+      ok(
+        await createPendingItem(
+          {
+            kind: "affiliation",
+            emailOrUpn: INVITED.toLowerCase(),
+            teamId: "team-a",
+          },
+          ctxAt(undefined, "req-state-invite-a"),
+        ),
+      );
+      ok(
+        await createPendingItem(
+          {
+            kind: "affiliation",
+            emailOrUpn: "elsewhere@vendor.example",
+            teamId: "team-b",
+          },
+          ctxAt(undefined, "req-state-invite-b"),
+        ),
+      );
+      signInAs(caller);
+      return call(await load(), "/api/litellm/teams/team-a/members", {
+        teamId: "team-a",
+      });
+    }
+    const stateOf = (items: Array<{ userId: string; state?: string }>) =>
+      Object.fromEntries(items.map((m) => [m.userId, m.state]));
+
+    it.each(WRITERS)(
+      "%s: a team member and a person matched by the Same person keys are signed-in, a pending invite on this team is invited, anyone else (and an invite for another team) is unknown",
+      async (caller) => {
+        const { body } = await read(caller);
+        expect(stateOf(body.data.items)).toEqual({
+          "uid-alice": "signed-in",
+          "uid-carol": "signed-in",
+          "uid-pending": "invited",
+          "uid-stranger": "unknown",
+          "uid-elsewhere": "unknown",
+        });
+      },
+    );
+
+    it("the Auditor reads the same rows with no state field and no hint of who is invited (T-IV5)", async () => {
+      const { res, body, text } = await read("auditor");
+      expect(res.status).toBe(200);
+      expect(body.data.items).toHaveLength(rowsFor.length);
+      for (const item of body.data.items) {
+        expect(item).not.toHaveProperty("state");
+      }
+      expect(text).not.toContain('"state"');
+      expect(text).not.toContain("invited");
+    });
+
+    // Access Control - "Placing a person by hand" (a signed-in person who is not
+    // a member of the team carries `identityOid` for Add to team; `oid` keeps
+    // meaning a matched member), T-IV5 (readers get neither identityOid nor state).
+    it.each(WRITERS)(
+      "%s: a signed-in person who is not a member carries identityOid and no oid; a member keeps oid and has no identityOid; an invited or unknown row has neither",
+      async (caller) => {
+        const { body } = await read(caller);
+        const byId = Object.fromEntries(
+          body.data.items.map((m: { userId: string }) => [m.userId, m]),
+        );
+        expect(byId["uid-carol"].identityOid).toBe(PEOPLE.carol.oid);
+        expect(byId["uid-carol"]).not.toHaveProperty("oid");
+        expect(byId["uid-alice"].oid).toBe(PEOPLE.alice.oid);
+        expect(byId["uid-alice"]).not.toHaveProperty("identityOid");
+        for (const id of ["uid-pending", "uid-stranger", "uid-elsewhere"]) {
+          expect(byId[id]).not.toHaveProperty("identityOid");
+          expect(byId[id]).not.toHaveProperty("oid");
+        }
+      },
+    );
+
+    it("the Auditor sees no identityOid, so the oid of a person who signed in is not disclosed (T-IV5)", async () => {
+      const { body, text } = await read("auditor");
+      for (const item of body.data.items) {
+        expect(item).not.toHaveProperty("identityOid");
+      }
+      expect(text).not.toContain("identityOid");
+      expect(text).not.toContain(PEOPLE.carol.oid);
+    });
+  });
+
+  // Access Control - "Same person" and "Match keys per sign-in mode" (the Entra
+  // id, then the tenant-checked non-guest UPN; one function, `matchLiteLLMUser`;
+  // two matches, or keys that disagree, mean no link), "Placing a person by
+  // hand" (Add to team needs a signed-in person with no team), T2 (the `email`
+  // claim is not a match key) and T-IV2 (an unverified LiteLLM email never
+  // selects a person). Review B1 of unit INV2: the earlier round-2 case that
+  // set `identityOid` from a stored-email match alone was wrong by these
+  // rules and is replaced by the cases below.
+  describe("identityOid only on a unique Same person match (B1; T2, T-IV2)", () => {
+    const X = "00000000-0000-4000-8000-0000000004a1";
+    const Y = "00000000-0000-4000-8000-0000000004a2";
+    const ANN_UPN = "ann@corp.example.com";
+
+    beforeEach(() => {
+      useEnv({
+        AUTH_MICROSOFT_ENTRA_ID_ID: "client-id-test",
+        AUTH_MICROSOFT_ENTRA_ID_ISSUER: ENTRA_ISSUER,
+      });
+    });
+
+    async function itemsFor(
+      rows: Array<{ id: string; email: string }>,
+      identity: { sso?: Record<string, string>; fail?: boolean } = {},
+    ) {
+      listMembers(rows, identity);
+      signInAs("admin");
+      const { body } = await call(
+        await load(),
+        "/api/litellm/teams/team-a/members",
+        { teamId: "team-a" },
+      );
+      return Object.fromEntries(
+        body.data.items.map((m: { userId: string }) => [m.userId, m]),
+      ) as Record<string, Record<string, unknown>>;
+    }
+
+    it("the Entra id key alone: an Entra-id match with a different email gives identityOid, name and email", async () => {
+      await seedSignedIn(X, {
+        upn: ANN_UPN,
+        email: "ann.stored@corp.example.com",
+        displayName: "Ann Lee",
+      });
+      const items = await itemsFor([
+        { id: X, email: "someone.else@vendor.example" },
+      ]);
+      expect(items[X]).toMatchObject({
+        identityOid: X,
+        identityName: "Ann Lee",
+        identityEmail: "ann.stored@corp.example.com",
+      });
+    });
+
+    it("the UPN email key: a tenant UPN equal to the LiteLLM email gives identityOid", async () => {
+      await seedSignedIn(X, {
+        upn: ANN_UPN,
+        email: "ann.stored@corp.example.com",
+        displayName: "Ann Lee",
+      });
+      const items = await itemsFor([{ id: "uid-ann", email: ANN_UPN }]);
+      expect(items["uid-ann"]).toMatchObject({
+        identityOid: X,
+        identityName: "Ann Lee",
+      });
+    });
+
+    it("(a) a guest UPN never matches: neither the guest UPN nor the stored email selects the person", async () => {
+      await seedSignedIn(X, {
+        upn: GUEST_UPN,
+        email: "jane@example.com",
+        displayName: "Jane",
+      });
+      const items = await itemsFor([
+        { id: "uid-guest-upn", email: GUEST_UPN },
+        { id: "uid-guest-mail", email: "jane@example.com" },
+      ]);
+      for (const id of ["uid-guest-upn", "uid-guest-mail"]) {
+        expect(items[id]).not.toHaveProperty("identityOid");
+      }
+    });
+
+    it("(b) an identity of a foreign tenant never matches by email", async () => {
+      await seedSignedIn(X, {
+        upn: ANN_UPN,
+        email: ANN_UPN,
+        tid: FOREIGN_TENANT,
+        displayName: "Ann Lee",
+      });
+      const items = await itemsFor([{ id: "uid-ann", email: ANN_UPN }]);
+      expect(items["uid-ann"]).not.toHaveProperty("identityOid");
+    });
+
+    it("(c) an email-claim-only match (T2, T-IV2): the stored email equals the LiteLLM email, the UPN does not, no Entra id", async () => {
+      await seedSignedIn(X, {
+        upn: "ann.upn@corp.example.com",
+        email: ANN_UPN,
+        displayName: "Ann Lee",
+      });
+      const items = await itemsFor([{ id: "uid-ann", email: ANN_UPN }]);
+      expect(items["uid-ann"]).not.toHaveProperty("identityOid");
+      expect(items["uid-ann"]).not.toHaveProperty("identityName");
+      expect(items["uid-ann"]).not.toHaveProperty("identityEmail");
+    });
+
+    it("(d) a duplicate: two identities with the key give no identityOid on the row", async () => {
+      await seedSignedIn(X, { upn: ANN_UPN, email: ANN_UPN });
+      await seedSignedIn(Y, { upn: ANN_UPN, email: ANN_UPN });
+      const items = await itemsFor([{ id: "uid-ann", email: ANN_UPN }]);
+      expect(items["uid-ann"]).not.toHaveProperty("identityOid");
+    });
+
+    it("(e) the keys disagree: the Entra id matches one identity and the email another, so neither is chosen", async () => {
+      await seedSignedIn(X, { upn: ANN_UPN, email: ANN_UPN });
+      await seedSignedIn(Y, {
+        upn: "yan@corp.example.com",
+        email: "yan@corp.example.com",
+      });
+      const items = await itemsFor([{ id: X, email: "yan@corp.example.com" }]);
+      expect(items[X]).not.toHaveProperty("identityOid");
+    });
+
+    it.each(["team-a", "team-b"])(
+      "(f) an identity that already has a team (%s) is not offered Add to team",
+      async (teamId) => {
+        await seedSignedIn(X, { upn: ANN_UPN, email: ANN_UPN });
+        await seedMember(X, teamId);
+        const items = await itemsFor([{ id: "uid-ann", email: ANN_UPN }]);
+        expect(items["uid-ann"]).not.toHaveProperty("identityOid");
+      },
+    );
+
+    // Round 1b (B1 gap, fail closed; Access Control - "Same person" ("ambiguous
+    // or disagreeing keys are no match") and "Placing a person by hand"; T2,
+    // T-IV2): the match uses the LiteLLM user's real sso_user_id, and the
+    // stored link wins.
+    it("(g) the stored link wins: identity C holds the link to the LiteLLM user, so identityOid is C though its email differs and another identity matches the email (T-IV2)", async () => {
+      const C = "00000000-0000-4000-8000-0000000004c3";
+      await seedLiteLLMConnection();
+      await seedSignedIn(C, {
+        upn: "carl@corp.example.com",
+        email: "carl@corp.example.com",
+        displayName: "Carl",
+      });
+      await seedSignedIn(X, { upn: ANN_UPN, email: ANN_UPN });
+      await linkIdentityToLiteLLMUser(C, "uid-ann");
+      const items = await itemsFor([{ id: "uid-ann", email: ANN_UPN }]);
+      expect(items["uid-ann"]).toMatchObject({
+        identityOid: C,
+        identityName: "Carl",
+      });
+    });
+
+    // Review R2-W1: a stored link owner that is not among the signed-in people
+    // (gone, cut by the bounded read, or never signed in) is no match; the
+    // email key must not be consulted as a fallback.
+    it("(g2) a stored link whose owner is not among the signed-in people gives no identityOid, though identity X matches the email key (Same person; Placing a person by hand; T2)", async () => {
+      const GONE = "00000000-0000-4000-8000-0000000004c4";
+      await seedLiteLLMConnection();
+      await seedSignedIn(X, { upn: ANN_UPN, email: ANN_UPN });
+      await linkIdentityToLiteLLMUser(GONE, "uid-ann");
+      const items = await itemsFor([{ id: "uid-ann", email: ANN_UPN }]);
+      expect(items["uid-ann"]).not.toHaveProperty("identityOid");
+    });
+
+    it("(h) disagreement: the email key names identity X but sso_user_id is identity Y's oid, so identityOid is absent (T2, T-IV2)", async () => {
+      await seedSignedIn(X, { upn: ANN_UPN, email: ANN_UPN });
+      await seedSignedIn(Y, {
+        upn: "yan@corp.example.com",
+        email: "yan@corp.example.com",
+      });
+      const items = await itemsFor([{ id: "uid-ann", email: ANN_UPN }], {
+        sso: { "uid-ann": Y },
+      });
+      expect(items["uid-ann"]).not.toHaveProperty("identityOid");
+    });
+
+    it("(i) fail closed: when the sso_user_id read errors, an email-key-only match gets no identityOid, an Entra-id match on user_id still does (T2)", async () => {
+      await seedSignedIn(X, {
+        upn: "xena@corp.example.com",
+        email: "xena@corp.example.com",
+        displayName: "Xena",
+      });
+      await seedSignedIn(Y, { upn: ANN_UPN, email: ANN_UPN });
+      const items = await itemsFor(
+        [
+          { id: X, email: "other@vendor.example" },
+          { id: "uid-ann", email: ANN_UPN },
+        ],
+        { fail: true },
+      );
+      expect(items["uid-ann"]).not.toHaveProperty("identityOid");
+      expect(items[X]).toMatchObject({ identityOid: X });
+    });
+
+    it("the Auditor sees none of identityOid, identityName or identityEmail (T-IV5)", async () => {
+      await seedSignedIn(X, {
+        upn: ANN_UPN,
+        email: ANN_UPN,
+        displayName: "Ann Lee",
+      });
+      listMembers([{ id: "uid-ann", email: ANN_UPN }]);
+      signInAs("auditor");
+      const { text } = await call(
+        await load(),
+        "/api/litellm/teams/team-a/members",
+        { teamId: "team-a" },
+      );
+      for (const key of ["identityOid", "identityName", "identityEmail"]) {
+        expect(text).not.toContain(key);
+      }
+      expect(text).not.toContain("Ann Lee");
+    });
+  });
+
+  // Rule 60.17 (no silent failure), review W1 of unit INV2: the bounded
+  // identity read can be cut; the response says so (as the directory does,
+  // US1 / D-US3) for the callers who read identities.
+  describe("truncated identity list (W1; Rule 60.17)", () => {
+    beforeEach(() => {
+      useEnv({
+        AUTH_MICROSOFT_ENTRA_ID_ID: "client-id-test",
+        AUTH_MICROSOFT_ENTRA_ID_ISSUER: ENTRA_ISSUER,
+      });
+    });
+    afterEach(() => {
+      identityBound.value = undefined;
+    });
+
+    async function readAs(caller: CallerName) {
+      listMembers([{ id: "uid-x", email: "x@vendor.example" }]);
+      signInAs(caller);
+      return call(await load(), "/api/litellm/teams/team-a/members", {
+        teamId: "team-a",
+      });
+    }
+
+    it("a writer gets truncated: true when the identity list was cut, false when it was not", async () => {
+      identityBound.value = 1;
+      expect((await readAs("admin")).body.data.truncated).toBe(true);
+      identityBound.value = undefined;
+      expect((await readAs("admin")).body.data.truncated).toBe(false);
+    });
+
+    it("the Auditor reads no identities, so the response carries no truncated key (T-IV5)", async () => {
+      identityBound.value = 1;
+      const { body } = await readAs("auditor");
+      expect(body.data).not.toHaveProperty("truncated");
+    });
+  });
 });
 
 // Source: docs/specs/2026-11-10-litellm.md -- "Team configuration page (L4)"
@@ -313,10 +765,12 @@ describe("GET /api/litellm/teams/[teamId]/members - candidates (add-member picke
       const alice = body.data.candidates.find(
         (c: { oid: string }) => c.oid === PEOPLE.alice.oid,
       );
+      // Placing a person by hand: a candidate is a dashboard member, so signed-in.
       expect(alice).toEqual({
         oid: PEOPLE.alice.oid,
         name: PEOPLE.alice.name,
         email: PEOPLE.alice.email,
+        state: "signed-in",
       });
     },
   );
@@ -341,7 +795,7 @@ describe("GET /api/litellm/teams/[teamId]/members - candidates (add-member picke
     const { body } = await get();
     expect(body.data.candidates).toHaveLength(2);
     for (const c of body.data.candidates) {
-      expect(Object.keys(c).sort()).toEqual(["email", "name", "oid"]);
+      expect(Object.keys(c).sort()).toEqual(["email", "name", "oid", "state"]);
     }
   });
 });
@@ -388,6 +842,7 @@ describe("GET /api/litellm/teams/[teamId]/members - candidates of a linked creat
           oid: PEOPLE.carol.oid,
           name: PEOPLE.carol.name,
           email: PEOPLE.carol.email,
+          state: "signed-in",
         },
       ]);
     },

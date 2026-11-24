@@ -4,9 +4,13 @@
 // pending invite (unit INV1)".
 // access-test-support first: it must finish loading before the (mocked)
 // DynamoDB module is pulled in through the data layer.
+import { vi } from "vitest";
+
 import { ctxAt, ok } from "./access-test-support";
 
+import { writeLiteLLMUserLink } from "@/lib/data/access/identity-links";
 import { createPendingItem } from "@/lib/data/access/pending";
+import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
 import { putRaw } from "@/test/support/test-support";
 
 export { ENTRA_ISSUER, FOREIGN_TENANT, TENANT } from "./password-test-support";
@@ -82,3 +86,75 @@ export const acceptPath = (team: string, key: string) =>
   `/api/teams/${team}/members/pending/${encodeURIComponent(key)}/accept`;
 export const candidatesPath = (team: string, key: string) =>
   `/api/teams/${team}/members/pending/${encodeURIComponent(key)}/candidates`;
+
+// ---- fake LiteLLM for INV2 (candidate signal, zero-call checks) ---------------
+// A test file that uses these sets, in a `vi.hoisted` block before its imports,
+// process.env.LITELLM_SERVICE_KEY = "sk-fake-key-000" and
+// process.env.LITELLM_ALLOWED_HOSTS = "litellm.test:4000"; it calls
+// `vi.unstubAllGlobals()` in afterEach. Placeholders only (Rule 50.9).
+export const LL_USER = "ll-jane-1";
+
+export async function seedLiteLLMConnection(): Promise<void> {
+  await putRaw({
+    PK: "LITELLM#CONFIG",
+    SK: "CONNECTION",
+    baseUrl: "http://litellm.test:4000",
+    version: 1,
+    updatedAt: "2026-11-14T10:00:00.000Z",
+  });
+}
+
+// Answers GET /user/list (the email lookup) from `users`; every other path is 404.
+export function installLiteLLM(users: Array<{ id: string; email: string }>) {
+  const fake = createFakeLiteLLM((call) => {
+    if (call.method === "GET" && call.path === "/user/list") {
+      const email = new URL(call.url).searchParams
+        .get("user_email")
+        ?.toLowerCase();
+      const rows = users
+        .filter((u) => !email || u.email.toLowerCase() === email)
+        .map((u) => ({
+          user_id: u.id,
+          user_email: u.email,
+          spend: 0,
+          max_budget: null,
+          teams: [] as string[],
+        }));
+      return {
+        status: 200,
+        body: {
+          users: rows,
+          total: rows.length,
+          page: 1,
+          page_size: 25,
+          total_pages: 1,
+        },
+      };
+    }
+    return { status: 404, body: { detail: "not found" } };
+  });
+  vi.stubGlobal("fetch", fake.fetch);
+  return fake;
+}
+
+// The identity `oid` holds the LiteLLM user (link and claim, as the link routes write them).
+export async function linkIdentityToLiteLLMUser(
+  oid: string,
+  litellmUserId: string,
+): Promise<void> {
+  ok(
+    await writeLiteLLMUserLink(
+      {
+        oid,
+        version: null,
+        write: {
+          kind: "set",
+          litellmUserId,
+          mode: "manual",
+          reason: "seed for the invite candidate signal",
+        },
+      },
+      ctxAt(undefined, `req-inv-link-${oid.slice(-4)}`),
+    ),
+  );
+}

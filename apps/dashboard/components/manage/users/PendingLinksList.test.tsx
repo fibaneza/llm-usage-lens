@@ -7,6 +7,8 @@ import { renderWithProviders } from "@/test/support/render-providers";
 
 import { PendingLinksList } from "./PendingLinksList";
 
+const stepUp = { entra: vi.fn(), credentials: vi.fn(), devLogin: vi.fn() };
+
 // Source: Design System - "Sync from LiteLLM" (People known only from LiteLLM
 // are listed in their own panel, "Not signed in yet", under the People table,
 // read from GET /api/identities/pending-links, with their email and LiteLLM
@@ -49,6 +51,16 @@ function stub(
         url,
         body: init?.body ? JSON.parse(String(init.body)) : undefined,
       });
+      if (url.pathname === "/api/access/org-units") {
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              departments: [{ id: "d", name: "Engineering" }],
+              teams: [{ id: "team-a", name: "Team A", departmentId: "d" }],
+            },
+          }),
+        );
+      }
       if (method === "DELETE") {
         return Promise.resolve(
           del ?? apiResponse({ data: { email: "p01@example.com" } }),
@@ -205,5 +217,149 @@ describe("PendingLinksList (Design System - Sync from LiteLLM)", () => {
     );
     const del = calls.find((c) => c.method === "DELETE");
     expect(del?.body).toEqual({ litellmUserId: "lu-sso-7", version: 3 });
+  });
+});
+
+// INV2 / T-SM5: Design System - Management -> Users, "Not signed in yet"
+// (INV2, 2026-11-24: "with SSO the row offers Invite; without SSO it offers
+// Add user (the existing dialog, email filled in, internal-admin) and Invite
+// with the hint 'Joins at first SSO sign-in'") and Access Control - "The two
+// sign-in modes", SM6 (Add user with the hint "Add them as a user to let them
+// sign in") and SM8 (Invite stays available in password mode). The component
+// receives flags as props and never reads the Entra variable.
+//
+// Contract additions to <PendingLinksList>: optional props
+//   steps?: AddUserSteps  (team = may Invite; password = may Add user)
+//   sso?: boolean         (Entra sign-in configured; default true)
+//   authMethod?, stepUp?  (passed to the Add user dialog)
+// Without `steps` no placement action is offered. A row with no email (a
+// placeholder keyed by an SSO reference) offers none either.
+describe("PendingLinksList placement actions per sign-in mode (INV2, T-SM5)", () => {
+  const ADMIN = { password: true, team: true, link: true };
+  const ORG_ADMIN = { password: false, team: true, link: true };
+  const AUDITOR = { password: false, team: false, link: false };
+  const show = (props: {
+    steps: typeof ADMIN;
+    sso: boolean;
+    canRemove?: boolean;
+  }) =>
+    renderWithProviders(
+      <PendingLinksList
+        canRemove={props.canRemove ?? true}
+        steps={props.steps}
+        sso={props.sso}
+        authMethod="entra"
+        stepUp={stepUp}
+      />,
+    );
+
+  it("SSO mode: the row offers Invite and no Add user, even for an admin (SM6)", async () => {
+    stub([{ items: [item(1)] }]);
+    show({ steps: ADMIN, sso: true });
+    const panel = await region();
+    await within(panel).findByText("p01@example.com");
+    expect(
+      within(panel).getByRole("button", { name: "Invite p01@example.com" }),
+    ).toBeVisible();
+    expect(
+      within(panel).queryByRole("button", { name: /add user/i }),
+    ).toBeNull();
+    expect(within(panel).queryByText(/joins at first sso/i)).toBeNull();
+  });
+
+  it("password mode, admin: Add user (email filled in) and Invite with the hint 'Joins at first SSO sign-in' (SM6, SM8)", async () => {
+    stub([{ items: [item(1)] }]);
+    show({ steps: ADMIN, sso: false });
+    const panel = await region();
+    await within(panel).findByText("p01@example.com");
+    expect(
+      within(panel).getByText("Add them as a user to let them sign in"),
+    ).toBeVisible();
+    expect(within(panel).getByText("Joins at first SSO sign-in")).toBeVisible();
+    expect(
+      within(panel).getByRole("button", { name: "Invite p01@example.com" }),
+    ).toBeVisible();
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Add user p01@example.com" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText(/work email/i)).toHaveValue(
+      "p01@example.com",
+    );
+  });
+
+  it("password mode, org-admin: Invite with the hint but no Add user (Add user is internal-admin only)", async () => {
+    stub([{ items: [item(1)] }]);
+    show({ steps: ORG_ADMIN, sso: false });
+    const panel = await region();
+    await within(panel).findByText("p01@example.com");
+    expect(
+      within(panel).getByRole("button", { name: "Invite p01@example.com" }),
+    ).toBeVisible();
+    expect(within(panel).getByText("Joins at first SSO sign-in")).toBeVisible();
+    expect(
+      within(panel).queryByRole("button", { name: /add user/i }),
+    ).toBeNull();
+  });
+
+  it("the auditor reads the rows and gets no Invite or Add user in either mode (T-IV5)", async () => {
+    stub([{ items: [item(1)] }]);
+    show({ steps: AUDITOR, sso: false, canRemove: false });
+    const panel = await region();
+    await within(panel).findByText("p01@example.com");
+    expect(
+      within(panel).queryByRole("button", { name: /invite|add user/i }),
+    ).toBeNull();
+    expect(within(panel).queryByText(/joins at first sso/i)).toBeNull();
+  });
+
+  it("a placeholder with no email offers neither action", async () => {
+    stub([
+      {
+        items: [
+          {
+            litellmUserId: "lu-sso-7",
+            version: 3,
+            createdAt: "2026-11-20T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+    show({ steps: ADMIN, sso: false });
+    const panel = await region();
+    await within(panel).findByText("lu-sso-7");
+    expect(
+      within(panel).queryByRole("button", { name: /invite|add user/i }),
+    ).toBeNull();
+  });
+
+  it("Invite opens the team picker for that email; confirming POSTs { emailOrUpn } to the chosen team", async () => {
+    const calls = stub([{ items: [item(1)] }]);
+    show({ steps: ORG_ADMIN, sso: true });
+    const panel = await region();
+    await within(panel).findByText("p01@example.com");
+    const u = userEvent.setup({ pointerEventsCheck: 0 });
+    await u.click(
+      within(panel).getByRole("button", { name: "Invite p01@example.com" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    const select = await within(dialog).findByRole("combobox", {
+      name: "Team",
+    });
+    await within(select).findByRole("option", { name: "Team A" });
+    await u.selectOptions(select, "Team A");
+    await u.click(within(dialog).getByRole("button", { name: "Continue" }));
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+    await u.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Confirm",
+      }),
+    );
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "POST")).toMatchObject({
+        url: expect.objectContaining({ pathname: "/api/teams/team-a/members" }),
+        body: { emailOrUpn: "p01@example.com" },
+      }),
+    );
   });
 });

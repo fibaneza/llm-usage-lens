@@ -700,6 +700,76 @@ scope stays a grant). Rules:
   target must be an identity in the tenant (`404`) → privileged `409` →
   the bind (`409` conflicts).
 
+**Placing a person by hand (unit INV2; user, 2026-11-18: "with option to
+invite", and "also a button to approve the invitation and add user to team
+with/without user accepting the invitation").** Three actions, for the
+callers of the add-member row (a lead in scope, `internal-org-admin`,
+`internal-admin`), on the Team page Members panel and in Settings → Access;
+on Management → Users and the user page for `internal-org-admin` and
+`internal-admin`, the roles that reach those pages (a lead does not):
+
+- **Invite** — the person has not signed in: `POST
+  /api/teams/[id]/members` with `{ emailOrUpn }`, a pending member bound at
+  first sign-in under the Joiner rule. No email is sent (Q4).
+- **Add to team** — the person has signed in and has no team: the same
+  route with `{ oid }`, member now.
+- **Approve and add** — an invite exists and the person has signed in: the
+  accept route above, with the same callers, refusals and required reason
+  (agent decision, 2026-11-18: one write path to secure). It replaces the
+  label **Accept invite**.
+
+The accept dialog preselects the target only when exactly one candidate is
+exact: its UPN equals the invite key, or it is the identity linked to the
+LiteLLM user that has this email. The link is a new candidate signal, never
+a bind key; the server recomputes the target on accept with the check order
+above, unchanged: for a lead the `oid` must be one of the server's
+candidates, and for `internal-admin` and `internal-org-admin` an
+unaffiliated identity in the tenant; a preselection never widens either set
+(agent decision, 2026-11-24, INV2, confirmed by the coordinator: the plan's
+T-IV1 wording collapsed INV1's two role paths into one, and the landed,
+reviewed behaviour wins; the accept route is not changed). A person who has never signed in cannot
+be a member yet, because a membership is stored under the identity; their
+invite needs no step from them (user, 2026-11-18, Q5: they join at first
+sign-in). There is no new write route, permission or audit action.
+
+For callers who may write members, a person's row carries a state:
+`signed-in`, `invited` or `unknown`. Readers get no state. On the Team page
+the state is per that team: `signed-in` is a member, or a signed-in
+identity **matched to the row by the *Same person* keys** (the one function,
+`matchLiteLLMUser`: the Entra id, then the tenant-checked UPN email key;
+never a guest UPN or the `email` claim alone; ambiguous or disagreeing keys
+are no match); `invited` is a pending member invite for the row's email on
+this team; anything else is `unknown`. **Add to team** needs such a matched,
+signed-in person **with no team**: only then does the row carry
+`identityOid` (with the identity's name and email, which the confirm names),
+and otherwise it offers no Add to team; `oid` keeps meaning a matched member
+(amended 2026-11-25, INV2 review B1, coordinator: an email-claim match broke
+the same-person rule and T2). The stored LiteLLM link names the identity
+first; otherwise the match uses the LiteLLM user's real SSO id, so an email
+key that names one identity while the SSO id names another is no match; when
+the SSO id cannot be read, an email-only match gives no `identityOid` (agent
+decision, 2026-11-25, INV2 round 1b: fail closed, as the sync does). A stored
+link whose owner is not among the signed-in people (not signed in, gone, or
+cut by the bounded read) is no match: it never falls through to the key
+match (INV2 review R2-W1). The SSO-id read is `searchUsers` with
+`withIdentity: true` for the team's users: GET only, once per request and
+only for a member writer with a non-member row, at most 40 pages of 25; the
+`sso_user_id` is compared on the server and never returned or logged (S20);
+a failed or refused read fails closed and records a span event with the
+error name or code only (Rule 60.17; agent decision, 2026-11-25, INV2 review
+R2-B1, R2-W2). When the bounded identity read is cut, the
+response says `truncated` and the panel notes it (Rule 60.17). On
+Management → Users and on the user page, a row is `signed-in`, or `invited`
+when pending member invites exist for the person's email or UPN, and then
+carries `invites: [{ teamId, key }, …]`, every such invite, one **Approve and
+add** per team (agent decisions, 2026-11-24 and 2026-11-25, INV2: the actions
+need a target that the reads did not carry; a person may be invited to
+several teams, review W4). On the Users page the team picker lists only the teams the
+caller may add members to; the add-member route still refuses another
+team, with the same `404` as a missing team and one `denied` record
+(*Audit log*, D17). This replaces RS1 D6's single **Add to
+team** action, which always created an invite.
+
 **Mover.** Moving a member to another team needs authority over **both**
 teams; it is **one atomic transaction** (`TransactWriteItems` with the
 `version` condition) with one `affiliation.move` audit record; it **removes
@@ -1607,8 +1677,10 @@ the automatic paths (the sync, the sign-in link) use the SM3 keys (UPN, never
 the `email` claim). Reason: the existing M3 route tests and behaviour stay
 unchanged and the comparison is still one function. (2) `searchUsers` returns
 the reduced rows it always did (LiteLLM spec — *Reads*, L3b); the sync asks
-for `user_role` and `sso_user_id` with `withIdentity: true`, the one caller
-that does. (3) The sync's people are the Entra identities (by UPN and `oid`)
+for `user_role` and `sso_user_id` with `withIdentity: true`. Two callers do:
+the sync, and the Team page members read's **Add to team** match
+(`lib/api/member-placement.ts`, *Placing a person by hand*; amended
+2026-11-25, INV2 review R2-B1). (3) The sync's people are the Entra identities (by UPN and `oid`)
 and the password users not yet bound (by sign-in email and the reserved
 `expectedOid`); the master user and a dev login are never matched. (4) The
 audit snapshot also keeps `counts` (a string list such as `applied=3`),
@@ -1674,7 +1746,7 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/teams/[id]/members` | GET, POST | Per matrix |
 | `/api/teams/[id]/members/[oid]` | DELETE | Per matrix |
 | `/api/teams/[id]/members/pending/[key]/accept` | POST `{ oid, reason }` (strict) | Per matrix (accept a pending invite); `403` before parsing without the permission; rules in *Accept a pending invite* (unit INV1) |
-| `/api/teams/[id]/members/pending/[key]/candidates` | GET (`?q=` for `internal-admin` and `internal-org-admin` only) | Per matrix (accept a pending invite); the candidate identities of *Accept a pending invite*, at most 10, `oid`, display name, UPN and email only (unit INV1) |
+| `/api/teams/[id]/members/pending/[key]/candidates` | GET (`?q=` for `internal-admin` and `internal-org-admin` only) | Per matrix (accept a pending invite); the candidate identities of *Accept a pending invite*, at most 10, `oid`, display name, UPN and email only (unit INV1); each row also carries `exact` and `signal` (`upn`, `guest-upn`, `email`, `litellm-link`, or `null` for a `?q=` search row) (unit INV2, *Placing a person by hand*) |
 | `/api/teams/[id]/admins`, `/api/departments/[id]/admins` | GET, POST | Per matrix |
 | `/api/teams/[id]/admins/[oid]`, `/api/departments/[id]/admins/[oid]` | DELETE | Per matrix |
 | `/api/affiliations/[oid]/move` | POST `{ fromTeamId, toTeamId, version }` | Per matrix |
@@ -1902,6 +1974,13 @@ test in the M4 Verify list (implementation-phases — *M4*).
 | T-INV4 | Tampering: a stale or replayed accept binds twice | conditional delete on the pending `version`; affiliation written only if none | INV1: a second accept `409 CONFLICT`; two concurrent accepts bind once, the other `409`; one affiliation, one audit |
 | T-INV5 | Disclosure / elevation: a lead accepts for a team outside its scope, or probes keys | the matrix row; out-of-scope team or unknown key the same `404` | INV1: a lead of another team `404`, same body as a missing key |
 | T-INV6 | Tampering: accept overrides SSO-managed membership | `409 MANAGED_BY_SSO`; `409 ALREADY_AFFILIATED` | INV1: both, no write |
+| T-IV1 | Tampering: a client sends a target the server did not offer (unit INV2) | The accept route recomputes the target: for a lead the `oid` must be a server candidate, for `internal-admin` and `internal-org-admin` an unaffiliated identity in the tenant; otherwise `404` (INV1's check order, unchanged) | INV2: from the new entry points, a preselected `oid` outside the set is `404` with one `denied` record |
+| T-IV2 | Spoofing: an unverified LiteLLM email selects the wrong person (unit INV2) | Preselection needs a UPN match or the LiteLLM link; the email alone is shown, never selected | INV2: unit and component tests |
+| T-IV3 | Disclosure: a lead learns about people or teams outside scope (unit INV2) | States and candidates only for teams in scope; `?q=` stays `internal-admin` and `internal-org-admin` only | INV2: route tests |
+| T-IV4 | Elevation: the wider entry points weaken INV1's refusals (unit INV2) | Same route; own invite `403`, global-role target `409`, already in a team `409`, stale version `409` | INV2: INV1's route tests, unchanged |
+| T-IV5 | Disclosure: a reader sees who is invited (unit INV2) | The state is returned to member writers only | INV2: route test |
+| T-IV6 | Elevation: a caller places a person in a team outside their scope from the Users page (unit INV2) | The picker is a convenience; the add-member route refuses a team outside the caller's scope with the same `404` as a missing team and one `denied` record (D17, T22); a caller without the permission gets `403` before parsing (route contract) | INV2: the existing route test; component test |
+| T-IV7 | Tampering: placing a person changes LiteLLM (unit INV2) | **Invite**, **Add to team** and **Approve and add** use the app-team routes, which import nothing from `lib/litellm` | INV2: zero calls on the fake LiteLLM; a structure test on the imports |
 | T-LW1 | Tampering: with SSO, the dashboard creates LiteLLM users that sign-in would create, or duplicates them (unit LW1, 2026-11-18) | The gate refuses `createUser` when SSO is enabled, before any LiteLLM call | Gate and route tests; zero LiteLLM calls |
 | BR10 | Disclosure: reset counts and amounts reveal another person's or another team's usage | One scoped read, filtered after the read; per-member figures only with the per-user approval in `prod`; visibility rules apply | M4 slice B leak tests (a user never sees another person's, a Lead never another team's; only team totals before the approval) |
 

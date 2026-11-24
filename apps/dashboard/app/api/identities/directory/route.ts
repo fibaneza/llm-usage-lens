@@ -8,11 +8,15 @@ import type { DirectoryRow } from "@llm-usage-lens/shared";
 import { z } from "zod";
 
 import { accessErrorResponse, cursorSecret } from "@/lib/api/access-route";
+import { loadManager } from "@/lib/api/matrix-route";
+import { findPersonInvites } from "@/lib/api/person-invite";
 import { jsonData, parseSearchParams, withRoute } from "@/lib/api/respond";
+import { isMatrixWriter } from "@/lib/auth/write-policy";
 import { getAffiliation } from "@/lib/data/access/affiliations";
 import { listDirectory } from "@/lib/data/access/directory-rows";
 import { searchIdentities } from "@/lib/data/access/identities";
 import { getIdentityLink } from "@/lib/data/access/identity-links";
+import { getIdentityRecord } from "@/lib/data/access/team-member-lookup";
 import { listTeamDirectory } from "@/lib/api/team-directory";
 import { isLiteLLMConfigured } from "@/lib/litellm/client";
 import { findUserByEmail } from "@/lib/litellm/operations";
@@ -75,12 +79,21 @@ export const GET = withRoute(async (request, _ctx, session) => {
       });
   if (!page.ok) return accessErrorResponse(page.code);
 
+  // Placing a person by hand (T-IV5): state and invite for member writers only.
+  const actor = await loadManager(session);
+  const writer = actor !== null && isMatrixWriter(actor.roles);
   const items: DirectoryRow[] = await Promise.all(
     page.value.items.map(async (identity) => {
       const [link, affiliation] = await Promise.all([
         getIdentityLink(identity.oid),
         getAffiliation(identity.oid),
       ]);
+      const invites = writer
+        ? await findPersonInvites([
+            identity.email,
+            (await getIdentityRecord(identity.oid))?.upn,
+          ])
+        : [];
       return {
         oid: identity.oid,
         displayName: identity.displayName ?? null,
@@ -93,6 +106,11 @@ export const GET = withRoute(async (request, _ctx, session) => {
         linkVersion: link?.version ?? 0,
         ...(identity.createdAt ? { createdAt: identity.createdAt } : {}),
         lastSignInAt: identity.lastSignInAt ?? null,
+        ...(writer
+          ? invites.length > 0
+            ? { state: "invited" as const, invites }
+            : { state: "signed-in" as const }
+          : {}),
       };
     }),
   );

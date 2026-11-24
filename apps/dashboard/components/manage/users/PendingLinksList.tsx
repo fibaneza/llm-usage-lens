@@ -9,14 +9,24 @@ import {
 } from "@llm-usage-lens/shared";
 
 import { Panel } from "@/components/display/Panel";
+import { AddUserDialog } from "@/components/manage/users/AddUserDialog";
+import { TeamPickerDialog } from "@/components/manage/users/TeamPickerDialog";
+import type {
+  AccessViewer,
+  StepUpActions,
+} from "@/components/settings/access/types";
 import { Button } from "@/components/ui/button";
+import type { AddUserSteps } from "@/lib/auth/add-user-steps";
 import { ApiRequestError, fetchApi, mutateApi } from "@/lib/query/fetch-api";
 
 // Source: Design System - "Sync from LiteLLM", Not signed in yet (people known
 // only from LiteLLM, read from GET /api/identities/pending-links; admin and
 // org-admin can Remove one); Access Control - API routes (additions): 25 rows
-// a page with an opaque cursor, DELETE { email, version }. The per-person
-// Invite and Add user actions belong to unit INV2. The row schema names only
+// a page with an opaque cursor, DELETE { email, version }. Unit INV2 (Design
+// System - Users, "Not signed in yet"; Access Control - SM6, SM8): with SSO the
+// row offers Invite; without SSO also Add user (email filled in, internal-admin)
+// and the hint "Joins at first SSO sign-in". The page passes the sign-in mode
+// as a flag; this component never reads the Entra variable (T-SM5). The row schema names only
 // what is shown, so an SSO reference in a payload is dropped on parse (S20);
 // the route's own shape is the shared contract (agent decision, 2026-11-24).
 const PATH = "/api/identities/pending-links";
@@ -28,7 +38,25 @@ type Item = z.infer<typeof PendingLinksPageSchema>["items"][number];
 const messageOf = (cause: unknown, fallback: string) =>
   cause instanceof ApiRequestError ? cause.message : fallback;
 
-export function PendingLinksList({ canRemove }: { canRemove: boolean }) {
+type Placing =
+  | { kind: "invite"; email: string }
+  | { kind: "add-user"; email: string }
+  | null;
+
+export function PendingLinksList({
+  canRemove,
+  steps,
+  sso = true,
+  authMethod,
+  stepUp,
+}: {
+  canRemove: boolean;
+  steps?: AddUserSteps;
+  sso?: boolean;
+  authMethod?: AccessViewer["authMethod"];
+  stepUp?: StepUpActions;
+}) {
+  const [placing, setPlacing] = useState<Placing>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -119,21 +147,88 @@ export function PendingLinksList({ canRemove }: { canRemove: boolean }) {
                   {item.litellmUserId}
                 </span>
               </span>
-              {canRemove ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label={`Remove ${item.email ?? item.litellmUserId}`}
-                  onClick={() => void remove(item)}
-                >
-                  Remove
-                </Button>
-              ) : null}
+              <span className="flex flex-wrap items-center gap-2">
+                {item.email && steps?.team ? (
+                  <span className="flex flex-col items-start gap-0.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Invite ${item.email}`}
+                      onClick={() =>
+                        item.email &&
+                        setPlacing({ kind: "invite", email: item.email })
+                      }
+                    >
+                      Invite
+                    </Button>
+                    {sso ? null : (
+                      <span className="text-muted-foreground text-xs">
+                        Joins at first SSO sign-in
+                      </span>
+                    )}
+                  </span>
+                ) : null}
+                {item.email &&
+                !sso &&
+                steps?.password &&
+                authMethod &&
+                stepUp ? (
+                  <span className="flex flex-col items-start gap-0.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Add user ${item.email}`}
+                      onClick={() =>
+                        item.email &&
+                        setPlacing({ kind: "add-user", email: item.email })
+                      }
+                    >
+                      Add user
+                    </Button>
+                    <span className="text-muted-foreground text-xs">
+                      Add them as a user to let them sign in
+                    </span>
+                  </span>
+                ) : null}
+                {canRemove ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Remove ${item.email ?? item.litellmUserId}`}
+                    onClick={() => void remove(item)}
+                  >
+                    Remove
+                  </Button>
+                ) : null}
+              </span>
             </li>
           ))}
         </ul>
       )}
+      {placing?.kind === "invite" ? (
+        <TeamPickerDialog
+          action={{ kind: "invite", email: placing.email }}
+          personName={placing.email}
+          onClose={() => setPlacing(null)}
+          onDone={() => {
+            setPlacing(null);
+            void load();
+          }}
+        />
+      ) : null}
+      {placing?.kind === "add-user" && steps && authMethod && stepUp ? (
+        <AddUserDialog
+          steps={steps}
+          authMethod={authMethod}
+          stepUp={stepUp}
+          initialEmail={placing.email}
+          onClose={() => setPlacing(null)}
+          onWritten={() => void load()}
+        />
+      ) : null}
       {cursor ? (
         <Button
           type="button"

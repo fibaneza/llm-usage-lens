@@ -8,6 +8,7 @@ import {
   sha256Hex,
   userKey,
 } from "@/lib/data/access/password-users";
+import { createPendingItem } from "@/lib/data/access/pending";
 import { grantRole } from "@/lib/data/access/role-grants";
 import {
   getIdentityLink,
@@ -89,6 +90,7 @@ type Detail = Record<string, unknown> & {
   allowed: Record<string, boolean>;
   sso?: { expectedUpn: string; expectedOid?: string; boundAt?: string };
   passwordUserVersion?: number;
+  invites?: { teamId: string; key: string }[];
 };
 const dataOf = (body: { data?: unknown }) => body.data as Detail;
 
@@ -331,6 +333,107 @@ describe("GET /api/identities/[oid]", () => {
       expect(dataOf((await read(carol.oid)).body).roleGrants).toEqual([
         expect.objectContaining({ role: "internal-admin" }),
       ]);
+    });
+  });
+
+  // Source: Access Control - "Placing a person by hand" (on the user page a
+  // row is `signed-in`, or `invited` when a pending member invite exists for the
+  // person's email or UPN, and then carries `invites: [{ teamId, key }, ...]`, one per invite (review W4); readers
+  // get no state), T-IV5. Both keys are absent, not null, for a read-only role.
+  // US2's fields above stay as they are.
+  describe("state and invite (Placing a person by hand; T-IV5)", () => {
+    const CAROL_UPN = "carol@corp.example.com";
+    const inviteFor = async (key: string) =>
+      ok(
+        await createPendingItem(
+          { kind: "affiliation", emailOrUpn: key, teamId: "team-b" },
+          seedCtx(),
+        ),
+      );
+
+    it.each(["admin", "orgAdmin"] as CallerName[])(
+      "%s: a person with no invite is signed-in and has no invites key",
+      async (who) => {
+        await seedPerson(carol.oid, { email: carol.email, name: carol.name });
+        signInAs(who);
+        const data = dataOf((await read(carol.oid)).body);
+        expect(data.state).toBe("signed-in");
+        expect(data).not.toHaveProperty("invites");
+        expect(data).not.toHaveProperty("invite");
+      },
+    );
+
+    it.each([
+      ["the UPN", CAROL_UPN],
+      ["the email", carol.email],
+    ])(
+      "admin and org-admin: a pending member invite for %s makes the person invited, with the invite's team and key in invites",
+      async (_name, key) => {
+        await seedPerson(carol.oid, {
+          email: carol.email,
+          name: carol.name,
+          upn: CAROL_UPN,
+        });
+        await inviteFor(key);
+        for (const who of ["admin", "orgAdmin"] as CallerName[]) {
+          signInAs(who);
+          const data = dataOf((await read(carol.oid)).body);
+          expect(data.state, who).toBe("invited");
+          expect(data.invites, who).toEqual([{ teamId: "team-b", key }]);
+          expect(data, who).not.toHaveProperty("invite");
+          IdentityDetailSchema.parse(data);
+        }
+      },
+    );
+
+    it.each(["admin", "orgAdmin"] as CallerName[])(
+      "%s: invites under the UPN and under the email, on two teams, are both returned (W4)",
+      async (who) => {
+        await seedPerson(carol.oid, {
+          email: carol.email,
+          name: carol.name,
+          upn: CAROL_UPN,
+        });
+        await inviteFor(CAROL_UPN);
+        ok(
+          await createPendingItem(
+            {
+              kind: "affiliation",
+              emailOrUpn: carol.email,
+              teamId: "team-c",
+            },
+            seedCtx(),
+          ),
+        );
+        signInAs(who);
+        const data = dataOf((await read(carol.oid)).body);
+        expect(data.state).toBe("invited");
+        expect(
+          [...(data.invites ?? [])].sort(
+            (a: { teamId: string }, b: { teamId: string }) =>
+              a.teamId.localeCompare(b.teamId),
+          ),
+        ).toEqual([
+          { teamId: "team-b", key: CAROL_UPN },
+          { teamId: "team-c", key: carol.email },
+        ]);
+        IdentityDetailSchema.parse(data);
+      },
+    );
+
+    it("the auditor and every other read-only role get neither state nor invites: the keys are not present, even with an invite pending", async () => {
+      await seedPerson(carol.oid, {
+        email: carol.email,
+        name: carol.name,
+        upn: CAROL_UPN,
+      });
+      await inviteFor(CAROL_UPN);
+      signInAs("auditor");
+      const { body, text } = await read(carol.oid);
+      expect(body.data).not.toHaveProperty("state");
+      expect(body.data).not.toHaveProperty("invites");
+      expect(text).not.toContain("invited");
+      expect(text).not.toContain("team-b");
     });
   });
 

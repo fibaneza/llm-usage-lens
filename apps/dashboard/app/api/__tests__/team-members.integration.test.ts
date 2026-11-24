@@ -1,4 +1,12 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { createAppTeam } from "@/lib/data/access/app-teams";
 import { resetDeniedAudit } from "@/lib/data/access/audit";
@@ -8,6 +16,10 @@ import {
   seedSsoAffiliation,
 } from "@/test/support/access-test-support";
 import { createPendingItem, listPendingFor } from "@/lib/data/access/pending";
+import {
+  installLiteLLM,
+  seedLiteLLMConnection,
+} from "@/test/support/invite-accept-support";
 import {
   CALLERS,
   MISSING,
@@ -49,6 +61,12 @@ import { GET, POST } from "../teams/[id]/members/route";
 // Callers: admin, orgAdmin, teamAdminA (scope team-a), deptAdminEng (scope
 // dept-eng), memberA/memberB (member only), viewerNone, auditor. Only `@/auth`
 // is mocked.
+// INV2 T-IV7: LiteLLM is configured with an in-process fake so that any call
+// from the add-member route would be recorded.
+vi.hoisted(() => {
+  process.env.LITELLM_SERVICE_KEY = "sk-fake-key-000";
+  process.env.LITELLM_ALLOWED_HOSTS = "litellm.test:4000";
+});
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("next/cache", async () => {
   const mod = await import("@/test/fakes/next-cache-fake");
@@ -776,4 +794,31 @@ describe("DELETE /api/teams/[id]/members/[oid]", () => {
       });
     });
   });
+});
+
+// Source: Access Control - "Placing a person by hand" (**Invite** is this route
+// with `{ emailOrUpn }`, **Add to team** the same route with `{ oid }`; no new
+// write route) and T-IV7 (they use the app-team routes: zero calls on the fake
+// LiteLLM). The route is not changed by INV2. T-IV6 (a caller outside the
+// team's scope is refused by the matrix, nothing written, one denied record) is
+// the out-of-scope 404 case above; the 403-before-parsing case is the shared
+// route-contract suite's.
+describe("POST /api/teams/[id]/members - Invite and Add to team make no LiteLLM call (T-IV7)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["admin", "Invite (emailOrUpn)", { emailOrUpn: "jane@example.com" }],
+    ["teamAdminA", "Add to team (oid)", { oid: alice.oid }],
+  ] as const)(
+    "%s: %s answers 201 and calls nothing on the fake LiteLLM",
+    async (caller, _action, body) => {
+      await seedLiteLLMConnection();
+      const fake = installLiteLLM([]);
+      signInAs(caller);
+      await expectData(await add("team-a", body), [200, 201]);
+      expect(fake.calls).toEqual([]);
+    },
+  );
 });

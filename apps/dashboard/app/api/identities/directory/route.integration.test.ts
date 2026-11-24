@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   getIdentityLink,
@@ -22,7 +22,9 @@ import { signInAs } from "@/test/fixtures/scope-fixtures";
 import type { CallerName } from "@/test/fixtures/scope-fixtures";
 import { ctxAt, ok } from "@/test/support/access-test-support";
 import { putRaw } from "@/test/support/test-support";
+import { seedSignedIn } from "@/test/support/invite-accept-support";
 import { addMember } from "@/lib/data/access/affiliations";
+import { createPendingItem } from "@/lib/data/access/pending";
 
 // Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)"
 // (`GET /api/identities/directory`: internal-admin, internal-org-admin and
@@ -52,6 +54,8 @@ type Row = {
   linkVersion: number;
   createdAt?: string;
   lastSignInAt?: string | null;
+  state?: string;
+  invites?: { teamId: string; key: string }[];
   match?: { litellmUserId: string; email: string } | null;
 };
 
@@ -192,6 +196,116 @@ describe("GET /api/identities/directory", () => {
       const { body } = await list();
       expect(state.fake.calls).toHaveLength(0);
       for (const row of rows(body)) expect(row).not.toHaveProperty("match");
+    });
+  });
+
+  // Source: Access Control - "Placing a person by hand" (for callers who may
+  // write members, a person's row carries a state; readers get none), Design
+  // System - Management -> Users ("Placing a person by hand": the row actions),
+  // T-IV5 (the state is returned to member writers only; the auditor reads the
+  // directory and must not learn who is invited). Directory rows are people who
+  // signed in, so a row is `signed-in`, or `invited` when a pending member
+  // invite exists for their email (agent decision, to be recorded in the spec:
+  // the same fact the Approve-and-add action needs). A lead has no read here.
+  describe("row state (Placing a person by hand; T-IV5)", () => {
+    beforeEach(async () => {
+      ok(
+        await createPendingItem(
+          {
+            kind: "affiliation",
+            emailOrUpn: PEOPLE.carol.email,
+            teamId: "team-b",
+          },
+          ctxAt(undefined, "req-dir-state-invite"),
+        ),
+      );
+    });
+
+    it.each(["admin", "orgAdmin"] as CallerName[])(
+      "%s: a row is signed-in, and invited when a pending member invite exists for the row's email, in the page and in the q search",
+      async (who) => {
+        signInAs(who);
+        const page = rows((await list()).body);
+        expect(rowOf(page, PEOPLE.carol.oid)?.state).toBe("invited");
+        expect(rowOf(page, PEOPLE.dave.oid)?.state).toBe("signed-in");
+        expect(rowOf(page, alice.oid)?.state).toBe("signed-in");
+        const found = rows((await list("?q=carol")).body);
+        expect(rowOf(found, PEOPLE.carol.oid)?.state).toBe("invited");
+      },
+    );
+
+    it("the auditor reads the same rows with no state field and no sign of the invite (T-IV5)", async () => {
+      signInAs("auditor");
+      for (const query of ["", "?q=carol"]) {
+        const { res, body, text } = await list(query);
+        expect(res.status).toBe(200);
+        expect(rows(body).length).toBeGreaterThan(0);
+        for (const row of rows(body)) expect(row).not.toHaveProperty("state");
+        expect(text).not.toContain("invited");
+      }
+    });
+
+    // Access Control - "Placing a person by hand" (a row with pending member
+    // invites carries `invites: [{ teamId, key }, ...]`, one per invite, for
+    // Approve and add; review W4 of unit INV2: all of them, not the first), T-IV5.
+    it.each(["admin", "orgAdmin"] as CallerName[])(
+      "%s: an invited row carries invites [{ teamId, key }] of that invite; other rows carry none",
+      async (who) => {
+        signInAs(who);
+        for (const query of ["", "?q=carol"]) {
+          const found = rows((await list(query)).body);
+          expect(rowOf(found, PEOPLE.carol.oid)?.invites).toEqual([
+            { teamId: "team-b", key: PEOPLE.carol.email },
+          ]);
+          for (const row of found) {
+            expect(row).not.toHaveProperty("invite");
+            if (row.oid !== PEOPLE.carol.oid) {
+              expect(row).not.toHaveProperty("invites");
+            }
+          }
+        }
+      },
+    );
+
+    it.each(["admin", "orgAdmin"] as CallerName[])(
+      "%s: a person invited on two teams (once by email, once by UPN) carries both, one entry per team (W4)",
+      async (who) => {
+        const upn = "carol@corp.example.com";
+        await seedSignedIn(PEOPLE.carol.oid, {
+          email: PEOPLE.carol.email,
+          upn,
+          displayName: PEOPLE.carol.name,
+        });
+        ok(
+          await createPendingItem(
+            { kind: "affiliation", emailOrUpn: upn, teamId: "team-c" },
+            ctxAt(undefined, "req-dir-state-invite-2"),
+          ),
+        );
+        signInAs(who);
+        for (const query of ["", "?q=carol"]) {
+          const found = rows((await list(query)).body);
+          const invites = (rowOf(found, PEOPLE.carol.oid)?.invites ?? [])
+            .slice()
+            .sort((a, b) => a.teamId.localeCompare(b.teamId));
+          expect(invites).toEqual([
+            { teamId: "team-b", key: PEOPLE.carol.email },
+            { teamId: "team-c", key: upn },
+          ]);
+        }
+      },
+    );
+
+    it("the auditor sees no invites field (T-IV5)", async () => {
+      signInAs("auditor");
+      for (const query of ["", "?q=carol"]) {
+        const { body, text } = await list(query);
+        for (const row of rows(body)) {
+          expect(row).not.toHaveProperty("invites");
+        }
+        expect(text).not.toContain('"invites"');
+        expect(text).not.toContain('"invite"');
+      }
     });
   });
 

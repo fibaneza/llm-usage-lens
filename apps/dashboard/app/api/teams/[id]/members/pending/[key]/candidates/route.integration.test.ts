@@ -14,8 +14,12 @@ import {
   GUEST_UPN,
   JANE_OID,
   KEY,
+  LL_USER,
   OTHER_OID,
   candidatesPath,
+  installLiteLLM,
+  linkIdentityToLiteLLMUser,
+  seedLiteLLMConnection,
   seedAdminScopeInvite,
   seedInvite,
   seedSignedIn,
@@ -45,10 +49,18 @@ import { GET } from "./route";
 // internal-org-admin only; at most 10; oid, display name, UPN and email
 // only), "Permission matrix" (accept a pending invite), T-INV1, T-INV5.
 // The 401 and no-store cases come from the shared route-contract suite.
+// INV2 additions cite "Placing a person by hand" (candidate rows carry `exact`
+// and `signal`), T-IV2, T-IV3 and "API routes" (the candidates row).
 // Decisions: `?q=` from a lead is ignored (the key candidates are returned);
 // from an admin or org-admin it returns the directory matches of `q` instead
 // of the key candidates; an unknown key, a key pending for another team, or a
 // pending admin scope is the same 404 as an out-of-scope team.
+// INV2: the candidate signal reads the LiteLLM user list (a GET on the in-process
+// fake); the variables are set before `@/env` is first loaded.
+vi.hoisted(() => {
+  process.env.LITELLM_SERVICE_KEY = "sk-fake-key-000";
+  process.env.LITELLM_ALLOWED_HOSTS = "litellm.test:4000";
+});
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("next/cache", async () => {
   const mod = await import("@/test/fakes/next-cache-fake");
@@ -73,11 +85,14 @@ vi.mock("@/env", async (orig) => {
   return { env };
 });
 
+type Signal = "upn" | "guest-upn" | "email" | "litellm-link";
 type Candidate = {
   oid: string;
   displayName: string | null;
   upn: string | null;
   email: string | null;
+  exact: boolean;
+  signal: Signal | null;
 };
 const NOBODY = "nobody@example.com";
 
@@ -127,6 +142,9 @@ describe("GET .../pending/[key]/candidates - role x action matrix", () => {
           displayName: "Jane Doe",
           upn: "jane.doe@company.com",
           email: KEY,
+          // Placing a person by hand; T-IV2: the stored email alone is not exact.
+          exact: false,
+          signal: "email",
         },
       ]);
       const text = JSON.stringify(rows);
@@ -279,6 +297,9 @@ describe("?q= directory search (internal-admin and internal-org-admin only)", ()
       signInAs(caller);
       const rows = await items(await read("team-a", KEY, "?q=robert"));
       expect(rows.map((r) => r.oid)).toEqual([OTHER_OID]);
+      // Placing a person by hand: every row carries the fields; a person who
+      // matches the key by nothing is not exact.
+      expect(rows[0]).toMatchObject({ exact: false, signal: null });
     },
   );
 
@@ -309,4 +330,113 @@ describe("?q= directory search (internal-admin and internal-org-admin only)", ()
       expect(JSON.stringify(rows)).not.toContain("Robert");
     },
   );
+});
+
+// Source: Access Control - "Placing a person by hand": the dialog preselects a
+// target only when its UPN equals the invite key, or it is the identity linked
+// to the LiteLLM user that has this email; the link is a candidate signal, never
+// a bind key and never a new candidate (the set stays INV1's, so the accept
+// route is unchanged); T-IV2 (an unverified LiteLLM email never selects),
+// "API routes" (the candidates row: `exact`, `signal`), LiteLLM LD37 (a gateway
+// that is not configured is a handled state), threat R1 (the boolean `exact`
+// is all of the link that reaches the caller).
+describe("candidate signal and exact (Placing a person by hand; T-IV2)", () => {
+  const UPN_OID = "00000000-0000-4000-8000-0000000003e1";
+  const GUEST_OID = "00000000-0000-4000-8000-0000000003e2";
+  const byOid = (rows: Candidate[], oid: string) =>
+    rows.find((r) => r.oid === oid);
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("signals: a UPN equal to the key is exact (upn); a guest UPN and a stored email alone are not exact (guest-upn, email)", async () => {
+    await seedSignedIn(UPN_OID, { upn: KEY.toUpperCase() });
+    await seedSignedIn(GUEST_OID, { upn: GUEST_UPN });
+    signInAs("teamAdminA");
+    const rows = await items(await read("team-a", KEY));
+    expect(byOid(rows, UPN_OID)).toMatchObject({
+      exact: true,
+      signal: "upn",
+    });
+    expect(byOid(rows, GUEST_OID)).toMatchObject({
+      exact: false,
+      signal: "guest-upn",
+    });
+    expect(byOid(rows, JANE_OID)).toMatchObject({
+      exact: false,
+      signal: "email",
+    });
+  });
+
+  describe("with LiteLLM configured", () => {
+    beforeEach(async () => {
+      await seedLiteLLMConnection();
+    });
+
+    it("an identity linked to the LiteLLM user with the key's email is exact (litellm-link), and only it", async () => {
+      const fake = installLiteLLM([{ id: LL_USER, email: KEY }]);
+      await linkIdentityToLiteLLMUser(JANE_OID, LL_USER);
+      await seedSignedIn(OTHER_OID, { email: KEY, upn: "other@company.com" });
+      signInAs("admin");
+      const rows = await items(await read("team-a", KEY));
+      expect(byOid(rows, JANE_OID)).toMatchObject({
+        exact: true,
+        signal: "litellm-link",
+      });
+      expect(byOid(rows, OTHER_OID)).toMatchObject({
+        exact: false,
+        signal: "email",
+      });
+      expect(fake.calls.length).toBeGreaterThan(0);
+      expect(fake.calls.every((c) => c.method === "GET")).toBe(true);
+    });
+
+    it("a LiteLLM user with the key's email that no identity holds makes nobody exact (T-IV2: the LiteLLM email alone never selects)", async () => {
+      installLiteLLM([{ id: LL_USER, email: KEY }]);
+      signInAs("teamAdminA");
+      const rows = await items(await read("team-a", KEY));
+      expect(rows.map((r) => r.oid)).toEqual([JANE_OID]);
+      expect(rows[0]).toMatchObject({ exact: false, signal: "email" });
+    });
+
+    it("the link adds no candidate: an identity linked to that user but matching the key by nothing stays out, so a lead's set is never widened (T-IV1, T-IV2)", async () => {
+      installLiteLLM([{ id: LL_USER, email: KEY }]);
+      await seedSignedIn(OTHER_OID, {
+        upn: "other@company.com",
+        email: "other@company.com",
+      });
+      await linkIdentityToLiteLLMUser(OTHER_OID, LL_USER);
+      for (const caller of ["teamAdminA", "admin"] as const) {
+        signInAs(caller);
+        const rows = await items(await read("team-a", KEY));
+        expect(rows.map((r) => r.oid)).toEqual([JANE_OID]);
+      }
+    });
+
+    it("a lead gets the boolean and the signal only: no LiteLLM user id, no LiteLLM email field, nothing beyond the six row fields (threat R1)", async () => {
+      installLiteLLM([{ id: LL_USER, email: KEY }]);
+      await linkIdentityToLiteLLMUser(JANE_OID, LL_USER);
+      signInAs("teamAdminA");
+      const res = await read("team-a", KEY);
+      const text = await res.clone().text();
+      expect(text).not.toContain(LL_USER);
+      expect(text).not.toContain("litellmUserId");
+      const rows = await items(res);
+      expect(Object.keys(rows[0] ?? {}).sort()).toEqual(
+        ["displayName", "email", "exact", "oid", "signal", "upn"].sort(),
+      );
+    });
+  });
+
+  it("with LiteLLM not configured the read still answers 200 with no litellm-link signal and no gateway call (LD37)", async () => {
+    const fake = installLiteLLM([{ id: LL_USER, email: KEY }]);
+    await linkIdentityToLiteLLMUser(JANE_OID, LL_USER);
+    signInAs("teamAdminA");
+    const rows = await items(await read("team-a", KEY));
+    expect(rows).toEqual([
+      expect.objectContaining({ oid: JANE_OID, exact: false, signal: "email" }),
+    ]);
+    expect(fake.calls).toEqual([]);
+  });
 });

@@ -48,7 +48,17 @@ export default async function UsersManagePage() {
           devLogin: stepUpWithDevLogin,
         }}
       />
-      <PendingLinksList canRemove={page.steps.link} />
+      <PendingLinksList
+        canRemove={page.steps.link}
+        steps={page.steps}
+        sso={enabledSignInProviders.entra}
+        authMethod={page.authMethod}
+        stepUp={{
+          entra: stepUpWithEntra,
+          credentials: stepUpWithCredentials,
+          devLogin: stepUpWithDevLogin,
+        }}
+      />
     </div>
   );
 }

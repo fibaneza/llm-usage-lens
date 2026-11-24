@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { PersonInviteSchema, PersonStateSchema } from "./access-control";
+
 // Source: docs/specs/2026-11-10-access-control.md - "LiteLLM user links"
 // (management improvements D16, 2026-11-17) and "API routes (additions)";
 // docs/specs/2026-11-10-litellm.md - `createUser`, `searchUsers`, "Views as
@@ -36,6 +38,9 @@ export const DirectoryRowSchema = z.object({
   // Unit US1: createdAt only when the record has it (written since US2).
   createdAt: z.string().optional(),
   lastSignInAt: z.string().nullable().optional(),
+  // Unit INV2: for callers who may write members only (T-IV5).
+  state: PersonStateSchema.optional(),
+  invites: z.array(PersonInviteSchema).optional(),
   match: DirectoryMatchSchema.optional(),
 });
 

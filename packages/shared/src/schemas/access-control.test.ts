@@ -12,6 +12,7 @@ import {
   DEFAULT_TEAM_VISIBILITY,
   DepartmentVisibilitySchema,
   GrantableRoleSchema,
+  IdentityDetailSchema,
   IdentityLinkSchema,
   InviteCandidateSchema,
   LocalUserSchema,
@@ -175,18 +176,58 @@ describe("InviteCandidateSchema", () => {
     displayName: "Jane Doe",
     upn: "jane.doe@company.com",
     email: "jane@example.com",
+    exact: false,
+    signal: "email",
   };
   it("accepts a row, with displayName, upn or email null when unknown", () => {
     accepts(InviteCandidateSchema)(row);
     accepts(InviteCandidateSchema)({ ...row, email: null });
     accepts(InviteCandidateSchema)({ ...row, displayName: null, upn: null });
   });
+  // Access Control - "Placing a person by hand" and "API routes" (candidates
+  // row): each row carries `exact` and `signal`; the signal is one of upn,
+  // guest-upn, email, litellm-link, or null for a directory-search row (agent
+  // decision, to be recorded in the spec).
+  it.each(["upn", "guest-upn", "email", "litellm-link", null])(
+    "accepts the signal %s",
+    (signal) =>
+      accepts(InviteCandidateSchema)({
+        ...row,
+        exact: signal !== null,
+        signal,
+      }),
+  );
+  it.each([
+    [
+      "a missing exact",
+      { oid: OID, displayName: null, upn: null, email: null, signal: "upn" },
+    ],
+    [
+      "a missing signal",
+      { oid: OID, displayName: null, upn: null, email: null, exact: true },
+    ],
+    ["a non-boolean exact", { ...row, exact: "yes" }],
+    ["an unknown signal", { ...row, signal: "linkedin" }],
+    [
+      "a LiteLLM user id on the row (threat R1)",
+      { ...row, litellmUserId: "u-1" },
+    ],
+  ])("rejects %s", (_name, value) => rejects(InviteCandidateSchema)(value));
   it.each([
     ["an extra field (nothing else leaves the route)", { ...row, tid: "t" }],
     ["lockout state", { ...row, failedAttempts: 1 }],
     ["a missing oid", { displayName: null, upn: null, email: null }],
     ["an empty oid", { ...row, oid: "" }],
-    ["an undefined email", { oid: OID, displayName: "J", upn: "j@c.com" }],
+    [
+      "an undefined email",
+      {
+        oid: OID,
+        displayName: "J",
+        upn: "j@c.com",
+        exact: false,
+        signal: null,
+      },
+    ],
   ])("rejects %s", (_name, value) => rejects(InviteCandidateSchema)(value));
 });
 
@@ -616,4 +657,57 @@ describe("isAdminScopeSuspended", () => {
     );
     expect(isAdminScopeSuspended(scope("sso"), {})).toBe(false);
   });
+});
+
+// Access Control - "Placing a person by hand" (user page: `state` signed-in or
+// invited for member writers, and `invites: [{ teamId, key }, ...]` when invited
+// (one per pending member invite; review W4 of unit INV2);
+// absent, not null, for readers), T-IV5. US2's fields are unchanged.
+describe("IdentityDetailSchema (state and invites)", () => {
+  const detail = {
+    oid: OID,
+    displayName: "Carol",
+    email: "carol@company.com",
+    upn: null,
+    authMethod: "entra",
+    createdAt: AT,
+    lastSignInAt: AT,
+    memberTeamId: null,
+    memberVersion: 0,
+    leadScopes: [],
+    litellm: { state: "none" },
+    linkVersion: 0,
+    allowed: {
+      editDisplayName: false,
+      linkLiteLLM: false,
+      unlinkLiteLLM: false,
+      resetSpend: false,
+      changeMembership: false,
+      changeLead: false,
+      editRoles: false,
+      editUsageIdentities: false,
+    },
+  };
+  const invites = [
+    { teamId: "team-b", key: "carol@company.com" },
+    { teamId: "team-c", key: "carol@corp.example.com" },
+  ];
+  it("accepts a person without state or invites, and keeps both when present", () => {
+    accepts(IdentityDetailSchema)(detail);
+    expect(IdentityDetailSchema.parse(detail)).not.toHaveProperty("state");
+    expect(IdentityDetailSchema.parse(detail)).not.toHaveProperty("invites");
+    expect(
+      IdentityDetailSchema.parse({ ...detail, state: "signed-in" }),
+    ).toMatchObject({ state: "signed-in" });
+    expect(
+      IdentityDetailSchema.parse({ ...detail, state: "invited", invites }),
+    ).toMatchObject({ state: "invited", invites });
+  });
+  it.each([
+    ["an unknown state", { ...detail, state: "unknown" }],
+    ["a null state (absent, not null)", { ...detail, state: null }],
+    ["an invite without a key", { ...detail, invites: [{ teamId: "team-b" }] }],
+    ["a single object instead of a list", { ...detail, invites: invites[0] }],
+    ["a null invites (absent, not null)", { ...detail, invites: null }],
+  ])("rejects %s", (_name, value) => rejects(IdentityDetailSchema)(value));
 });
