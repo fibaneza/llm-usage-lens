@@ -247,3 +247,115 @@ describe("GET /api/audit", () => {
     expect(await viewsToday()).toHaveLength(before);
   });
 });
+
+// Source: docs/specs/2026-11-10-access-control.md - API routes, row
+// `/api/audit`, `/api/access-review` ("From 2026-11-24 (unit SRT1, D-SR1;
+// coordinator ruling): `GET /api/audit` takes `dir` (`asc` oldest first, the
+// previous order and the default; `desc` newest first), a Zod enum, any other
+// value `400`; only the query direction changes (scope, day and cursor
+// unchanged); the signed cursor carries the direction, so a cursor from one
+// direction is `400` under the other").
+describe("GET /api/audit dir (unit SRT1, D-SR1)", () => {
+  const ids = (d: Listed) => d.items.map((i) => i.requestId);
+  const asc = [0, 1, 2, 3, 4].map((i) => `req-${DAY}-${i}`);
+
+  it("no dir and dir=asc return the previous order, oldest first", async () => {
+    await seed(DAY, 5);
+    expect(ids(await expectData<Listed>(await get(`?day=${DAY}`)))).toEqual(
+      asc,
+    );
+    expect(
+      ids(await expectData<Listed>(await get(`?day=${DAY}&dir=asc`))),
+    ).toEqual(asc);
+  });
+
+  it("dir=desc returns the same day's records newest first, in the same item shape", async () => {
+    await seed(DAY, 5);
+    await seed("2026-10-02", 2);
+    const data = await expectData<Listed>(await get(`?day=${DAY}&dir=desc`));
+    expect(ids(data)).toEqual([...asc].reverse());
+    expect(data.items[0]).toMatchObject({
+      actor: "oid-actor",
+      action: "groupmap.create",
+      result: "success",
+    });
+    const keys = Object.keys(data.items[0] ?? {});
+    for (const forbidden of ["PK", "SK", "expiresAt", "gsi1pk"]) {
+      expect(keys).not.toContain(forbidden);
+    }
+  });
+
+  it("dir=desc pages with the cursor: every record exactly once, newest first", async () => {
+    await seed(DAY, 5);
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const query: string = `?day=${DAY}&dir=desc&limit=2${
+        cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
+      }`;
+      const data = await expectData<Listed>(await get(query));
+      seen.push(...ids(data));
+      cursor = data.cursor;
+      pages += 1;
+    } while (cursor && pages < 10);
+    expect(pages).toBeGreaterThan(1);
+    expect(seen).toEqual([...asc].reverse());
+  });
+
+  it("dir=desc is audited once per successful view and only for admin or auditor", async () => {
+    await seed(DAY, 1);
+    await expectData(await get(`?day=${DAY}&dir=desc`));
+    expect(await viewsToday()).toHaveLength(1);
+    signInAs("viewer");
+    await expectError(await get(`?day=${DAY}&dir=desc`), 403, "FORBIDDEN");
+    expect(await viewsToday()).toHaveLength(1);
+  });
+
+  it.each(["up", "ASC", "newest", "", "asc,desc"])(
+    "dir=%s is 400 BAD_REQUEST; nothing audited",
+    async (dir) => {
+      await seed(DAY, 2);
+      await expectError(
+        await get(`?day=${DAY}&dir=${encodeURIComponent(dir)}`),
+        400,
+        "BAD_REQUEST",
+      );
+      expect(await auditToday()).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["asc", "desc"],
+    ["desc", "asc"],
+  ] as const)(
+    "a cursor from dir=%s is 400 BAD_REQUEST under dir=%s; nothing audited",
+    async (from, under) => {
+      await seed(DAY, 4);
+      const first = await expectData<Listed>(
+        await get(`?day=${DAY}&dir=${from}&limit=1`),
+      );
+      expect(first.cursor).toBeDefined();
+      const before = (await viewsToday()).length;
+      await expectError(
+        await get(
+          `?day=${DAY}&dir=${under}&cursor=${encodeURIComponent(first.cursor ?? "")}`,
+        ),
+        400,
+        "BAD_REQUEST",
+      );
+      expect(await viewsToday()).toHaveLength(before);
+    },
+  );
+
+  it("a cursor from the default order is accepted under dir=asc (the default is asc)", async () => {
+    await seed(DAY, 4);
+    const first = await expectData<Listed>(await get(`?day=${DAY}&limit=1`));
+    const next = await expectData<Listed>(
+      await get(
+        `?day=${DAY}&dir=asc&limit=1&cursor=${encodeURIComponent(first.cursor ?? "")}`,
+      ),
+    );
+    expect(ids(next)).toEqual([`req-${DAY}-1`]);
+  });
+});

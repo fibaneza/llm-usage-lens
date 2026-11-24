@@ -46,13 +46,14 @@ export const GET = withRoute(async (request, _ctx, session) => {
     );
   }
   const { dateFrom, dateTo } = parseSearchParams(request, DateRangeQuerySchema);
-  const query = parseSearchParams(request, AuditQuerySchema);
+  const { dir, ...query } = parseSearchParams(request, AuditQuerySchema);
   return liteLLMResponse(async () => {
     requireEnabled(await enabledOperations(), ["listProxyAuditLog"]);
     const res = await listProxyAuditLog({
       startDate: dateFrom,
       endDate: dateTo,
       ...query,
+      sortOrder: dir,
     });
     // A view that cannot be recorded is not served (fail closed).
     await recordLiteLLMAuditView(session.user.oid);

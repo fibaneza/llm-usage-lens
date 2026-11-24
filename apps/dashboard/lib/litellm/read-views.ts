@@ -275,6 +275,8 @@ export const AuditQuerySchema = PageQuerySchema.extend({
     .optional(),
   tableName: z.enum(AUDIT_TABLES).optional(),
   objectId: z.string().refine(isValidLiteLLMId, "Invalid id").optional(),
+  // Unit SRT1 (D-SR1): newest first by default.
+  dir: z.enum(["asc", "desc"]).default("desc"),
 });
 
 // ---- reduction of loose upstream rows --------------------------------------

@@ -1,12 +1,13 @@
 "use client";
 
 import { Download } from "lucide-react";
-import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { parseAsStringLiteral, useQueryStates } from "nuqs";
 import type { ReactNode } from "react";
 
 import { AuditSection } from "@/components/litellm/AuditSection";
 import { LiteLLMSection } from "@/components/litellm/LiteLLMSection";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { SORT_PARAMS } from "@/components/tables/SortableHeader";
 import { Button } from "@/components/ui/button";
 import { withBasePath } from "@/lib/base-path";
 
@@ -15,7 +16,10 @@ type AuditSource = (typeof SOURCES)[number];
 
 const LABELS: Record<AuditSource, string> = { app: "App", gateway: "Gateway" };
 
-const sourceParser = parseAsStringLiteral(SOURCES);
+const SOURCE_PARAMS = {
+  source: parseAsStringLiteral(SOURCES),
+  ...SORT_PARAMS,
+};
 
 // Design System - Management pages, Audit: one page, a source filter shown as
 // a segmented toggle (nuqs `source`) only when the caller may read both; a
@@ -28,7 +32,8 @@ export function AuditPageContent({
   sources: readonly AuditSource[];
   app?: ReactNode;
 }) {
-  const [requested, setRequested] = useQueryState("source", sourceParser);
+  const [params, setParams] = useQueryStates(SOURCE_PARAMS);
+  const requested = params.source;
   const fallback = sources[0];
   const selected: AuditSource | undefined =
     requested !== null && sources.includes(requested) ? requested : fallback;
@@ -56,7 +61,9 @@ export function AuditPageContent({
                 variant={source === selected ? "default" : "outline"}
                 size="sm"
                 aria-pressed={source === selected}
-                onClick={() => void setRequested(source)}
+                onClick={() =>
+                  void setParams({ source, sort: null, dir: null })
+                }
               >
                 {LABELS[source]}
               </Button>

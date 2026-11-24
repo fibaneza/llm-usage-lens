@@ -9,6 +9,7 @@ import {
   type UsersListRow,
 } from "@llm-usage-lens/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryStates } from "nuqs";
 import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -19,6 +20,11 @@ import { UserDetail, budget, spend } from "@/components/litellm/UserSearch";
 import { LiteLLMReportedBadge } from "@/components/litellm/LiteLLMReportedBadge";
 import { LiteLLMLinkCell } from "@/components/manage/users/LiteLLMLinkCell";
 import type { LinkState } from "@/components/manage/users/LiteLLMLinkCell";
+import {
+  SORT_PARAMS,
+  SortableHeader,
+  readSort,
+} from "@/components/tables/SortableHeader";
 import { NativeSelect } from "@/components/settings/access/form-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +58,36 @@ const DEBOUNCE_MS = 500;
 const PAGE_SIZE = 25;
 const NOT_IN_LITELLM = "Not in LiteLLM";
 
+// Design System - "Sorting in the other tables (unit SRT1; D-SR1)": the server
+// sorts by these keys; the URL value is checked against the list before it is
+// sent. With no sort the page keeps LiteLLM's own order.
+const SORT_KEYS = ["email", "spend"] as const;
+const EMAIL_ONLY = ["email"] as const;
+type Sort = { sort: string; dir: "asc" | "desc" } | null;
+
+function useUsersSort(): Sort {
+  const [params] = useQueryStates(SORT_PARAMS);
+  const { key, dir } = readSort(params.sort, params.dir, "", SORT_KEYS);
+  return key === "" ? null : { sort: key, dir };
+}
+
+// A capped caller who opens ?sort=spend gets a 400 (LD23): drop the sort so the
+// list reloads in LiteLLM's own order instead of a dead error state.
+function useDropRefusedSpendSort(query: { isError: boolean; error: unknown }) {
+  const [params, setParams] = useQueryStates(SORT_PARAMS);
+  const refused =
+    query.isError &&
+    query.error instanceof ApiRequestError &&
+    query.error.status === 400 &&
+    params.sort === "spend";
+  useEffect(() => {
+    if (refused) void setParams({ sort: null, dir: null });
+  }, [refused, setParams]);
+}
+
+const sortQuery = (sort: Sort) =>
+  sort ? `&sort=${sort.sort}&dir=${sort.dir}` : "";
+
 type Mode = "all" | "team";
 
 // A row as the views share it. `linkKnown` is false where the route carries no
@@ -71,6 +107,8 @@ type RowsState = {
   proxyCanReset?: boolean;
   // The caller's own LiteLLM user id, for the own-row check on a search.
   callerLitellmUserId?: string | null;
+  // Server-sorted views only; the proxy-team members view has no sort.
+  sortable?: boolean;
   pager: {
     page: number;
     hasMore: boolean;
@@ -234,7 +272,12 @@ function RowsView({
     pager,
     proxyCanReset,
     callerLitellmUserId,
+    sortable,
   } = state;
+  // LD23: with per-user cost hidden or capped no row carries spend, and the
+  // server refuses sort=spend, so the header is not offered.
+  const spendShown = rows.some((r) => r.litellmUser?.spend !== undefined);
+  const sortKeys = spendShown ? SORT_KEYS : EMAIL_ONLY;
   const canCreate = enabledOperations.includes("createUser");
   const canReset =
     (mayLink || proxyCanReset === true) &&
@@ -330,8 +373,24 @@ function RowsView({
           <TableHeader>
             <TableRow>
               <TableHead>User</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead className="text-right">Spend</TableHead>
+              {sortable ? (
+                <SortableHeader sortKey="email" sortKeys={sortKeys}>
+                  Email
+                </SortableHeader>
+              ) : (
+                <TableHead>Email</TableHead>
+              )}
+              {sortable && spendShown ? (
+                <SortableHeader
+                  sortKey="spend"
+                  sortKeys={sortKeys}
+                  className="text-right"
+                >
+                  Spend
+                </SortableHeader>
+              ) : (
+                <TableHead className="text-right">Spend</TableHead>
+              )}
               <TableHead className="text-right">Budget</TableHead>
               <TableHead>Teams</TableHead>
               <TableHead>Actions</TableHead>
@@ -443,11 +502,20 @@ function ListView({
   });
   if (team !== null) params.set("team", team);
   if (term) params.set("q", term);
+  const sort = useUsersSort();
   const query = useLiteLLMQueryState(
-    ["users-list", team ?? "all", term, String(page)],
-    `/api/litellm/users?${params.toString()}`,
+    [
+      "users-list",
+      team ?? "all",
+      term,
+      String(page),
+      sort?.sort ?? "",
+      sort?.dir ?? "",
+    ],
+    `/api/litellm/users?${params.toString()}${sortQuery(sort)}`,
     UsersListResponseSchema,
   );
+  useDropRefusedSpendSort(query);
   const notice = queryNotice(query);
   if (notice) return notice;
   if (query.data?.status !== "ok") return null;
@@ -459,6 +527,7 @@ function ListView({
         rows: users.map((u) => ({ ...u, linkKnown: true })),
         mayLink,
         enabledOperations,
+        sortable: true,
         pager: { page, hasMore, onPage },
       }}
       ownOid={ownOid}
@@ -473,11 +542,13 @@ function ListView({
 function SearchView({ ownOid, term, selected, onSelect }: ViewProps) {
   const params = new URLSearchParams({ q: term, page: "1" });
   params.set("pageSize", String(PAGE_SIZE));
+  const sort = useUsersSort();
   const query = useLiteLLMQueryState(
-    ["users-list", "search", term],
-    `/api/litellm/users?${params.toString()}`,
+    ["users-list", "search", term, sort?.sort ?? "", sort?.dir ?? ""],
+    `/api/litellm/users?${params.toString()}${sortQuery(sort)}`,
     LiteLLMUserSearchResponseSchema,
   );
+  useDropRefusedSpendSort(query);
   const notice = queryNotice(query);
   if (notice) return notice;
   if (query.data?.status !== "ok") return null;
@@ -497,6 +568,7 @@ function SearchView({ ownOid, term, selected, onSelect }: ViewProps) {
         mayLink,
         callerLitellmUserId,
         enabledOperations,
+        sortable: true,
         pager: null,
       }}
       ownOid={ownOid}
@@ -637,6 +709,15 @@ export function LiteLLMUsersList({ canReset = false }: { canReset?: boolean }) {
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [input]);
+
+  const sorted = useUsersSort();
+  const sortKey = `${sorted?.sort ?? ""}|${sorted?.dir ?? ""}`;
+  // A sort change returns to the first page (D-US1 pattern), adjusted during render.
+  const [seenSort, setSeenSort] = useState(sortKey);
+  if (seenSort !== sortKey) {
+    setSeenSort(sortKey);
+    setPage(1);
+  }
 
   const caller = useCaller();
   const view: ViewProps = {

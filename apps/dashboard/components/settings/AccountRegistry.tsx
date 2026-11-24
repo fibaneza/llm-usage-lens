@@ -2,6 +2,7 @@
 
 import type { AccountMeta } from "@llm-usage-lens/shared";
 import { Building2, Pencil, Plus, UserX } from "lucide-react";
+import { useQueryStates } from "nuqs";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/display/EmptyState";
@@ -10,6 +11,11 @@ import {
   DeactivateAccountDialog,
   EditAccountSheet,
 } from "@/components/settings/AccountDialogs";
+import {
+  SORT_PARAMS,
+  SortableHeader,
+  readSort,
+} from "@/components/tables/SortableHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +30,14 @@ import {
 import { useAccounts } from "@/hooks/useAccounts";
 import { sectionData } from "@/lib/query/section-data";
 
+const SORT_KEYS = [
+  "accountId",
+  "name",
+  "department",
+  "team",
+  "status",
+] as const;
+
 type Dialog =
   | { kind: "add" }
   | { kind: "edit"; account: AccountMeta }
@@ -33,10 +47,29 @@ type Dialog =
 // write Route Handlers enforce the role again — Rule 10.3, 50.4).
 export function AccountRegistry({ isAdmin }: { isAdmin: boolean }) {
   const accounts = sectionData(useAccounts());
+  const [params] = useQueryStates(SORT_PARAMS);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const close = () => setDialog(null);
 
   if (accounts === undefined) return <Skeleton className="h-48 w-full" />;
+
+  const { key, dir } = readSort(params.sort, params.dir, "", SORT_KEYS);
+  const sign = dir === "asc" ? 1 : -1;
+  const sorted = key
+    ? [...accounts].sort((a, b) => {
+        if (key === "status")
+          return sign * (Number(!a.active) - Number(!b.active));
+        const [x, y] =
+          key === "accountId"
+            ? [a.accountId, b.accountId]
+            : key === "name"
+              ? [a.accountName, b.accountName]
+              : key === "department"
+                ? [a.departmentName, b.departmentName]
+                : [a.teamName, b.teamName];
+        return sign * x.localeCompare(y);
+      })
+    : accounts;
 
   const addButton = isAdmin ? (
     <Button type="button" size="sm" onClick={() => setDialog({ kind: "add" })}>
@@ -55,11 +88,21 @@ export function AccountRegistry({ isAdmin }: { isAdmin: boolean }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Account ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Team</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableHeader sortKey="accountId" sortKeys={SORT_KEYS}>
+                  Account ID
+                </SortableHeader>
+                <SortableHeader sortKey="name" sortKeys={SORT_KEYS}>
+                  Name
+                </SortableHeader>
+                <SortableHeader sortKey="department" sortKeys={SORT_KEYS}>
+                  Department
+                </SortableHeader>
+                <SortableHeader sortKey="team" sortKeys={SORT_KEYS}>
+                  Team
+                </SortableHeader>
+                <SortableHeader sortKey="status" sortKeys={SORT_KEYS}>
+                  Status
+                </SortableHeader>
                 {isAdmin ? (
                   <TableHead>
                     <span className="sr-only">Actions</span>
@@ -68,7 +111,7 @@ export function AccountRegistry({ isAdmin }: { isAdmin: boolean }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {accounts.map((a) => (
+              {sorted.map((a) => (
                 <TableRow key={a.accountId}>
                   <TableCell className="font-mono">{a.accountId}</TableCell>
                   <TableCell>{a.accountName}</TableCell>

@@ -1363,3 +1363,268 @@ describe("POST /api/litellm/users (create and link)", () => {
     expect(await linkOf(PEOPLE.alice.oid)).toBeFalsy();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Unit SRT1 (2026-11-24, D-SR1).
+// Source: docs/specs/2026-11-10-litellm.md - Allowlist `searchUsers` ("from
+// 2026-11-24 (unit SRT1, D-SR1): optional `sort_by` (`user_email` or `spend`)
+// and `sort_order`, set only by the server from the route's own enum (never a
+// client string passed on)") and API routes `/api/litellm/users` ("SRT1
+// (2026-11-24, D-SR1): `sort` (`email`, `spend`) and `dir` (`asc`, `desc`;
+// default: LiteLLM's own order, no sort), Zod enums, any other value `400`;
+// mapped to `sort_by` `user_email`/`spend` on `searchUsers`. `sort=spend` is
+// `400` when per-user cost is hidden or capped for the caller (LD23) ... In
+// *Members of one team* and in a Lead's merged result (several calls) the
+// route sorts the rows it returns in memory by the same key, a row without
+// the value last. `created` is not a key"); LD23, LT21.
+// ---------------------------------------------------------------------------
+type SortedRow = {
+  litellmUser: { email: string; spend?: number } | null;
+};
+const sortedRows = (body: { data?: unknown }): SortedRow[] =>
+  (body.data as { users: SortedRow[] }).users;
+
+// The defined values come first in the asked order; rows without the value
+// come last (a row without the value is last in both directions).
+function expectOrdered(
+  values: Array<string | number | undefined>,
+  dir: "asc" | "desc",
+) {
+  const defined = values.filter((v) => v !== undefined);
+  const firstMissing = values.findIndex((v) => v === undefined);
+  if (firstMissing !== -1) {
+    expect(values.slice(firstMissing).every((v) => v === undefined)).toBe(true);
+  }
+  const asc = [...defined].sort((a, b) =>
+    typeof a === "number" && typeof b === "number"
+      ? a - b
+      : String(a).localeCompare(String(b), "en"),
+  );
+  expect(defined).toEqual(dir === "asc" ? asc : asc.reverse());
+}
+
+describe("GET /api/litellm/users sort and dir reach searchUsers (unit SRT1, D-SR1)", () => {
+  it.each([
+    ["email", "asc", "user_email"],
+    ["email", "desc", "user_email"],
+    ["spend", "asc", "spend"],
+    ["spend", "desc", "spend"],
+  ])(
+    "the all-users list: sort=%s dir=%s sends sort_by=%s and the same sort_order",
+    async (sort, dir, sortBy) => {
+      signInAs("admin");
+      const { res } = await get(`?sort=${sort}&dir=${dir}`);
+      expect(res.status).toBe(200);
+      const q = new URL(listCalls()[0]!.url).searchParams;
+      expect(q.get("sort_by")).toBe(sortBy);
+      expect(q.get("sort_order")).toBe(dir);
+    },
+  );
+
+  it("an org-wide search (?q=) sends the same mapping", async () => {
+    signInAs("orgAdmin");
+    await get("?q=company&sort=email&dir=desc");
+    const q = new URL(listCalls()[0]!.url).searchParams;
+    expect(q.get("sort_by")).toBe("user_email");
+    expect(q.get("sort_order")).toBe("desc");
+  });
+
+  it("no sort: LiteLLM's own order, so neither sort_by nor sort_order is sent", async () => {
+    signInAs("admin");
+    await get("");
+    const q = new URL(listCalls()[0]!.url).searchParams;
+    expect(q.has("sort_by")).toBe(false);
+    expect(q.has("sort_order")).toBe(false);
+  });
+
+  it("a client sort_by or sort_order is never passed on to LiteLLM", async () => {
+    signInAs("admin");
+    await get("?sort=email&dir=asc&sort_by=password&sort_order=drop");
+    const q = new URL(listCalls()[0]!.url).searchParams;
+    expect(q.get("sort_by")).toBe("user_email");
+    expect(q.get("sort_order")).toBe("asc");
+  });
+
+  it.each([
+    ["created (not a key: the tab shows no created column)", "sort=created"],
+    ["an upper-case key", "sort=EMAIL"],
+    ["user_email (LiteLLM's name, not ours)", "sort=user_email"],
+    ["an unknown dir", "sort=email&dir=up"],
+    ["an upper-case dir", "sort=email&dir=ASC"],
+  ])("%s is 400 BAD_REQUEST with no LiteLLM call", async (_n, query) => {
+    signInAs("admin");
+    const { res } = await get(`?${query}`);
+    await expectError(res, 400, "BAD_REQUEST");
+    expect(state.fake.calls).toHaveLength(0);
+  });
+});
+
+describe("GET /api/litellm/users sort=spend is 400 when per-user cost is hidden or capped (unit SRT1, LD23)", () => {
+  it.each([
+    ["admin", "?sort=spend&dir=asc"],
+    ["orgAdmin", "?q=company&sort=spend&dir=desc"],
+    ["auditor", "?team=team-a&sort=spend&dir=asc"],
+    ["teamAdminA", "?q=company&sort=spend&dir=asc"],
+    ["deptAdminEng", "?q=company&sort=spend&dir=desc"],
+  ] as const)(
+    "%s in prod without the approval: 400, no LiteLLM call, so the order cannot reveal hidden spend (%s)",
+    async (who, query) => {
+      await enterProd();
+      signInAs(who);
+      const { res } = await get(query);
+      await expectError(res, 400, "BAD_REQUEST");
+      expect(state.fake.calls).toHaveLength(0);
+    },
+  );
+
+  it("the capped caller may still sort by email", async () => {
+    await enterProd();
+    signInAs("admin");
+    const { res } = await get("?sort=email&dir=desc");
+    expect(res.status).toBe(200);
+    expect(new URL(listCalls()[0]!.url).searchParams.get("sort_by")).toBe(
+      "user_email",
+    );
+  });
+
+  it("with the approval recorded, sort=spend is allowed again (LD23: reversible)", async () => {
+    await enterProd({ approved: true });
+    signInAs("admin");
+    const { res } = await get("?sort=spend&dir=desc");
+    expect(res.status).toBe(200);
+    expect(new URL(listCalls()[0]!.url).searchParams.get("sort_by")).toBe(
+      "spend",
+    );
+  });
+});
+
+describe("GET /api/litellm/users sorts a Lead's merged result in memory (unit SRT1, D-SR1)", () => {
+  it.each(["asc", "desc"] as const)(
+    "a department Lead's merged rows are ordered by email %s and cut to 25",
+    async (dir) => {
+      installFake(state, {
+        extraUsers: ["bulka", "bulkb"].flatMap((prefix) =>
+          Array.from({ length: 30 }, (_, i) => {
+            const id = `${prefix}${String(i).padStart(2, "0")}@company.com`;
+            return {
+              user_id: id,
+              user_email: id,
+              spend: 1,
+              max_budget: null,
+              teams: [LTEAM[prefix === "bulka" ? "team-a" : "team-b"]],
+            };
+          }),
+        ),
+      });
+      signInAs("deptAdminEng");
+      const { res, body } = await get(`?q=bulk&sort=email&dir=${dir}`);
+      expect(res.status).toBe(200);
+      const rows = sortedRows(body);
+      expect(rows).toHaveLength(25);
+      expectOrdered(
+        rows.map(
+          (r) => r.litellmUser?.email ?? (r as { email?: string }).email,
+        ),
+        dir,
+      );
+    },
+  );
+
+  it.each(["asc", "desc"] as const)(
+    "a department Lead's merged rows are ordered by spend %s",
+    async (dir) => {
+      signInAs("deptAdminEng");
+      const { res, body } = await get(`?q=company&sort=spend&dir=${dir}`);
+      expect(res.status).toBe(200);
+      const spends = (body.data as { users: Array<{ spend?: number }> }).users
+        .map((u) => u.spend)
+        .filter((s) => s !== undefined);
+      expect(spends.length).toBeGreaterThan(1);
+      expectOrdered(spends, dir);
+    },
+  );
+});
+
+describe("GET /api/litellm/users?team= sorts the members of one team in memory (unit SRT1, D-SR1)", () => {
+  beforeEach(async () => {
+    await seedMemberPeople();
+    await seedIdentity(CALLERS.memberA.oid, {
+      email: "a1@company.com",
+      name: "Member A",
+    });
+    const base = memberWritesHandler();
+    // A LiteLLM team member no app member claims (an orphan) with its own spend.
+    const withOrphan: FakeHandler = (call, attempt) => {
+      const reply = base(call, attempt);
+      if (typeof reply === "string" || call.path !== "/team/info") return reply;
+      const b = reply.body as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+      return {
+        status: reply.status,
+        body: {
+          ...b,
+          team_info: {
+            ...b.team_info,
+            members_with_roles: [
+              ...b.team_info.members_with_roles,
+              {
+                user_id: "orphan@company.com",
+                user_email: "orphan@company.com",
+                role: "user",
+              },
+            ],
+          },
+          team_memberships: [
+            ...b.team_memberships,
+            {
+              user_id: "orphan@company.com",
+              team_id: b.team_id,
+              spend: 2,
+              budget_id: "b2",
+              litellm_budget_table: { max_budget: 5 },
+            },
+          ],
+        },
+      };
+    };
+    state.fake = createFakeLiteLLM(withOrphan);
+    vi.stubGlobal("fetch", state.fake.fetch);
+  });
+
+  it.each(["asc", "desc"] as const)(
+    "sort=email dir=%s orders by the LiteLLM email; a person not in LiteLLM is last",
+    async (dir) => {
+      signInAs("admin");
+      const { res, body } = await get(`?team=team-a&sort=email&dir=${dir}`);
+      expect(res.status).toBe(200);
+      const rows = sortedRows(body);
+      expect(rows.length).toBeGreaterThan(2);
+      expect(rows.some((r) => r.litellmUser === null)).toBe(true);
+      expectOrdered(
+        rows.map((r) => r.litellmUser?.email),
+        dir,
+      );
+    },
+  );
+
+  it.each(["asc", "desc"] as const)(
+    "sort=spend dir=%s orders by spend; a row with no spend is last in both directions",
+    async (dir) => {
+      signInAs("admin");
+      const { res, body } = await get(`?team=team-a&sort=spend&dir=${dir}`);
+      expect(res.status).toBe(200);
+      const rows = sortedRows(body);
+      const spends = rows.map((r) => r.litellmUser?.spend);
+      expect(spends.filter((s) => s !== undefined).length).toBeGreaterThan(1);
+      expect(spends.some((s) => s === undefined)).toBe(true);
+      expectOrdered(spends, dir);
+    },
+  );
+
+  it("sort=spend is 400 for the capped caller, before any LiteLLM call", async () => {
+    await enterProd();
+    signInAs("admin");
+    const { res } = await get("?team=team-a&sort=spend&dir=desc");
+    await expectError(res, 400, "BAD_REQUEST");
+    expect(state.fake.calls).toHaveLength(0);
+  });
+});

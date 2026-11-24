@@ -25,14 +25,16 @@ const DayQuerySchema = z.object({
       );
     }, "day is not a calendar date")
     .optional(),
+  // Unit SRT1 (D-SR1): oldest first (the previous order) by default.
+  dir: z.enum(["asc", "desc"]).default("asc"),
 });
 
 export const GET = withRoute(
   async (request, _ctx, session) => {
-    const { day } = parseSearchParams(request, DayQuerySchema);
+    const { day, dir } = parseSearchParams(request, DayQuerySchema);
     const ctx = auditContext(session);
     const utcDay = day ?? ctx.now.toISOString().slice(0, 10);
-    const result = await viewAuditDay(utcDay, listOptions(request), ctx);
+    const result = await viewAuditDay(utcDay, listOptions(request), ctx, dir);
     if (!result.ok) return accessErrorResponse(result.code);
     return jsonData(result.value);
   },

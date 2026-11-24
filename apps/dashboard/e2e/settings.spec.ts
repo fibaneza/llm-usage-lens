@@ -87,6 +87,31 @@ test.describe("settings page -- admin", () => {
     expect(consoleErrors).toEqual([]);
   });
 
+  // Design System - "Sorting in the other tables (unit SRT1, 2026-11-24;
+  // D-SR1)": the AWS accounts registry sorts in the browser with the one
+  // SortableHeader; the sort lives in the URL, so a real reload keeps it.
+  test("a header click sorts the registry, writes sort and dir to the URL and a reload keeps it (unit SRT1; D-SR1)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await mockApi(page);
+    await openSettings(page);
+    const name = page.getByRole("columnheader", { name: "Name", exact: true });
+    const firstName = () =>
+      page.getByRole("row").nth(1).getByRole("cell").nth(1);
+    await expect(firstName()).toHaveText("Payments Prod");
+    await name.getByRole("button").click();
+    await expect(page).toHaveURL(/sort=name/);
+    await expect(name).toHaveAttribute("aria-sort", "ascending");
+    await expect(firstName()).toHaveText("Legacy Sandbox");
+    await page.reload();
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("columnheader", { name: "Name", exact: true }),
+    ).toHaveAttribute("aria-sort", "ascending");
+    await expect(firstName()).toHaveText("Legacy Sandbox");
+  });
+
   test("the Sync and data tab shows sync status and retention, no console errors", async ({
     page,
   }) => {

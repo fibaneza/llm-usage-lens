@@ -175,3 +175,71 @@ describe("SortableHeader (unit US1, D-US4)", () => {
     expect(header("Team B")).toHaveAttribute("aria-sort", "none");
   });
 });
+
+// Source: Design System - "Sorting in the other tables (unit SRT1, 2026-11-24;
+// D-SR1)": the gateway audit source is newest first by default, so the shared
+// header takes an optional `defaultDir` ('asc' | 'desc', default 'asc') that is
+// the direction of the default key while the URL has no usable sort
+// (coordinator ruling, 2026-11-24).
+describe("SortableHeader defaultDir (unit SRT1, D-SR1)", () => {
+  function showDesc(
+    searchParams: Record<string, string> = {},
+    onUrlUpdate?: OnUrlUpdateFunction,
+  ) {
+    renderWithProviders(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <SortableHeader
+              sortKey="time"
+              sortKeys={["time", "user"]}
+              defaultKey="time"
+              defaultDir="desc"
+            >
+              Time
+            </SortableHeader>
+            <SortableHeader
+              sortKey="user"
+              sortKeys={["time", "user"]}
+              defaultKey="time"
+              defaultDir="desc"
+            >
+              User
+            </SortableHeader>
+          </TableRow>
+        </TableHeader>
+      </Table>,
+      { searchParams, ...(onUrlUpdate ? { onUrlUpdate } : {}) },
+    );
+  }
+
+  it("with defaultDir desc and no sort in the URL the default key is descending, with a down arrow", () => {
+    showDesc();
+    expect(header("Time")).toHaveAttribute("aria-sort", "descending");
+    expect(header("User")).toHaveAttribute("aria-sort", "none");
+    const arrow = screen
+      .getByRole("button", { name: "Time" })
+      .querySelector("svg");
+    expect(arrow?.getAttribute("class")).toMatch(/arrow-down/);
+  });
+
+  it("clicking the default header flips it from the default and writes dir=asc to the URL", async () => {
+    const updates = vi.fn();
+    showDesc({}, updates);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Time" }));
+    expect(header("Time")).toHaveAttribute("aria-sort", "ascending");
+    expect(updates.mock.lastCall?.[0].searchParams.get("dir")).toBe("asc");
+  });
+
+  it("an unknown URL sort falls back to the default key in the default direction, and aria-sort matches", () => {
+    showDesc({ sort: "bogus" });
+    expect(header("Time")).toHaveAttribute("aria-sort", "descending");
+    expect(header("User")).toHaveAttribute("aria-sort", "none");
+    expect(
+      screen
+        .getByRole("button", { name: "Time" })
+        .querySelector("svg")
+        ?.getAttribute("class"),
+    ).toMatch(/arrow-down/);
+  });
+});

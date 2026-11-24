@@ -3,6 +3,7 @@
 import { AuditRecordSchema } from "@llm-usage-lens/shared";
 import type { AuditRecord } from "@llm-usage-lens/shared";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { useQueryStates } from "nuqs";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/display/EmptyState";
@@ -13,6 +14,11 @@ import {
 } from "@/components/settings/access/access-queries";
 import { pageOf } from "@/components/settings/access/access-schemas";
 import { FormField } from "@/components/settings/access/form-controls";
+import {
+  SORT_PARAMS,
+  SortableHeader,
+  readSort,
+} from "@/components/tables/SortableHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,17 +46,24 @@ const RESULT_LABELS: Record<AuditRecord["result"], string> = {
   denied: "Denied",
 };
 
+const SORT_KEYS = ["time"] as const;
+
 const utcToday = () => new Date().toISOString().slice(0, 10);
 
 export function AuditLogSection() {
   const [today] = useState(utcToday);
   const [day, setDay] = useState(today);
   const valid = DAY_PATTERN.test(day);
+  // Design System - "Sorting in the other tables (unit SRT1; D-SR1)": time,
+  // oldest first by default; a sort change is a new query key, so it starts
+  // from the first page.
+  const [sortParams] = useQueryStates(SORT_PARAMS);
+  const { dir } = readSort(sortParams.sort, sortParams.dir, "time", SORT_KEYS);
   const query = useInfiniteQuery({
-    queryKey: ["access", "audit", day],
+    queryKey: ["access", "audit", day, dir],
     queryFn: ({ pageParam }) =>
       fetchApi(
-        `/api/audit?day=${day}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+        `/api/audit?day=${day}&dir=${dir}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
         pageOf(AuditRecordSchema),
       ),
     initialPageParam: "",
@@ -90,7 +103,13 @@ export function AuditLogSection() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Time (UTC)</TableHead>
+                <SortableHeader
+                  sortKey="time"
+                  sortKeys={SORT_KEYS}
+                  defaultKey="time"
+                >
+                  Time (UTC)
+                </SortableHeader>
                 <TableHead>Actor</TableHead>
                 <TableHead>Action</TableHead>
                 <TableHead>Target</TableHead>

@@ -1,4 +1,5 @@
 import { act, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useQueryStates } from "nuqs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -145,5 +146,59 @@ describe("AuditSection edition state (D-LF2)", () => {
     renderWithProviders(<Subject />, { searchParams: RANGE });
     expect(await screen.findByText("No audit entries.")).toBeTruthy();
     expect(screen.queryByText("LiteLLM unavailable")).toBeNull();
+  });
+});
+
+// Source: Design System - "Sorting in the other tables (unit SRT1, 2026-11-24;
+// D-SR1)": the gateway audit table sorts by time with the shared
+// `SortableHeader`, newest first by default; LiteLLM spec - API routes
+// (`/api/litellm/audit` `dir`, default `desc`). The App source and the page
+// composition are covered in components/manage/AuditPageContent.test.tsx.
+describe("AuditSection sorting by time (unit SRT1, D-SR1)", () => {
+  const ITEM = {
+    id: "a1",
+    updatedAt: "2026-11-15T13:00:00Z",
+    changedBy: "ops@example.test",
+    action: "update",
+    tableName: "LiteLLM_TeamTable",
+    objectId: "t1",
+    changedFields: ["max_budget"],
+    viaDashboard: false,
+  };
+  function seen() {
+    const urls: URL[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        urls.push(new URL(String(input), "http://localhost"));
+        return Promise.resolve(
+          apiResponse({
+            data: { items: [ITEM], page: 1, totalPages: 1, total: 1 },
+          }),
+        );
+      }),
+    );
+    return urls;
+  }
+
+  it("keeps the date range in the request next to the direction", async () => {
+    const urls = seen();
+    renderWithProviders(<Subject />, {
+      searchParams: { ...RANGE, sort: "time", dir: "asc" },
+    });
+    await screen.findByRole("columnheader", { name: "Time" });
+    expect(urls[0]?.searchParams.get("dateFrom")).toBe("2026-10-01");
+    expect(urls[0]?.searchParams.get("dir")).toBe("asc");
+  });
+
+  it("refetches with the new direction when the URL direction changes", async () => {
+    const urls = seen();
+    renderWithProviders(<Subject />, { searchParams: RANGE });
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "Time" }));
+    await vi.waitFor(() =>
+      expect(urls.at(-1)?.searchParams.get("dir")).toBe("asc"),
+    );
   });
 });

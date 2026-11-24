@@ -2,6 +2,7 @@
 
 import { OrgUnitsSchema } from "@llm-usage-lens/shared";
 import { useQuery } from "@tanstack/react-query";
+import { useQueryStates } from "nuqs";
 import { useId, useState } from "react";
 
 import {
@@ -18,6 +19,11 @@ import {
 } from "@/components/settings/litellm-panel/TeamLinkForm";
 import { TeamLinkNewTeamForm } from "@/components/settings/litellm-panel/TeamLinkNewTeamForm";
 import { TeamLinkRow } from "@/components/settings/litellm-panel/TeamLinkRow";
+import {
+  SORT_PARAMS,
+  SortableHeader,
+  readSort,
+} from "@/components/tables/SortableHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,6 +36,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchApi } from "@/lib/query/fetch-api";
+
+const TEAM_SORT_KEYS = ["team"] as const;
 
 // Management -> LiteLLM -> LiteLLM teams (D3, 2026-11-17): the link rows, the
 // LiteLLM teams table with a Members action (RS2), a "Spend source" table for
@@ -45,6 +53,7 @@ export function LiteLLMTeamLinksSection({
 }) {
   const searchId = useId();
   const [term, setTerm] = useState("");
+  const [sortParams] = useQueryStates(SORT_PARAMS);
   const [openTeam, setOpenTeam] = useState<string | null>(null);
   const query = useQuery({
     queryKey: TEAM_LINKS_KEY,
@@ -75,6 +84,22 @@ export function LiteLLMTeamLinksSection({
       : query.data.configured === false
         ? { state: "not-configured" }
         : { state: "unavailable" };
+  const teamSort = readSort(
+    sortParams.sort,
+    sortParams.dir,
+    "",
+    TEAM_SORT_KEYS,
+  );
+  const sortedTeams =
+    litellmTeams.state === "ready"
+      ? teamSort.key === "team"
+        ? [...litellmTeams.teams].sort(
+            (a, b) =>
+              (teamSort.dir === "asc" ? 1 : -1) *
+              a.alias.localeCompare(b.alias),
+          )
+        : litellmTeams.teams
+      : [];
   const needle = term.trim().toLowerCase();
   const items = query.data.items.filter(
     (link) =>
@@ -119,12 +144,14 @@ export function LiteLLMTeamLinksSection({
             <TableCaption className="sr-only">LiteLLM teams</TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead>LiteLLM team</TableHead>
+                <SortableHeader sortKey="team" sortKeys={TEAM_SORT_KEYS}>
+                  LiteLLM team
+                </SortableHeader>
                 <TableHead>Members</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {litellmTeams.teams.map((team) => (
+              {sortedTeams.map((team) => (
                 <TableRow key={team.litellmTeamId}>
                   <TableCell>{team.alias}</TableCell>
                   <TableCell>

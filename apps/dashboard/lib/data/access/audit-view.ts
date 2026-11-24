@@ -17,11 +17,13 @@ export async function viewAuditDay(
   utcDay: string,
   options: ListOptions,
   ctx: AuditContext,
+  direction: "asc" | "desc" = "asc",
 ): Promise<AccessResult<Page<AuditRecord>>> {
   const result = await queryPage({
     schema: AuditRecordSchema,
     options,
     partition: auditPk(utcDay),
+    direction,
   });
   if (!result.ok) return result;
   await recordAuditedRead(

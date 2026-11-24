@@ -261,3 +261,52 @@ describe("GET /api/litellm/audit on LiteLLM OSS (D-LF2)", () => {
     await expectError(res, 503, "LITELLM_UNAVAILABLE");
   });
 });
+
+// Source: docs/specs/2026-11-10-litellm.md - Allowlist `listProxyAuditLog`
+// ("from 2026-11-24 (unit SRT1, coordinator ruling): `sort_by=updated_at`
+// fixed by the server and `sort_order` (`asc`, `desc`) from the route's
+// `dir`") and API routes `/api/litellm/audit` ("SRT1 (2026-11-24): `dir`
+// (`asc`, `desc`; default `desc`, newest first) sorts by time through
+// `listProxyAuditLog`'s `sort_order`; any other value `400`"); LD15.
+describe("GET /api/litellm/audit dir (unit SRT1, D-SR1)", () => {
+  beforeEach(async () => {
+    await enterProd();
+    signInAs("admin");
+  });
+  const auditQuery = () => {
+    const call = state.fake.calls.find((c) => c.path === "/audit")!;
+    return new URL(call.url).searchParams;
+  };
+
+  it.each([
+    ["no dir (default desc, newest first)", "", "desc"],
+    ["dir=desc", "&dir=desc", "desc"],
+    ["dir=asc", "&dir=asc", "asc"],
+  ])(
+    "%s sends sort_by=updated_at and the sort_order of the direction",
+    async (_n, extra, order) => {
+      const { res } = await get(`?${DATES}${extra}`);
+      expect(res.status).toBe(200);
+      const q = auditQuery();
+      expect(q.get("sort_by")).toBe("updated_at");
+      expect(q.get("sort_order")).toBe(order);
+    },
+  );
+
+  it.each(["ASC", "up", "newest", "created_at"])(
+    "dir=%s is 400 BAD_REQUEST: no LiteLLM call, no view record",
+    async (dir) => {
+      const { res } = await get(`?${DATES}&dir=${dir}`);
+      await expectError(res, 400, "BAD_REQUEST");
+      expect(state.fake.calls).toHaveLength(0);
+      expect(await viewRecords()).toHaveLength(0);
+    },
+  );
+
+  it("a client sort_by or sort_order is never passed on: the key is the server's (never a client string to LiteLLM)", async () => {
+    await get(`?${DATES}&sort_by=action&sort_order=asc&dir=desc`);
+    const q = auditQuery();
+    expect(q.get("sort_by")).toBe("updated_at");
+    expect(q.get("sort_order")).toBe("desc");
+  });
+});

@@ -19,27 +19,36 @@ export function readSort(
   dir: string | null,
   defaultKey: string,
   allowed?: readonly string[],
+  defaultDir: "asc" | "desc" = "asc",
 ): { key: string; dir: "asc" | "desc" } {
   const known = sort !== null && (!allowed || allowed.includes(sort));
-  return {
-    key: known ? sort : defaultKey,
-    dir: known && dir === "desc" ? "desc" : "asc",
-  };
+  if (!known) return { key: defaultKey, dir: defaultDir };
+  return { key: sort, dir: dir === "desc" ? "desc" : "asc" };
 }
 
 export function SortableHeader({
   sortKey,
   sortKeys,
   defaultKey,
+  defaultDir,
+  className,
   children,
 }: {
   sortKey: string;
   sortKeys: readonly string[];
   defaultKey?: string;
+  defaultDir?: "asc" | "desc";
+  className?: string;
   children: ReactNode;
 }) {
   const [params, setParams] = useQueryStates(SORT_PARAMS);
-  const current = readSort(params.sort, params.dir, defaultKey ?? "", sortKeys);
+  const current = readSort(
+    params.sort,
+    params.dir,
+    defaultKey ?? "",
+    sortKeys,
+    defaultDir,
+  );
   const active = current.key === sortKey;
   const Arrow = !active
     ? ArrowUpDown
@@ -49,6 +58,7 @@ export function SortableHeader({
 
   return (
     <TableHead
+      {...(className ? { className } : {})}
       aria-sort={
         active ? (current.dir === "asc" ? "ascending" : "descending") : "none"
       }

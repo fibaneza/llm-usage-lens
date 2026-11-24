@@ -576,3 +576,134 @@ describe("AccountRegistry -- deactivate", () => {
     expect(await within(dialog).findByText(/Account gone/)).toBeInTheDocument();
   });
 });
+
+// Sources: Design System - "Sorting in the other tables (unit SRT1, 2026-11-24;
+// D-SR1, D-SR2)": the AWS accounts registry sorts in the browser with the one
+// SortableHeader; the order is stable (ties keep the server's order) and
+// survives a refetch; the sort lives in the URL (nuqs `sort`, `dir`). Contract:
+// the sortable columns are Account ID (`accountId`), Name (`name`), Department
+// (`department`), Team (`team`) and Status (`status`, Active before Inactive
+// ascending); the Actions column is not sortable; with no (or an unknown) URL
+// sort the table keeps the server's order and no header is active.
+const reg = (
+  accountId: string,
+  accountName: string,
+  departmentName: string,
+  teamName: string,
+  active = true,
+) => account({ accountId, accountName, departmentName, teamName, active });
+
+// Server order is deliberately not sorted by any column.
+const SERVER = [
+  reg("333333333333", "Charlie", "Operations", "Ops", true),
+  reg("111111111111", "Alice", "Engineering", "Payments", false),
+  reg("222222222222", "Bob", "Operations", "Growth", true),
+  reg("444444444444", "Dora", "Engineering", "Payments", false),
+];
+const accountOrder = () =>
+  screen
+    .getAllByRole("row")
+    .slice(1)
+    .map((r) => within(r).getAllByRole("cell")[1]?.textContent);
+const th = (name: string) => screen.getByRole("columnheader", { name });
+
+describe("AccountRegistry sorting (unit SRT1; D-SR1)", () => {
+  it("each data column is a SortableHeader button; Actions is not; the server order holds by default", async () => {
+    stubAccounts(SERVER);
+    renderWithProviders(<AccountRegistry isAdmin />);
+    await screen.findByRole("table");
+    for (const name of ["Account ID", "Name", "Department", "Team", "Status"]) {
+      expect(within(th(name)).getByRole("button")).toBeInTheDocument();
+      expect(th(name)).toHaveAttribute("aria-sort", "none");
+    }
+    expect(within(th("Actions")).queryByRole("button")).not.toBeInTheDocument();
+    expect(accountOrder()).toEqual(["Charlie", "Alice", "Bob", "Dora"]);
+  });
+
+  it.each([
+    ["accountId", "asc", "Account ID", ["Alice", "Bob", "Charlie", "Dora"]],
+    ["accountId", "desc", "Account ID", ["Dora", "Charlie", "Bob", "Alice"]],
+    ["name", "asc", "Name", ["Alice", "Bob", "Charlie", "Dora"]],
+    // ties keep the server order in both directions
+    ["department", "asc", "Department", ["Alice", "Dora", "Charlie", "Bob"]],
+    ["department", "desc", "Department", ["Charlie", "Bob", "Alice", "Dora"]],
+    ["team", "asc", "Team", ["Bob", "Charlie", "Alice", "Dora"]],
+    ["status", "asc", "Status", ["Charlie", "Bob", "Alice", "Dora"]],
+    ["status", "desc", "Status", ["Alice", "Dora", "Charlie", "Bob"]],
+  ])(
+    "the URL sort=%s dir=%s sets aria-sort on %s and orders the rows",
+    async (sort, dir, header, expected) => {
+      stubAccounts(SERVER);
+      renderWithProviders(<AccountRegistry isAdmin />, {
+        searchParams: { sort, dir },
+      });
+      await screen.findByRole("table");
+      expect(th(header)).toHaveAttribute(
+        "aria-sort",
+        dir === "asc" ? "ascending" : "descending",
+      );
+      expect(accountOrder()).toEqual(expected);
+    },
+  );
+
+  it("an unknown URL sort falls back to the server order with no active header", async () => {
+    stubAccounts(SERVER);
+    renderWithProviders(<AccountRegistry isAdmin />, {
+      searchParams: { sort: "region", dir: "desc" },
+    });
+    await screen.findByRole("table");
+    expect(accountOrder()).toEqual(["Charlie", "Alice", "Bob", "Dora"]);
+    expect(th("Name")).toHaveAttribute("aria-sort", "none");
+  });
+
+  it("a header click sorts in the browser, flips on the second click and does not refetch", async () => {
+    const u = userEvent.setup();
+    const stub = stubAccounts(SERVER);
+    renderWithProviders(<AccountRegistry isAdmin />);
+    await screen.findByRole("table");
+    const button = within(th("Name")).getByRole("button");
+    await u.click(button);
+    await waitFor(() =>
+      expect(accountOrder()).toEqual(["Alice", "Bob", "Charlie", "Dora"]),
+    );
+    expect(th("Name")).toHaveAttribute("aria-sort", "ascending");
+    await u.click(button);
+    await waitFor(() =>
+      expect(accountOrder()).toEqual(["Dora", "Charlie", "Bob", "Alice"]),
+    );
+    expect(th("Name")).toHaveAttribute("aria-sort", "descending");
+    expect(stub.listFetches()).toBe(1);
+  });
+
+  it("a read-only caller sorts too (no Actions column, same headers)", async () => {
+    stubAccounts(SERVER);
+    renderWithProviders(<AccountRegistry isAdmin={false} />, {
+      searchParams: { sort: "name", dir: "asc" },
+    });
+    await screen.findByRole("table");
+    expect(th("Name")).toHaveAttribute("aria-sort", "ascending");
+    expect(accountOrder()).toEqual(["Alice", "Bob", "Charlie", "Dora"]);
+  });
+
+  it("the sort survives a refetch: the new list arrives in the chosen order", async () => {
+    const list = [...SERVER];
+    const stub = stubAccounts(list);
+    renderWithProviders(<AccountRegistry isAdmin />, {
+      searchParams: { sort: "name", dir: "asc" },
+    });
+    await screen.findByRole("table");
+    list.unshift(reg("555555555555", "Aaron", "Operations", "Ops"));
+    window.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() => expect(stub.listFetches()).toBe(2));
+    await waitFor(() =>
+      expect(accountOrder()).toEqual([
+        "Aaron",
+        "Alice",
+        "Bob",
+        "Charlie",
+        "Dora",
+      ]),
+    );
+    expect(th("Name")).toHaveAttribute("aria-sort", "ascending");
+  });
+});

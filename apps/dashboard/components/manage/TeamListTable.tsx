@@ -1,7 +1,15 @@
+"use client";
+
+import { useQueryStates } from "nuqs";
 import Link from "next/link";
 
 import { TeamCreateTrigger } from "@/components/manage/TeamCreateTrigger";
 import { PageHeader } from "@/components/layout/PageHeader";
+import {
+  SORT_PARAMS,
+  SortableHeader,
+  readSort,
+} from "@/components/tables/SortableHeader";
 import {
   Table,
   TableBody,
@@ -11,6 +19,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { TeamListRow } from "@/lib/manage/team-list";
+
+const COLUMNS = ["team", "department", "members", "litellm"] as const;
 
 const DESCRIPTION =
   "The teams you may open, with their members and LiteLLM team.";
@@ -27,6 +37,24 @@ export function TeamListTable({
   canCreateTeam: boolean;
   scopeLabel?: string | null;
 }) {
+  const [params] = useQueryStates(SORT_PARAMS);
+  // A lead's rows carry no LiteLLM team id, so that column is not offered.
+  const showLiteLLMSort = rows.some((r) => r.litellmTeamId !== null);
+  const sortKeys: readonly string[] = showLiteLLMSort
+    ? COLUMNS
+    : COLUMNS.filter((c) => c !== "litellm");
+  const { key, dir } = readSort(params.sort, params.dir, "team", sortKeys);
+  const sign = dir === "asc" ? 1 : -1;
+  const sorted = [...rows].sort((a, b) => {
+    if (key === "members") return sign * (a.memberCount - b.memberCount);
+    const [x, y] =
+      key === "department"
+        ? [a.departmentName, b.departmentName]
+        : key === "litellm"
+          ? [a.litellmTeamId ?? "", b.litellmTeamId ?? ""]
+          : [a.teamName, b.teamName];
+    return sign * x.localeCompare(y);
+  });
   const createTrigger = canCreateTeam ? <TeamCreateTrigger /> : undefined;
 
   return (
@@ -46,14 +74,43 @@ export function TeamListTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Team</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead className="text-right">Members</TableHead>
-              <TableHead>LiteLLM team</TableHead>
+              <SortableHeader
+                sortKey="team"
+                sortKeys={sortKeys}
+                defaultKey="team"
+              >
+                Team
+              </SortableHeader>
+              <SortableHeader
+                sortKey="department"
+                sortKeys={sortKeys}
+                defaultKey="team"
+              >
+                Department
+              </SortableHeader>
+              <SortableHeader
+                sortKey="members"
+                sortKeys={sortKeys}
+                defaultKey="team"
+                className="text-right"
+              >
+                Members
+              </SortableHeader>
+              {showLiteLLMSort ? (
+                <SortableHeader
+                  sortKey="litellm"
+                  sortKeys={sortKeys}
+                  defaultKey="team"
+                >
+                  LiteLLM team
+                </SortableHeader>
+              ) : (
+                <TableHead>LiteLLM team</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
+            {sorted.map((row) => (
               <TableRow key={row.teamId}>
                 <TableCell>
                   <Link

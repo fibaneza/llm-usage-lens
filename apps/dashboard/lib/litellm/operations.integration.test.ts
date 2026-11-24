@@ -310,6 +310,32 @@ const CASES: Case[] = [
     ],
   },
   {
+    // Allowlist `searchUsers` (from 2026-11-24, unit SRT1, D-SR1): optional
+    // sort_by (user_email | spend) and sort_order (asc | desc).
+    name: "searchUsers (sorted: sort_by and sort_order, unit SRT1)",
+    write: false,
+    run: (o) =>
+      o.searchUsers!({
+        page: 1,
+        pageSize: 25,
+        sortBy: "spend",
+        sortOrder: "desc",
+      }),
+    calls: [
+      {
+        method: "GET",
+        template: "/user/list",
+        path: "/user/list",
+        query: {
+          page: "1",
+          page_size: "25",
+          sort_by: "spend",
+          sort_order: "desc",
+        },
+      },
+    ],
+  },
+  {
     name: "getTeamDailySpend (org: all linked teams in one call, L3b)",
     write: false,
     run: (o) =>
@@ -1704,6 +1730,14 @@ describe("read inputs are bounded (Reads table)", () => {
           startDate: D2,
           endDate: D1,
         }),
+    ],
+    [
+      "searchUsers with a sort key outside user_email and spend (unit SRT1)",
+      (o: Ops) => o.searchUsers!({ search: "jane", sortBy: "created_at" }),
+    ],
+    [
+      "searchUsers with an unknown sort order (unit SRT1)",
+      (o: Ops) => o.searchUsers!({ search: "jane", sortOrder: "up" }),
     ],
     [
       "a read with an unknown field",

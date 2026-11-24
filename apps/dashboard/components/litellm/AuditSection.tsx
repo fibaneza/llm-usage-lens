@@ -1,5 +1,12 @@
 "use client";
 
+import { useQueryStates } from "nuqs";
+
+import {
+  SORT_PARAMS,
+  SortableHeader,
+  readSort,
+} from "@/components/tables/SortableHeader";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,14 +24,20 @@ import { LiteLLMAuditResponseSchema } from "@llm-usage-lens/shared";
 import { formatSydneyTime } from "./sydney-time";
 import { useLiteLLMEditionQuery, useUrlRange } from "./use-litellm-query";
 
+const SORT_KEYS = ["time"] as const;
+
+// Design System - "Sorting in the other tables (unit SRT1; D-SR1)": time sorts
+// on the server, newest first by default.
 // LiteLLM's own audit entries: field names only, never values (LiteLLM spec --
 // Audit). "via dashboard" marks entries the dashboard made.
 export function AuditSection() {
   const isMobile = useIsMobile();
   const { keyParts, query } = useUrlRange();
+  const [params] = useQueryStates(SORT_PARAMS);
+  const { dir } = readSort(params.sort, params.dir, "time", SORT_KEYS, "desc");
   const result = useLiteLLMEditionQuery(
-    ["audit", ...keyParts],
-    `/api/litellm/audit?${query}`,
+    ["audit", ...keyParts, dir],
+    `/api/litellm/audit?${query}&dir=${dir}`,
     LiteLLMAuditResponseSchema,
   );
   if (result.status === "unavailable") return <Unavailable />;
@@ -96,7 +109,14 @@ export function AuditSection() {
             </TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead>Time</TableHead>
+                <SortableHeader
+                  sortKey="time"
+                  sortKeys={SORT_KEYS}
+                  defaultKey="time"
+                  defaultDir="desc"
+                >
+                  Time
+                </SortableHeader>
                 <TableHead>Actor</TableHead>
                 <TableHead>Action</TableHead>
                 <TableHead>Object</TableHead>

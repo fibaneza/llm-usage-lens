@@ -454,6 +454,9 @@ const SearchUsersInput = z.strictObject({
   page: PageNumber.optional(),
   pageSize: z.number().int().min(1).max(25).optional(),
   litellmTeamId: LiteLLMId.optional(),
+  // Unit SRT1 (D-SR1): set by the route from its own enum, never a client string.
+  sortBy: z.enum(["user_email", "spend"]).optional(),
+  sortOrder: z.enum(["asc", "desc"]).optional(),
 });
 
 export async function searchUsers(input: z.input<typeof SearchUsersInput>) {
@@ -466,6 +469,8 @@ export async function searchUsers(input: z.input<typeof SearchUsersInput>) {
       page: i.page,
       page_size: i.pageSize,
       team: i.litellmTeamId,
+      sort_by: i.sortBy,
+      sort_order: i.sortOrder,
     },
     UserSearchResponse,
   );
@@ -601,6 +606,8 @@ const ListAuditInput = withRange(
       .optional(),
     tableName: z.enum(AUDIT_TABLES).optional(),
     objectId: LiteLLMId.optional(),
+    // Unit SRT1 (D-SR1): the key is fixed (updated_at); only the direction varies.
+    sortOrder: z.enum(["asc", "desc"]).optional(),
   }),
   MAX_RANGE_DAYS,
 );
@@ -618,6 +625,8 @@ export async function listProxyAuditLog(input: z.input<typeof ListAuditInput>) {
       action: i.action,
       table_name: i.tableName,
       object_id: i.objectId,
+      sort_by: i.sortOrder ? "updated_at" : undefined,
+      sort_order: i.sortOrder,
     },
     AuditResponse,
   );

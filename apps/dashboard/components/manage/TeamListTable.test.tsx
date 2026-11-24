@@ -218,3 +218,166 @@ describe("TeamListTable New team (D-TM4; Design System - New team D5, D6)", () =
     );
   });
 });
+
+// Sources: Design System - "Sorting in the other tables (unit SRT1, 2026-11-24;
+// D-SR1, D-SR2)": the team list sorts in the browser with the one
+// SortableHeader; the order is stable (ties keep the server's order) and
+// survives a refetch; a lead's team list offers no sort on a column a lead
+// does not see; the sort lives in the URL (nuqs `sort`, `dir`). Contract: the
+// sort keys are `team`, `department`, `members` and `litellm`; the default is
+// `team` ascending (the server's own order, by team name); `members` sorts
+// numerically; a table whose ids are withheld (a lead: litellmTeamId null on
+// every row) gives the LiteLLM team column a plain, non-sortable header.
+const SORT_ROWS = [
+  { name: "Alpha", dept: "Engineering", members: 10, llm: "m-llm" },
+  { name: "Beta", dept: "Operations", members: 2, llm: "c-llm" },
+  { name: "Delta", dept: "Engineering", members: 5, llm: "x-llm" },
+  { name: "Gamma", dept: "Operations", members: 2, llm: "a-llm" },
+].map((r) => ({
+  teamId: `t-${r.name.toLowerCase()}`,
+  teamName: r.name,
+  departmentId: `d-${r.dept}`,
+  departmentName: r.dept,
+  memberCount: r.members,
+  litellmTeamId: r.llm as string | null,
+  litellmLinked: true,
+}));
+
+const order = () =>
+  screen
+    .getAllByRole("row")
+    .slice(1)
+    .map((r) => within(r).getByRole("link").textContent);
+const th = (name: string) => screen.getByRole("columnheader", { name });
+
+describe("TeamListTable sorting (unit SRT1; D-SR1)", () => {
+  it("each visible column is a SortableHeader: a button in the th, Team ascending by default", () => {
+    renderList({ rows: SORT_ROWS });
+    for (const name of ["Team", "Department", "Members", "LiteLLM team"]) {
+      expect(within(th(name)).getByRole("button")).toBeInTheDocument();
+    }
+    expect(th("Team")).toHaveAttribute("aria-sort", "ascending");
+    expect(th("Members")).toHaveAttribute("aria-sort", "none");
+    expect(order()).toEqual(["Alpha", "Beta", "Delta", "Gamma"]);
+  });
+
+  it.each([
+    ["team", "desc", "Team", "descending", ["Gamma", "Delta", "Beta", "Alpha"]],
+    [
+      "members",
+      "asc",
+      "Members",
+      "ascending",
+      ["Beta", "Gamma", "Delta", "Alpha"],
+    ],
+    [
+      "members",
+      "desc",
+      "Members",
+      "descending",
+      ["Alpha", "Delta", "Beta", "Gamma"],
+    ],
+    [
+      "department",
+      "asc",
+      "Department",
+      "ascending",
+      ["Alpha", "Delta", "Beta", "Gamma"],
+    ],
+    [
+      "department",
+      "desc",
+      "Department",
+      "descending",
+      ["Beta", "Gamma", "Alpha", "Delta"],
+    ],
+    [
+      "litellm",
+      "asc",
+      "LiteLLM team",
+      "ascending",
+      ["Gamma", "Beta", "Alpha", "Delta"],
+    ],
+  ])(
+    "the URL sort=%s dir=%s sets aria-sort on %s and orders the rows; members numeric, ties keep the server order both ways",
+    (sort, dir, header, ariaSort, expected) => {
+      render(sort, dir);
+      expect(th(header)).toHaveAttribute("aria-sort", ariaSort);
+      expect(order()).toEqual(expected);
+    },
+  );
+
+  it("an unknown URL sort falls back to the default (Team ascending, server order)", () => {
+    render("password", "desc");
+    expect(th("Team")).toHaveAttribute("aria-sort", "ascending");
+    expect(th("Department")).toHaveAttribute("aria-sort", "none");
+    expect(order()).toEqual(["Alpha", "Beta", "Delta", "Gamma"]);
+  });
+
+  it("a header click sorts in the browser and writes sort and dir to the URL", async () => {
+    const u = userEvent.setup();
+    const onUrlUpdate = vi.fn();
+    renderWithProviders(
+      <TeamListTable rows={SORT_ROWS} canCreateTeam={false} />,
+      { onUrlUpdate },
+    );
+    await u.click(within(th("Members")).getByRole("button"));
+    await vi.waitFor(() =>
+      expect(order()).toEqual(["Beta", "Gamma", "Delta", "Alpha"]),
+    );
+    expect(th("Members")).toHaveAttribute("aria-sort", "ascending");
+    expect(th("Team")).toHaveAttribute("aria-sort", "none");
+    expect(onUrlUpdate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        queryString: expect.stringMatching(/sort=members/),
+      }),
+    );
+    await u.click(within(th("Members")).getByRole("button"));
+    await vi.waitFor(() =>
+      expect(order()).toEqual(["Alpha", "Delta", "Beta", "Gamma"]),
+    );
+    expect(th("Members")).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("the sort survives a refetch: new rows arrive and the order and aria-sort hold", () => {
+    const view = render("members", "desc");
+    expect(order()).toEqual(["Alpha", "Delta", "Beta", "Gamma"]);
+    view.rerender(
+      <TeamListTable
+        rows={[
+          ...SORT_ROWS.slice(0, 2),
+          { ...SORT_ROWS[2]!, memberCount: 1 },
+          SORT_ROWS[3]!,
+        ]}
+        canCreateTeam={false}
+      />,
+    );
+    expect(order()).toEqual(["Alpha", "Beta", "Gamma", "Delta"]);
+    expect(th("Members")).toHaveAttribute("aria-sort", "descending");
+  });
+
+  // TM1 withholds the id from a caller who is not a global reader.
+  it("a lead's list (ids withheld) offers no sort on the LiteLLM team column; the others still sort", () => {
+    const lead = SORT_ROWS.map((r) => ({ ...r, litellmTeamId: null }));
+    renderList({ rows: lead });
+    expect(within(th("LiteLLM team")).queryByRole("button")).toBeNull();
+    expect(th("LiteLLM team")).not.toHaveAttribute("aria-sort", "ascending");
+    expect(within(th("Members")).getByRole("button")).toBeInTheDocument();
+  });
+
+  it("a lead's URL sort=litellm is not honoured: it falls back to the default order", () => {
+    const lead = SORT_ROWS.map((r) => ({ ...r, litellmTeamId: null }));
+    renderWithProviders(<TeamListTable rows={lead} canCreateTeam={false} />, {
+      searchParams: { sort: "litellm", dir: "desc" },
+    });
+    expect(th("Team")).toHaveAttribute("aria-sort", "ascending");
+    expect(order()).toEqual(["Alpha", "Beta", "Delta", "Gamma"]);
+  });
+});
+
+function render(sort: string, dir: string) {
+  return renderWithProviders(
+    <TeamListTable rows={SORT_ROWS} canCreateTeam={false} />,
+    { searchParams: { sort, dir } },
+  );
+}

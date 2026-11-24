@@ -594,6 +594,35 @@ test.describe("Management -> Team: list, then the team (unit TM1)", () => {
     ).toBeVisible();
   });
 
+  // Design System - "Sorting in the other tables (unit SRT1, 2026-11-24;
+  // D-SR1)": the team list sorts in the browser with the one SortableHeader;
+  // the sort lives in the URL, so a real reload keeps it.
+  test("a header click sorts the team list, writes sort and dir to the URL and a reload keeps it (unit SRT1; D-SR1)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await mockApi(page);
+    await page.goto(LIST_URL);
+    await waitForHydration(page);
+    const members = page.getByRole("columnheader", {
+      name: "Members",
+      exact: true,
+    });
+    await expect(members).toHaveAttribute("aria-sort", "none");
+    await members.getByRole("button").click();
+    await expect(page).toHaveURL(/sort=members/);
+    await expect(members).toHaveAttribute("aria-sort", "ascending");
+    await members.getByRole("button").click();
+    await expect(members).toHaveAttribute("aria-sort", "descending");
+    await expect(page).toHaveURL(/dir=desc/);
+    await page.reload();
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("columnheader", { name: "Members", exact: true }),
+    ).toHaveAttribute("aria-sort", "descending");
+  });
+
   test("the team page has no team picker and no scope dropdowns (D-TM2)", async ({
     page,
     context,

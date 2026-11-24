@@ -489,3 +489,48 @@ describe("one lib/auth function answers 'SSO enabled' (T-LW4, LW1)", () => {
     expect(LITELLM_OPERATIONS.createUser.ossOnly).toBe(true);
   });
 });
+
+// Source: docs/specs/2026-11-10-litellm.md - Allowlist rows `searchUsers` and
+// `listProxyAuditLog` ("from 2026-11-24 (unit SRT1 ...)"): the sort parameters
+// are set only by the server from the route's own enum, never a client
+// string; no new route, no new read (design system - unit SRT1, D-SR2).
+describe("the sort parameters are pinned to their spec rows (unit SRT1, D-SR1)", () => {
+  const spec = read(join(ROOT, "docs/specs/2026-11-10-litellm.md"));
+  const rowOf = (name: string) =>
+    spec.split("\n").find((l) => l.startsWith(`| \`${name}\``)) ?? "";
+
+  it("searchUsers: optional sort_by (user_email or spend) and sort_order (asc, desc), set only by the server", () => {
+    const row = rowOf("searchUsers");
+    expect(row).toContain("`sort_by` (`user_email` or `spend`)");
+    expect(row).toContain("`sort_order` (`asc`, `desc`)");
+    expect(row).toContain("never a client string passed on");
+  });
+
+  it("listProxyAuditLog: sort_by=updated_at fixed by the server, sort_order from the route's dir", () => {
+    const row = rowOf("listProxyAuditLog");
+    expect(row).toContain("`sort_by=updated_at` fixed by the server");
+    expect(row).toContain("`sort_order` (`asc`, `desc`)");
+  });
+
+  it("the code rows keep their one route each: sorting adds no route and no operation", () => {
+    expect(LITELLM_OPERATIONS.searchUsers.kind).toBe("read");
+    expect(
+      LITELLM_OPERATIONS.searchUsers.routes.map(
+        (r) => `${r.method} ${r.template}`,
+      ),
+    ).toEqual(["GET /user/list"]);
+    expect(
+      LITELLM_OPERATIONS.listProxyAuditLog.routes.map(
+        (r) => `${r.method} ${r.template}`,
+      ),
+    ).toEqual(["GET /audit"]);
+  });
+
+  it("the operations module names exactly the allowed sort keys (user_email, spend) and the audit key updated_at", () => {
+    const source = read(join(ROOT, "apps/dashboard/lib/litellm/operations.ts"));
+    expect(source).toMatch(/sort_by/);
+    expect(source).toMatch(/sort_order/);
+    expect(source).toMatch(/["']user_email["']/);
+    expect(source).toMatch(/["']updated_at["']/);
+  });
+});

@@ -73,7 +73,32 @@ const UsersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(10_000).optional(),
   pageSize: z.coerce.number().int().min(1).max(25).optional(),
   team: IdParamSchema.optional(),
+  // Unit SRT1 (D-SR1): our enums, mapped server-side; never passed on as typed.
+  sort: z.enum(["email", "spend"]).optional(),
+  dir: z.enum(["asc", "desc"]).optional(),
 });
+
+type SortKey = "email" | "spend";
+const SORT_BY = { email: "user_email", spend: "spend" } as const;
+
+// A row without the value is last in both directions (SRT1, D-SR1).
+function compareBy<T>(
+  value: (row: T) => string | number | undefined,
+  dir: "asc" | "desc",
+) {
+  return (a: T, b: T): number => {
+    const x = value(a);
+    const y = value(b);
+    if (x === undefined || y === undefined) {
+      return x === y ? 0 : x === undefined ? 1 : -1;
+    }
+    const c =
+      typeof x === "number" && typeof y === "number"
+        ? x - y
+        : String(x).localeCompare(String(y), "en");
+    return dir === "asc" ? c : -c;
+  };
+}
 
 type Teams = Array<{ teamId: string; teamName: string }>;
 
@@ -91,9 +116,19 @@ export const GET = withRoute(async (request, _ctx, session) => {
   if (!access.orgWide && !access.lead) {
     return jsonError(403, "FORBIDDEN", "Insufficient permission");
   }
+  // LD23: the order of a spend sort would reveal hidden spend.
+  if (query.sort === "spend" && access.perUserCostHidden) {
+    return jsonError(400, "BAD_REQUEST", "Spend is not available to sort by");
+  }
   const page = query.page ?? 1;
   const pageSize = query.pageSize ?? USER_LINKS_PAGE_SIZE;
   const hidden = access.perUserCostHidden;
+  const sort = query.sort
+    ? { key: query.sort, dir: query.dir ?? ("asc" as const) }
+    : undefined;
+  const upstreamSort = sort
+    ? { sortBy: SORT_BY[sort.key], sortOrder: sort.dir }
+    : {};
   const mayLink = await permitAdminOrOrgAdmin(request, session);
   // Read per request, never cached (Rule 60.10).
   const callerLitellmUserId =
@@ -118,6 +153,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
         teamsOf,
         session,
         mayLink,
+        sort,
         ...(query.q !== undefined ? { q: query.q } : {}),
       });
     }
@@ -128,6 +164,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
         ...(query.q !== undefined ? { search: query.q } : {}),
         page,
         pageSize,
+        ...upstreamSort,
       });
       const rows = await Promise.all(
         result.users.map(async (u): Promise<UsersListRow> => {
@@ -182,6 +219,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
           search: query.q,
           page,
           pageSize,
+          ...upstreamSort,
           ...(litellmTeamId ? { litellmTeamId } : {}),
         }),
       ),
@@ -215,7 +253,14 @@ export const GET = withRoute(async (request, _ctx, session) => {
     const ordered = access.orgWide
       ? rows
       : rows
-          .sort((a, b) => a.email.localeCompare(b.email, "en"))
+          .sort(
+            compareBy(
+              sort?.key === "spend"
+                ? (r: (typeof rows)[number]) => r.spend
+                : (r: (typeof rows)[number]) => r.email,
+              sort?.dir ?? "asc",
+            ),
+          )
           .slice(0, pageSize);
     return jsonData(
       LiteLLMUserSearchResponseSchema.parse({
@@ -249,10 +294,20 @@ async function teamMembers(args: {
   teamsOf: (ids: readonly string[] | null | undefined) => Teams;
   session: Parameters<typeof resolveLiteLLMTeam>[0];
   mayLink: boolean;
+  sort: { key: SortKey; dir: "asc" | "desc" } | undefined;
   q?: string;
 }): Promise<Response> {
-  const { teamId, page, pageSize, hidden, enabled, teamsOf, session, mayLink } =
-    args;
+  const {
+    teamId,
+    page,
+    pageSize,
+    hidden,
+    enabled,
+    teamsOf,
+    session,
+    mayLink,
+    sort,
+  } = args;
   const team = await resolveLiteLLMTeam(session, teamId);
   const oids = await listAllTeamMemberOids(teamId);
   if (oids.length > 200) throw new MemberSumTooManyMembers(oids.length);
@@ -389,9 +444,23 @@ async function teamMembers(args: {
     },
   );
 
+  const pageRows = slice
+    .map((_, i) => rows.get(i))
+    .filter((r) => r !== undefined);
+  // The rows this page returns sort in memory (SRT1, D-SR1).
+  if (sort) {
+    pageRows.sort(
+      compareBy(
+        (r: UsersListRow) =>
+          sort.key === "spend" ? r.litellmUser?.spend : r.litellmUser?.email,
+        sort.dir,
+      ),
+    );
+  }
+
   return jsonData(
     UsersListResponseSchema.parse({
-      users: slice.map((_, i) => rows.get(i)).filter((r) => r !== undefined),
+      users: pageRows,
       page,
       pageSize,
       hasMore: start + pageSize < total,

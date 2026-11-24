@@ -1076,3 +1076,150 @@ describe("LiteLLMUsersList empty value is an em dash (LF1 F2, D-LF1)", () => {
     expect(within(detail).queryByText("$0.00")).toBeNull();
   });
 });
+
+// Source: Design System - "Sorting in the other tables (unit SRT1, 2026-11-24;
+// user item 10; D-SR1, D-SR2)": a table sorts with the one `SortableHeader`
+// (`sortKeys` per table); the LiteLLM users tab sorts on the server by email
+// and spend, "spend is not offered when per-user cost is hidden or capped,
+// LD23; with no sort the page keeps LiteLLM's own order"; the sort lives in
+// the URL (nuqs `sort`, `dir`). The route side is tested in
+// app/api/litellm/users/route.integration.test.ts.
+describe("LiteLLMUsersList sorting (unit SRT1, D-SR1)", () => {
+  const header = (name: string) => screen.getByRole("columnheader", { name });
+  const first = (calls: ReturnType<typeof stub>) =>
+    calls.listUrls()[0]!.searchParams;
+
+  it("Email and Spend are sortable headers; the others are not", async () => {
+    stub();
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    expect(
+      within(header("Email")).getByRole("button", { name: "Email" }),
+    ).toBeInTheDocument();
+    expect(
+      within(header("Spend")).getByRole("button", { name: "Spend" }),
+    ).toBeInTheDocument();
+    for (const name of ["User", "Budget", "Teams", "Actions"]) {
+      expect(within(header(name)).queryByRole("button")).toBeNull();
+    }
+  });
+
+  it("with no sort in the URL no header is active and the request carries no sort (LiteLLM's own order)", async () => {
+    const calls = stub();
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    expect(header("Email")).toHaveAttribute("aria-sort", "none");
+    expect(header("Spend")).toHaveAttribute("aria-sort", "none");
+    expect(first(calls).has("sort")).toBe(false);
+    expect(first(calls).has("dir")).toBe(false);
+  });
+
+  it.each([
+    ["email", "asc", "Email", "ascending"],
+    ["email", "desc", "Email", "descending"],
+    ["spend", "desc", "Spend", "descending"],
+  ] as const)(
+    "?sort=%s&dir=%s: the %s header says %s and the request carries sort and dir",
+    async (sort, dir, name, aria) => {
+      const calls = stub();
+      renderWithProviders(<LiteLLMUsersList />, {
+        searchParams: { sort, dir },
+      });
+      await screen.findByText("Ada Lovelace");
+      expect(header(name)).toHaveAttribute("aria-sort", aria);
+      const other = name === "Email" ? "Spend" : "Email";
+      expect(header(other)).toHaveAttribute("aria-sort", "none");
+      expect(first(calls).get("sort")).toBe(sort);
+      expect(first(calls).get("dir")).toBe(dir);
+    },
+  );
+
+  it("an unknown ?sort= is ignored: no active header and no sort in the request (never a client string to the API)", async () => {
+    const calls = stub();
+    renderWithProviders(<LiteLLMUsersList />, {
+      searchParams: { sort: "created", dir: "desc" },
+    });
+    await screen.findByText("Ada Lovelace");
+    expect(header("Email")).toHaveAttribute("aria-sort", "none");
+    expect(first(calls).has("sort")).toBe(false);
+  });
+
+  it("clicking Spend writes sort=spend, dir=asc to the URL and refetches sorted", async () => {
+    const onUrlUpdate = vi.fn();
+    const calls = stub();
+    renderWithProviders(<LiteLLMUsersList />, { onUrlUpdate });
+    await screen.findByText("Ada Lovelace");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Spend" }));
+    await vi.waitFor(() =>
+      expect(
+        calls
+          .listUrls()
+          .some(
+            (u) =>
+              u.searchParams.get("sort") === "spend" &&
+              u.searchParams.get("dir") === "asc",
+          ),
+      ).toBe(true),
+    );
+    const last = onUrlUpdate.mock.calls.at(-1)?.[0]?.queryString as string;
+    expect(last).toContain("sort=spend");
+    expect(last).toContain("dir=asc");
+  });
+
+  it("per-user cost hidden (the Organisation cap): the Spend header offers no sort, Email still does, and the request carries no sort=spend (LD23)", async () => {
+    const capped = {
+      userId: "ll-ada",
+      email: "ada@example.com",
+      teams: [{ teamId: "t1", teamName: "Payments" }],
+    };
+    const calls = stub({ users: [{ ...ROW_LINKED, litellmUser: capped }] });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    expect(screen.queryByRole("button", { name: "Spend" })).toBeNull();
+    expect(
+      within(header("Email")).getByRole("button", { name: "Email" }),
+    ).toBeInTheDocument();
+    expect(
+      calls.listUrls().every((u) => u.searchParams.get("sort") !== "spend"),
+    ).toBe(true);
+  });
+
+  it("a 400 for sort=spend removes sort and dir from the URL and the next request carries no sort (spend not offered when cost is hidden)", async () => {
+    const onUrlUpdate = vi.fn();
+    const calls = stub();
+    const inner = globalThis.fetch;
+    const rejected: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), "http://localhost");
+        if (
+          url.pathname === "/api/litellm/users" &&
+          url.searchParams.get("sort") === "spend"
+        ) {
+          rejected.push(url.search);
+          return Promise.resolve(apiError(400, "BAD_REQUEST"));
+        }
+        return inner(input, init);
+      }),
+    );
+    renderWithProviders(<LiteLLMUsersList />, {
+      searchParams: { sort: "spend", dir: "desc" },
+      onUrlUpdate,
+    });
+    await vi.waitFor(() => expect(rejected.length).toBeGreaterThan(0));
+    await vi.waitFor(() => {
+      const update = onUrlUpdate.mock.calls.at(-1)?.[0]?.queryString as
+        | string
+        | undefined;
+      expect(update ?? "sort=spend").not.toContain("sort=");
+      expect(update ?? "dir=").not.toContain("dir=");
+    });
+    await screen.findByText("Ada Lovelace");
+    const lastList = calls.listUrls().at(-1)!;
+    expect(lastList.searchParams.has("sort")).toBe(false);
+    expect(lastList.searchParams.has("dir")).toBe(false);
+  });
+});

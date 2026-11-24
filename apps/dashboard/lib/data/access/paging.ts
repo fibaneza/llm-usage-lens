@@ -13,6 +13,7 @@ import type { AccessResult, ListOptions, Page } from "./result";
 // Rule 20.6 (paginate on LastEvaluatedKey). Callers receive an opaque signed
 // cursor; a cursor minted for another partition is rejected.
 const DEFAULT_LIMIT = 100;
+const DIRECTION_ATTR = "_dir";
 
 type PageQuery<S extends z.ZodType> = {
   schema: S;
@@ -20,12 +21,15 @@ type PageQuery<S extends z.ZodType> = {
   partition: string;
   sortPrefix?: string;
   index?: "GSI1";
+  // Unit SRT1 (D-SR1): an optional order. The signed cursor carries it, so a
+  // cursor from one direction is BAD_CURSOR under the other.
+  direction?: "asc" | "desc";
 };
 
 export async function queryPage<S extends z.ZodType>(
   query: PageQuery<S>,
 ): Promise<AccessResult<Page<z.infer<S>>>> {
-  const { schema, options, partition, sortPrefix, index } = query;
+  const { schema, options, partition, sortPrefix, index, direction } = query;
   const pkAttr = index ? "gsi1pk" : "PK";
   const skAttr = index ? "gsi1sk" : "SK";
 
@@ -40,7 +44,11 @@ export async function queryPage<S extends z.ZodType>(
     ) {
       return { ok: false, code: "BAD_CURSOR" };
     }
-    startKey = decoded.value;
+    const { [DIRECTION_ATTR]: cursorDirection, ...key } = decoded.value;
+    if (direction !== undefined && (cursorDirection ?? "asc") !== direction) {
+      return { ok: false, code: "BAD_CURSOR" };
+    }
+    startKey = direction !== undefined ? key : decoded.value;
   }
 
   const res = await getDocumentClient().send(
@@ -58,6 +66,7 @@ export async function queryPage<S extends z.ZodType>(
         DEFAULT_LIMIT,
         Math.max(1, Math.floor(options.limit ?? DEFAULT_LIMIT)),
       ),
+      ...(direction === "desc" ? { ScanIndexForward: false } : {}),
       ExclusiveStartKey: startKey,
     }),
   );
@@ -74,6 +83,12 @@ export async function queryPage<S extends z.ZodType>(
   }
   return {
     ok: true,
-    value: { items, cursor: encodeCursor(key, options.cursorSecret) },
+    value: {
+      items,
+      cursor: encodeCursor(
+        direction !== undefined ? { ...key, [DIRECTION_ATTR]: direction } : key,
+        options.cursorSecret,
+      ),
+    },
   };
 }

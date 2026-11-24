@@ -1,7 +1,16 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { OnUrlUpdateFunction } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AuditLogSection } from "@/components/settings/access/AuditLogSection";
+import {
+  ALICE,
+  auditItem,
+  ok,
+  page,
+  stubAccessApi,
+} from "@/test/fakes/access-ui-stubs";
 import { apiError, apiResponse } from "@/test/fakes/api-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
@@ -237,5 +246,191 @@ describe("AuditPageContent Gateway source (LiteLLM spec - Audit, LD15, LD20, LT2
       await within(audit).findByText(/LiteLLM unavailable/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "App" })).toBeInTheDocument();
+  });
+});
+
+// Source: Design System - "Sorting in the other tables (unit SRT1, 2026-11-24;
+// D-SR1, D-SR2)": the audit log, app and gateway sources, sorts by time in
+// both directions with the shared `SortableHeader`, "newest first on the
+// gateway source and oldest first on the app source by default, as today"; the
+// sort is server-side (`dir` on /api/audit and /api/litellm/audit) and lives
+// in the URL (nuqs `sort`, `dir`). Access Control - API routes (`/api/audit`
+// `dir`); LiteLLM spec - API routes (`/api/litellm/audit` `dir`).
+describe("AuditPageContent sorting by time (unit SRT1, D-SR1)", () => {
+  const APP_ROWS = [
+    auditItem({ requestId: "r1", timestamp: "2026-11-15T10:00:00.000Z" }),
+    auditItem({
+      requestId: "r2",
+      action: "role.grant",
+      timestamp: "2026-11-15T10:05:00.000Z",
+    }),
+  ];
+  const routes = () => ({
+    "GET /api/audit": page(APP_ROWS),
+    "GET /api/identities": page([ALICE]),
+    "GET /api/litellm/audit": () => ok(AUDIT),
+  });
+  const withApp = (
+    searchParams: Record<string, string> = {},
+    onUrlUpdate?: OnUrlUpdateFunction,
+  ) =>
+    renderWithProviders(
+      <AuditPageContent sources={BOTH} app={<AuditLogSection />} />,
+      { searchParams, ...(onUrlUpdate ? { onUrlUpdate } : {}) },
+    );
+  const dirOf = (search: string, fallback: string) =>
+    new URLSearchParams(search).get("dir") ?? fallback;
+
+  describe("App source (oldest first by default)", () => {
+    it("the Time header is a sort button, ascending by default, and the request is oldest first", async () => {
+      const api = stubAccessApi(routes());
+      withApp();
+      const th = await screen.findByRole("columnheader", {
+        name: "Time (UTC)",
+      });
+      expect(
+        within(th).getByRole("button", { name: "Time (UTC)" }),
+      ).toBeInTheDocument();
+      expect(th).toHaveAttribute("aria-sort", "ascending");
+      await vi.waitFor(() =>
+        expect(api.to("GET /api/audit")).not.toHaveLength(0),
+      );
+      expect(dirOf(api.to("GET /api/audit")[0]!.search, "asc")).toBe("asc");
+    });
+
+    it("?sort=time&dir=desc: the header says descending and the request carries dir=desc", async () => {
+      const api = stubAccessApi(routes());
+      withApp({ sort: "time", dir: "desc" });
+      const th = await screen.findByRole("columnheader", {
+        name: "Time (UTC)",
+      });
+      expect(th).toHaveAttribute("aria-sort", "descending");
+      expect(
+        new URLSearchParams(api.to("GET /api/audit")[0]!.search).get("dir"),
+      ).toBe("desc");
+    });
+
+    it("clicking Time on the default order writes dir=desc to the URL and refetches newest first", async () => {
+      const onUrlUpdate = vi.fn();
+      const api = stubAccessApi(routes());
+      withApp({}, onUrlUpdate);
+      await userEvent
+        .setup()
+        .click(await screen.findByRole("button", { name: "Time (UTC)" }));
+      await vi.waitFor(() =>
+        expect(
+          api
+            .to("GET /api/audit")
+            .some((c) => new URLSearchParams(c.search).get("dir") === "desc"),
+        ).toBe(true),
+      );
+      expect(onUrlUpdate.mock.calls.at(-1)?.[0]?.queryString).toContain(
+        "dir=desc",
+      );
+    });
+  });
+
+  describe("Gateway source (newest first by default)", () => {
+    const gateway = { source: "gateway" };
+
+    it("the Time header is a sort button, descending by default, and the request is newest first", async () => {
+      const api = stubAccessApi(routes());
+      withApp(gateway);
+      const th = await screen.findByRole("columnheader", { name: "Time" });
+      expect(
+        within(th).getByRole("button", { name: "Time" }),
+      ).toBeInTheDocument();
+      expect(th).toHaveAttribute("aria-sort", "descending");
+      await vi.waitFor(() =>
+        expect(api.to("GET /api/litellm/audit")).not.toHaveLength(0),
+      );
+      expect(dirOf(api.to("GET /api/litellm/audit")[0]!.search, "desc")).toBe(
+        "desc",
+      );
+    });
+
+    it("?sort=time&dir=asc: the header says ascending and the request carries dir=asc", async () => {
+      const api = stubAccessApi(routes());
+      withApp({ ...gateway, sort: "time", dir: "asc" });
+      const th = await screen.findByRole("columnheader", { name: "Time" });
+      expect(th).toHaveAttribute("aria-sort", "ascending");
+      expect(
+        new URLSearchParams(api.to("GET /api/litellm/audit")[0]!.search).get(
+          "dir",
+        ),
+      ).toBe("asc");
+    });
+
+    it("clicking Time on the default order writes dir=asc to the URL and refetches oldest first", async () => {
+      const onUrlUpdate = vi.fn();
+      const api = stubAccessApi(routes());
+      withApp(gateway, onUrlUpdate);
+      await userEvent
+        .setup()
+        .click(await screen.findByRole("button", { name: "Time" }));
+      await vi.waitFor(() =>
+        expect(
+          api
+            .to("GET /api/litellm/audit")
+            .some((c) => new URLSearchParams(c.search).get("dir") === "asc"),
+        ).toBe(true),
+      );
+      expect(onUrlUpdate.mock.calls.at(-1)?.[0]?.queryString).toContain(
+        "dir=asc",
+      );
+    });
+  });
+
+  // Design System - "Sorting in the other tables (unit SRT1": newest first on
+  // the gateway and oldest first on the app by default. The two sources share
+  // the URL `sort`/`dir`, so switching source clears them and each view opens
+  // in its own default (review W-U1).
+  describe("switching source resets the order to that source's default (review W-U1)", () => {
+    it("app sorted dir=desc, then Gateway: sort and dir leave the URL and the Gateway shows newest first", async () => {
+      const onUrlUpdate = vi.fn();
+      const api = stubAccessApi(routes());
+      withApp({ sort: "time", dir: "desc" }, onUrlUpdate);
+      await screen.findByRole("columnheader", { name: "Time (UTC)" });
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: "Gateway" }));
+      const th = await screen.findByRole("columnheader", { name: "Time" });
+      const last = new URLSearchParams(
+        onUrlUpdate.mock.calls.at(-1)?.[0]?.queryString,
+      );
+      expect(last.get("source")).toBe("gateway");
+      expect(last.has("sort")).toBe(false);
+      expect(last.has("dir")).toBe(false);
+      expect(th).toHaveAttribute("aria-sort", "descending");
+      await vi.waitFor(() =>
+        expect(api.to("GET /api/litellm/audit")).not.toHaveLength(0),
+      );
+      expect(
+        dirOf(api.to("GET /api/litellm/audit").at(-1)!.search, "desc"),
+      ).toBe("desc");
+    });
+
+    it("Gateway sorted dir=asc, then App: dir leaves the URL and the App shows oldest first", async () => {
+      const onUrlUpdate = vi.fn();
+      const api = stubAccessApi(routes());
+      withApp({ source: "gateway", sort: "time", dir: "asc" }, onUrlUpdate);
+      await screen.findByRole("columnheader", { name: "Time" });
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: "App" }));
+      const th = await screen.findByRole("columnheader", {
+        name: "Time (UTC)",
+      });
+      const last = new URLSearchParams(
+        onUrlUpdate.mock.calls.at(-1)?.[0]?.queryString,
+      );
+      expect(last.has("sort")).toBe(false);
+      expect(last.has("dir")).toBe(false);
+      expect(th).toHaveAttribute("aria-sort", "ascending");
+      await vi.waitFor(() =>
+        expect(api.to("GET /api/audit")).not.toHaveLength(0),
+      );
+      expect(dirOf(api.to("GET /api/audit").at(-1)!.search, "asc")).toBe("asc");
+    });
   });
 });

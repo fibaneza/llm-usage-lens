@@ -352,7 +352,7 @@ the aggregated view.
 **Owns:** the sort additions in the LiteLLM users tab and its route, the
 audit list and its route, `TeamListTable.tsx`, the LiteLLM teams table,
 `AccountRegistry.tsx`; their tests. It starts after LF1, TM1 and US1 are
-on `main`.
+on `main`. **Added 2026-11-24 (coordinator rulings on SRT1's overlap, additive only):** `lib/litellm/operations.ts` — the `searchUsers` sort parameters (enum mapped on the server; `spend` only when per-user cost is visible) and `listProxyAuditLog`'s `sort_order` (`sort_by` fixed to `updated_at`), each pinned in `lib/litellm/structure.test.ts`; `lib/data/access/audit*` — the query direction only, the cursor bound to it; `components/tables/SortableHeader.tsx` and its test — an optional `defaultDir` prop (default `asc`, US1 unchanged; an unknown sort falls back to the column's `defaultDir`, and the `aria-sort` on load matches the order applied; plus an optional `className` on the `th`, token classes only); `lib/data/access/paging.ts` — an additive optional `direction` on `queryPage` (no direction is today's behaviour and today's cursors stay valid; a cursor from the other direction is `400 BAD_CURSOR`; scope filter and page cap unchanged; only `audit-view.ts` passes one; coordinator ruling 2026-11-24). A shared module changes, so the gate has one full Vitest run at the end (in the test slot).
 
 | Test | Proves |
 |---|---|

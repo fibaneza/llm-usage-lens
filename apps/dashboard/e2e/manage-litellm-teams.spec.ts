@@ -273,3 +273,39 @@ test.describe("Management -> LiteLLM -> LiteLLM teams: spend source and accessib
     expect(await noScroll()).toBe(true);
   });
 });
+
+// Design System - "Sorting in the other tables (unit SRT1, 2026-11-24;
+// D-SR1)": the LiteLLM teams table sorts by the LiteLLM team column in the
+// browser; the sort lives in the URL, so a real reload keeps it.
+test.describe("Management -> LiteLLM -> LiteLLM teams: sorting (unit SRT1; D-SR1)", () => {
+  test("the LiteLLM team header sorts the table, the URL keeps it across a reload", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await mockApi(page, {
+      configured: true,
+      litellmTeams: [
+        { litellmTeamId: "ll-222", alias: "Beta" },
+        { litellmTeamId: "ll-111", alias: "Alpha" },
+      ],
+    });
+    await open(page);
+    const table = page.getByRole("table", { name: "LiteLLM teams" });
+    const header = table.getByRole("columnheader", { name: "LiteLLM team" });
+    const aliases = () =>
+      table.getByRole("row").filter({ has: page.getByRole("cell") });
+    await expect(aliases().first()).toContainText("Beta");
+    await header.getByRole("button").click();
+    await expect(page).toHaveURL(/sort=team/);
+    await expect(header).toHaveAttribute("aria-sort", "ascending");
+    await expect(aliases().first()).toContainText("Alpha");
+    await page.reload();
+    await waitForHydration(page);
+    await expect(
+      page
+        .getByRole("table", { name: "LiteLLM teams" })
+        .getByRole("columnheader", { name: "LiteLLM team" }),
+    ).toHaveAttribute("aria-sort", "ascending");
+  });
+});

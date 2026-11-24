@@ -590,3 +590,120 @@ describe("LiteLLMTeamLinksSection - LiteLLM teams are the rows (D-LF3, T-LF4)", 
     expect(screen.queryByRole("form", { name: "New LiteLLM team" })).toBeNull();
   });
 });
+
+// Sources: Design System - "Sorting in the other tables (unit SRT1, 2026-11-24;
+// D-SR1, D-SR2)": the LiteLLM teams table sorts in the browser with the one
+// SortableHeader; the sort lives in the URL (nuqs `sort`, `dir`); it survives a
+// refetch; no new read. Contract: the one sortable column is "LiteLLM team"
+// (the alias), key `team`; the Members action column is not sortable; with no
+// (or an unknown) URL sort the table keeps the server's order and no header is
+// active. Ties are not observable here: equal aliases render identically.
+const SHUFFLED = [
+  { litellmTeamId: "ll-3", alias: "Gamma" },
+  { litellmTeamId: "ll-1", alias: "Alpha" },
+  { litellmTeamId: "ll-2", alias: "Beta" },
+];
+
+async function teamsTable() {
+  return screen.findByRole("table", { name: "LiteLLM teams" });
+}
+const aliasOrder = (table: HTMLElement) =>
+  within(table)
+    .getAllByRole("row")
+    .slice(1)
+    .map((r) => within(r).getAllByRole("cell")[0]?.textContent);
+
+describe("LiteLLMTeamLinksSection teams table sorting (unit SRT1; D-SR1)", () => {
+  it("the LiteLLM team header is a SortableHeader button; Members is not; the server order holds by default", async () => {
+    stub({ extra: { litellmTeams: SHUFFLED } });
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
+    const table = await teamsTable();
+    const header = within(table).getByRole("columnheader", {
+      name: "LiteLLM team",
+    });
+    expect(within(header).getByRole("button")).toBeInTheDocument();
+    expect(header).toHaveAttribute("aria-sort", "none");
+    expect(
+      within(
+        within(table).getByRole("columnheader", { name: "Members" }),
+      ).queryByRole("button"),
+    ).toBeNull();
+    expect(aliasOrder(table)).toEqual(["Gamma", "Alpha", "Beta"]);
+  });
+
+  it.each([
+    ["asc", "ascending", ["Alpha", "Beta", "Gamma"]],
+    ["desc", "descending", ["Gamma", "Beta", "Alpha"]],
+  ])(
+    "the URL sort=team dir=%s sets aria-sort and orders the aliases",
+    async (dir, ariaSort, expected) => {
+      stub({ extra: { litellmTeams: SHUFFLED } });
+      renderWithProviders(<LiteLLMTeamLinksSection canEdit />, {
+        searchParams: { sort: "team", dir },
+      });
+      const table = await teamsTable();
+      expect(
+        within(table).getByRole("columnheader", { name: "LiteLLM team" }),
+      ).toHaveAttribute("aria-sort", ariaSort);
+      expect(aliasOrder(table)).toEqual(expected);
+    },
+  );
+
+  it("an unknown URL sort falls back to the server order", async () => {
+    stub({ extra: { litellmTeams: SHUFFLED } });
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit />, {
+      searchParams: { sort: "spend", dir: "desc" },
+    });
+    const table = await teamsTable();
+    expect(aliasOrder(table)).toEqual(["Gamma", "Alpha", "Beta"]);
+    expect(
+      within(table).getByRole("columnheader", { name: "LiteLLM team" }),
+    ).toHaveAttribute("aria-sort", "none");
+  });
+
+  it("a header click sorts in the browser, flips on the second click and issues no new read", async () => {
+    const u = userEvent.setup();
+    const calls = stub({ extra: { litellmTeams: SHUFFLED } });
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
+    const table = await teamsTable();
+    const reads = calls.length;
+    const button = within(
+      within(table).getByRole("columnheader", { name: "LiteLLM team" }),
+    ).getByRole("button");
+    await u.click(button);
+    await waitFor(() =>
+      expect(aliasOrder(table)).toEqual(["Alpha", "Beta", "Gamma"]),
+    );
+    await u.click(button);
+    await waitFor(() =>
+      expect(aliasOrder(table)).toEqual(["Gamma", "Beta", "Alpha"]),
+    );
+    expect(calls).toHaveLength(reads);
+  });
+
+  it("the sort survives a refetch: the new list arrives in the chosen order", async () => {
+    const extra: { litellmTeams: typeof SHUFFLED } = {
+      litellmTeams: SHUFFLED,
+    };
+    const calls = stub({ extra });
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit />, {
+      searchParams: { sort: "team", dir: "asc" },
+    });
+    const table = await teamsTable();
+    expect(aliasOrder(table)).toEqual(["Alpha", "Beta", "Gamma"]);
+    const readsOf = () =>
+      calls.filter((c) => c.path === "/api/litellm/team-links").length;
+    extra.litellmTeams = [
+      { litellmTeamId: "ll-4", alias: "Delta" },
+      ...SHUFFLED,
+    ];
+    window.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() => expect(readsOf()).toBe(2));
+    await waitFor(() =>
+      expect(aliasOrder(table)).toEqual(["Alpha", "Beta", "Delta", "Gamma"]),
+    );
+    expect(
+      within(table).getByRole("columnheader", { name: "LiteLLM team" }),
+    ).toHaveAttribute("aria-sort", "ascending");
+  });
+});
