@@ -21,7 +21,7 @@ const LOCAL_HOSTNAMES = new Set([
 
 // Twin of isLocalEndpoint in apps/dashboard/lib/dynamodb.ts (server-only, so
 // not importable here).
-function isLocalEndpoint(endpoint: string): boolean {
+export function isLocalEndpoint(endpoint: string): boolean {
   try {
     return LOCAL_HOSTNAMES.has(new URL(endpoint).hostname);
   } catch {

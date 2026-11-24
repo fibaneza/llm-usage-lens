@@ -138,10 +138,10 @@ Organisation settings that are not secrets or deployment wiring (LiteLLM operati
 | `pnpm lint` | ESLint v9 flat config check |
 | `pnpm format:check` | Checks formatting with Prettier (`pnpm format` to auto-fix) |
 | `pnpm test:unit` | Runs Vitest unit & component tests (jsdom, no DynamoDB needed) |
-| `pnpm test:integration` | Runs Vitest integration tests against DynamoDB Local on `:8000` |
+| `pnpm test:integration` | Runs the Vitest integration tests (the `integration` and `integration-serial` projects) against DynamoDB Local on `:8000` |
 | `pnpm test:infra` | Runs the Vitest CDK stack tests in `infra/` (node) |
-| `pnpm test` | Runs all three Vitest projects (requires DynamoDB Local) |
-| `pnpm test:coverage` | Runs all three projects with v8 coverage into `coverage/` (see the [testing guide](docs/guides/testing.md)) |
+| `pnpm test` | Runs every Vitest project (unit, integration, integration-serial, infra) (requires DynamoDB Local) |
+| `pnpm test:coverage` | Runs every Vitest project with v8 coverage into `coverage/` (see the [testing guide](docs/guides/testing.md)) |
 | `pnpm test:e2e` | Runs headless Playwright end-to-end tests in `apps/dashboard/e2e` |
 | `pnpm exec vitest run path/to/file.test.ts` | Runs a single test file |
 | `pnpm --filter @llm-usage-lens/infra synth` | `cdk synth` for the platform stacks (needs the CDK context; never deploys) |
@@ -153,7 +153,7 @@ Organisation settings that are not secrets or deployment wiring (LiteLLM operati
 - **Pre-commit:** Scans staged files with Gitleaks for secrets, then runs `lint-staged` (ESLint `--fix` + Prettier).
 - **Commit-msg:** Validates commit message format against Conventional Commits via Commitlint.
 - **Pre-push:** Runs `pnpm typecheck` and the Vitest `unit` and `infra` projects when `apps/`, `packages/`, `scripts/`, or `infra/` change, the simulator's typecheck and tests when `tools/bedrock-simulator/` changes, then a Gitleaks scan of the pushed commits.
-- **CI Workflow:** `llm-usage-lens-build.yml` runs on every push to `main` and on every pull request: `quality` (lint, format, typecheck, Gitleaks), `test` (all three Vitest projects against DynamoDB Local), and `build` (`pnpm build:ci`).
+- **CI Workflow:** `llm-usage-lens-build.yml` runs on every push to `main` and on every pull request: `quality` (lint, format, typecheck, Gitleaks), `test` (every Vitest project against DynamoDB Local), and `build` (`pnpm build:ci`).
 - **Deploy:** `llm-usage-lens-deploy.yml` is manual (`workflow_dispatch`) only; deploying is always a user action.
 
 Hooks are never bypassed with `--no-verify`. See [Git Hooks](docs/guides/git-hooks.md) and [.github/ACTIONS.md](.github/ACTIONS.md) for every workflow.

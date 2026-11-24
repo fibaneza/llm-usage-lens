@@ -303,7 +303,7 @@ Rules for the roster:
   day).** The isolation is automatic, so no slot messages are needed for
   it:
   - **Vitest** (unit and integration) is isolated per run, with its own
-    `bedrock-usage-test-<pid>` table. No slot; runs in parallel.
+    `bedrock-usage-test-<pid>-*` tables, one per integration file. No slot; runs in parallel.
   - **E2E** (`pnpm test:e2e`, both Playwright projects) takes the
     cross-worktree lock itself (`scripts/e2e-lock.mjs`, in the git common
     dir) and waits for it. No slot request; just run it.

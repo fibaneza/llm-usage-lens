@@ -4,16 +4,25 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 // Root Vitest config scoping the suite to the dashboard workspace (apps +
-// packages + scripts + infra) and keeping the standalone simulator out. Three
+// packages + scripts + infra) and keeping the standalone simulator out. Four
 // projects (docs/guides/testing.md):
 //  - `unit`: jsdom + React Testing Library; needs no external services.
 //  - `integration`: node, `*.integration.test.{ts,tsx}` against DynamoDB Local
-//    (localhost:8000; Rule 60.22). Files run serially because they share one
-//    table, named per run so concurrent runs (e.g. several worktrees) against
-//    the same DynamoDB Local never clear each other's data; the global setup
-//    deletes it afterwards.
+//    (localhost:8000; Rule 60.22). Runs as its own group (`groupOrder: 1`)
+//    after unit and infra. Files run in parallel, at most 4 workers;
+//    each test file gets its own table `bedrock-usage-test-<pid>-<slot>-<suffix>`
+//    (created by test/setup/integration-file-table.ts), so files and concurrent
+//    runs (e.g. several worktrees) never clear each other's data. Per file, not
+//    per worker: Vitest reuses a pool slot before the old worker has exited.
+//    The global setup deletes this run's tables afterwards.
+//  - `integration-serial`: the integration settings for the files in
+//    `SERIAL_INTEGRATION_FILES` only, one file at a time after the
+//    `integration` group (`groupOrder: 2`; implementation-phases, test speed, D-TS5).
 //  - `infra`: node, the CDK stack tests in `infra/` (no DOM, no setup file).
-// The pre-push hook runs `unit` and `infra`; CI and `pnpm test` run all three.
+// The pre-push hook runs `unit` and `infra`; CI and `pnpm test` run all four.
+// Both integration projects list the same global setup; its teardown runs once
+// per project when the whole run ends (after the serial group) and only deletes
+// this run's tables, so the second run is a harmless no-op.
 const resolve = {
   alias: {
     // Mirror the dashboard tsconfig "@/*" path alias.
@@ -38,6 +47,55 @@ const isolation = {
 };
 
 const integrationTableName = `bedrock-usage-test-${process.pid}`;
+
+// Files that cannot run beside others (implementation-phases, test speed, D-TS5); each stays out
+// of `integration` (exclude) and runs in `integration-serial`, whose include
+// names them literally.
+const SERIAL_INTEGRATION_FILES = [
+  "apps/dashboard/lib/data/identity.integration.test.ts",
+  "scripts/lib/run-seed.integration.test.ts",
+];
+
+const integrationTest = {
+  environment: "node" as const,
+  ...isolation,
+  setupFiles: ["./apps/dashboard/test/setup/integration-file-table.ts"],
+  globalSetup: ["./apps/dashboard/test/setup/integration-global-setup.ts"],
+  // Seed-reset tests write and delete thousands of items against
+  // DynamoDB Local; the 5s default times out on CI runners.
+  testTimeout: 60_000,
+  hookTimeout: 60_000,
+  // DynamoDB Local settings; no credentials are set here.
+  env: {
+    DYNAMODB_ENDPOINT: process.env.DYNAMODB_ENDPOINT ?? "http://localhost:8000",
+    AWS_REGION: "us-east-1",
+    INTEGRATION_TABLE_BASE: integrationTableName,
+    DYNAMODB_TABLE_NAME: integrationTableName,
+    SKIP_ENV_VALIDATION: "true",
+    // The list-cursor HMAC key derives from AUTH_SECRET and there is no
+    // fallback (Access Control spec, user decision 2026-11-15); a
+    // test-only value, never a real secret.
+    AUTH_SECRET: "integration-test-auth-secret",
+    // Unit CFG (System Architecture — Configuration file, A9): the
+    // file beats saved toggles, so integration tests that save a
+    // toggle (deleteKey: true) read an empty configuration by default;
+    // a test names another fixture with vi.stubEnv("APP_CONFIG_FILE").
+    APP_CONFIG_FILE: fileURLToPath(
+      new URL(
+        "./apps/dashboard/test/fixtures/config/empty.yaml",
+        import.meta.url,
+      ),
+    ),
+  },
+};
+
+const integrationExclude = [
+  "**/node_modules/**",
+  "**/.next/**",
+  "**/.next-probe-r5/**",
+  "**/.next-probe-litellm/**",
+  "tools/**",
+];
 
 export default defineConfig({
   test: {
@@ -102,50 +160,41 @@ export default defineConfig({
         resolve,
         test: {
           name: "integration",
-          environment: "node",
-          ...isolation,
+          ...integrationTest,
           include: [
             "apps/**/*.integration.test.{ts,tsx}",
             "packages/**/*.integration.test.{ts,tsx}",
             "scripts/**/*.integration.test.ts",
           ],
-          exclude: [
-            "**/node_modules/**",
-            "**/.next/**",
-            "**/.next-probe-r5/**",
-            "**/.next-probe-litellm/**",
-            "tools/**",
+          exclude: [...integrationExclude, ...SERIAL_INTEGRATION_FILES],
+          fileParallelism: true,
+          // Vitest needs a separate group for a per-project worker cap; the
+          // integration group runs after unit and infra (both keep 0).
+          sequence: { groupOrder: 1 },
+          // Cap for this project only (the unit project keeps the default);
+          // lower it rather than raise a timeout (implementation-phases, test speed, D-TS6).
+          maxWorkers: 4,
+        },
+      },
+      {
+        plugins: [react()],
+        resolve,
+        test: {
+          name: "integration-serial",
+          ...integrationTest,
+          // Include lists stay literal arrays: probe-structure.test.ts reads
+          // them as text (LiteLLM spec LD28).
+          include: [
+            // Serial until fix/master-lock-race lands (production race in reserveMasterAttempt: repairMissingLock writes lockedUntil first, so lockedNow is lost). Failed 1 of 7 parallel runs; passes alone.
+            "apps/dashboard/lib/data/identity.integration.test.ts",
+            // A heavy writer (thousands of items): 23 s alone, 31-41 s beside parallel files, and it reaches the 60 s timeout when DynamoDB Local is loaded.
+            "scripts/lib/run-seed.integration.test.ts",
           ],
+          exclude: integrationExclude,
           fileParallelism: false,
-          globalSetup: [
-            "./apps/dashboard/test/setup/integration-global-setup.ts",
-          ],
-          // Seed-reset tests write and delete thousands of items against
-          // DynamoDB Local; the 5s default times out on CI runners.
-          testTimeout: 60_000,
-          hookTimeout: 60_000,
-          // DynamoDB Local settings; no credentials are set here.
-          env: {
-            DYNAMODB_ENDPOINT:
-              process.env.DYNAMODB_ENDPOINT ?? "http://localhost:8000",
-            AWS_REGION: "us-east-1",
-            DYNAMODB_TABLE_NAME: integrationTableName,
-            SKIP_ENV_VALIDATION: "true",
-            // The list-cursor HMAC key derives from AUTH_SECRET and there is no
-            // fallback (Access Control spec, user decision 2026-11-15); a
-            // test-only value, never a real secret.
-            AUTH_SECRET: "integration-test-auth-secret",
-            // Unit CFG (System Architecture — Configuration file, A9): the
-            // file beats saved toggles, so integration tests that save a
-            // toggle (deleteKey: true) read an empty configuration by default;
-            // a test names another fixture with vi.stubEnv("APP_CONFIG_FILE").
-            APP_CONFIG_FILE: fileURLToPath(
-              new URL(
-                "./apps/dashboard/test/fixtures/config/empty.yaml",
-                import.meta.url,
-              ),
-            ),
-          },
+          maxWorkers: 1,
+          // After the integration group.
+          sequence: { groupOrder: 2 },
         },
       },
       {

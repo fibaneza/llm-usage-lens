@@ -1120,9 +1120,12 @@ plans §3):
 - Speed: the seeded password hash is computed once per file with the
   real parameters; nothing is mocked and no hash cost is lowered
   (D-TS1, D-TS2). Integration files run in parallel with one table per
-  Vitest worker, at most 4 workers (D-TS3, D-TS6); a file that fails
-  only beside others moves to a serial project and is not edited
-  (D-TS5). The CI `e2e` job is not split (D-TS8; open question Q-TS1).
+  test file, `bedrock-usage-test-<pid>-<slot>-<suffix>`, at most 4 workers
+  (D-TS3 amended 2026-11-24, agent decision: a table per worker failed
+  under load because Vitest 4 frees a pool slot before the old worker
+  exits, so two files shared a table; D-TS6); a file that fails only
+  beside others moves to the serial project `integration-serial` and is
+  not edited (D-TS5). The CI `e2e` job is not split (D-TS8; open question Q-TS1).
 
 - [ ] **TC1** route duplicates (`write-routes` cases the route-contract
   suite also runs; the nine `frozen` registry entries; contract copies
@@ -1134,7 +1137,7 @@ plans §3):
 - [ ] **TS1** the password seed hash, once per file, in `account-password.integration.test.ts` only (coordinator, TC0 review: `password-credentials.integration.test.ts` seeds through the code under test and spies on the hash, so it is left as is)
   Verify: that file only; the same case count; no assertion changed
   and no mock added; three green runs; seconds before and after reported
-- [ ] **TS2** integration files in parallel, a table per worker
+- [ ] **TS2** integration files in parallel, a table per test file (D-TS3 amended)
   Verify: no test file changed; three full Vitest runs and one shuffled
   run green with the baseline's counts; no test table left after a run;
   the table guard unchanged; the integration project's time before and

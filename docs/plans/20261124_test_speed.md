@@ -53,7 +53,7 @@ them into implementation-phases (`spec-changes.md` §6).
 |---|---|---|
 | D-TS1 | TS1 computes the seeded user's hash **once per file**, with the real `hashPassword` and the real parameters, and reuses it. Nothing is mocked; the verify and the hash inside the code under test still run for real | The file's own comment: "Only the clock is faked, so Argon2 and the SDK still run for real" |
 | D-TS2 | No production change and no lower hash cost for tests. A switch that makes hashing cheaper would be a way to weaken a control, and is the user's decision; it is not proposed | Rule 50; implementation-phases — *Decision policy* |
-| D-TS3 | TS2 runs integration files in parallel with **one table per Vitest worker**: `bedrock-usage-test-<pid>-<worker id>`, set before any test module loads; the run's tables are deleted at the end | It removes the reason for the serial run and changes no test |
+| D-TS3 | TS2 runs integration files in parallel with **one table per test file**: `bedrock-usage-test-<pid>-<pool slot>-<random>`, set before any test module loads and created before the file's tests; the run's tables (prefix `bedrock-usage-test-<pid>-`) are deleted at the end. *Amended 2026-11-24, coordinator: previously one table per Vitest worker (`bedrock-usage-test-<pid>-<worker id>`). Vitest 4 frees a worker's pool slot before the old worker exits, so under load the next file shared a table with a worker still writing (a full run failed 1,286 tests with seed conflicts).* | It removes the reason for the serial run and changes no test; per file, no two files can share a table |
 | D-TS4 | TS2 is chosen over splitting the CI job into shards: it also shortens every local run, and it adds no runner minutes | Cost posture (CLAUDE.md); the local gates are where the minutes are spent |
 | D-TS5 | A file that fails only beside others is **not edited** by TS2 when another unit owns it: it goes into a second project, `integration-serial`, with the reason in a comment. The second project exists only if such a file is found | Round 2 units own most test files |
 | D-TS6 | The integration project is capped at 4 workers until a measurement says more is safe | One DynamoDB Local serves all of them |
@@ -65,12 +65,12 @@ them into implementation-phases (`spec-changes.md` §6).
 | Unit | What | Owner | Worktree | Branch | Needs |
 |---|---|---|---|---|---|
 | **TS1** | The password seed hash, once per file | a free worker session; `improvements_worker` proposed | `ts1` | `chore/test-speed-password-seeds` | the baseline |
-| **TS2** | Integration files in parallel, a table per worker | a free worker session; `bedrock_worker` proposed | `ts2` | `chore/test-parallel-integration` | the baseline |
+| **TS2** | Integration files in parallel, a table per test file (D-TS3, amended 2026-11-24) | a free worker session; `bedrock_worker` proposed | `ts2` | `chore/test-parallel-integration` | the baseline |
 
 | Unit | Owns | Never edits |
 |---|---|---|
 | TS1 | `apps/dashboard/app/api/__tests__/account-password.integration.test.ts` (amended 2026-11-24: not `password-credentials.integration.test.ts`) | `apps/dashboard/test/**`, `lib/auth/password-hash.ts`, any other file |
-| TS2 | `vitest.config.ts`; `apps/dashboard/test/setup/**` (a new per-worker set-up file; `integration-global-setup.ts`); `apps/dashboard/test/support/test-support.ts` (only the table name); `docs/guides/testing.md` (*Projects*, *Running*); and only if D-TS5 applies: `package.json` (`test:integration`), the pre-push hook's Vitest line, and the sentences that say "three projects" (`CLAUDE.md`, Rule 60, Rule 70, `.github/ACTIONS.md`) | any test file; any production file; `.github/workflows/**` (the CI command `pnpm exec vitest run` stays) |
+| TS2 | `vitest.config.ts`; `apps/dashboard/test/setup/**` (a new per-file table set-up file, D-TS3 amended; `integration-global-setup.ts`); `apps/dashboard/test/support/test-support.ts` (only the table name); `docs/guides/testing.md` (*Projects*, *Running*); and only if D-TS5 applies: `package.json` (`test:integration`), the pre-push hook's Vitest line, and the sentences that say "three projects" (`CLAUDE.md`, Rule 60, Rule 70, `.github/ACTIONS.md`) | any test file; any production file; `.github/workflows/**` (the CI command `pnpm exec vitest run` stays) |
 
 No file is shared between TS1, TS2 and TC1 (TC1 leaves
 `account-password.integration.test.ts` to TS1: D-TC13). `docs/guides/testing.md`
@@ -106,10 +106,10 @@ fresh hash.
 
 ### TS2 — integration files in parallel
 
-- A set-up file for the integration project appends the Vitest worker id
-  (`VITEST_POOL_ID`) to `DYNAMODB_TABLE_NAME` before any test module
-  loads, so `lib/dynamodb.ts` and `test-support.ts` read the worker's
-  table.
+- A set-up file for the integration project gives each test file its own
+  table (`DYNAMODB_TABLE_NAME` = the run base, the pool slot and a random
+  suffix) before any test module loads, so `lib/dynamodb.ts` and
+  `test-support.ts` read the file's table (D-TS3, amended 2026-11-24).
 - `fileParallelism` on for the integration project, at most 4 workers
   (D-TS6).
 - The global set-up deletes every table whose name starts with the

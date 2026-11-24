@@ -10,20 +10,49 @@ own test setup).
 
 ## Projects
 
-One root [`vitest.config.ts`](../../vitest.config.ts) with three projects.
+One root [`vitest.config.ts`](../../vitest.config.ts) with four projects.
 
 | Project | Environment | Matches | Needs |
 |---|---|---|---|
 | `unit` | jsdom (React Testing Library, jest-dom, user-event) | `apps/**`, `packages/**`, `scripts/**` — `*.test.ts(x)` | nothing |
 | `integration` | node | `*.integration.test.{ts,tsx}` under `apps/`, `packages/`, `scripts/` | DynamoDB Local on `:8000` |
+| `integration-serial` | node | two `*.integration.test.ts` files that cannot run beside others (below) | DynamoDB Local on `:8000` |
 | `infra` | node | `infra/**/*.test.ts` (CDK stack tests) | nothing |
 
 - `unit` loads [`test/setup/vitest.setup.ts`](../../apps/dashboard/test/setup/vitest.setup.ts)
   (jest-dom matchers and the jsdom shims).
-- `integration` runs files serially against one table named per run
-  (`bedrock-usage-test-<pid>`), created and deleted by
-  [`test/setup/integration-global-setup.ts`](../../apps/dashboard/test/setup/integration-global-setup.ts),
-  so several worktrees can share one DynamoDB Local.
+- `integration-serial` has the same settings as `integration` (one shared
+  object in `vitest.config.ts`) but lists only the files in
+  `SERIAL_INTEGRATION_FILES`, runs them one after the other (`fileParallelism:
+  false`, `maxWorkers: 1`) and after the `integration` group
+  (`sequence.groupOrder: 2`). Both are excluded from `integration`. Its global
+  setup teardown runs once per project at the end of the whole run and only
+  deletes this run's tables, so the repeat is harmless. Files (implementation-phases — *Maintenance — test clean-up, second pass, and test speed*, D-TS5):
+  - `apps/dashboard/lib/data/identity.integration.test.ts`: temporary, serial
+    only until `fix/master-lock-race` lands. A production race in
+    `reserveMasterAttempt` (`repairMissingLock` writes `lockedUntil` first, so
+    `lockedNow` is lost) shows under parallel load; after the fix the file
+    returns to `integration`.
+  - `scripts/lib/run-seed.integration.test.ts`: a heavy writer that reaches the
+    60 s timeout beside parallel files.
+  A unit whose new integration test fails only in parallel reports it and adds
+  the file to `SERIAL_INTEGRATION_FILES` as a shared line (implementation-phases — *Maintenance — test clean-up, second pass, and test speed*, D-TS5).
+- `integration` runs as its own group after `unit` and `infra` (`sequence.groupOrder: 1`;
+  Vitest needs a separate group for a per-project worker cap), files in
+  parallel, at most 4 workers (this project only).
+  [`test/setup/integration-file-table.ts`](../../apps/dashboard/test/setup/integration-file-table.ts)
+  gives each test file its own table, `bedrock-usage-test-<pid>-<slot>-<suffix>`
+  (slot = `VITEST_POOL_ID`, suffix = random), and creates it before the file's
+  tests. It is per file, not per worker, because Vitest frees a pool slot when a
+  file ends without waiting for the old worker, so the next file can get the
+  same slot while the old worker still writes. At the end of the run
+  [`test/setup/integration-global-setup.ts`](../../apps/dashboard/test/setup/integration-global-setup.ts)
+  deletes every table of this pid (and refuses a non-local endpoint), so
+  several worktrees can share one DynamoDB Local. A run that is killed
+  (SIGKILL, a closed terminal) skips that teardown and leaves its
+  `bedrock-usage-test-*` tables; delete them by hand against DynamoDB Local
+  only (for example with `dynamodb-admin`, or `aws dynamodb delete-table`
+  with `--endpoint-url http://localhost:8000`), never against an AWS endpoint.
 - Every project sets `restoreMocks`, `unstubEnvs` and `unstubGlobals`: spies,
   `vi.stubEnv` and `vi.stubGlobal` are undone after each test. A test does not
   need its own `afterEach` for them.
@@ -65,14 +94,15 @@ docker compose -f .devcontainer/docker-compose.yml up -d dynamodb-local
 
 | Command | Runs |
 |---|---|
-| `pnpm test` | all three projects |
+| `pnpm test` | all four projects |
 | `pnpm test:unit` | `unit` only (no DynamoDB) |
-| `pnpm test:integration` | `integration` only |
+| `pnpm test:integration` | `integration` and `integration-serial` |
 | `pnpm test:infra` | `infra` only |
+| `pnpm exec vitest run --project integration --no-file-parallelism` | integration files one at a time, for a debug (or `--maxWorkers=1`) |
 | `pnpm exec vitest run path/to/foo.test.ts` | one file |
 | `pnpm exec vitest run --project unit lib/auth` | one project, filtered by path |
 | `pnpm exec vitest run --changed $(git merge-base main HEAD)` | the tests impacted by a branch (Rule 70.12) |
-| `pnpm test:coverage` | all three projects with coverage |
+| `pnpm test:coverage` | all four projects with coverage |
 | `pnpm check` | the full local gate (typecheck, lint, format, all tests, build, bundle scan) |
 
 The pre-push hook runs `unit` and `infra`; CI runs everything

@@ -21,7 +21,7 @@
     "test:unit": "vitest run --project unit",
     "test:infra": "vitest run --project infra",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "vitest run --project integration",
+    "test:integration": "vitest run --project integration --project integration-serial",
     "db:create-table": "tsx scripts/create-table.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:empty": "tsx scripts/seed-empty.ts",

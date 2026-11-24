@@ -73,7 +73,7 @@ jobs:
           exit 1
       - name: Create table
         run: pnpm db:create-table
-      # Smoke check on `bedrock-usage`; tests use a per-run `bedrock-usage-test-<pid>` table.
+      # Smoke check on `bedrock-usage`; tests use their own `bedrock-usage-test-<pid>-*` tables, one per integration file.
       - name: Seed (smoke)
         run: pnpm db:seed
       - name: Test

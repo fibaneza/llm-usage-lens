@@ -102,15 +102,15 @@ Package manager is **pnpm** (run via `corepack pnpm` if `pnpm` is not on PATH). 
 | `pnpm dev` | Next.js dev server (`apps/dashboard`) |
 | `pnpm build` | `next build` |
 | `pnpm build:ci` | `pnpm build` with non-secret placeholder auth/env values so env validation still runs (what the CI build job runs) |
-| `pnpm check` | Full local gate, stopping at the first failure: `typecheck`, `lint`, `format:check`, `vitest run` (all three projects; DynamoDB Local on `:8000`), `build:ci`, then the bundle scan (`lib/litellm/bundle-output.test.ts` with `REQUIRE_BUILD_OUTPUT=1` — the LiteLLM service key must not reach `.next/static`) — the pre-merge gate in Rule 31 |
+| `pnpm check` | Full local gate, stopping at the first failure: `typecheck`, `lint`, `format:check`, `vitest run` (all four projects; DynamoDB Local on `:8000`), `build:ci`, then the bundle scan (`lib/litellm/bundle-output.test.ts` with `REQUIRE_BUILD_OUTPUT=1` — the LiteLLM service key must not reach `.next/static`) — the pre-merge gate in Rule 31 |
 | `pnpm format:check` | Prettier format check (`pnpm format` to write) |
 | `pnpm lint` | ESLint v9 flat config (`eslint.config.ts`) |
 | `pnpm typecheck` | `tsc --noEmit` across every workspace (`pnpm -r --if-present typecheck`) plus `tsc -p tsconfig.scripts.json` for `scripts/` |
-| `pnpm test` | Unit + integration + infra tests (**Vitest**, not Jest) — root `vitest.config.ts` with three projects; the integration project needs DynamoDB Local on `:8000`; excludes `e2e/` and `tools/` ([testing guide](docs/guides/testing.md)) |
+| `pnpm test` | Unit + integration + infra tests (**Vitest**, not Jest) — root `vitest.config.ts` with four projects (`integration-serial` holds the two integration files that cannot run beside others); the integration projects need DynamoDB Local on `:8000`; excludes `e2e/` and `tools/` ([testing guide](docs/guides/testing.md)) |
 | `pnpm test:unit` | Unit + component tests only (`vitest run --project unit`, jsdom; no DynamoDB needed) |
-| `pnpm test:integration` | Data-access integration tests against DynamoDB Local (`vitest run --project integration`) |
+| `pnpm test:integration` | Data-access integration tests against DynamoDB Local (`vitest run --project integration --project integration-serial`) |
 | `pnpm test:infra` | CDK stack tests (`vitest run --project infra`, node) |
-| `pnpm test:coverage` | All three projects with v8 coverage into `coverage/`; measured, no threshold ([testing guide](docs/guides/testing.md)) |
+| `pnpm test:coverage` | All four projects with v8 coverage into `coverage/`; measured, no threshold ([testing guide](docs/guides/testing.md)) |
 | `pnpm db:create-table` | Create the `bedrock-usage` table in DynamoDB Local (idempotent) |
 | `pnpm db:seed` / `db:seed:empty` / `db:seed:large` / `db:seed:ranking` | Load seed data (`seed:empty` resets the table first) |
 | `pnpm exec vitest run path/to/file.test.ts` | Run a single test file |
@@ -146,7 +146,7 @@ is the source of truth — read it before touching any workflow.
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| `llm-usage-lens-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (all three Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`), `e2e` (Playwright, both projects, production servers, against DynamoDB Local), `e2e-dev` (the dev-login specs on `next dev`) |
+| `llm-usage-lens-build.yml` | push to `main`; pull request | Dashboard CI: `quality` (lint, format, typecheck, gitleaks), `test` (all four Vitest projects against a DynamoDB Local service), `build` (`pnpm build:ci`), `e2e` (Playwright, both projects, production servers, against DynamoDB Local), `e2e-dev` (the dev-login specs on `next dev`) |
 | `llm-usage-lens-deploy.yml` | `workflow_dispatch` (user action) | Builds the dashboard image, pushes it to ECR via OIDC and deploys the DashboardServiceStack only |
 | `claude-pr-review.yml` | PR opened / synchronize / ready / reopened | Inline review + security findings; HIGH findings submit a `REQUEST_CHANGES` review |
 | `claude-code-review.yml` | release tag push / `workflow_dispatch` | Release audit scoped to commits since the previous tag; files issues |
