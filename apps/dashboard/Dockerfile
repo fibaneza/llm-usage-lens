@@ -35,7 +35,8 @@ ENV SKIP_ENV_VALIDATION=1 \
 # build only; the app code is type-checked as usual.
 RUN node -e "const f='apps/dashboard/tsconfig.json',c=JSON.parse(require('fs').readFileSync(f,'utf8'));c.exclude=[...c.exclude,'e2e','probe','test','playwright.config.ts','vitest.config.ts','**/*.test.ts','**/*.test.tsx'];require('fs').writeFileSync(f,JSON.stringify(c,null,2))" \
  && mkdir -p apps/dashboard/public \
- && pnpm --filter @llm-usage-lens/dashboard build
+ && pnpm --filter @llm-usage-lens/dashboard build \
+ && pnpm --filter @llm-usage-lens/dashboard run build:jobs
 
 FROM node:24.22.3-alpine3.24@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS runner
 WORKDIR /repo
@@ -54,6 +55,10 @@ RUN apk upgrade --no-cache \
 COPY --from=build --chown=app:app /repo/apps/dashboard/.next/standalone ./
 COPY --from=build --chown=app:app /repo/apps/dashboard/.next/static apps/dashboard/.next/static
 COPY --from=build --chown=app:app /repo/apps/dashboard/public apps/dashboard/public
+# The scheduled LiteLLM user sync job: one self-contained bundle, run with
+# `node apps/dashboard/jobs/sync-litellm-users.cjs` by the schedule's command
+# override (Platform spec - Scheduled job, unit SYNC2).
+COPY --from=build --chown=app:app /repo/apps/dashboard/jobs/sync-litellm-users.cjs apps/dashboard/jobs/sync-litellm-users.cjs
 # The baked-in app config (System Architecture — Configuration file): the loader
 # reads apps/dashboard/config/config.yaml relative to its own module, and the
 # standalone trace does not carry a file that is only read at runtime.

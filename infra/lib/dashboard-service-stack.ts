@@ -14,6 +14,7 @@ import { addCiDeployRole } from "./dashboard-service/ci-deploy-role";
 import { addDashboardAlarms } from "./dashboard-service/alarms";
 import { addDashboardIngress } from "./dashboard-service/ingress";
 import { addDashboardTask } from "./dashboard-service/task";
+import { addUserSyncSchedule } from "./dashboard-service/user-sync-schedule";
 import { ssmPrefix } from "./inputs";
 import type { AppInputs } from "./inputs";
 
@@ -130,6 +131,22 @@ export class DashboardServiceStack extends Stack {
       auditLogGroup,
       alarmAction,
     });
+    if (
+      inputs.litellmUserSyncSchedule !== undefined &&
+      inputs.litellmUserSyncSchedule !== "off"
+    ) {
+      addUserSyncSchedule(this, {
+        inputs,
+        expression: inputs.litellmUserSyncSchedule,
+        clusterName,
+        taskDefinition,
+        taskSecurityGroup,
+        privateSubnetIds: inputs.privateSubnetIds,
+        appLogGroup,
+        alarmTopic,
+        alarmAction,
+      });
+    }
     addCiDeployRole(this, { inputs, service, repository });
   }
 }

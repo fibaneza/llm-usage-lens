@@ -229,3 +229,39 @@ describe("parseAppInputs - fails closed", () => {
     expect(() => parseAppInputs({})).toThrow();
   });
 });
+
+// Source: docs/specs/2026-11-10-platform.md - Inputs, litellmUserSyncSchedule
+// (unit SYNC2): optional, absent or "off" means no schedule, no default.
+describe("parseAppInputs litellmUserSyncSchedule", () => {
+  it("has no default: absent leaves it unset", () => {
+    expect(
+      parseAppInputs(importContext).litellmUserSyncSchedule,
+    ).toBeUndefined();
+  });
+
+  it("keeps a cron expression as given", () => {
+    expect(
+      parseAppInputs({
+        ...importContext,
+        litellmUserSyncSchedule: "cron(0 18 * * ? *)",
+      }).litellmUserSyncSchedule,
+    ).toBe("cron(0 18 * * ? *)");
+  });
+
+  it('"off" is accepted and means no schedule', () => {
+    const v = parseAppInputs({
+      ...importContext,
+      litellmUserSyncSchedule: "off",
+    }).litellmUserSyncSchedule;
+    expect(v === undefined || v === "off").toBe(true);
+  });
+
+  it("rejects a value that is not a scheduler expression (fail-closed context parsing)", () => {
+    expect(() =>
+      parseAppInputs({
+        ...importContext,
+        litellmUserSyncSchedule: "every day at six",
+      }),
+    ).toThrow();
+  });
+});

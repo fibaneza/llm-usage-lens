@@ -16,9 +16,31 @@ the existing SNS topic supplied as `alarmTopicArn`.
 | Target-group unhealthy hosts and 5xx (create mode only) | Targets fail `/api/health` or return 5xx | Target group health in the console; app log group. In import mode the shared ALB's own alarms apply |
 | Application 5xx | Log metric filter on the app log group | Logs Insights on the app log group for the failing route and stack. `/api/health` returns `200` with `status: degraded` when DynamoDB is unreachable, so look at its body too |
 | Security events | Metric filter on `/llm-usage-lens/<env>/audit`: global-role grants, master-user sign-ins, failures, lockouts | Logs Insights on the audit log group; confirm each event against an expected admin action. Unexpected: treat as an incident (Access Control spec - *Threat model*) |
+| LiteLLM user sync failed (only with `litellmUserSyncSchedule`) | An EventBridge rule on the ECS task state change: the scheduled job's task stopped with a non-zero exit code, or failed to start | The job's log lines in the app log group (the run id is on every record); `aws ecs describe-tasks` for `stoppedReason` and the container exit code. A truncated plan or the 10-minute deadline exits non-zero by design |
+| No successful LiteLLM user sync in 2 days (same condition) | The success log line is missing (missing data breaches), so the job did not start or kept failing (a skipped run, toggle off or lease held, counts as completed). The alarm starts in ALARM right after deploy, until the first successful run | Management → Users and the audit log for the last `litellm.user.sync` record; the toggle `syncLiteLLMUsers`; the EventBridge Scheduler schedule's state |
 
 `/api/health` needs no session and exposes no data, only
 `ok`/`degraded` and per-dependency status.
+
+## LiteLLM user sync schedule
+
+Only with the `litellmUserSyncSchedule` input (Platform spec — *Scheduled
+job — LiteLLM user sync*). The schedule runs one Fargate task from the
+dashboard task definition with the command override
+`node apps/dashboard/jobs/sync-litellm-users.cjs`; it places people by the
+same rules as an on-demand Apply and never writes to LiteLLM.
+
+- **Run it once by hand:** `aws ecs run-task` with the dashboard cluster,
+  the task-definition family, the private subnets, the service's security
+  group, public IP disabled and that command override (a user action; it
+  takes the same lease, so it cannot overlap a run).
+- **Switch it off:** turn the `syncLiteLLMUsers` toggle off in Settings →
+  LiteLLM (the job then skips with exit 0 and writes a `skipped` summary), or
+  remove the input (or set it to `off`) and redeploy, which deletes the
+  schedule, its role, the rule and the alarm.
+- **Time:** 18:00 UTC is 04:00 AEST and 05:00 AEDT in Sydney.
+- **Cost:** EventBridge Scheduler has no charge at one invocation a day; one
+  Fargate task of one to two minutes a day is a few cents a month.
 
 ## Redeploy
 

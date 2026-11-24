@@ -22,7 +22,6 @@ import {
 } from "@/lib/data/access/pending-litellm-links";
 import type { AccessErrorCode, AuditContext } from "@/lib/data/access/result";
 import { configuredTenant } from "@/lib/data/access/sso-binding";
-import { recordAuditedRead } from "@/lib/data/access/store";
 import { listTeamLinks } from "@/lib/data/litellm/team-links";
 import { getOperationToggles } from "@/lib/data/litellm/toggles";
 import {
@@ -42,6 +41,7 @@ import {
   staleCandidates,
 } from "./plan";
 import type { HashRow, PlanPending, PlanRow, PlanUser } from "./plan";
+import { writeSyncSummary } from "./summary";
 
 // Source: docs/specs/2026-11-10-access-control.md - "LiteLLM user sync" (the
 // user's rules, *Users*, *Pending LiteLLM links*, *Clean-up of dashboard
@@ -601,34 +601,13 @@ function changesOf(plan: SyncPlan): Change[] {
   ];
 }
 
-async function summary(
-  ctx: AuditContext,
-  runId: string,
-  trigger: SyncTrigger,
-  fields: {
-    truncated?: boolean;
-    planHash?: string;
-    skipped?: "disabled" | "locked" | "lost-lease";
-    counts?: string[];
-  },
-): Promise<void> {
-  await recordAuditedRead(
-    {
-      action: "litellm.user.sync",
-      target: { type: "litellm-sync", id: runId },
-      after: {
-        runId,
-        trigger,
-        ...(fields.truncated !== undefined
-          ? { truncated: fields.truncated }
-          : {}),
-        ...(fields.planHash ? { planHash: fields.planHash } : {}),
-        ...(fields.skipped ? { skipped: fields.skipped } : {}),
-        ...(fields.counts ? { counts: fields.counts } : {}),
-      },
-    },
-    ctx,
-  );
+// The id of the run in this process that holds the lease, for the job's
+// deadline and SIGTERM release (Platform - Scheduled job). Set only after the
+// lease is acquired; a refused run or a preview never touches it.
+let heldRunId: string | undefined;
+
+export function currentRunId(): string | undefined {
+  return heldRunId;
 }
 
 export async function runLiteLLMUserSync(input: RunInput): Promise<RunResult> {
@@ -649,7 +628,7 @@ export async function runLiteLLMUserSync(input: RunInput): Promise<RunResult> {
   const skipRun = async (
     skipped: "disabled" | "locked",
   ): Promise<RunResult> => {
-    await summary(ctx, runId, trigger, { skipped });
+    await writeSyncSummary(ctx, runId, trigger, { skipped });
     return { ok: true, value: { runId, skipped } };
   };
 
@@ -663,6 +642,7 @@ export async function runLiteLLMUserSync(input: RunInput): Promise<RunResult> {
       : { ok: false, code: "SYNC_RUNNING" };
   }
 
+  heldRunId = runId;
   try {
     const built = await buildPlan(trigger, callerOid);
     const { plan } = built;
@@ -677,7 +657,7 @@ export async function runLiteLLMUserSync(input: RunInput): Promise<RunResult> {
     const memberships: SyncResultRow[] = [];
     for (let i = 0; i < batch.length; i += BATCH) {
       if (!(await renewUserSyncLease(runId, new Date()))) {
-        await summary(ctx, runId, trigger, { skipped: "lost-lease" });
+        await writeSyncSummary(ctx, runId, trigger, { skipped: "lost-lease" });
         return { ok: false, code: "SYNC_RUNNING" };
       }
       for (const change of batch.slice(i, i + BATCH)) {
@@ -688,7 +668,7 @@ export async function runLiteLLMUserSync(input: RunInput): Promise<RunResult> {
     const applied = [...users, ...memberships].filter(
       (r) => r.status === "applied",
     ).length;
-    await summary(ctx, runId, trigger, {
+    await writeSyncSummary(ctx, runId, trigger, {
       truncated: false,
       planHash: plan.planHash,
       counts: [
@@ -711,6 +691,7 @@ export async function runLiteLLMUserSync(input: RunInput): Promise<RunResult> {
       },
     };
   } finally {
+    if (heldRunId === runId) heldRunId = undefined;
     await releaseUserSyncLease(runId);
   }
 }

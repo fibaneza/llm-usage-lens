@@ -89,7 +89,7 @@ Pass with `-c key=value`; lists are comma-separated. Never commit real values
 | `privateSubnetIds` | both | `subnet-00000000000000001,subnet-00000000000000002` |
 | `certificateArn` | both | ACM certificate ARN |
 | `dashboardHostname` | both | `llm-usage-lens.example.internal` |
-| `alarmTopicArn` | both | existing SNS topic ARN |
+| `alarmTopicArn` | both | existing SNS topic ARN. With `litellmUserSyncSchedule`, add this statement to the topic policy (CDK cannot edit an imported topic): Allow, Principal `{"Service": "events.amazonaws.com"}`, Action `sns:Publish`, Resource the topic ARN, Condition `ArnEquals` `aws:SourceArn` = the `UserSyncFailedRuleArn` stack output. If the topic is KMS-encrypted, also allow `events.amazonaws.com` `kms:GenerateDataKey*` and `kms:Decrypt` on the key |
 | `entraClientId` | both | Entra application (client) ID (non-secret); the workflow reads `vars.ENTRA_CLIENT_ID` |
 | `entraIssuer` | both | `https://login.microsoftonline.com/<tenant>/v2.0`; the workflow reads `vars.ENTRA_ISSUER` |
 | `githubRepository` | both | `owner/repo` |
@@ -98,6 +98,7 @@ Pass with `-c key=value`; lists are comma-separated. Never commit real values
 | `opsRoleArn` | both | `prod`: the break-glass permission set's role ARN (section 2; recommended — synth warns when unset); `dev`: unset or your usual admin role |
 | `dynamodbVpcEndpointId` | both | optional existing DynamoDB gateway endpoint, e.g. `vpce-00000000000000000` |
 | `litellmAllowedHosts` | both | optional LiteLLM hostname (with `:port` if not 443); becomes the non-secret `LITELLM_ALLOWED_HOSTS` container environment variable |
+| `litellmUserSyncSchedule` | both | optional (unit SYNC2); the recommended expression is `cron(0 18 * * ? *)`, 18:00 UTC (04:00 AEST and 05:00 AEDT in Sydney). Absent or `off`: no schedule, role, rule or alarm is created; there is no default. Deploying is the user's action |
 | `listenerArn`, `listenerRulePriority`, `albSecurityGroupId` | import | listener ARN, unique priority agreed with the ALB owner, the ALB's security group |
 | `companyCidrs` | create | `10.0.0.0/8` (never `0.0.0.0/0`) |
 

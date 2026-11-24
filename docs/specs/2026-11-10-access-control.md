@@ -1113,7 +1113,13 @@ on-demand Apply does, with actor `system`: it adds "Not signed in yet"
 people, links exact matches, places a person when exactly one team fits, and
 cleans up placeholders. The membership limits hold: two or more teams place
 nobody, nobody is moved, nobody becomes a lead, an SSO-sourced membership is
-never touched. There is no `placeTeams` option: one code path (T-SY12).
+never touched. There is no `placeTeams` option: one code path (T-SY12). The
+schedule exists only when the deploy input `litellmUserSyncSchedule` is set
+(no default; user, 2026-11-18, Q3); the job, its deadline, the scheduler role
+and the alarms are in the Platform spec (*Inputs*, *Scheduled job — LiteLLM
+user sync*, *Scheduler role*, *Operations*). The job calls the function with
+actor `system`, trigger `schedule` and mode `apply` and nothing else, and
+never writes to LiteLLM.
 
 *Preview and apply.* The GET returns the plan and a `planHash`; the POST
 takes `{ planHash }`, recomputes the plan and applies it only when the hash

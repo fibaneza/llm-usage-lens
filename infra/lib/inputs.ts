@@ -85,6 +85,17 @@ const BaseSchema = z
       .string()
       .regex(/^(\/[a-z0-9-]+)*$/)
       .default(""),
+    // Platform spec - Inputs (unit SYNC2): an EventBridge Scheduler expression
+    // for the LiteLLM user sync; absent or "off" creates nothing. No default.
+    litellmUserSyncSchedule: z
+      .union([
+        z.literal("off"),
+        z.string().regex(/^(cron|rate|at)\(.+\)$/, {
+          message:
+            "litellmUserSyncSchedule must be off or a cron(...), rate(...) or at(...) expression",
+        }),
+      ])
+      .optional(),
   })
   .superRefine((v, ctx) => {
     if ((v.entraClientId === undefined) !== (v.entraIssuer === undefined)) {
@@ -131,6 +142,7 @@ export function parseAppInputs(context: Record<string, unknown>): AppInputs {
     "opsRoleArn",
     "dynamodbVpcEndpointId",
     "litellmAllowedHosts",
+    "litellmUserSyncSchedule",
   ];
   const cleaned = Object.fromEntries(
     Object.entries(context).filter(

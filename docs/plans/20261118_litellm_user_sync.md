@@ -306,7 +306,12 @@ shared e2e file changes and no full e2e is needed), `infra/**`.
 `infra/lib/dashboard-service/alarms.ts` (one alarm),
 `apps/dashboard/Dockerfile` (the bundle step and one `COPY`),
 `apps/dashboard/package.json` (the `esbuild` dev dependency and one
-script), `pnpm-lock.yaml`; the Platform spec, the deployment and
+script), `pnpm-lock.yaml`; M: `apps/dashboard/lib/litellm-user-sync/run.ts`
+(the additive `currentRunId()` export; coordinator 2026-11-24); the summary
+writer moved to the new `apps/dashboard/lib/litellm-user-sync/summary.ts` so
+the job can write the `lost-lease` summary; the root `.gitignore` (the bundle
+output); `eslint.config.ts` (one ignore entry for the bundle output;
+coordinator 2026-11-24); the Platform spec, the deployment and
 operations guides, implementation-phases.
 
 **SYNC2 does not touch:** `infra/lib/dashboard-service/task.ts` — the sync

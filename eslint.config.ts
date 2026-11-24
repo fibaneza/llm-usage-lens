@@ -15,6 +15,8 @@ export default tseslint.config(
       "**/.next-base-path/**",
       "**/node_modules/**",
       "**/next-env.d.ts",
+      // The job bundle built by `build:jobs` (unit SYNC2), never authored code.
+      "apps/dashboard/jobs/*.cjs",
       "**/coverage/**",
       // CI helper scripts and the standalone simulator carry their own configs.
       ".github/**",

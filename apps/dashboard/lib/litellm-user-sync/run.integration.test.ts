@@ -10,6 +10,7 @@ import {
   vi,
 } from "vitest";
 
+import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
 import { installFakeOtel, recordedSpans } from "@/test/fakes/otel-fake";
 import {
   CURSOR_SECRET,
@@ -35,6 +36,7 @@ import {
   nonReadCalls,
   pagesRead,
   stubSyncEnv,
+  syncHandler,
 } from "@/test/support/user-sync-support";
 import type {
   RunView,
@@ -1474,5 +1476,115 @@ describe("T-SY12: the scheduled run skips cleanly", () => {
       skipped: "locked",
     });
     expect((await lockItem())?.owner).toBe("another-run");
+  });
+});
+
+// ------------------------------------------------------- currentRunId -----
+
+// Coordinator ruling 2026-11-24: run.ts exports `currentRunId(): string |
+// undefined`, set once the run holds the lease and cleared when it ends, so the
+// job can release the lease on the deadline or SIGTERM only for a run that holds
+// it. Source: Platform - Scheduled job (exit and deadline: the deadline and
+// SIGTERM release the lease); Access Control - LiteLLM user sync, lease; T-SY5,
+// T-SY8.
+describe("currentRunId (Platform - Scheduled job; T-SY5, T-SY8)", () => {
+  const current = async () => (await import("./run")).currentRunId();
+
+  function watchList(onList: () => void | Promise<void>) {
+    fake = createFakeLiteLLM((call, attempt) => {
+      if (call.path === "/user/list") void onList();
+      return syncHandler(state)(call, attempt);
+    });
+    vi.stubGlobal("fetch", fake.fetch);
+  }
+
+  it("is undefined before any run", async () => {
+    expect(await current()).toBeUndefined();
+  });
+
+  it("equals the run's id while the run holds the lease, and is undefined after a successful run", async () => {
+    lite("lu-x", "x@corp.example");
+    const seen: (string | undefined)[] = [];
+    let watching = false;
+    const mod = await import("./run");
+    watchList(() => {
+      if (watching) seen.push(mod.currentRunId());
+    });
+    expect(await current()).toBeUndefined();
+
+    watching = true;
+    const result = await run({
+      actor: "system",
+      trigger: "schedule",
+      mode: "apply",
+    });
+
+    const runId = result.value?.runId;
+    expect(runId).toBeDefined();
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((id) => id === runId)).toBe(true);
+    expect(await current()).toBeUndefined();
+  });
+
+  it("is undefined again after a run that failed", async () => {
+    state.listFails = true;
+    const outcome = await run({
+      actor: "system",
+      trigger: "schedule",
+      mode: "apply",
+    }).then(
+      () => "resolved",
+      () => "rejected",
+    );
+    expect(outcome).toBe("rejected");
+    expect(await current()).toBeUndefined();
+  });
+
+  it("a second run refused with SYNC_RUNNING neither changes nor clears it: the first run's id stays until the first run ends (T-SY5)", async () => {
+    await seedPerson(PEOPLE.alice);
+    lite("lu-alice", "alice@corp.example");
+    const planned = hashOf(await preview());
+    const mod = await import("./run");
+    let first: string | undefined;
+    let second: Promise<RunView> | undefined;
+    let duringRenew: string | undefined | null = null;
+    let watching = false;
+    watchList(() => {
+      if (!watching || first !== undefined) return;
+      first = mod.currentRunId();
+      second = run({
+        actor: ADMIN,
+        trigger: "manual",
+        mode: "apply",
+        planHash: "not-the-hash",
+      });
+    });
+    hook.before = async (_name, input) => {
+      const text = JSON.stringify(input);
+      if (
+        duringRenew !== null ||
+        first === undefined ||
+        !text.includes(LOCK_PK) ||
+        !text.includes(first)
+      )
+        return;
+      duringRenew = undefined;
+      await second;
+      duringRenew = mod.currentRunId();
+    };
+
+    watching = true;
+    const result = await run({
+      actor: ADMIN,
+      trigger: "manual",
+      mode: "apply",
+      planHash: planned,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(first).toBeDefined();
+    expect(await second).toMatchObject({ ok: false, code: "SYNC_RUNNING" });
+    expect(duringRenew).toBe(first);
+    expect(await current()).toBeUndefined();
   });
 });

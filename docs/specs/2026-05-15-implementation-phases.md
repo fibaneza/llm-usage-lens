@@ -1059,6 +1059,15 @@ Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
 - [x] The access review lists pending LiteLLM links and flags stale ones
 - [ ] Verify: T-SY1 match keys and refusals; T-SY2 no role, lead or scope; T-SY3 team cases; T-SY4 own identity; T-SY5 hash, lease and the three `409` codes (`PLAN_CHANGED`, `SYNC_RUNNING`, `PLAN_TRUNCATED`), lease renewal and loss; T-SY6 binding cases, both placeholder keys, no LiteLLM call at sign-in; T-SY7 bounds, truncated plan not applied, the removal guard, LiteLLM down; T-SY9 `403` for lead, user and auditor and LD37; T-SY10 `runId` on every record and no email in a log line; T-SY11 read only; T-SY12 the S4 cases with actor `system`; T-SM1 to T-SM4; one audit record per change and one summary; component and mocked e2e with axe at 375; branch gate with `main` merged in (Rule 70.12)
 
+### SYNC2 — The LiteLLM user sync, scheduled (`feature/litellm-user-sync-schedule`)
+
+*User request, 2026-11-18 ("On demand and scheduled"); decisions S7–S11, S17 and V10–V15 (Platform — *Inputs*, *Scheduled job — LiteLLM user sync*, *Scheduler role*, *Operations*; Access Control — *LiteLLM user sync*, T-SY8, T-SY12). Tests first (Rule 70). Security review at the merge. Synthesised, never deployed. No schedule until the user sets `litellmUserSyncSchedule` (no default; user, 2026-11-18, Q3).*
+
+- [x] The job entry `apps/dashboard/jobs/sync-litellm-users.ts` and its esbuild bundle step in the image (`react-server` condition, no alias); the 10-minute deadline and `SIGTERM` handling that release the lease and exit non-zero; one fixed structured success line with the counts
+- [x] `litellmUserSyncSchedule` (optional, no default; `off` equals absent); the schedule and its ECS `RunTask` target (flexible window off, retry policy of 2 attempts and 1 hour); the scheduler role (trust with `aws:SourceAccount`; two statements); the task-state-change rule and the "no successful sync in 2 days" alarm, both to the existing topic
+- [x] The deployment and operations guides (the input, the expression and Sydney times, the alarms, the manual run, switching the sync off)
+- [ ] Verify: CDK — the schedule and target, the retry policy of 2 attempts and 1 hour, the flexible window off, the role's two statements only, `iam:PassRole` limited to the two roles and `ecs-tasks`, `ecs:RunTask` on the task-definition family with the cluster condition, the trust condition, nothing created when the input is absent or `off`, the rule and the missing-run alarm on the topic; job, unit — toggle off and lease held skip with exit 0, a failure, a truncated plan and the 10-minute deadline exit non-zero (T-SY8); job, integration — the bundled entry runs against DynamoDB Local and the fake LiteLLM, and the fake records zero write calls (T-SY11, T-SY12); `pnpm test:infra`; `cdk synth` with the example context; branch gate with `main` merged in (Rule 70.12)
+
 ---
 
 ## Decision policy (decided 2026-11-15, user)
