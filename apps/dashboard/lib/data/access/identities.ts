@@ -20,6 +20,7 @@ export const IdentityListItemSchema = IdentityRecordSchema.pick({
   email: true,
   displayName: true,
   authMethod: true,
+  createdAt: true,
   lastSignInAt: true,
 });
 export type IdentityListItem = z.infer<typeof IdentityListItemSchema>;
@@ -34,6 +35,39 @@ export function listIdentities(
     partition: IDENTS_GSI1PK,
     sortPrefix: "IDENT#",
   });
+}
+
+export const DIRECTORY_READ_BOUND = 2000;
+
+// Unit US1 (Access Control spec - /api/identities/directory): at most 2,000
+// identities from GSI1 IDENTS, paging on LastEvaluatedKey (Rule 20.6), never a
+// Scan. One extra row is read to tell "exactly 2,000" from "more".
+export async function listIdentitiesBounded(
+  opts: { bound?: number } = {},
+): Promise<{
+  items: IdentityListItem[];
+  truncated: boolean;
+}> {
+  const bound = opts.bound ?? DIRECTORY_READ_BOUND;
+  const items: IdentityListItem[] = [];
+  let startKey: Record<string, unknown> | undefined;
+  do {
+    const res = await getDocumentClient().send(
+      new QueryCommand({
+        TableName: getTableName(),
+        IndexName: GSI1_NAME,
+        KeyConditionExpression: "gsi1pk = :pk AND begins_with(gsi1sk, :sk)",
+        ExpressionAttributeValues: { ":pk": IDENTS_GSI1PK, ":sk": "IDENT#" },
+        ...(startKey ? { ExclusiveStartKey: startKey } : {}),
+      }),
+    );
+    for (const item of res.Items ?? []) {
+      items.push(IdentityListItemSchema.parse(item));
+    }
+    startKey = res.LastEvaluatedKey;
+  } while (startKey && items.length <= bound);
+  const truncated = items.length > bound;
+  return { items: items.slice(0, bound), truncated };
 }
 
 const SEARCH_CAP = 10;

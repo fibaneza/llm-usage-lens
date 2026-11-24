@@ -1,9 +1,16 @@
 "use client";
 
-import { DirectoryPageSchema, type DirectoryRow } from "@llm-usage-lens/shared";
+import {
+  DirectoryPageSchema,
+  DIRECTORY_SORTS,
+  DirectorySortSchema,
+  type DirectoryRow,
+} from "@llm-usage-lens/shared";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
-import { useState } from "react";
+import { Plus, Search } from "lucide-react";
+import Link from "next/link";
+import { useQueryStates } from "nuqs";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 
 import { Panel } from "@/components/display/Panel";
@@ -18,7 +25,13 @@ import type {
   StepUpActions,
 } from "@/components/settings/access/types";
 import { Badge } from "@/components/ui/badge";
+import {
+  SORT_PARAMS,
+  SortableHeader,
+  readSort,
+} from "@/components/tables/SortableHeader";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -55,6 +68,13 @@ function useCanCreate(): boolean {
 }
 
 const DIRECTORY_KEY = ["manage", "users", "directory"] as const;
+const MIN_TERM = 2;
+const DEBOUNCE_MS = 500;
+const EMPTY = "—";
+
+// UTC calendar day of an ISO timestamp (Rule 20.1).
+const day = (iso: string | null | undefined) =>
+  iso ? iso.slice(0, 10) : EMPTY;
 
 const METHOD_LABELS: Record<DirectoryRow["authMethod"], string> = {
   entra: "Microsoft Entra",
@@ -63,9 +83,24 @@ const METHOD_LABELS: Record<DirectoryRow["authMethod"], string> = {
   local: "Local developer",
 };
 
-async function fetchDirectory(cursor: string | undefined, withMatch: boolean) {
+type DirectoryRequest = {
+  cursor: string | undefined;
+  sort: string;
+  dir: string;
+  q: string | undefined;
+};
+
+async function fetchDirectory(
+  { cursor, sort, dir, q }: DirectoryRequest,
+  withMatch: boolean,
+) {
   const query = (include: boolean) => {
     const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    else {
+      params.set("sort", sort);
+      params.set("dir", dir);
+    }
     if (include) params.set("include", "litellmMatch");
     if (cursor) params.set("cursor", cursor);
     const text = params.toString();
@@ -106,20 +141,40 @@ function People({
   canCreate,
   litellmConfigured,
   canResetSpend,
+  term,
 }: {
   steps: AddUserSteps;
   ownOid: string;
   canCreate: boolean;
   litellmConfigured: boolean;
   canResetSpend: boolean;
+  term: string | undefined;
 }) {
+  const [params] = useQueryStates(SORT_PARAMS);
+  const parsedSort = DirectorySortSchema.safeParse(params.sort ?? "name");
+  const { key, dir } = readSort(
+    parsedSort.success ? parsedSort.data : "name",
+    params.dir,
+    "name",
+    DIRECTORY_SORTS,
+  );
   const queryClient = useQueryClient();
   const units = useOrgUnits();
   const directory = useInfiniteQuery({
-    queryKey: DIRECTORY_KEY,
+    queryKey: [...DIRECTORY_KEY, key, dir, term ?? null],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => fetchDirectory(pageParam, litellmConfigured),
+    queryFn: ({ pageParam }) =>
+      fetchDirectory(
+        { cursor: pageParam, sort: key, dir, q: term },
+        litellmConfigured,
+      ),
     getNextPageParam: (page) => page.cursor,
+    // A sort change keeps the table (and the focused header button) mounted
+    // while page 1 of the new order loads; a new search term does not.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery && previousQuery.queryKey[5] === (term ?? null)
+        ? previous
+        : undefined,
   });
   if (directory.isPending) return <Skeleton className="h-48 w-full" />;
   if (directory.isError) throw directory.error;
@@ -128,11 +183,16 @@ function People({
     (units.data?.teams ?? []).map((team) => [team.id, team.name] as const),
   );
   const rows = directory.data.pages.flatMap((page) => page.items);
+  const truncated = directory.data.pages.some((page) => page.truncated);
   const refresh = () =>
     void queryClient.invalidateQueries({ queryKey: DIRECTORY_KEY });
 
   if (rows.length === 0) {
-    return <p className="text-muted-foreground text-sm">No people yet.</p>;
+    return (
+      <p className="text-muted-foreground text-sm">
+        {term ? "No people match." : "No people yet."}
+      </p>
+    );
   }
   return (
     <div className="flex flex-col gap-3">
@@ -140,10 +200,42 @@ function People({
         <TableCaption className="sr-only">People</TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Email</TableHead>
+            <SortableHeader
+              sortKey="name"
+              sortKeys={DIRECTORY_SORTS}
+              defaultKey="name"
+            >
+              Name
+            </SortableHeader>
+            <SortableHeader
+              sortKey="email"
+              sortKeys={DIRECTORY_SORTS}
+              defaultKey="name"
+            >
+              Email
+            </SortableHeader>
             <TableHead>Sign-in</TableHead>
-            <TableHead>Team</TableHead>
+            <SortableHeader
+              sortKey="createdAt"
+              sortKeys={DIRECTORY_SORTS}
+              defaultKey="name"
+            >
+              Created
+            </SortableHeader>
+            <SortableHeader
+              sortKey="lastSignInAt"
+              sortKeys={DIRECTORY_SORTS}
+              defaultKey="name"
+            >
+              Last sign-in
+            </SortableHeader>
+            <SortableHeader
+              sortKey="team"
+              sortKeys={DIRECTORY_SORTS}
+              defaultKey="name"
+            >
+              Team
+            </SortableHeader>
             <TableHead>LiteLLM</TableHead>
           </TableRow>
         </TableHeader>
@@ -153,13 +245,24 @@ function People({
             const state = linkStateOf(row);
             return (
               <TableRow key={row.oid}>
-                <TableCell className="font-medium">{name}</TableCell>
-                <TableCell className="break-all">{row.email ?? "-"}</TableCell>
+                <TableCell className="font-medium">
+                  <Link
+                    href={`/dashboard/manage/users/${encodeURIComponent(row.oid)}`}
+                    className="underline-offset-2 hover:underline"
+                  >
+                    {name}
+                  </Link>
+                </TableCell>
+                <TableCell className="break-all">
+                  {row.email ?? EMPTY}
+                </TableCell>
                 <TableCell>{METHOD_LABELS[row.authMethod]}</TableCell>
+                <TableCell>{day(row.createdAt)}</TableCell>
+                <TableCell>{day(row.lastSignInAt)}</TableCell>
                 <TableCell>
                   {row.memberTeamId
                     ? (teamNames.get(row.memberTeamId) ?? row.memberTeamId)
-                    : "-"}
+                    : EMPTY}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-2">
@@ -200,7 +303,12 @@ function People({
           })}
         </TableBody>
       </Table>
-      {directory.hasNextPage ? (
+      {truncated ? (
+        <p className="text-muted-foreground text-sm">
+          The list is truncated at 2,000 people; search to find anyone else.
+        </p>
+      ) : null}
+      {directory.hasNextPage && !term ? (
         <div>
           <Button
             type="button"
@@ -237,6 +345,14 @@ function PeoplePanel({
 }: PanelProps & { canCreate: boolean }) {
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
+  const [text, setText] = useState("");
+  const [term, setTerm] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const trimmed = text.trim();
+    const next = trimmed.length >= MIN_TERM ? trimmed : undefined;
+    const timer = setTimeout(() => setTerm(next), DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [text]);
   const canAdd = steps.password || steps.team;
   return (
     <Panel
@@ -244,12 +360,29 @@ function PeoplePanel({
       boundaryTitle="the people list"
       description="People who have signed in or been added, with their team and LiteLLM link."
       actions={
-        canAdd ? (
-          <Button type="button" size="sm" onClick={() => setAdding(true)}>
-            <Plus aria-hidden />
-            Add user
-          </Button>
-        ) : null
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-40 min-w-0 sm:w-56">
+            <Search
+              aria-hidden
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2"
+            />
+            <Input
+              type="search"
+              aria-label="Search people"
+              placeholder="Search people"
+              maxLength={100}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              className="pl-8"
+            />
+          </div>
+          {canAdd ? (
+            <Button type="button" size="sm" onClick={() => setAdding(true)}>
+              <Plus aria-hidden />
+              Add user
+            </Button>
+          ) : null}
+        </div>
       }
     >
       <People
@@ -258,6 +391,7 @@ function PeoplePanel({
         canCreate={canCreate}
         litellmConfigured={litellmConfigured}
         canResetSpend={canResetSpend}
+        term={term}
       />
       {adding ? (
         <AddUserDialog

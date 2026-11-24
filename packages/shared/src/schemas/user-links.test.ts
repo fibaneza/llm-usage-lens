@@ -169,6 +169,33 @@ describe("directory schemas (API routes: 25 a page, opaque cursor, D15)", () => 
     rejects(DirectoryQuerySchema)({ q: "" });
     rejects(DirectoryQuerySchema)({ q: "a".repeat(101) });
   });
+  // Source: docs/specs/2026-11-10-access-control.md - row
+  // /api/identities/directory, "From 2026-11-24 (unit US1, D-US3, D-US3a)".
+  it("sort defaults to name and dir to asc; only the five keys and asc/desc parse", () => {
+    const parsed = DirectoryQuerySchema.parse({});
+    expect(parsed.sort).toBe("name");
+    expect(parsed.dir).toBe("asc");
+    for (const sort of ["name", "email", "createdAt", "lastSignInAt", "team"]) {
+      accepts(DirectoryQuerySchema)({ sort });
+    }
+    for (const dir of ["asc", "desc"]) accepts(DirectoryQuerySchema)({ dir });
+    for (const sort of ["updatedAt", "Name", "", "cost"]) {
+      rejects(DirectoryQuerySchema)({ sort });
+    }
+    for (const dir of ["ASC", "up", ""]) rejects(DirectoryQuerySchema)({ dir });
+  });
+
+  it("a row accepts createdAt and lastSignInAt, and a page accepts truncated", () => {
+    accepts(DirectoryRowSchema)({
+      ...row,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastSignInAt: "2026-01-02T00:00:00.000Z",
+    });
+    accepts(DirectoryRowSchema)({ ...row, lastSignInAt: null });
+    accepts(DirectoryPageSchema)({ items: [], truncated: false });
+    accepts(DirectoryPageSchema)({ items: [], truncated: true });
+    rejects(DirectoryPageSchema)({ items: [], truncated: "no" });
+  });
 });
 
 describe("CreateLiteLLMUserBodySchema (LiteLLM spec createUser: only the oid)", () => {

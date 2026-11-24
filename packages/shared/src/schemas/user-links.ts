@@ -33,15 +33,32 @@ export const DirectoryRowSchema = z.object({
   litellm: DirectoryLiteLLMLinkSchema,
   // The IdentityLink version the link writes must send (0: no link yet).
   linkVersion: z.number().int().min(0),
+  // Unit US1: createdAt only when the record has it (written since US2).
+  createdAt: z.string().optional(),
+  lastSignInAt: z.string().nullable().optional(),
   match: DirectoryMatchSchema.optional(),
 });
 
 export const DirectoryPageSchema = z.object({
   items: z.array(DirectoryRowSchema).max(USER_LINKS_PAGE_SIZE),
   cursor: z.string().optional(),
+  // Unit US1: true when the 2,000-identity bound cut the list.
+  truncated: z.boolean().optional(),
 });
 
+export const DIRECTORY_SORTS = [
+  "name",
+  "email",
+  "createdAt",
+  "lastSignInAt",
+  "team",
+] as const;
+export const DirectorySortSchema = z.enum(DIRECTORY_SORTS);
+export const DirectoryDirSchema = z.enum(["asc", "desc"]);
+
 export const DirectoryQuerySchema = z.object({
+  sort: DirectorySortSchema.default("name"),
+  dir: DirectoryDirSchema.default("asc"),
   cursor: z.string().min(1).max(2048).optional(),
   include: z.literal("litellmMatch").optional(),
   q: z.string().trim().min(1).max(100).optional(),
@@ -137,6 +154,8 @@ export const UsersListResponseSchema = z.object({
   mayLink: z.boolean().default(false),
 });
 
+export type DirectorySort = z.infer<typeof DirectorySortSchema>;
+export type DirectoryDir = z.infer<typeof DirectoryDirSchema>;
 export type DirectoryRow = z.infer<typeof DirectoryRowSchema>;
 export type DirectoryPage = z.infer<typeof DirectoryPageSchema>;
 export type LiteLLMLinkPutBody = z.infer<typeof LiteLLMLinkPutBodySchema>;

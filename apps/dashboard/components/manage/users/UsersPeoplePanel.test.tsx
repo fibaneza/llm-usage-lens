@@ -190,7 +190,7 @@ describe("UsersPeoplePanel Add user and link controls (D15, D16)", () => {
     await screen.findByText("Ada Lovelace");
     expect(screen.getByText("Match found")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /link|unlink|create/i }),
+      screen.queryByRole("button", { name: /^(link|unlink|create and link)/i }),
     ).toBeNull();
   });
 
@@ -206,7 +206,9 @@ describe("UsersPeoplePanel Add user and link controls (D15, D16)", () => {
     stub([OWN]);
     show(STEPS.admin);
     await screen.findByText("Me Myself");
-    expect(screen.queryByRole("button", { name: /link|create/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^(link|unlink|create and link)/i }),
+    ).toBeNull();
   });
 
   it("OSS: Create and link on a none row; Enterprise: absent with the sign-in-once note", async () => {
@@ -237,7 +239,9 @@ describe("UsersPeoplePanel without LiteLLM configured (LiteLLM spec LD37)", () =
     expect(screen.getAllByText("LiteLLM not configured")).toHaveLength(2);
     expect(screen.getByText("Linked")).toBeInTheDocument();
     expect(screen.queryByText("Match found")).toBeNull();
-    expect(screen.queryByRole("button", { name: /create|^link/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^(link|create and link)/i }),
+    ).toBeNull();
   });
 });
 
@@ -297,5 +301,314 @@ describe("UsersPeoplePanel Reset spend row action (RS1)", () => {
       }),
     ).toBeInTheDocument();
     expect(memberships()).toEqual(["/api/litellm/users/ll-ada/memberships"]);
+  });
+});
+
+// Unit US1 (Design System - "The users table (unit US1, 2026-11-24; D-US1 to
+// D-US5, D-US2a, D-US3a)"; Access Control - /api/identities/directory row,
+// unit US1; Rule 60.24a: the route's sort and paging are tested in the route's
+// own file, here only what the panel renders and requests).
+describe("UsersPeoplePanel users table (unit US1)", () => {
+  const ADA = row({
+    oid: "oid-ada",
+    displayName: "Ada Lovelace",
+    email: "ada@example.com",
+    memberTeamId: "team-a",
+    litellm: { state: "linked", litellmUserId: "ll-ada" },
+    linkVersion: 3,
+    match: null,
+    createdAt: "2026-03-05T10:20:30.000Z",
+    lastSignInAt: "2026-11-20T23:59:59.000Z",
+  });
+  // Written before unit US2: no createdAt (D-US2a); no email, no team.
+  const OLD = row({
+    oid: "oid-old",
+    displayName: "Old Timer",
+    memberTeamId: null,
+    match: null,
+    lastSignInAt: "2026-01-02T00:00:00.000Z",
+  });
+  const SEARCH_HIT = row({
+    oid: "oid-hit",
+    displayName: "Hit Person",
+    email: "hit@example.com",
+    match: null,
+    createdAt: "2026-02-01T00:00:00.000Z",
+    lastSignInAt: "2026-02-02T00:00:00.000Z",
+  });
+
+  function stubDirectory(
+    pages: { items: unknown[]; cursor?: string; truncated?: boolean },
+    hits: unknown[] = [SEARCH_HIT],
+  ) {
+    const urls: URL[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = new URL(String(input), "http://localhost");
+        urls.push(url);
+        if (url.pathname === "/api/access/org-units") {
+          return Promise.resolve(
+            apiResponse({
+              data: {
+                departments: [],
+                teams: [{ id: "team-a", name: "Team A", departmentId: "d" }],
+              },
+            }),
+          );
+        }
+        if (url.searchParams.get("q")) {
+          return Promise.resolve(apiResponse({ data: { items: hits } }));
+        }
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              items: url.searchParams.get("cursor") ? [NONE] : pages.items,
+              ...(pages.cursor && !url.searchParams.get("cursor")
+                ? { cursor: pages.cursor }
+                : {}),
+              ...(pages.truncated ? { truncated: true } : {}),
+            },
+          }),
+        );
+      }),
+    );
+    return urls;
+  }
+  const directoryUrls = (urls: URL[]) =>
+    urls.filter((u) => u.pathname === "/api/identities/directory");
+
+  function showAt(
+    searchParams: Record<string, string> = {},
+    steps = STEPS.admin,
+  ) {
+    renderWithProviders(
+      <UsersPeoplePanel
+        steps={steps}
+        ownOid="oid-me"
+        canCreate
+        litellmConfigured
+        authMethod="entra"
+        stepUp={stepUp}
+      />,
+      { searchParams },
+    );
+  }
+  const header = (name: string) => screen.getByRole("columnheader", { name });
+  const cell = (tr: HTMLElement, column: string) => {
+    const index = screen
+      .getAllByRole("columnheader")
+      .findIndex((th) => th.textContent?.trim().startsWith(column));
+    return within(tr).getAllByRole("cell")[index] as HTMLElement;
+  };
+
+  it("shows Created and Last sign-in as UTC dates, and an empty value as a dash (D-US2a)", async () => {
+    stubDirectory({ items: [ADA, OLD] });
+    showAt();
+    const ada = (await screen.findByText("Ada Lovelace")).closest(
+      "tr",
+    ) as HTMLElement;
+    expect(cell(ada, "Created")).toHaveTextContent("2026-03-05");
+    expect(cell(ada, "Last sign-in")).toHaveTextContent("2026-11-20");
+    const old = screen.getByText("Old Timer").closest("tr") as HTMLElement;
+    expect(cell(old, "Created")).toHaveTextContent("—");
+    expect(cell(old, "Last sign-in")).toHaveTextContent("2026-01-02");
+    expect(cell(old, "Email")).toHaveTextContent("—");
+    expect(cell(old, "Team")).toHaveTextContent("—");
+    expect(screen.queryByText(/unknown/i)).toBeNull();
+  });
+
+  it("each row's name links to the user page (D-US5)", async () => {
+    stubDirectory({ items: [ADA] });
+    showAt();
+    const link = await screen.findByRole("link", { name: "Ada Lovelace" });
+    expect(link).toHaveAttribute("href", "/dashboard/manage/users/oid-ada");
+  });
+
+  it("name, email, created, last sign-in and team are sortable; sign-in method and LiteLLM are not (D-US3a)", async () => {
+    stubDirectory({ items: [ADA] });
+    showAt();
+    await screen.findByText("Ada Lovelace");
+    for (const label of ["Name", "Email", "Created", "Last sign-in", "Team"]) {
+      expect(
+        within(header(label)).getByRole("button", { name: label }),
+      ).toBeInTheDocument();
+    }
+    for (const label of ["Sign-in", "LiteLLM"]) {
+      expect(within(header(label)).queryByRole("button")).toBeNull();
+    }
+  });
+
+  it("opens sorted by name ascending and asks the server for it (D-US3: default name, asc)", async () => {
+    const urls = stubDirectory({ items: [ADA] });
+    showAt();
+    await screen.findByText("Ada Lovelace");
+    expect(header("Name")).toHaveAttribute("aria-sort", "ascending");
+    expect(header("Email")).toHaveAttribute("aria-sort", "none");
+    const first = directoryUrls(urls)[0] as URL;
+    expect(first.searchParams.get("sort") ?? "name").toBe("name");
+    expect(first.searchParams.get("dir") ?? "asc").toBe("asc");
+  });
+
+  it("the sort in the URL is the sort the first request carries", async () => {
+    const urls = stubDirectory({ items: [ADA] });
+    showAt({ sort: "lastSignInAt", dir: "desc" });
+    await screen.findByText("Ada Lovelace");
+    expect(header("Last sign-in")).toHaveAttribute("aria-sort", "descending");
+    const first = directoryUrls(urls)[0] as URL;
+    expect(first.searchParams.get("sort")).toBe("lastSignInAt");
+    expect(first.searchParams.get("dir")).toBe("desc");
+  });
+
+  it("a sort click requests that sort ascending, a second click descending, and goes back to page 1 (no cursor, earlier pages dropped)", async () => {
+    const urls = stubDirectory({ items: [ADA], cursor: "next-1" });
+    showAt();
+    const user = userEvent.setup();
+    await screen.findByText("Ada Lovelace");
+    await user.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("Cy Young")).toBeInTheDocument();
+
+    await user.click(within(header("Email")).getByRole("button"));
+    await vi.waitFor(() =>
+      expect(header("Email")).toHaveAttribute("aria-sort", "ascending"),
+    );
+    await vi.waitFor(() => {
+      const last = directoryUrls(urls).at(-1) as URL;
+      expect(last.searchParams.get("sort")).toBe("email");
+      expect(last.searchParams.get("dir") ?? "asc").toBe("asc");
+      expect(last.searchParams.get("cursor")).toBeNull();
+    });
+    await vi.waitFor(() =>
+      expect(screen.queryByText("Cy Young")).not.toBeInTheDocument(),
+    );
+
+    await user.click(within(header("Email")).getByRole("button"));
+    await vi.waitFor(() => {
+      const last = directoryUrls(urls).at(-1) as URL;
+      expect(last.searchParams.get("sort")).toBe("email");
+      expect(last.searchParams.get("dir")).toBe("desc");
+      expect(last.searchParams.get("cursor")).toBeNull();
+    });
+  });
+
+  it("Load more keeps the current sort in its request", async () => {
+    const urls = stubDirectory({ items: [ADA], cursor: "next-1" });
+    showAt({ sort: "team", dir: "desc" });
+    await screen.findByText("Ada Lovelace");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Load more" }));
+    await screen.findByText("Cy Young");
+    const paged = directoryUrls(urls).find(
+      (u) => u.searchParams.get("cursor") === "next-1",
+    ) as URL;
+    expect(paged.searchParams.get("sort")).toBe("team");
+    expect(paged.searchParams.get("dir")).toBe("desc");
+  });
+
+  it("says the list is truncated when the server reports it, and not otherwise (the 2,000 bound)", async () => {
+    stubDirectory({ items: [ADA], truncated: true });
+    showAt();
+    await screen.findByText("Ada Lovelace");
+    expect(screen.getByText(/truncated/i)).toBeInTheDocument();
+  });
+
+  it("shows no truncated notice for a list inside the bound", async () => {
+    stubDirectory({ items: [ADA] });
+    showAt();
+    await screen.findByText("Ada Lovelace");
+    expect(screen.queryByText(/truncated/i)).toBeNull();
+  });
+
+  describe("search inside the People panel (D-US1)", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function setup() {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      return userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    }
+
+    it("the People panel holds the one search box, in its header", async () => {
+      stubDirectory({ items: [ADA] });
+      showAt();
+      await screen.findByText("Ada Lovelace");
+      const panel = screen.getByRole("region", { name: "People" });
+      expect(
+        within(panel).getByRole("searchbox", { name: /search/i }),
+      ).toBeInTheDocument();
+      expect(screen.getAllByRole("searchbox")).toHaveLength(1);
+    });
+
+    it("one character requests nothing; two or more search by q, debounced, and show the matches without paging", async () => {
+      const urls = stubDirectory({ items: [ADA], cursor: "next-1" });
+      const user = setup();
+      showAt();
+      await screen.findByText("Ada Lovelace");
+      const box = screen.getByRole("searchbox", { name: /search/i });
+
+      await user.type(box, "h");
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(directoryUrls(urls).some((u) => u.searchParams.has("q"))).toBe(
+        false,
+      );
+
+      await user.type(box, "i");
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(await screen.findByText("Hit Person")).toBeInTheDocument();
+      const search = directoryUrls(urls).find((u) => u.searchParams.has("q"));
+      expect(search?.searchParams.get("q")).toBe("hi");
+      expect(search?.searchParams.get("cursor")).toBeNull();
+      expect(screen.queryByText("Ada Lovelace")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+    });
+
+    it("clearing the box returns to the sorted list", async () => {
+      stubDirectory({ items: [ADA] });
+      const user = setup();
+      showAt();
+      await screen.findByText("Ada Lovelace");
+      const box = screen.getByRole("searchbox", { name: /search/i });
+      await user.type(box, "hi");
+      await vi.advanceTimersByTimeAsync(1500);
+      await screen.findByText("Hit Person");
+      await user.clear(box);
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument();
+      expect(screen.queryByText("Hit Person")).toBeNull();
+    });
+  });
+
+  describe("row actions keep following the role (D-US5a; Design System - row actions unchanged)", () => {
+    it.each([
+      ["admin", STEPS.admin, true],
+      ["org-admin", STEPS.orgAdmin, true],
+      ["auditor", STEPS.auditor, false],
+    ])(
+      "%s: the row actions follow the role, the name link and dates show for all",
+      async (_name, steps, actions) => {
+        stubDirectory({ items: [ADA] });
+        renderWithProviders(
+          <UsersPeoplePanel
+            steps={steps}
+            ownOid="oid-me"
+            canCreate
+            litellmConfigured
+            canResetSpend={actions}
+            authMethod="entra"
+            stepUp={stepUp}
+          />,
+        );
+        await screen.findByRole("link", { name: "Ada Lovelace" });
+        expect(screen.queryByRole("button", { name: /unlink/i }) !== null).toBe(
+          actions,
+        );
+        expect(
+          screen.queryByRole("button", { name: /reset spend/i }) !== null,
+        ).toBe(actions);
+        expect(screen.getByText("2026-03-05")).toBeInTheDocument();
+      },
+    );
   });
 });

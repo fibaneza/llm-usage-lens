@@ -250,7 +250,7 @@ INV2); the LiteLLM add and remove member actions stay as they are.
 - **D-US2 (item 9).** Columns gain **Created** (the identity's
   `createdAt`, UTC, shown as a date).
 - **D-US3 (item 10).** Sorting is done by the API:
-  `GET /api/identities/directory?sort=<name|email|createdAt|updatedAt|team>&dir=<asc|desc>`
+  `GET /api/identities/directory?sort=<name|email|createdAt|~~updatedAt~~ lastSignInAt|team>&dir=<asc|desc>` (`updatedAt` superseded 2026-11-23 by D-US3a: the record has no such field; Access Control — `/api/identities/directory`)
   (Zod enums; default `name`, `asc`). The route reads the identities
   (bound: 2,000; over it the response says `truncated`), sorts in memory
   with a stable tie-break on `oid`, then pages (25 rows). In-memory
@@ -270,7 +270,7 @@ INV2); the LiteLLM add and remove member actions stay as they are.
 `app/dashboard/manage/users/page.tsx`, `components/tables/**`,
 `app/api/identities/directory/route.ts`, the module that builds its rows,
 the directory schemas in `packages/shared`, their tests,
-`e2e/manage-users.spec.ts`. **Shared, one mount line each:** SYNC1 adds
+`e2e/manage-users.spec.ts`. **From code (planner ruling 2026-11-23, `ownership-from-code.md` US1; added 2026-11-24, US1 review):** `lib/data/access/identities.ts` (the bounded read), `lib/data/access/directory-rows.ts` (new, the row builder), `e2e/litellm-a11y.spec.ts` and `e2e/manage-pages.spec.ts` (retarget only). **Shared, one mount line each:** SYNC1 adds
 its sync button and its "Not signed in yet" panel to the page.
 
 | Test | Proves |

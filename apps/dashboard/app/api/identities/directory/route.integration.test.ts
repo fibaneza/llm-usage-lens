@@ -22,6 +22,7 @@ import { signInAs } from "@/test/fixtures/scope-fixtures";
 import type { CallerName } from "@/test/fixtures/scope-fixtures";
 import { ctxAt, ok } from "@/test/support/access-test-support";
 import { putRaw } from "@/test/support/test-support";
+import { addMember } from "@/lib/data/access/affiliations";
 
 // Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)"
 // (`GET /api/identities/directory`: internal-admin, internal-org-admin and
@@ -49,6 +50,8 @@ type Row = {
   memberTeamId: string | null;
   litellm: { state: string; litellmUserId?: string };
   linkVersion: number;
+  createdAt?: string;
+  lastSignInAt?: string | null;
   match?: { litellmUserId: string; email: string } | null;
 };
 
@@ -175,6 +178,7 @@ describe("GET /api/identities/directory", () => {
             "displayName",
             "email",
             "linkVersion",
+            "lastSignInAt",
             "litellm",
             "memberTeamId",
             "oid",
@@ -253,6 +257,278 @@ describe("GET /api/identities/directory", () => {
       const withMatch = await list("?include=litellmMatch");
       await expectError(withMatch.res, 503, "LITELLM_UNAVAILABLE");
       expect((await list()).res.status).toBe(200);
+    });
+  });
+
+  // Source: docs/specs/2026-11-10-access-control.md - row
+  // /api/identities/directory, "From 2026-11-24 (unit US1, D-US3, D-US3a)":
+  // `sort` (name, email, createdAt, lastSignInAt, team; default name) and `dir`
+  // (asc, desc; default asc), anything else 400; in-memory sort with a stable
+  // tie-break on oid; a row without the sort value sorts last in both
+  // directions; the cursor encodes sort and dir (another one is 400); rows carry
+  // createdAt (when present) and lastSignInAt; `q` takes no sort; lead 403.
+  describe("sort and dir (unit US1, D-US3, D-US3a)", () => {
+    const sid = (n: number) =>
+      `00000000-0000-4000-8000-0000000004${String(n).padStart(2, "0")}`;
+    type Seed = {
+      n: number;
+      name: string;
+      email: string;
+      createdAt?: string;
+      lastSignInAt: string;
+    };
+    // n=5 has no createdAt (a record written before unit US2). n=3 and n=4
+    // tie on every sort value.
+    const SEEDS: Seed[] = [
+      {
+        n: 1,
+        name: "Bea",
+        email: "d@s.com",
+        createdAt: "2026-03-01T00:00:00.000Z",
+        lastSignInAt: "2026-06-01T00:00:00.000Z",
+      },
+      {
+        n: 2,
+        name: "Abe",
+        email: "e@s.com",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastSignInAt: "2026-09-01T00:00:00.000Z",
+      },
+      {
+        n: 3,
+        name: "Cy",
+        email: "a@s.com",
+        createdAt: "2026-02-01T00:00:00.000Z",
+        lastSignInAt: "2026-03-01T00:00:00.000Z",
+      },
+      {
+        n: 4,
+        name: "Cy",
+        email: "a@s.com",
+        createdAt: "2026-02-01T00:00:00.000Z",
+        lastSignInAt: "2026-03-01T00:00:00.000Z",
+      },
+      {
+        n: 5,
+        name: "Dee",
+        email: "c@s.com",
+        lastSignInAt: "2026-05-01T00:00:00.000Z",
+      },
+    ];
+    const mine = new Set(SEEDS.map((s) => sid(s.n)));
+
+    async function seedSorted() {
+      for (const s of SEEDS) {
+        await putRaw({
+          PK: `IDENT#${sid(s.n)}`,
+          SK: "META",
+          gsi1pk: "IDENTS",
+          gsi1sk: `IDENT#${sid(s.n)}`,
+          oid: sid(s.n),
+          tid: "00000000-0000-4000-8000-0000000000ff",
+          email: s.email,
+          displayName: s.name,
+          ...(s.createdAt ? { createdAt: s.createdAt } : {}),
+          lastSignInAt: s.lastSignInAt,
+          lastSeenRoles: ["internal-viewer"],
+          authMethod: "entra",
+          version: 1,
+        });
+      }
+    }
+
+    async function walk(query: string) {
+      const all: Row[] = [];
+      let cursor: string | undefined;
+      for (let i = 0; i < 20; i++) {
+        const sep = query ? "&" : "?";
+        const url = cursor
+          ? `${query}${sep}cursor=${encodeURIComponent(cursor)}`
+          : query;
+        const { res, body } = await list(url);
+        expect(res.status).toBe(200);
+        all.push(...rows(body));
+        cursor = (body.data as { cursor?: string }).cursor;
+        if (!cursor) return all;
+      }
+      throw new Error("cursor never ended");
+    }
+    const mineOf = (items: Row[]) =>
+      items.filter((r) => mine.has(r.oid)).map((r) => Number(r.oid.slice(-2)));
+
+    it("defaults to name ascending when sort and dir are absent", async () => {
+      await seedSorted();
+      signInAs("admin");
+      const names = (await walk("")).map((r) => r.oid);
+      const explicit = (await walk("?sort=name&dir=asc")).map((r) => r.oid);
+      expect(names).toEqual(explicit);
+    });
+
+    // [sort, dir, expected order of seeds 1-4 (ties 3,4 by oid asc), then 5]
+    it.each([
+      ["name", "asc", [2, 1, 3, 4, 5]],
+      ["name", "desc", [5, 3, 4, 1, 2]],
+      ["email", "asc", [3, 4, 5, 1, 2]],
+      ["email", "desc", [2, 1, 5, 3, 4]],
+      ["createdAt", "asc", [2, 3, 4, 1, 5]],
+      ["createdAt", "desc", [1, 3, 4, 2, 5]],
+      ["lastSignInAt", "asc", [3, 4, 5, 1, 2]],
+      ["lastSignInAt", "desc", [2, 1, 5, 3, 4]],
+    ] as const)(
+      "sort=%s dir=%s orders the rows, ties together",
+      async (sort, dir, expected) => {
+        await seedSorted();
+        signInAs("admin");
+        const got = mineOf(await walk(`?sort=${sort}&dir=${dir}`));
+        // Tied seeds (3 and 4) stay adjacent in either direction; the tie-break
+        // on oid is ascending (stable).
+        expect(got).toEqual([...expected]);
+      },
+    );
+
+    it.each(["asc", "desc"] as const)(
+      "a row without createdAt sorts last in %s (D-US3a)",
+      async (dir) => {
+        await seedSorted();
+        signInAs("admin");
+        const items = await walk(`?sort=createdAt&dir=${dir}`);
+        const valued = items.filter((r) => r.createdAt !== undefined);
+        const valueless = items.filter((r) => r.createdAt === undefined);
+        expect(valueless.map((r) => r.oid)).toContain(sid(5));
+        expect(items.slice(0, valued.length).every((r) => r.createdAt)).toBe(
+          true,
+        );
+        expect(items.slice(valued.length)).toEqual(valueless);
+      },
+    );
+
+    it.each(["asc", "desc"] as const)(
+      "sort=team %s orders by the team's display name; no team sorts last (D-US3a)",
+      async (dir) => {
+        await seedSorted();
+        ok(
+          await addMember(
+            { oid: sid(1), teamId: "team-b" },
+            ctxAt(undefined, "r-t1"),
+          ),
+        );
+        ok(
+          await addMember(
+            { oid: sid(2), teamId: "team-a" },
+            ctxAt(undefined, "r-t2"),
+          ),
+        );
+        signInAs("admin");
+        const items = await walk(`?sort=team&dir=${dir}`);
+        const ids = items.map((r) => r.oid);
+        const pos = (n: number) => ids.indexOf(sid(n));
+        if (dir === "asc") expect(pos(2)).toBeLessThan(pos(1));
+        else expect(pos(1)).toBeLessThan(pos(2));
+        // seeds 3-5 have no team: after both teamed seeds in both directions
+        for (const n of [3, 4, 5]) {
+          expect(pos(n)).toBeGreaterThan(Math.max(pos(1), pos(2)));
+        }
+      },
+    );
+
+    it.each([
+      ["sort=updatedAt", "no updatedAt key (D-US3a)"],
+      ["sort=bogus", "an unknown sort"],
+      ["sort=", "an empty sort"],
+      ["dir=sideways", "an unknown dir"],
+      ["sort=name&dir=ASC", "dir is case-sensitive"],
+    ])("400 for ?%s (%s)", async (query) => {
+      signInAs("admin");
+      const { res } = await list(`?${query}`);
+      await expectError(res, 400, "BAD_REQUEST");
+    });
+
+    it.each([
+      ["?sort=name&dir=asc", "?sort=email&dir=asc"],
+      ["?sort=name&dir=asc", "?sort=name&dir=desc"],
+      ["?sort=createdAt&dir=desc", "?sort=lastSignInAt&dir=desc"],
+    ])("400 for a cursor issued under %s used under %s", async (from, to) => {
+      await seedMany(30);
+      signInAs("admin");
+      const first = await list(from);
+      const cursor = (first.body.data as { cursor?: string }).cursor;
+      expect(typeof cursor).toBe("string");
+      const { res } = await list(
+        `${to}&cursor=${encodeURIComponent(cursor ?? "")}`,
+      );
+      await expectError(res, 400, "BAD_REQUEST");
+    });
+
+    it("400 for a cursor from the default sort used with an explicit other sort", async () => {
+      await seedMany(30);
+      signInAs("admin");
+      const first = await list();
+      const cursor = (first.body.data as { cursor?: string }).cursor ?? "";
+      const { res } = await list(
+        `?sort=email&cursor=${encodeURIComponent(cursor)}`,
+      );
+      await expectError(res, 400, "BAD_REQUEST");
+    });
+
+    it.each(["name", "email", "createdAt", "lastSignInAt", "team"])(
+      "paging a list sorted by %s returns every identity exactly once",
+      async (sort) => {
+        await seedMany(30);
+        await seedSorted();
+        signInAs("admin");
+        const unsorted = (await walk("")).map((r) => r.oid);
+        const sorted = (await walk(`?sort=${sort}&dir=desc`)).map((r) => r.oid);
+        expect(new Set(sorted).size).toBe(sorted.length);
+        expect([...sorted].sort()).toEqual([...unsorted].sort());
+        expect(sorted.length).toBeGreaterThan(25);
+      },
+    );
+
+    it("answers truncated: false under the 2,000 bound (a true case is not seeded: 2,000+ items)", async () => {
+      signInAs("admin");
+      const { body } = await list("?sort=email");
+      expect((body.data as { truncated?: boolean }).truncated).toBe(false);
+    });
+
+    it("rows carry createdAt when the record has it, omit it otherwise, and always lastSignInAt", async () => {
+      await seedSorted();
+      signInAs("auditor");
+      const items = await walk("?sort=createdAt");
+      const withDate = items.find((r) => r.oid === sid(2));
+      const without = items.find((r) => r.oid === sid(5));
+      expect(withDate).toMatchObject({
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastSignInAt: "2026-09-01T00:00:00.000Z",
+      });
+      expect(without?.createdAt).toBeUndefined();
+      expect(without?.lastSignInAt).toBe("2026-05-01T00:00:00.000Z");
+    });
+
+    it.each(["admin", "orgAdmin", "auditor"] as CallerName[])(
+      "%s may sort",
+      async (who) => {
+        signInAs(who);
+        const { res } = await list("?sort=lastSignInAt&dir=desc");
+        expect(res.status).toBe(200);
+      },
+    );
+
+    it.each(["teamAdminA", "memberA"] as const)(
+      "%s (a lead or member) gets 403 on a sorted read, before the query is parsed",
+      async (who) => {
+        signInAs(who);
+        const { res } = await list("?sort=bogus");
+        await expectError(res, 403, "FORBIDDEN");
+      },
+    );
+
+    it("q ignores sort and dir: at most 10 results, no cursor, no truncated flag needed", async () => {
+      await seedMany(15);
+      signInAs("admin");
+      const { res, body } = await list("?q=company.com&sort=email&dir=desc");
+      expect(res.status).toBe(200);
+      expect(rows(body)).toHaveLength(10);
+      expect((body.data as { cursor?: string }).cursor).toBeUndefined();
     });
   });
 

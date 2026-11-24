@@ -6,7 +6,8 @@ import {
   putRaw,
 } from "@/test/support/test-support";
 
-import { searchIdentities } from "./identities";
+import { listDirectory } from "./directory-rows";
+import { listIdentitiesBounded, searchIdentities } from "./identities";
 
 // Source: unit ST1 D-ST2 (docs/plans/20261118_teams_users_and_litellm_sync.md
 // section 3; Access Control spec - API routes, `GET /api/identities/directory`
@@ -132,5 +133,51 @@ describe("searchIdentities (D-ST2)", () => {
       displayName: "Visible Shared",
     });
     expect(oids(await searchIdentities("visible shared", 10))).toEqual([hit]);
+  });
+});
+
+// Source: Access Control spec - row `/api/identities/directory`, "From
+// 2026-11-24 (unit US1, D-US3)": at most 2,000 identities are read and sorted;
+// past the bound `truncated` is true and the order is partial (the first rows
+// in GSI order). The bound is a parameter (default 2,000) so the rule is
+// provable with a handful of rows.
+describe("directory read bound (unit US1, D-US3: 2,000 bound, truncated)", () => {
+  it("listIdentitiesBounded: a bound below the count returns exactly `bound` rows and truncated true", async () => {
+    for (const n of [1, 2, 3, 4, 5]) await seed(n);
+    const result = await listIdentitiesBounded({ bound: 3 });
+    expect(result.truncated).toBe(true);
+    expect(result.items).toHaveLength(3);
+  });
+
+  it.each([5, 6])(
+    "listIdentitiesBounded: a bound of %i with 5 identities is not truncated",
+    async (bound) => {
+      for (const n of [1, 2, 3, 4, 5]) await seed(n);
+      const result = await listIdentitiesBounded({ bound });
+      expect(result.truncated).toBe(false);
+      expect(result.items).toHaveLength(5);
+    },
+  );
+
+  it("listIdentitiesBounded: the default bound leaves a small directory untruncated", async () => {
+    await seed(1);
+    expect((await listIdentitiesBounded()).truncated).toBe(false);
+  });
+
+  it("listDirectory passes the bound through: truncated true with a bound of 3, false with 10", async () => {
+    for (const n of [1, 2, 3, 4, 5]) await seed(n);
+    const base = {
+      sort: "name" as const,
+      dir: "asc" as const,
+      cursorSecret: "test-secret",
+      limit: 50,
+      teamNames: new Map<string, string>(),
+    };
+    const small = await listDirectory({ ...base, bound: 3 });
+    expect(small.ok && small.value.truncated).toBe(true);
+    expect(small.ok && small.value.items).toHaveLength(3);
+    const large = await listDirectory({ ...base, bound: 10 });
+    expect(large.ok && large.value.truncated).toBe(false);
+    expect(large.ok && large.value.items).toHaveLength(5);
   });
 });

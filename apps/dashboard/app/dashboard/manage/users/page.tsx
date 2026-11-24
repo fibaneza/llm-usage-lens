@@ -3,8 +3,6 @@ import { notFound } from "next/navigation";
 import { auth, enabledSignInProviders } from "@/auth";
 import { UsersPeoplePanel } from "@/components/manage/users/UsersPeoplePanel";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { LiteLLMSection } from "@/components/litellm/LiteLLMSection";
-import { UserSearch } from "@/components/litellm/UserSearch";
 import { isLiteLLMConfigured } from "@/lib/litellm/client";
 import { enabledOperations } from "@/lib/litellm/read-views";
 import { managementAccessFor } from "@/lib/manage-access";
@@ -33,7 +31,7 @@ export default async function UsersManagePage() {
   const canResetSpend = page.steps.link && enabled.includes("resetMemberSpend");
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader description="People, their teams and LiteLLM links, and a lookup of a person's LiteLLM spend, budget and keys." />
+      <PageHeader description="People, their teams and LiteLLM links." />
       <UsersPeoplePanel
         steps={page.steps}
         ownOid={page.ownOid}
@@ -47,9 +45,6 @@ export default async function UsersManagePage() {
           devLogin: stepUpWithDevLogin,
         }}
       />
-      <LiteLLMSection title="Search LiteLLM users">
-        <UserSearch />
-      </LiteLLMSection>
     </div>
   );
 }

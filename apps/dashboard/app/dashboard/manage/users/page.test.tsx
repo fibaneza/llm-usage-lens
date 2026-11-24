@@ -10,12 +10,13 @@ import { renderWithProviders } from "@/test/support/render-providers";
 
 // Source: Design System - Management pages (Users: global readers only; page
 // frame: PageHeader description, the h1 stays in the top bar) and Management
-// improvements, Users (D15: the People list and Add user, then the existing
-// user search; each step and link control resolved on the server from the
+// improvements, Users (D15: the People list and Add user; each step and link control resolved on the server from the
 // effective roles, Rule 10.3) and User link states (D16: Create and link on
 // OSS only; LiteLLM spec - createUser: edition gate and toggle, "the UI hides
 // or disables its control (reads return the caller's enabledOperations)").
-// Search behaviour: UserSearch.test.tsx; the access matrix:
+// The users table (unit US1, 2026-11-24, D-US1: the separate "Search LiteLLM
+// users" section is removed and the search box lives in the People panel;
+// the lookup stays on Management -> LiteLLM -> LiteLLM users). The access matrix:
 // lib/manage-users-access.integration.test.ts; the gate matrix:
 // __tests__/manage-routes.integration.test.ts (Rule 60.24a). This file asserts
 // the wiring.
@@ -23,7 +24,7 @@ import { renderWithProviders } from "@/test/support/render-providers";
 // Contract (app/dashboard/manage/users/page.tsx): async Server Component, no
 // props; notFound() unless managementAccessFor(...).users, or when
 // usersPageAccessFor(...) is null; renders <PageHeader/>, the People panel,
-// then <LiteLLMSection title="Search LiteLLM users"><UserSearch/>.
+// then nothing else: no LiteLLMSection, no UserSearch (unit US1).
 vi.mock("@/auth", () => ({
   auth: vi.fn(),
   enabledSignInProviders: { entra: false, devLogin: true, master: false },
@@ -118,7 +119,7 @@ afterEach(() => {
 });
 
 describe("Users management page (/dashboard/manage/users)", () => {
-  it("opens with a one-line description, no page-level h1, the People panel and the user search (D15)", async () => {
+  it("opens with a one-line description, no page-level h1 and the People panel holding the only search box; no separate search section (D-US1)", async () => {
     stubFetch();
     const view = renderWithProviders(await UsersManagePage());
 
@@ -129,10 +130,13 @@ describe("Users management page (/dashboard/manage/users)", () => {
     expect(
       within(people).getByRole("button", { name: /add user/i }),
     ).toBeInTheDocument();
-    const search = screen.getByRole("region", { name: "Search LiteLLM users" });
     expect(
-      within(search).getByRole("searchbox", { name: /search users/i }),
+      within(people).getByRole("searchbox", { name: /search/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Search LiteLLM users" }),
+    ).toBeNull();
+    expect(screen.getAllByRole("searchbox")).toHaveLength(1);
   });
 
   it("answers the 404 when the caller may not see Users", async () => {

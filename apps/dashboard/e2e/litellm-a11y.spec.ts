@@ -277,13 +277,21 @@ async function mockApi(page: Page, options: MockOptions = {}) {
         return ok({
           page: 1,
           pageSize: 25,
+          hasMore: false,
+          mayLink: false,
           enabledOperations: [],
+          // The LiteLLM users tab row shape (UsersListResponseSchema, D16a).
           users: [
             {
-              userId: "u-ada",
-              email: "ada@example.test",
-              ...(capped ? {} : { spend: 77.1, maxBudget: 150 }),
-              teams: [{ teamId: PAYMENTS_ID, teamName: "Payments" }],
+              key: "ll:u-ada",
+              linkState: "unlinked",
+              appUser: null,
+              litellmUser: {
+                userId: "u-ada",
+                email: "ada@example.test",
+                ...(capped ? {} : { spend: 77.1, maxBudget: 150 }),
+                teams: [{ teamId: PAYMENTS_ID, teamName: "Payments" }],
+              },
             },
           ],
         });
@@ -444,13 +452,13 @@ test.describe("axe per role and dialog state (L5 Accessibility floor)", () => {
     });
   }
 
-  test("org admin: Users with search results is axe-clean", async ({
+  test("org admin: LiteLLM users with search results is axe-clean", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-org-admin"] });
     await mockApi(page);
-    await open(page, "/dashboard/manage/users");
+    await open(page, "/dashboard/manage/litellm/users");
     await page.getByRole("searchbox", { name: /search users/i }).fill("ada");
     await expect(
       page.getByRole("button", { name: "ada@example.test" }),
@@ -922,7 +930,7 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
   }) => {
     await signInAsTestUser(context, { roles: ["internal-org-admin"] });
     await mockApi(page, { capped: true });
-    await open(page, "/dashboard/manage/users");
+    await open(page, "/dashboard/manage/litellm/users");
     await page.getByRole("searchbox", { name: /search users/i }).fill("ada");
     const row = page.getByRole("row", { name: /ada@example\.test/ });
     await expect(row).toBeVisible();
@@ -1144,33 +1152,34 @@ test.describe("responsive (L5 Responsive; Design System: Responsive Tables)", ()
     });
   }
 
-  // UserSearch's results table is captioned "User results" (coordinator ruling,
-  // L5b, 2026-11-17); below md it is a card list of the same name.
-  test("User search results: cards at 375px, a table from 768px", async ({
+  // Unit US1 (D-US1): the Users page no longer mounts UserSearch; the lookup
+  // is Management -> LiteLLM -> LiteLLM users, captioned "LiteLLM users"
+  // (card list of the same name below md).
+  test("LiteLLM users search results: cards at 375px, a table from 768px", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
     await page.setViewportSize({ width: 375, height: 900 });
-    await open(page, "/dashboard/manage/users");
+    await open(page, "/dashboard/manage/litellm/users");
     await page.getByRole("searchbox", { name: /search users/i }).fill("ada");
 
-    const cards = page.getByRole("list", { name: "User results" });
+    const cards = page.getByRole("list", { name: "LiteLLM users" });
     await expect(cards, "no card list below md").toBeVisible();
     await expect(cards.getByRole("listitem")).toHaveCount(1);
     await expect(cards).toContainText("ada@example.test");
     await expect(
-      page.getByRole("table", { name: "User results" }),
-      "user results still render a <table> below md",
+      page.getByRole("table", { name: "LiteLLM users" }),
+      "LiteLLM users still render a <table> below md",
     ).toHaveCount(0);
-    await expectNoHorizontalScroll(page, "user results at 375px");
+    await expectNoHorizontalScroll(page, "LiteLLM users at 375px");
 
     await page.setViewportSize({ width: 768, height: 900 });
     await expect(
-      page.getByRole("table", { name: "User results" }),
+      page.getByRole("table", { name: "LiteLLM users" }),
     ).toBeVisible();
-    await expect(page.getByRole("list", { name: "User results" })).toHaveCount(
+    await expect(page.getByRole("list", { name: "LiteLLM users" })).toHaveCount(
       0,
     );
   });

@@ -10,8 +10,10 @@ import { z } from "zod";
 import { accessErrorResponse, cursorSecret } from "@/lib/api/access-route";
 import { jsonData, parseSearchParams, withRoute } from "@/lib/api/respond";
 import { getAffiliation } from "@/lib/data/access/affiliations";
-import { listIdentities, searchIdentities } from "@/lib/data/access/identities";
+import { listDirectory } from "@/lib/data/access/directory-rows";
+import { searchIdentities } from "@/lib/data/access/identities";
 import { getIdentityLink } from "@/lib/data/access/identity-links";
+import { listTeamDirectory } from "@/lib/api/team-directory";
 import { isLiteLLMConfigured } from "@/lib/litellm/client";
 import { findUserByEmail } from "@/lib/litellm/operations";
 import {
@@ -53,11 +55,22 @@ export const GET = withRoute(async (request, _ctx, session) => {
         value: {
           items: await searchIdentities(query.q, SEARCH_LIMIT),
           cursor: undefined,
+          truncated: false,
         },
       }
-    : await listIdentities({
+    : await listDirectory({
+        sort: query.sort,
+        dir: query.dir,
         cursorSecret: cursorSecret(),
         limit: USER_LINKS_PAGE_SIZE,
+        teamNames:
+          query.sort === "team"
+            ? new Map(
+                (await listTeamDirectory()).map(
+                  (t) => [t.teamId, t.teamName] as const,
+                ),
+              )
+            : new Map(),
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
       });
   if (!page.ok) return accessErrorResponse(page.code);
@@ -78,6 +91,8 @@ export const GET = withRoute(async (request, _ctx, session) => {
           ? { state: "linked" as const, litellmUserId: link.litellmUserId }
           : { state: "none" as const },
         linkVersion: link?.version ?? 0,
+        ...(identity.createdAt ? { createdAt: identity.createdAt } : {}),
+        lastSignInAt: identity.lastSignInAt ?? null,
       };
     }),
   );
@@ -109,6 +124,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
   return jsonData(
     DirectoryPageSchema.parse({
       items,
+      truncated: page.value.truncated,
       ...(page.value.cursor ? { cursor: page.value.cursor } : {}),
     }),
   );

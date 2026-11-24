@@ -77,14 +77,21 @@ async function mockApi(page: Page, me: unknown = ME) {
       "/api/litellm/users": {
         page: 1,
         pageSize: 25,
+        hasMore: false,
+        mayLink: false,
         enabledOperations: [],
         users: [
           {
-            userId: "u-ada",
-            email: "ada@example.test",
-            spend: 77.1,
-            maxBudget: 150,
-            teams: [{ teamId: "t1", teamName: "Payments" }],
+            key: "ll:u-ada",
+            linkState: "unlinked",
+            appUser: null,
+            litellmUser: {
+              userId: "u-ada",
+              email: "ada@example.test",
+              spend: 77.1,
+              maxBudget: 150,
+              teams: [{ teamId: "t1", teamName: "Payments" }],
+            },
           },
         ],
       },
@@ -169,16 +176,18 @@ test.describe("Management -> Organisation and Users", () => {
     await expectNoBlockingViolations(page);
   });
 
+  // Unit US1 (D-US1): the Users page no longer mounts the LiteLLM user search;
+  // the lookup is on Management -> LiteLLM -> LiteLLM users.
   test("an org admin searches users and opens one user's spend", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-org-admin"] });
     await mockApi(page);
-    await open(page, "/dashboard/manage/users");
+    await open(page, "/dashboard/manage/litellm/users");
 
     await expect(
-      page.getByRole("heading", { level: 1, name: "Users" }),
+      page.getByRole("heading", { level: 1, name: "LiteLLM" }),
     ).toBeVisible();
     await page.getByRole("searchbox", { name: /search users/i }).fill("ada");
     await page.getByRole("button", { name: "ada@example.test" }).click();
@@ -187,13 +196,13 @@ test.describe("Management -> Organisation and Users", () => {
     ).toContainText("$77.10");
   });
 
-  test("the Users page has no serious or critical axe violations", async ({
+  test("the LiteLLM users page has no serious or critical axe violations", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-admin"] });
     await mockApi(page);
-    await open(page, "/dashboard/manage/users");
+    await open(page, "/dashboard/manage/litellm/users");
     await expect(
       page.getByRole("searchbox", { name: /search users/i }),
     ).toBeVisible();
