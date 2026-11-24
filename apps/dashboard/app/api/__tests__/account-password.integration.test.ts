@@ -110,6 +110,10 @@ const step = (at: Date) => Math.floor(at.getTime() / 30_000);
 
 type Seeded = { oid: string; email: string };
 
+// D-TS1: the real Argon2id hash of GOOD_PASSWORD, computed once per file and
+// reused by every seeded user; the route's verify and re-hash still run for real.
+let goodPasswordHash: string;
+
 // A user who finished setup: a real Argon2id hash for GOOD_PASSWORD and, when
 // asked, an enrolled TOTP secret whose last used step is long past.
 async function seedUser(
@@ -124,7 +128,7 @@ async function seedUser(
       {
         email,
         tokenHash: sha256Hex(created.setupToken),
-        passwordHash: await hashPassword(GOOD_PASSWORD),
+        passwordHash: goodPasswordHash,
         ...(options.totp
           ? {
               totp: {
@@ -206,6 +210,9 @@ const updateRecords = async () =>
   );
 
 beforeAll(ensureTestTable);
+beforeAll(async () => {
+  goodPasswordHash = await hashPassword(GOOD_PASSWORD);
+});
 beforeEach(async () => {
   await clearTable();
   vi.mocked(auth).mockReset();
