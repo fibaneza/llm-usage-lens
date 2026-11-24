@@ -178,7 +178,10 @@ test.describe("Management -> Users (D15, D16)", () => {
 });
 
 test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
-  test("lists users with link states; a person not in LiteLLM reads 'Not in LiteLLM', never $0", async ({
+  // Design System - LiteLLM users tab, D-LF4 and T-LF5: no linked-account
+  // column; each row keeps Unlink or Link; the linked account and its state
+  // are in the selected user's detail.
+  test("lists users without a linked-account column; a person not in LiteLLM reads 'Not in LiteLLM', never $0; the detail shows the link", async ({
     context,
     page,
   }) => {
@@ -229,18 +232,93 @@ test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
         },
       }),
     );
+    await page.route(/\/api\/litellm\/users\/ll-ada(\?|$)/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            userId: "ll-ada",
+            email: "ada@example.test",
+            spend: 12.5,
+            maxBudget: 100,
+            daily: [],
+            enabledOperations: ["createUser"],
+          },
+        },
+      }),
+    );
     await page.goto("/dashboard/manage/litellm/users");
     await waitForHydration(page);
 
     const bob = page.getByRole("row", { name: /Bob Barker/ });
     await expect(bob).toContainText("Not in LiteLLM");
     await expect(bob).not.toContainText("$0");
-    await expect(page.getByRole("row", { name: /Ada Lovelace/ })).toContainText(
-      "$12.50",
-    );
+    const ada = page.getByRole("row", { name: /Ada Lovelace/ });
+    await expect(ada).toContainText("$12.50");
     await expect(
       bob.getByRole("button", { name: "Create and link" }),
     ).toBeVisible();
+
+    await expect(page.getByRole("columnheader", { name: /link/i })).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole("table")).not.toContainText("Linked");
+    await expect(ada.getByRole("button", { name: /unlink/i })).toBeVisible();
+
+    await ada.getByRole("button", { name: "Ada Lovelace" }).click();
+    // The linked account is in the detail's description list (D-LF4).
+    const account = page
+      .locator("dl")
+      .filter({ has: page.getByText("Linked account") });
+    await expect(account.getByText("Linked", { exact: true })).toBeVisible();
+    await expect(page.getByRole("table")).not.toContainText("Linked");
+
+    // LF1 UI review WARN 2 (Design System - Layout, Rule 40.6): the detail
+    // open at 375 has no serious axe violation and no horizontal scroll.
+    await page.setViewportSize({ width: 375, height: 800 });
+    await expect(account).toBeVisible();
+    await expectNoBlockingViolations(page);
+    expect(await noHorizontalScroll(page)).toBe(true);
+  });
+
+  test("an auditor reads the list and gets no Link, Unlink or Create and link control (D-LF4, Access Control - LiteLLM user links)", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
+    await page.route(/\/api\/litellm\/team-links/, (route) =>
+      route.fulfill({ json: { data: { items: [] } } }),
+    );
+    await page.route(/\/api\/litellm\/users(\?|$)/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            page: 1,
+            pageSize: 25,
+            hasMore: false,
+            enabledOperations: ["createUser"],
+            mayLink: false,
+            users: [
+              {
+                key: "oid-bob",
+                linkState: "none",
+                appUser: {
+                  oid: "oid-bob",
+                  displayName: "Bob Barker",
+                  email: "bob@example.test",
+                  version: 0,
+                },
+                litellmUser: null,
+              },
+            ],
+          },
+        },
+      }),
+    );
+    await page.goto("/dashboard/manage/litellm/users");
+    await waitForHydration(page);
+    const bob = page.getByRole("row", { name: /Bob Barker/ });
+    await expect(bob).toBeVisible();
+    await expect(bob.getByRole("button", { name: /link/i })).toHaveCount(0);
   });
 });
 
@@ -324,7 +402,8 @@ test.describe("Management -> LiteLLM users: link to an existing user (D16, T-MI1
     await waitForHydration(page);
     // Below md the list is cards (listitem), not table rows.
     const bob = page.getByRole("listitem").filter({ hasText: "Bob Barker" });
-    await expect(bob).toContainText("No LiteLLM user with that email");
+    // The state is in the detail, not in the row (D-LF4).
+    await expect(bob).not.toContainText("No LiteLLM user with that email");
     await expectNoBlockingViolations(page);
 
     await bob

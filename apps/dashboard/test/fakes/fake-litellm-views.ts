@@ -76,6 +76,10 @@ export function expectNoSentinels(body: unknown) {
 
 export type ViewsFakeOptions = {
   outage?: boolean;
+  // GET /audit is an Enterprise endpoint: on "oss" the proxy refuses it with a
+  // 403, as the gateway fake does for GET /global/spend/report (LiteLLM spec -
+  // Audit, D-LF2). Default "enterprise" so other views keep their data.
+  edition?: "oss" | "enterprise";
   // GET /user/list ignores `team=` (a misbehaving or older proxy), so the
   // route's own post-call filtering is what the test sees (LT21).
   ignoreTeamFilter?: boolean;
@@ -83,6 +87,11 @@ export type ViewsFakeOptions = {
   extraKeys?: Array<Record<string, unknown>>;
   // Extra rows for GET /user/list (LiteLLM-shaped; `teams` are LiteLLM ids).
   extraUsers?: Array<Record<string, unknown>>;
+  // Raw GET /user/info bodies by user id, as LiteLLM sends them: UserInfoResponse
+  // in docs/litellm/openapi.json requires only user_id, user_info, keys and
+  // teams, and user_info is an open object or null, so a user may carry no
+  // spend, max_budget or user_email at all.
+  userInfoBodies?: Record<string, unknown>;
 };
 
 // L3b: LiteLLM users known to the fake. `id` differs from the email for the
@@ -279,6 +288,8 @@ export function viewsHandler(opts: ViewsFakeOptions = {}): FakeHandler {
         if (userId === GHOST_USER_ID) {
           return { status: 404, body: { detail: "user not found" } };
         }
+        const raw = userId ? opts.userInfoBodies?.[userId] : undefined;
+        if (raw !== undefined) return { status: 200, body: raw };
         const known = USER_ROWS.find((u) => u.user_id === userId);
         const isLinkedFixture = (Object.values(LUSER) as string[]).includes(
           userId ?? "",
@@ -370,6 +381,8 @@ export function viewsHandler(opts: ViewsFakeOptions = {}): FakeHandler {
           },
         };
       case "GET /audit":
+        if (opts.edition === "oss")
+          return { status: 403, body: { detail: "enterprise only" } };
         return {
           status: 200,
           body: {

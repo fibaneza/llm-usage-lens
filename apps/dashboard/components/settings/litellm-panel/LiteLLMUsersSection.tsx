@@ -12,7 +12,11 @@ import { fetchApi } from "@/lib/query/fetch-api";
 // Design System "Settings Page" - LiteLLM sub-tabs, agent decision (3): the
 // note shows only once the links have loaded and none exist (gap G7). From
 // unit M3 (D16a) the tab is the users list with link states.
-export function LiteLLMUsersSection() {
+export function LiteLLMUsersSection({
+  canReset = false,
+}: {
+  canReset?: boolean;
+}) {
   const links = useQuery({
     queryKey: TEAM_LINKS_KEY,
     queryFn: () => fetchApi("/api/litellm/team-links", TeamLinksSchema),
@@ -26,7 +30,7 @@ export function LiteLLMUsersSection() {
           links.
         </p>
       ) : null}
-      <LiteLLMUsersList />
+      <LiteLLMUsersList canReset={canReset} />
     </div>
   );
 }

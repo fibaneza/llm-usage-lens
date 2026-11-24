@@ -51,13 +51,17 @@ export default async function LiteLLMAreaTabPage({
       );
       break;
     }
-    case "users":
+    case "users": {
+      const viewer = await loadSettingsAccessViewer(session);
+      if (!viewer) notFound();
+      const capabilities = litellmPanelCapabilities(viewer.roles);
       body = (
         <LiteLLMSection title="LiteLLM users">
-          <LiteLLMUsersSection />
+          <LiteLLMUsersSection canReset={capabilities.editTeamLinks} />
         </LiteLLMSection>
       );
       break;
+    }
   }
   return body;
 }

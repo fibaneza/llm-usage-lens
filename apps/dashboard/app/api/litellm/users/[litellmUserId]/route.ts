@@ -117,7 +117,8 @@ export const GET = withRoute(async (request, { params }, session) => {
         userId: litellmUserId,
         email: info.user_info?.user_email ?? litellmUserId,
         ...(combined === undefined ? {} : { combined }),
-        spend: info.user_info?.spend ?? 0,
+        // Absent spend is null, shown as a dash; never an invented $0 (LF1).
+        spend: info.user_info?.spend ?? null,
         maxBudget: info.user_info?.max_budget ?? null,
         daily: reduceDaily(daily.results),
         enabledOperations: enabled,

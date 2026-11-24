@@ -116,7 +116,7 @@ changing code** (the response LiteLLM really sends, from
 **Owns:** `components/manage/users/LiteLLMUsersList.tsx`,
 `LiteLLMLinkCell.tsx`, `components/litellm/UserSearch.tsx`,
 `AuditSection.tsx`, `app/dashboard/manage/litellm/**`,
-`app/api/litellm/users/route.ts` and `users/[litellmUserId]/route.ts`
+`app/api/litellm/users/route.ts` and `users/[litellmUserId]/route.ts`. *Ownership change, coordinator 2026-11-24 (additive only):* `lib/litellm/allowlist.ts` (`listProxyAuditLog` Enterprise-only), `components/litellm/use-litellm-query.ts` (the opt-in `useLiteLLMEditionQuery`; other callers unchanged), `app/api/litellm/__tests__/role-operation-matrix.integration.test.ts` (the `GET /audit` row on Enterprise, cells unchanged), `docs/specs/2026-11-17-app-teams.md` and `docs/specs/2026-11-10-access-control.md` (superseded markers; the US1 text kept). Also approved (coordinator, 2026-11-24, review round 1): `lib/litellm/operations.ts`, `packages/shared/src/schemas/litellm-views.ts` and `test/fakes/*` (items 2 and 3).
 (reads only), `app/api/litellm/audit/route.ts`, the LiteLLM teams table
 component, the response schemas in `packages/shared/src/schemas/user-links.ts`,
 their tests, `e2e/manage-users-links.spec.ts`, `e2e/litellm-*.spec.ts`.

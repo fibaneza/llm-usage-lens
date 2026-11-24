@@ -27,6 +27,12 @@ export type LiteLLMResult<T> =
   | { status: "ok"; data: T }
   | { status: "unavailable" };
 
+// The audit log is Enterprise-only: a 403 OPERATION_UNAVAILABLE is the named
+// edition state (LiteLLM spec -- Audit, D-LF2), distinct from an outage.
+export type LiteLLMEditionResult<T> =
+  | LiteLLMResult<T>
+  | { status: "needs-enterprise" };
+
 // An outage (503 LITELLM_UNAVAILABLE) is a handled, section-level state
 // (Design System -- LiteLLM Page, States); every other error bubbles to the
 // section's ErrorBoundary (Rule 60.17).
@@ -34,10 +40,11 @@ function litellmQuery<S extends z.ZodType>(
   key: readonly string[],
   path: string,
   schema: S,
+  editionState = false,
 ) {
   return {
     queryKey: ["litellm", ...key],
-    queryFn: async (): Promise<LiteLLMResult<z.output<S>>> => {
+    queryFn: async (): Promise<LiteLLMEditionResult<z.output<S>>> => {
       try {
         return { status: "ok", data: await fetchApi(path, schema) };
       } catch (error) {
@@ -46,6 +53,13 @@ function litellmQuery<S extends z.ZodType>(
           error.code === "LITELLM_UNAVAILABLE"
         ) {
           return { status: "unavailable" };
+        }
+        if (
+          editionState &&
+          error instanceof ApiRequestError &&
+          error.code === "OPERATION_UNAVAILABLE"
+        ) {
+          return { status: "needs-enterprise" };
         }
         throw error;
       }
@@ -58,7 +72,17 @@ export function useLiteLLMQuery<S extends z.ZodType>(
   path: string,
   schema: S,
 ): LiteLLMResult<z.output<S>> {
-  return useSuspenseQuery(litellmQuery(key, path, schema)).data;
+  return useSuspenseQuery(litellmQuery(key, path, schema))
+    .data as LiteLLMResult<z.output<S>>;
+}
+
+// Opt-in: only the audit section maps OPERATION_UNAVAILABLE to a state.
+export function useLiteLLMEditionQuery<S extends z.ZodType>(
+  key: readonly string[],
+  path: string,
+  schema: S,
+): LiteLLMEditionResult<z.output<S>> {
+  return useSuspenseQuery(litellmQuery(key, path, schema, true)).data;
 }
 
 // Same cache entry, without suspending: for callers that must render around a
@@ -68,5 +92,8 @@ export function useLiteLLMQueryState<S extends z.ZodType>(
   path: string,
   schema: S,
 ) {
-  return useQuery(litellmQuery(key, path, schema));
+  return useQuery({
+    ...litellmQuery(key, path, schema),
+    select: (result) => result as LiteLLMResult<z.output<S>>,
+  });
 }

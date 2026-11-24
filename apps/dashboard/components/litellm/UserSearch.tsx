@@ -2,6 +2,7 @@
 
 import { CircleDollarSign, Wallet } from "lucide-react";
 import { useEffect, useId, useState } from "react";
+import type { ReactNode } from "react";
 
 import {
   LiteLLMUserDetailResponseSchema,
@@ -39,8 +40,10 @@ const HIDDEN = "Hidden until per-user reporting is approved";
 
 export const budget = (value: number | null | undefined) =>
   value === undefined ? HIDDEN : value === null ? "No limit" : formatUsd(value);
-export const spend = (value: number | undefined) =>
-  value === undefined ? HIDDEN : formatUsd(value);
+// undefined: hidden by the cap (LD23). null: LiteLLM reported no spend, shown
+// as a dash and never as $0 (Design System, LF1 D-LF1).
+export const spend = (value: number | null | undefined) =>
+  value === undefined ? HIDDEN : value === null ? "\u2014" : formatUsd(value);
 
 function QueryFailure({ error }: { error: unknown }) {
   return (
@@ -50,7 +53,15 @@ function QueryFailure({ error }: { error: unknown }) {
   );
 }
 
-export function UserDetail({ userId }: { userId: string }) {
+// `account` is the linked app account and its state for the selected row, shown
+// by the LiteLLM users tab; the detail route itself carries no link data.
+export function UserDetail({
+  userId,
+  account,
+}: {
+  userId: string;
+  account?: ReactNode;
+}) {
   const query = useLiteLLMQueryState(
     ["user", userId],
     `/api/litellm/users/${encodeURIComponent(userId)}`,
@@ -69,13 +80,14 @@ export function UserDetail({ userId }: { userId: string }) {
       ) : (
         <QueryFailure error={query.error} />
       );
-  } else if (query.data.status === "unavailable") {
+  } else if (query.data.status !== "ok") {
     body = <Unavailable />;
   } else {
     const user = query.data.data;
     body = (
       <div className="flex flex-col gap-4">
         <p className="text-muted-foreground text-sm">{user.email}</p>
+        {account ?? null}
         <div className="grid gap-4 sm:grid-cols-2">
           <MetricCard
             title="Spend"
@@ -130,7 +142,7 @@ function Results({
   );
   if (query.isPending) return <Skeleton className="h-24 w-full" />;
   if (query.isError) return <QueryFailure error={query.error} />;
-  if (query.data.status === "unavailable") return <Unavailable />;
+  if (query.data.status !== "ok") return <Unavailable />;
   const { users } = query.data.data;
   if (users.length === 0) return <Empty>No users found</Empty>;
   return (

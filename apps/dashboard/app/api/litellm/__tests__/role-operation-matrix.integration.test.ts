@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createFakeLiteLLM, healthyHandler } from "@/test/fakes/fake-litellm";
-import { DATES } from "@/test/fakes/fake-litellm-views";
+import { DATES, enterProd } from "@/test/fakes/fake-litellm-views";
 import { COLUMNS, SPEC_COLUMN } from "@/test/support/litellm-matrix-support";
 import type { MatrixColumn } from "@/test/support/litellm-matrix-support";
 import {
@@ -69,6 +69,10 @@ type Row = {
   cells: Cells;
   // A healthy LiteLLM (connection probes) instead of the team-writes fake.
   healthy?: boolean;
+  // Enterprise-only operation (LiteLLM spec - Audit, D-LF2): on OSS the route
+  // answers 403 OPERATION_UNAVAILABLE, covered in audit/route.integration.test.ts,
+  // so the role matrix runs it on Enterprise (APP_ENV=prod).
+  enterprise?: boolean;
 };
 
 const TEAM_URL = "/api/litellm/teams";
@@ -471,13 +475,14 @@ const ROWS: Row[] = [
   },
   ...(
     [
-      ["audit", `?${DATES}`, () => import("../audit/route")],
-      ["orphans", "", () => import("../orphans/route")],
+      ["audit", `?${DATES}`, () => import("../audit/route"), true],
+      ["orphans", "", () => import("../orphans/route"), false],
     ] as const
   ).map(
-    ([name, query, importer]): Row => ({
+    ([name, query, importer, enterprise]): Row => ({
       route: `GET /${name}`,
       write: false,
+      enterprise,
       load: loader(importer, "GET"),
       request: () => ({
         method: "GET",
@@ -595,6 +600,7 @@ describe.each(ROWS)("$route", (row) => {
         state.fake = createFakeLiteLLM(healthyHandler);
         vi.stubGlobal("fetch", state.fake.fetch);
       }
+      if (row.enterprise) await enterProd();
       await col.signIn();
 
       const expected = row.cells[SPEC_COLUMN[col.column]] as number;

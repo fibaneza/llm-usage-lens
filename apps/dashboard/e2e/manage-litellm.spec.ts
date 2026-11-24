@@ -178,7 +178,7 @@ test.describe("Management -> LiteLLM area (M1)", () => {
 
       await tabRow(page).getByRole("tab", { name: "LiteLLM users" }).click();
       await expect(page).toHaveURL(`${AREA}/users`);
-      // D16a: the tab is the users list with link states, search kept.
+      // D16a, D-LF4: the tab is the users list (no link-state column), search kept.
       await expect(
         page.getByRole("searchbox", { name: /search users/i }),
       ).toBeVisible();

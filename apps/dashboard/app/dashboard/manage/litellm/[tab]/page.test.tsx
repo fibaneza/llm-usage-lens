@@ -56,7 +56,9 @@ vi.mock("@/components/settings/litellm-panel/LiteLLMTeamLinksSection", () => ({
   ),
 }));
 vi.mock("@/components/settings/litellm-panel/LiteLLMUsersSection", () => ({
-  LiteLLMUsersSection: () => <div data-testid="users" />,
+  LiteLLMUsersSection: (props: { canReset?: boolean }) => (
+    <div data-testid="users">{String(props.canReset)}</div>
+  ),
 }));
 
 import {
@@ -116,6 +118,19 @@ describe("LiteLLM area tab page (M1)", () => {
       expect(screen.getByTestId("teams")).toHaveTextContent(flags);
     },
   );
+
+  // LF1 F1 (Design System - LiteLLM users tab; RS2): the users tab gets the same
+  // server capability as the teams table's canEdit (admin and org-admin true,
+  // auditor false) as `canReset`, for Reset spend on proxy-team members.
+  it.each([
+    ["internal-admin", "true"],
+    ["internal-org-admin", "true"],
+    ["internal-auditor", "false"],
+  ])("LiteLLM users for %s passes canReset = %s", async (role, flag) => {
+    as([role]);
+    render(await open("users"));
+    expect(screen.getByTestId("users")).toHaveTextContent(flag);
+  });
 
   it.each(["organisation", "teams", "users"])(
     "a caller without the litellm flag (a lead, a user) gets the 404 on %s",

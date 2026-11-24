@@ -205,7 +205,7 @@ test.describe("Management -> LiteLLM -> LiteLLM teams: roles (LD24)", () => {
 });
 
 test.describe("Management -> LiteLLM -> LiteLLM teams: spend source and accessibility", () => {
-  test("lists a linked and an unlinked app team with their spend source and is axe-clean with a picker open", async ({
+  test("spend source lists linked teams only (D-LF3); picker still offers the rest; axe-clean", async ({
     page,
     context,
   }) => {
@@ -218,10 +218,9 @@ test.describe("Management -> LiteLLM -> LiteLLM teams: spend source and accessib
         .getByRole("row", { name: /Payments/ })
         .getByRole("cell", { name: "LiteLLM team" }),
     ).toBeVisible();
+    await expect(table.getByRole("row", { name: /Growth/ })).toHaveCount(0);
     await expect(
-      table
-        .getByRole("row", { name: /Growth/ })
-        .getByRole("cell", { name: "Sum of members" }),
+      page.getByRole("button", { name: "Members of Alpha" }),
     ).toBeVisible();
 
     await teamPicker(page).click();
@@ -235,5 +234,40 @@ test.describe("Management -> LiteLLM -> LiteLLM teams: spend source and accessib
         .filter((v) => v.impact === "serious" || v.impact === "critical")
         .map((v) => v.id),
     ).toEqual([]);
+  });
+
+  // LF1 UI review WARN 3 (Design System - Layout, Rule 40.6; D4a): the team
+  // picker open on the LiteLLM teams tab at both ends of the breakpoint range.
+  test("with the Team picker open the tab has no serious axe violation at 375 and no horizontal scroll at 1440", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    const noScroll = () =>
+      page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      );
+    await page.setViewportSize({ width: 375, height: 800 });
+    await open(page);
+    await teamPicker(page).click();
+    await expect(page.getByRole("option", { name: /Growth/ })).toBeVisible();
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => v.id),
+    ).toEqual([]);
+    await page.keyboard.press("Escape");
+    expect(await noScroll()).toBe(true);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await teamPicker(page).click();
+    await expect(page.getByRole("option", { name: /Growth/ })).toBeVisible();
+    expect(await noScroll()).toBe(true);
   });
 });

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { resolveUrlRange } from "@/lib/date-range";
 import { dateRangeSearchParams } from "@/lib/date-range-search-params";
-import { apiError } from "@/test/fakes/api-stubs";
+import { apiError, apiResponse } from "@/test/fakes/api-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { AuditSection } from "./AuditSection";
@@ -99,5 +99,51 @@ describe("AuditSection date range", () => {
       expect(seen.at(-1)?.searchParams.get("dateFrom")).toBe("2026-09-01"),
     );
     expect(seen.at(-1)?.searchParams.get("dateTo")).toBe("2026-09-10");
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - Audit, D-LF2; Design System -
+// Management pages (Audit, Gateway source): the client maps 403
+// OPERATION_UNAVAILABLE to the named Enterprise state; "LiteLLM unavailable"
+// is for a real outage (503 LITELLM_UNAVAILABLE) only.
+describe("AuditSection edition state (D-LF2)", () => {
+  function answer(response: () => Response) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(response())),
+    );
+  }
+
+  it("shows the named Enterprise state on 403 OPERATION_UNAVAILABLE, not LiteLLM unavailable", async () => {
+    answer(() =>
+      apiError(403, "OPERATION_UNAVAILABLE", "Not available on this edition"),
+    );
+    renderWithProviders(<Subject />, { searchParams: RANGE });
+    expect(
+      await screen.findByText("The LiteLLM audit log needs LiteLLM Enterprise"),
+    ).toBeTruthy();
+    expect(screen.queryByText("LiteLLM unavailable")).toBeNull();
+  });
+
+  it("still shows LiteLLM unavailable on a real outage (503 LITELLM_UNAVAILABLE)", async () => {
+    answer(() =>
+      apiError(503, "LITELLM_UNAVAILABLE", "LiteLLM is unavailable"),
+    );
+    renderWithProviders(<Subject />, { searchParams: RANGE });
+    expect(await screen.findByText("LiteLLM unavailable")).toBeTruthy();
+    expect(
+      screen.queryByText("The LiteLLM audit log needs LiteLLM Enterprise"),
+    ).toBeNull();
+  });
+
+  it("renders entries, with neither state, on a 200", async () => {
+    answer(() =>
+      apiResponse({
+        data: { items: [], page: 1, totalPages: 1, total: 0 },
+      }),
+    );
+    renderWithProviders(<Subject />, { searchParams: RANGE });
+    expect(await screen.findByText("No audit entries.")).toBeTruthy();
+    expect(screen.queryByText("LiteLLM unavailable")).toBeNull();
   });
 });

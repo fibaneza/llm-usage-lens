@@ -211,6 +211,13 @@ const DailyActivityResponse = z.object({
   results: z.array(Loose),
   metadata: Loose.default({}),
 });
+// docs/litellm/openapi.json types /user/info key rows as open objects, so a row
+// may carry no token. The token hash identifies a key; a row without one cannot
+// be shown or acted on, so it is left out and never fails the read (LF1 D-LF1).
+const UserKeyRows = z
+  .array(Loose)
+  .transform((rows) => rows.filter((row) => typeof row.token === "string"))
+  .pipe(z.array(KeyRow));
 const UserInfoResponse = z.object({
   user_id: z.string().nullish(),
   user_info: z
@@ -222,7 +229,7 @@ const UserInfoResponse = z.object({
       max_budget: z.number().nullish(),
     })
     .nullish(),
-  keys: z.array(KeyRow).default([]),
+  keys: UserKeyRows.default([]),
   teams: z.array(Loose).default([]),
 });
 const UserListResponse = z.object({

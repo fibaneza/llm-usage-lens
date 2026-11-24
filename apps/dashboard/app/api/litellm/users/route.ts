@@ -73,7 +73,6 @@ const UsersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(10_000).optional(),
   pageSize: z.coerce.number().int().min(1).max(25).optional(),
   team: IdParamSchema.optional(),
-  include: z.literal("links").optional(),
 });
 
 type Teams = Array<{ teamId: string; teamName: string }>;
@@ -96,6 +95,9 @@ export const GET = withRoute(async (request, _ctx, session) => {
   const pageSize = query.pageSize ?? USER_LINKS_PAGE_SIZE;
   const hidden = access.perUserCostHidden;
   const mayLink = await permitAdminOrOrgAdmin(request, session);
+  // Read per request, never cached (Rule 60.10).
+  const callerLitellmUserId =
+    (await getIdentityLink(session.user.oid))?.litellmUserId ?? null;
   const byLiteLLMId = new Map(access.linked.map((t) => [t.litellmTeamId, t]));
   const teamsOf = (ids: readonly string[] | null | undefined): Teams =>
     (ids ?? []).flatMap((id) => {
@@ -121,7 +123,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
     }
 
     requireEnabled(enabled, ["searchUsers"]);
-    if (access.orgWide && (query.q === undefined || query.include)) {
+    if (access.orgWide && query.q === undefined) {
       const result = await searchUsers({
         ...(query.q !== undefined ? { search: query.q } : {}),
         page,
@@ -226,6 +228,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
         pageSize,
         enabledOperations: enabled,
         mayLink,
+        callerLitellmUserId,
       }),
     );
   });

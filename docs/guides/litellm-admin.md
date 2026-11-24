@@ -106,7 +106,7 @@ dashboard, its CI or its AWS account. `$LITELLM` is the proxy base URL.
 /spend/logs/v2
 /models
 /global/spend/report
-/audit
+/audit                (Enterprise only)
 ```
 
 **Why the two wildcards (temporary, 2026-11-15).** LiteLLM 1.109.1 matches

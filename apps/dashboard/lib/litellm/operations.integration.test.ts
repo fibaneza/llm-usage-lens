@@ -432,6 +432,8 @@ const CASES: Case[] = [
   {
     name: "listProxyAuditLog",
     write: false,
+    env: { APP_ENV: "prod", LITELLM_ALLOWED_HOSTS: "litellm.test" },
+    fake: { edition: "enterprise" },
     run: (o) =>
       o.listProxyAuditLog!({
         startDate: D1,
@@ -1799,6 +1801,17 @@ describe("responses are Zod-parsed", () => {
     },
   );
 
+  // LiteLLM spec - Audit, D-LF2: GET /audit is Enterprise-only; on OSS it is
+  // refused by the edition gate (403 OPERATION_UNAVAILABLE) with no LiteLLM
+  // call, never read as an outage (LITELLM_UNAVAILABLE).
+  it("listProxyAuditLog on OSS is OPERATION_UNAVAILABLE with no call (Audit, D-LF2)", async () => {
+    const { ops } = await load();
+    await expect(
+      ops.listProxyAuditLog!({ startDate: D1, endDate: D2 }),
+    ).rejects.toMatchObject({ code: "OPERATION_UNAVAILABLE", status: 403 });
+    expect(fake.calls).toHaveLength(0);
+  });
+
   it("a user list missing its required fields is contract drift", async () => {
     fake.setHandler(() => ({ status: 200, body: { nope: true } }));
     const { ops } = await load();
@@ -1808,7 +1821,11 @@ describe("responses are Zod-parsed", () => {
   });
 
   it("the audit view drops before_value, updated_values and changed_by_api_key at parsing (Audit item 3)", async () => {
-    const { ops } = await load();
+    install({ edition: "enterprise" });
+    const { ops } = await load({
+      APP_ENV: "prod",
+      LITELLM_ALLOWED_HOSTS: "litellm.test",
+    });
     const result = await ops.listProxyAuditLog!({ startDate: D1, endDate: D2 });
     const text = JSON.stringify(result);
     expect(text).not.toContain("SECRET-HASH-SENTINEL");

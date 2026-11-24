@@ -267,6 +267,28 @@ describe("UserSearch selected user", () => {
     await pickAda();
     expect(await screen.findByText(/user not found/i)).toBeInTheDocument();
   });
+
+  // Design System - Management pages, LiteLLM users tab, D-LF1 and T-LF1: a
+  // user LiteLLM reports no usage for renders the usage section with "—" for
+  // the absent value and no error. The route answers `spend: null` then (the
+  // route's own test); a user under the Organisation cap has no `spend` key
+  // and keeps the "Hidden until ..." text (LD23).
+  it("a user with no reported usage shows an em dash for spend, no error and no $0 (D-LF1, T-LF1)", async () => {
+    stub((url) =>
+      url.pathname === "/api/litellm/users"
+        ? apiResponse({ data: USERS })
+        : apiResponse({
+            data: { ...DETAIL, spend: null, maxBudget: null, daily: [] },
+          }),
+    );
+    await pickAda();
+    const detail = await screen.findByRole("region", { name: /user usage/i });
+    expect(within(detail).queryByRole("alert")).toBeNull();
+    expect(within(detail).getByText("ada@example.test")).toBeInTheDocument();
+    expect(within(detail).getByText("\u2014")).toBeInTheDocument();
+    expect(detail).not.toHaveTextContent("$0");
+    expect(detail).not.toHaveTextContent(/hidden until/i);
+  });
 });
 
 // Source: docs/specs/2026-11-10-litellm.md - "Combined usage and My usage

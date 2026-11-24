@@ -4,6 +4,7 @@ import {
 } from "@llm-usage-lens/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { putIdentityLink } from "@/lib/data/access/identity-links";
 import { grantRole } from "@/lib/data/access/role-grants";
 import { ctxAt, ok } from "@/test/support/access-test-support";
 import { createFakeLiteLLM } from "@/test/fakes/fake-litellm";
@@ -561,21 +562,27 @@ describe("GET /api/litellm/users (no q): all users, one page on the server (D16a
     ).toMatchObject({ spend: 6 });
   });
 
-  it("q with include=links returns the list shape with link states (Design System - the search narrows the list and keeps the link column)", async () => {
+  // LiteLLM spec - Views as Management routes, D16a decision as amended by
+  // LF1 D-LF1 and D-LF4 (2026-11-18): `q` with include=links no longer returns
+  // the list shape; the search has its own response schema and the tab's
+  // table has no link-state column.
+  it("q with include=links answers the search shape like any q: no link states (D-LF1, D-LF4)", async () => {
     signInAs("admin");
-    const { body } = await get("?q=a1&include=links");
-    const rows = rowsOf(body);
+    const { res, body } = await get("?q=a1&include=links");
+    expect(res.status).toBe(200);
     expect(new URL(listCalls()[0]!.url).searchParams.get("search")).toBe("a1");
-    expect(rows.map((r) => r.key)).toEqual(["a1@company.com"]);
-    expect(rows[0]!.linkState).toBe("linked");
+    expect(LiteLLMUserSearchResponseSchema.safeParse(body.data).success).toBe(
+      true,
+    );
+    expect(UsersListResponseSchema.safeParse(body.data).success).toBe(false);
+    expect(body.data.users[0]).not.toHaveProperty("linkState");
   });
 
-  // Defect probe (not a route-only rule): the list tab sends `?page&pageSize&q`
-  // without include=links (components/manage/users/LiteLLMUsersList.tsx). The
-  // spec's tab lists "the D16 link state" for a searched list too (Design
-  // System - "LiteLLM users tab"), so that exact request must answer the list
-  // shape. Fails while the route returns the legacy search shape for it.
-  it("q without include=links keeps the plain search shape: no link states (LiteLLM spec - Views as Management routes, D16a decision: only include=links returns the list shape)", async () => {
+  // The tab sends ?page&pageSize&q. Item 3 (2026-11-18): the client parsed this
+  // answer with the list schema and failed on users[0].key, linkState,
+  // appUser, litellmUser and hasMore. The route's answer is the search shape,
+  // and its exported schema is the one the client must parse it with.
+  it("the tab's search request (?page&pageSize&q) answers the search shape that LiteLLMUserSearchResponseSchema parses (D-LF1, T-LF2)", async () => {
     signInAs("admin");
     const { res, body } = await get("?page=1&pageSize=25&q=ab");
     expect(res.status).toBe(200);
@@ -583,6 +590,69 @@ describe("GET /api/litellm/users (no q): all users, one page on the server (D16a
       true,
     );
     expect(UsersListResponseSchema.safeParse(body.data).success).toBe(false);
+  });
+
+  it.each([
+    ["admin", true],
+    ["orgAdmin", true],
+    ["auditor", false],
+  ] as const)(
+    "%s's search answer carries mayLink %s, so a search row can offer Reset spend only to who may write (RS2, D-LF1)",
+    async (who, expected) => {
+      signInAs(who);
+      const { body } = await get("?q=ab");
+      expect(LiteLLMUserSearchResponseSchema.parse(body.data).mayLink).toBe(
+        expected,
+      );
+    },
+  );
+
+  // Design System users tab LF1 decision (d), RS2 "Reset any LiteLLM user": a
+  // search row has no oid, so the answer names the caller's own LiteLLM user
+  // (from their stored identity link, per request) for the client to hide
+  // Reset spend on it. null when the caller has no link.
+  it("the search answer carries callerLitellmUserId: the caller's linked LiteLLM user, null without a link (LF1 (d), RS2)", async () => {
+    signInAs("admin");
+    const unlinked = await get("?q=ab");
+    expect(
+      (unlinked.body.data as { callerLitellmUserId?: unknown })
+        .callerLitellmUserId ?? null,
+    ).toBeNull();
+    ok(
+      await putIdentityLink(
+        {
+          oid: CALLERS.admin.oid,
+          usageIdentities: [CALLERS.admin.email],
+          aliases: [],
+          litellmUserId: "ab@company.com",
+          version: null,
+        },
+        ctxAt(undefined, "req-own-litellm"),
+      ),
+    );
+    const linked = await get("?q=ab");
+    expect(
+      (linked.body.data as { callerLitellmUserId?: unknown })
+        .callerLitellmUserId,
+    ).toBe("ab@company.com");
+  });
+
+  it("a Lead's search still drops rows outside its teams after the LiteLLM call and carries no cost under the cap, in the exported schema (T-LF2, LT21, LD23)", async () => {
+    await enterProd();
+    installFake(state, { ignoreTeamFilter: true });
+    signInAs("teamAdminA");
+    const { res, body } = await get("?q=company");
+    expect(res.status).toBe(200);
+    const parsed = LiteLLMUserSearchResponseSchema.parse(body.data);
+    expect(parsed.users.map((u) => u.userId).sort()).toEqual([
+      "a1@company.com",
+      "ab@company.com",
+      "mix@company.com",
+    ]);
+    for (const row of parsed.users) {
+      expect(row).not.toHaveProperty("spend");
+      expect(row).not.toHaveProperty("maxBudget");
+    }
   });
 
   it("a disabled searchUsers is 403 OPERATION_DISABLED before any LiteLLM call (LD19)", async () => {
@@ -659,7 +729,7 @@ describe("GET /api/litellm/users: mayLink (F1; Rule 50.4, Rule 60.10)", () => {
     expect(mayLinkOf(body)).toBe(true);
   });
 
-  it("the same flag rides the team list and the search-with-links shape", async () => {
+  it("the same flag rides the team list and the search", async () => {
     await seedMemberPeople();
     installMemberWritesFake(state);
     for (const [who, expected] of [
@@ -672,7 +742,7 @@ describe("GET /api/litellm/users: mayLink (F1; Rule 50.4, Rule 60.10)", () => {
       expect(mayLinkOf(team.body)).toBe(expected);
     }
     signInAs("auditor");
-    const search = await get("?q=company&include=links");
+    const search = await get("?q=company");
     expect(mayLinkOf(search.body)).toBe(false);
   });
 

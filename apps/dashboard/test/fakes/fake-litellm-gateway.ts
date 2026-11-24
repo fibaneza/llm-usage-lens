@@ -148,6 +148,8 @@ export function gatewayHandler(opts: GatewayFakeOptions = {}): FakeHandler {
           },
         };
       case "GET /audit":
+        if (edition !== "enterprise")
+          return { status: 403, body: { detail: "enterprise only" } };
         return {
           status: 200,
           body: {

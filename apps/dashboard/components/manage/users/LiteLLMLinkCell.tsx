@@ -391,6 +391,7 @@ export function LiteLLMLinkCell({
   canWrite,
   canCreate,
   onChanged,
+  showState = true,
 }: {
   subject: LinkSubject;
   link: LinkState;
@@ -398,6 +399,9 @@ export function LiteLLMLinkCell({
   // `createUser` is on and this edition creates users (OSS).
   canCreate: boolean;
   onChanged: () => void;
+  // false: the actions only; the state is shown elsewhere (LiteLLM users tab
+  // rows, Design System LF1 D-LF4).
+  showState?: boolean;
 }) {
   const [open, setOpen] = useState<Open>(null);
   const close = () => setOpen(null);
@@ -406,10 +410,14 @@ export function LiteLLMLinkCell({
     <div className="flex flex-col items-start gap-1.5">
       {link.state === "linked" ? (
         <>
-          <Badge variant="secondary">Linked</Badge>
-          <span className="text-muted-foreground text-xs break-all">
-            {link.litellmUserId}
-          </span>
+          {showState ? (
+            <>
+              <Badge variant="secondary">Linked</Badge>
+              <span className="text-muted-foreground text-xs break-all">
+                {link.litellmUserId}
+              </span>
+            </>
+          ) : null}
           {canWrite ? (
             <Button
               type="button"
@@ -425,10 +433,14 @@ export function LiteLLMLinkCell({
       ) : null}
       {link.state === "match" ? (
         <>
-          <Badge variant="outline">Match found</Badge>
-          <span className="text-muted-foreground text-xs break-all">
-            {link.email}
-          </span>
+          {showState ? (
+            <>
+              <Badge variant="outline">Match found</Badge>
+              <span className="text-muted-foreground text-xs break-all">
+                {link.email}
+              </span>
+            </>
+          ) : null}
           {canWrite ? (
             <Button
               type="button"
@@ -444,7 +456,9 @@ export function LiteLLMLinkCell({
       ) : null}
       {link.state === "none" ? (
         <>
-          <Badge variant="outline">No LiteLLM user with that email</Badge>
+          {showState ? (
+            <Badge variant="outline">No LiteLLM user with that email</Badge>
+          ) : null}
           {canWrite ? (
             <div className="flex flex-wrap gap-2">
               <Button

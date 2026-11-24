@@ -142,6 +142,51 @@ describe("the gateway registry matches the allowlist table", () => {
   });
 });
 
+// ---- Enterprise-only routes are pinned to the spec (LF1 D-LF2, LD10) ----
+
+describe("Enterprise-only routes match the spec (Audit item 3, D-LF2; allowlist table)", () => {
+  const specText = readFileSync(SPEC, "utf8");
+  const specLines = specText.split("\n");
+
+  it("the routes the code marks enterpriseOnly equal the allowlist-table rows marked Enterprise only", () => {
+    const fromSpec = specLines
+      .filter((l) => /^\| `\//.test(l) && !l.startsWith("| `/api/"))
+      .filter((l) => /Enterprise only/.test(l))
+      .map((l) => /^\| `([^`]+)`/.exec(l)?.[1])
+      .sort();
+    const fromCode = Object.values(LITELLM_OPERATIONS)
+      .flatMap((op) => op.routes)
+      .filter((r) => "enterpriseOnly" in r && r.enterpriseOnly)
+      .map((r) => r.template);
+    expect(fromSpec).toEqual([
+      "/audit",
+      "/global/spend/report",
+      "/key/{key}/regenerate",
+    ]);
+    expect([...new Set(fromCode)].sort()).toEqual(fromSpec);
+  });
+
+  it.each(["listProxyAuditLog", "getGlobalSpendReport"])(
+    "the operations table row for %s says Enterprise only",
+    (name) => {
+      const row = specLines.find((l) => l.startsWith(`| \`${name}\` |`));
+      expect(row, `operations row for ${name}`).toBeDefined();
+      expect(row).toMatch(/Enterprise only/);
+    },
+  );
+
+  it("the runbook allowed_routes list marks /audit Enterprise only", () => {
+    const text = readFileSync(RUNBOOK, "utf8");
+    const from = text.search(/## 3\. `allowed_routes` \(must equal/);
+    expect(from).toBeGreaterThanOrEqual(0);
+    const line = text
+      .slice(from)
+      .split("\n")
+      .find((l) => /^\/audit(\s|$)/.test(l));
+    expect(line).toMatch(/^\/audit\s+\(.*Enterprise only.*\)\s*$/);
+  });
+});
+
 // ---- allowed_routes = runbook = spec = gateway path set (LT3) ----
 
 function fencedAfter(file: string, heading: RegExp): string[] {

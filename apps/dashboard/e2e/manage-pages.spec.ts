@@ -268,6 +268,38 @@ test.describe("Management -> Audit", () => {
     await expectNoBlockingViolations(page);
   });
 
+  // Design System - Management pages, Audit, LF1 (the gateway source on an
+  // OSS LiteLLM, whose audit read is enterprise-only): a 403
+  // OPERATION_UNAVAILABLE says so, never "LiteLLM unavailable"; LF1 UI review
+  // WARN 1, with axe at 375.
+  test("the Gateway source on a LiteLLM without the audit log says it needs Enterprise, not 'unavailable', axe-clean at 375", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await mockApi(page);
+    await page.route(/\/api\/litellm\/audit(\?|$)/, (route) =>
+      route.fulfill({
+        status: 403,
+        json: {
+          error: {
+            code: "OPERATION_UNAVAILABLE",
+            message: "Not available on this LiteLLM edition",
+          },
+        },
+      }),
+    );
+    await page.setViewportSize({ width: 375, height: 800 });
+    await open(page, "/dashboard/manage/audit?source=gateway");
+
+    const audit = page.getByRole("region", { name: "LiteLLM audit" });
+    await expect(
+      audit.getByText("The LiteLLM audit log needs LiteLLM Enterprise"),
+    ).toBeVisible();
+    await expect(page.getByText(/LiteLLM unavailable/i)).toHaveCount(0);
+    await expectNoBlockingViolations(page);
+  });
+
   test("an org admin gets the 404 (neither audit source is readable by it)", async ({
     page,
     context,

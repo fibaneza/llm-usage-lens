@@ -482,3 +482,118 @@ describe("GET /api/litellm/users/[litellmUserId] - combined (L6)", () => {
     expect((await detail()).body.data.combined.bedrockDirect).toBe(21);
   });
 });
+
+// Source: Design System - Management pages, LiteLLM users tab, D-LF1 (a field
+// LiteLLM may omit is optional or nullable in the schema, one exported schema
+// per route response) and T-LF1 (a LiteLLM user with no usage fields renders
+// the usage section with "—"). The bodies are what UserInfoResponse in
+// docs/litellm/openapi.json allows: user_id, user_info, keys and teams are
+// required, user_info is an open object or null, so spend, max_budget and
+// user_email can all be missing.
+describe("GET /api/litellm/users/[litellmUserId] - a user whose /user/info omits usage fields (D-LF1, T-LF1)", () => {
+  const ID = "lone@company.com";
+  const BODIES: Array<[string, unknown]> = [
+    [
+      "user_info with only the id and role",
+      {
+        user_id: ID,
+        user_info: { user_id: ID, user_role: "internal_user" },
+        keys: [],
+        teams: [],
+      },
+    ],
+    ["user_info empty", { user_id: ID, user_info: {}, keys: [], teams: [] }],
+    ["user_info null", { user_id: ID, user_info: null, keys: [], teams: [] }],
+    [
+      "user_id null and user_info null",
+      { user_id: null, user_info: null, keys: [], teams: [] },
+    ],
+  ];
+
+  it.each(BODIES)(
+    "%s: 200, parses with the exported detail schema, no invented zero spend",
+    async (_name, upstream) => {
+      installFake(state, { userInfoBodies: { [ID]: upstream } });
+      signInAs("admin");
+      const { res, body } = await get(ID);
+      expect(res.status).toBe(200);
+      const { LiteLLMUserDetailResponseSchema } =
+        await import("@llm-usage-lens/shared");
+      const parsed = LiteLLMUserDetailResponseSchema.parse(body.data);
+      expect(parsed.userId).toBe(ID);
+      expect(parsed.email).toBe(ID);
+      expect(parsed.spend).toBeNull();
+    },
+  );
+
+  // openapi.json types `keys` and `teams` as arrays of unconstrained items, so
+  // a key row without `token` or a team row without `team_id` is a valid reply
+  // and the detail, which uses neither, must still answer. Today the gateway
+  // schema requires `token` (lib/litellm/operations.ts, KeyRow), so such a
+  // reply fails with "expected string, received undefined" at keys[0].token.
+  it("keys and teams rows with no token or team id do not fail the read; spend and budget come through", async () => {
+    installFake(state, {
+      userInfoBodies: {
+        [ID]: {
+          user_id: ID,
+          user_info: { user_id: ID, spend: 4.5, max_budget: 9 },
+          keys: [{ key_alias: "no-token-field" }],
+          teams: [{ team_alias: "no-team-id-field" }],
+        },
+      },
+    });
+    signInAs("admin");
+    const { res, body } = await get(ID);
+    expect(res.status).toBe(200);
+    expect(body.data).toMatchObject({ spend: 4.5, maxBudget: 9 });
+  });
+
+  // Source: LiteLLM spec - contract drift is a Zod-parse failure on an
+  // allowlisted field (503 LITELLM_UNAVAILABLE, never loosened); Design System
+  // users tab LF1 decision (a) drops only a row with no token (Q-B1).
+  it("a key row WITH a token but a malformed allowlisted field is contract drift, 503 LITELLM_UNAVAILABLE (Q-B1)", async () => {
+    installFake(state, {
+      userInfoBodies: {
+        [ID]: {
+          user_id: ID,
+          user_info: { user_id: ID, spend: 4.5, max_budget: 9 },
+          keys: [{ token: "a".repeat(64), blocked: "yes" }],
+          teams: [],
+        },
+      },
+    });
+    signInAs("admin");
+    const { res } = await get(ID);
+    await expectError(res, 503, "LITELLM_UNAVAILABLE");
+  });
+
+  it("a token-less malformed row is dropped while a valid keyed row stays: the read succeeds (decision (a), Q-B1)", async () => {
+    installFake(state, {
+      userInfoBodies: {
+        [ID]: {
+          user_id: ID,
+          user_info: { user_id: ID, spend: 4.5, max_budget: 9 },
+          keys: [{ blocked: "yes" }, { key_alias: "no-token" }],
+          teams: [],
+        },
+      },
+    });
+    signInAs("admin");
+    const { res, body } = await get(ID);
+    expect(res.status).toBe(200);
+    expect(body.data).toMatchObject({ spend: 4.5 });
+  });
+
+  it("the same user under the Organisation cap still answers identity only (LD23)", async () => {
+    await enterProd();
+    installFake(state, {
+      userInfoBodies: {
+        [ID]: { user_id: ID, user_info: null, keys: [], teams: [] },
+      },
+    });
+    signInAs("admin");
+    const { res, body } = await get(ID);
+    expect(res.status).toBe(200);
+    expect(body.data).not.toHaveProperty("spend");
+  });
+});

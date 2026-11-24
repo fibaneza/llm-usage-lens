@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { apiError, apiResponse } from "@/test/fakes/api-stubs";
@@ -43,6 +44,65 @@ function stub(items: unknown[]) {
       }
       if (url.pathname === "/api/litellm/team-links") {
         return Promise.resolve(apiResponse({ data: { items } }));
+      }
+      if (url.pathname === "/api/me") {
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              oid: "oid-me",
+              email: "me@example.com",
+              roles: ["internal-admin"],
+              usageIdentities: [],
+              global: true,
+              memberTeamId: null,
+              memberTeamVisible: false,
+              teamScopes: [],
+              departmentScopes: [],
+            },
+          }),
+        );
+      }
+      if (url.pathname === "/api/litellm/org") {
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              configured: true,
+              totals: { spend: 1 },
+              daily: [],
+              litellmTeams: [
+                {
+                  litellmTeamId: "ll-team-shared",
+                  alias: "Shared platform",
+                  spend: 4,
+                  maxBudget: null,
+                  memberCount: 1,
+                  linkedAppTeam: null,
+                },
+              ],
+              appTeams: [],
+              enabledOperations: [],
+            },
+          }),
+        );
+      }
+      if (url.pathname === "/api/litellm/proxy-teams/ll-team-shared/members") {
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              litellmTeamId: "ll-team-shared",
+              enabledOperations: ["getTeam", "resetMemberSpend"],
+              items: [
+                {
+                  userId: "ll-zed",
+                  email: "zed@example.com",
+                  spend: 4,
+                  maxBudget: null,
+                  person: null,
+                },
+              ],
+            },
+          }),
+        );
       }
       return Promise.resolve(apiError(404, "NOT_FOUND"));
     }),
@@ -93,4 +153,32 @@ describe("LiteLLMUsersSection", () => {
     renderWithProviders(<LiteLLMUsersSection />);
     expect(screen.queryByRole("status")).toBeNull();
   });
+
+  // LF1 F1 (Design System - LiteLLM users tab, LF1 decisions): the section
+  // passes the page's server capability on as `canReset`, so Reset spend shows
+  // on the members of a LiteLLM team with no app team (RS2).
+  it.each([
+    [true, true],
+    [false, false],
+  ])(
+    "canReset=%s reaches the users list: Reset spend on a proxy-team member is %s",
+    async (canReset, shown) => {
+      stub([]);
+      const user = userEvent.setup();
+      renderWithProviders(<LiteLLMUsersSection canReset={canReset} />);
+      await user.click(
+        await screen.findByRole("radio", { name: "Members of one team" }),
+      );
+      await user.selectOptions(
+        await screen.findByLabelText("Team"),
+        "Shared platform",
+      );
+      await screen.findByText("zed@example.com");
+      expect(
+        screen.queryAllByRole("button", {
+          name: "Reset spend for zed@example.com",
+        }),
+      ).toHaveLength(shown ? 1 : 0);
+    },
+  );
 });

@@ -15,19 +15,22 @@ import {
 import { Empty, Unavailable } from "./LiteLLMSection";
 import { LiteLLMAuditResponseSchema } from "@llm-usage-lens/shared";
 import { formatSydneyTime } from "./sydney-time";
-import { useLiteLLMQuery, useUrlRange } from "./use-litellm-query";
+import { useLiteLLMEditionQuery, useUrlRange } from "./use-litellm-query";
 
 // LiteLLM's own audit entries: field names only, never values (LiteLLM spec --
 // Audit). "via dashboard" marks entries the dashboard made.
 export function AuditSection() {
   const isMobile = useIsMobile();
   const { keyParts, query } = useUrlRange();
-  const result = useLiteLLMQuery(
+  const result = useLiteLLMEditionQuery(
     ["audit", ...keyParts],
     `/api/litellm/audit?${query}`,
     LiteLLMAuditResponseSchema,
   );
   if (result.status === "unavailable") return <Unavailable />;
+  if (result.status === "needs-enterprise") {
+    return <Empty>The LiteLLM audit log needs LiteLLM Enterprise</Empty>;
+  }
   const { items } = result.data;
   if (items.length === 0) return <Empty>No audit entries.</Empty>;
   return (

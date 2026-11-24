@@ -10,6 +10,8 @@ import {
   LiteLLMProxyTeamMembersResponseSchema,
   LiteLLMSpendLogsResponseSchema,
   LiteLLMTeamDetailResponseSchema,
+  LiteLLMUserDetailResponseSchema,
+  LiteLLMUserSearchResponseSchema,
   MemberSumCoverageSchema,
   MemberSumSchema,
   SpendSourceSchema,
@@ -664,5 +666,52 @@ describe("LiteLLMAuditResponseSchema", () => {
     expect(!r.success || !JSON.stringify(r.data).includes("sk-secret")).toBe(
       true,
     );
+  });
+});
+
+// Source: Design System - Management pages, LiteLLM users tab, D-LF1 (a field
+// LiteLLM may omit is optional or nullable, and an absent value renders "—";
+// one exported schema per route response) and T-LF1/T-LF2; RS2 (Reset spend
+// on every row) needs the caller's mayLink on the search rows too.
+describe("LiteLLMUserDetailResponseSchema: a user LiteLLM reports no usage for (D-LF1, T-LF1)", () => {
+  const base = {
+    userId: "u-1",
+    email: "u1@example.test",
+    enabledOperations: ["getUser"],
+  };
+  it.each([
+    ["spend null", { ...base, spend: null, maxBudget: null }],
+    ["spend and budget absent", base],
+    ["spend null with a daily list", { ...base, spend: null, daily }],
+  ])("accepts %s", (_name, value) => {
+    expect(LiteLLMUserDetailResponseSchema.safeParse(value).success).toBe(true);
+  });
+
+  it("keeps null apart from absent: null spend stays null (shown as an em dash), absent stays absent (hidden by the cap, LD23)", () => {
+    const absent = LiteLLMUserDetailResponseSchema.parse(base);
+    const none = LiteLLMUserDetailResponseSchema.parse({
+      ...base,
+      spend: null,
+    });
+    expect(absent).not.toHaveProperty("spend");
+    expect(none.spend).toBeNull();
+  });
+});
+
+describe("LiteLLMUserSearchResponseSchema (D-LF1, T-LF2)", () => {
+  const row = {
+    userId: "u-1",
+    email: "u1@example.test",
+    spend: 1,
+    maxBudget: null,
+    teams: [],
+  };
+  const body = { users: [row], page: 1, pageSize: 25, enabledOperations: [] };
+
+  it("carries the server-computed mayLink the route returns, false when absent (fail closed)", () => {
+    expect(
+      LiteLLMUserSearchResponseSchema.parse({ ...body, mayLink: true }).mayLink,
+    ).toBe(true);
+    expect(LiteLLMUserSearchResponseSchema.parse(body).mayLink).toBe(false);
   });
 });

@@ -74,7 +74,46 @@ type Options = {
   // undefined omits the field from the response (fail closed).
   mayLink?: boolean | undefined;
   memberships?: unknown[];
+  // Rows GET /api/litellm/users?q= answers: the search shape, as the route
+  // returns it (LiteLLMUserSearchResponseSchema), not the list shape.
+  search?: unknown[];
+  // GET /api/litellm/org: the LiteLLM teams (listTeams), linked or not.
+  litellmTeams?: unknown[];
+  // GET /api/litellm/proxy-teams/[id]/members items.
+  proxyMembers?: unknown[];
+  // enabledOperations the proxy-team members read answers (default: member reset on).
+  proxyOps?: string[];
+  detail?: unknown;
+  // The caller's own LiteLLM user id, as the search response carries it
+  // (LiteLLMUserSearchResponseSchema.callerLitellmUserId; null = not linked).
+  callerLitellmUserId?: string | null;
 };
+
+const SEARCH_ROW = {
+  userId: "ll-ada",
+  email: "ada@example.com",
+  spend: 12.5,
+  maxBudget: 100,
+  teams: [{ teamId: "t1", teamName: "Payments" }],
+};
+const LITELLM_TEAMS = [
+  {
+    litellmTeamId: "ll-team-alpha",
+    alias: "Alpha",
+    spend: 10,
+    maxBudget: null,
+    memberCount: 3,
+    linkedAppTeam: { teamId: "team-a", teamName: "Team A" },
+  },
+  {
+    litellmTeamId: "ll-team-shared",
+    alias: "Shared platform",
+    spend: 4,
+    maxBudget: null,
+    memberCount: 2,
+    linkedAppTeam: null,
+  },
+];
 
 function stub(options: Options = { mayLink: true }) {
   const mayLink = "mayLink" in options ? options.mayLink : true;
@@ -92,7 +131,77 @@ function stub(options: Options = { mayLink: true }) {
           apiResponse({
             data: {
               departments: [],
-              teams: [{ id: "team-a", name: "Team A", departmentId: "d" }],
+              teams: [
+                { id: "team-a", name: "Team A", departmentId: "d" },
+                { id: "team-u", name: "Team U", departmentId: "d" },
+              ],
+            },
+          }),
+        );
+      }
+      if (url.pathname === "/api/litellm/org") {
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              configured: true,
+              totals: { spend: 14 },
+              daily: [],
+              litellmTeams: options.litellmTeams ?? LITELLM_TEAMS,
+              appTeams: [
+                {
+                  teamId: "team-u",
+                  teamName: "Team U",
+                  spendSource: "member-sum",
+                  spend: 1,
+                },
+              ],
+              enabledOperations: [],
+            },
+          }),
+        );
+      }
+      if (/^\/api\/litellm\/proxy-teams\/[^/]+\/members$/.test(url.pathname)) {
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              litellmTeamId: url.pathname.split("/")[4],
+              enabledOperations: options.proxyOps ?? [
+                "getTeam",
+                "resetMemberSpend",
+              ],
+              items: options.proxyMembers ?? [],
+            },
+          }),
+        );
+      }
+      if (
+        url.pathname === "/api/litellm/users" &&
+        url.searchParams.has("q") &&
+        !url.searchParams.has("team")
+      ) {
+        return Promise.resolve(
+          apiResponse({
+            data: {
+              users: options.search ?? [SEARCH_ROW],
+              page: Number(url.searchParams.get("page") ?? 1),
+              pageSize: 25,
+              callerLitellmUserId: options.callerLitellmUserId ?? null,
+              enabledOperations: options.enabledOperations ?? ["createUser"],
+              ...(mayLink === undefined ? {} : { mayLink }),
+            },
+          }),
+        );
+      }
+      if (/^\/api\/litellm\/users\/[^/]+$/.test(url.pathname)) {
+        return Promise.resolve(
+          apiResponse({
+            data: options.detail ?? {
+              userId: url.pathname.split("/")[4],
+              email: "ada@example.com",
+              spend: 12.5,
+              maxBudget: 100,
+              daily: [],
+              enabledOperations: [],
             },
           }),
         );
@@ -121,6 +230,7 @@ function stub(options: Options = { mayLink: true }) {
   );
   return {
     listUrls: () => urls.filter((u) => u.pathname === "/api/litellm/users"),
+    urls,
   };
 }
 
@@ -154,7 +264,7 @@ describe("LiteLLMUsersList (D16a)", () => {
     );
   });
 
-  it("Members of one team asks for that team only once one is chosen", async () => {
+  it("Members of one team asks for that team only once one is chosen (D-LF3: a linked LiteLLM team asks by its app team)", async () => {
     const calls = stub();
     renderWithProviders(<LiteLLMUsersList />);
     await screen.findByText("Ada Lovelace");
@@ -165,7 +275,7 @@ describe("LiteLLMUsersList (D16a)", () => {
     expect(
       await screen.findByText("Choose a team to list its members"),
     ).toBeInTheDocument();
-    await user.selectOptions(await screen.findByLabelText("Team"), "team-a");
+    await user.selectOptions(await screen.findByLabelText("Team"), "Alpha");
     await vi.waitFor(() =>
       expect(
         calls.listUrls().some((u) => u.searchParams.get("team") === "team-a"),
@@ -245,14 +355,10 @@ describe("LiteLLMUsersList link controls (D16)", () => {
   it.each([
     ["mayLink false", false],
     ["mayLink absent (fail closed)", undefined],
-  ])("%s: states shown, no link control", async (_n, mayLink) => {
+  ])("%s: no link control", async (_n, mayLink) => {
     stub({ mayLink, me: { roles: ["internal-admin"] } });
     renderWithProviders(<LiteLLMUsersList />);
     await screen.findByText("Ada Lovelace");
-    expect(screen.getByText("Linked")).toBeInTheDocument();
-    expect(
-      screen.getByText("No LiteLLM user with that email"),
-    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /unlink/i })).toBeNull();
     expect(
       screen.queryByRole("button", { name: /link to an existing/i }),
@@ -266,9 +372,6 @@ describe("LiteLLMUsersList link controls (D16)", () => {
     stub({ users: [ROW_OWN], mayLink: true });
     renderWithProviders(<LiteLLMUsersList />);
     await screen.findByText("Me Myself");
-    expect(
-      screen.getByText("No LiteLLM user with that email"),
-    ).toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: /link/i })).toEqual([]);
   });
 
@@ -517,5 +620,459 @@ describe("Reset spend row action (RS1)", () => {
     } finally {
       mobile.on = false;
     }
+  });
+});
+
+// Design System - Management pages, LiteLLM users tab, D-LF1 and T-LF2: the
+// tab's search has its own response shape (LiteLLMUserSearchResponseSchema)
+// and the client parses it with that schema. A search row has no key,
+// linkState, appUser or litellmUser, and the page has no hasMore. RS2: Reset
+// spend stays on every row with a LiteLLM user, and LD23: no cost figure under
+// the Organisation cap.
+describe("LiteLLMUsersList search (D-LF1, T-LF2)", () => {
+  const search = async (text = "ad") => {
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    await user.type(
+      screen.getByRole("searchbox", { name: /search users/i }),
+      text,
+    );
+  };
+
+  it("renders the rows of a search response with no error (the route answers the search shape for ?q=)", async () => {
+    const calls = stub();
+    await search();
+    const row = (
+      await screen.findByRole(
+        "button",
+        { name: "ada@example.com" },
+        { timeout: 3000 },
+      )
+    ).closest("tr");
+    expect(row).not.toBeNull();
+    expect(row).toHaveTextContent("$12.50");
+    expect(row).toHaveTextContent("Payments");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(calls.listUrls().some((u) => u.searchParams.get("q") === "ad")).toBe(
+      true,
+    );
+  });
+
+  it("keeps Reset spend on a search row for a caller who may write (RS2)", async () => {
+    stub({
+      enabledOperations: ["createUser", "resetUserSpend"],
+      mayLink: true,
+    });
+    await search();
+    expect(
+      await screen.findByRole(
+        "button",
+        { name: "Reset spend for ada@example.com" },
+        { timeout: 3000 },
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // Design System users tab LF1 decision (d) and RS2 "Reset any LiteLLM
+  // user": a search row has no oid, so the caller's own LiteLLM user is
+  // matched by the search response's callerLitellmUserId; list and proxy-team
+  // rows already hide Reset on the caller's own row.
+  it("hides Reset spend on the caller's own LiteLLM user in search results and keeps it on others (LF1 (d), RS2)", async () => {
+    stub({
+      enabledOperations: ["createUser", "resetUserSpend"],
+      mayLink: true,
+      callerLitellmUserId: "ll-me",
+      search: [
+        { ...SEARCH_ROW, userId: "ll-me", email: "me@example.com" },
+        SEARCH_ROW,
+      ],
+    });
+    await search();
+    expect(
+      await screen.findByRole(
+        "button",
+        { name: "Reset spend for ada@example.com" },
+        { timeout: 3000 },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "me@example.com" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Reset spend for me@example.com" }),
+    ).toBeNull();
+  });
+
+  it("shows no Reset spend on a search row when the response says the caller may not write (RS2; fail closed)", async () => {
+    stub({
+      enabledOperations: ["createUser", "resetUserSpend"],
+      mayLink: false,
+    });
+    await search();
+    await screen.findByRole(
+      "button",
+      { name: "ada@example.com" },
+      { timeout: 3000 },
+    );
+    expect(screen.queryByRole("button", { name: /reset spend/i })).toBeNull();
+  });
+
+  it("shows no cost under the Organisation cap: a search row without spend reads no figure and no $0 (LD23)", async () => {
+    stub({
+      search: [{ userId: "ll-ada", email: "ada@example.com", teams: [] }],
+    });
+    await search();
+    const row = (
+      await screen.findByRole(
+        "button",
+        { name: "ada@example.com" },
+        { timeout: 3000 },
+      )
+    ).closest("tr");
+    expect(row).not.toHaveTextContent(/\$/);
+  });
+});
+
+// Design System - LiteLLM users tab, D-LF4 and T-LF5: the table has no
+// linked-account column; each row keeps its buttons (Link or Unlink for the
+// roles that may, never on one's own row; RS2's Reset spend on every row
+// with a LiteLLM user); the linked account and its state are in the selected
+// user's detail.
+describe("LiteLLMUsersList without a linked-account column (D-LF4, T-LF5)", () => {
+  const ROW_MATCH_SELECTABLE = {
+    ...ROW_NONE,
+    key: "oid-cy",
+    linkState: "match",
+    appUser: { ...ROW_NONE.appUser, oid: "oid-cy", displayName: "Cy Young" },
+    litellmUser: {
+      userId: "ll-cy",
+      email: "cy@example.com",
+      spend: 1,
+      maxBudget: null,
+      teams: [],
+    },
+  };
+  const ROW_ONLY = {
+    key: "ll-zed",
+    linkState: "unlinked",
+    appUser: null,
+    litellmUser: {
+      userId: "ll-zed",
+      email: "zed@example.com",
+      spend: 1,
+      maxBudget: null,
+      teams: [],
+    },
+  };
+  const ON = ["createUser", "resetMemberSpend", "resetUserSpend"];
+  const STATES = ["Linked", "Match found", "No LiteLLM user with that email"];
+
+  it("has no Link column and no link-state text in any row, and keeps Unlink, Link and Reset spend", async () => {
+    stub({ users: [ROW_LINKED, ROW_NONE], enabledOperations: ON });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    const table = screen.getByRole("table");
+    for (const header of within(table).getAllByRole("columnheader")) {
+      expect(header).not.toHaveTextContent(/link/i);
+    }
+    for (const text of STATES) {
+      expect(within(table).queryByText(text)).toBeNull();
+    }
+    expect(
+      within(table).getByRole("button", { name: /unlink/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(table).getByRole("button", {
+        name: "Link to an existing LiteLLM user",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(table).getByRole("button", {
+        name: "Reset spend for Ada Lovelace",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("an auditor's rows (no write) carry no link-state text and no button at all", async () => {
+    stub({
+      users: [ROW_LINKED, ROW_NONE],
+      enabledOperations: ON,
+      mayLink: false,
+    });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    const table = screen.getByRole("table");
+    expect(
+      within(table).queryAllByRole("button", { name: /link|reset/i }),
+    ).toEqual([]);
+    for (const text of STATES) {
+      expect(within(table).queryByText(text)).toBeNull();
+    }
+  });
+
+  it("the stacked card layout below md has no link-state text either", async () => {
+    mobile.on = true;
+    try {
+      stub({ users: [ROW_LINKED, ROW_NONE], enabledOperations: ON });
+      renderWithProviders(<LiteLLMUsersList />);
+      const list = await screen.findByRole("list", { name: "LiteLLM users" });
+      for (const text of STATES) {
+        expect(within(list).queryByText(text)).toBeNull();
+      }
+      expect(
+        within(list).getByRole("button", {
+          name: "Reset spend for Ada Lovelace",
+        }),
+      ).toBeInTheDocument();
+    } finally {
+      mobile.on = false;
+    }
+  });
+
+  it.each([
+    ["linked", ROW_LINKED, "Ada Lovelace", "Linked"],
+    ["a match", ROW_MATCH_SELECTABLE, "Cy Young", "Match found"],
+    [
+      "a LiteLLM user with no app user",
+      ROW_ONLY,
+      null,
+      "Not linked to an app user",
+    ],
+  ] as const)(
+    "selecting %s shows the linked account and its state in the detail, outside the table",
+    async (_name, row, person, state) => {
+      stub({ users: [row] });
+      const user = userEvent.setup();
+      renderWithProviders(<LiteLLMUsersList />);
+      const table = await screen.findByRole("table");
+      expect(within(table).queryByText(state)).toBeNull();
+      const opener = within(table).getByRole("button", {
+        name: person ?? row.litellmUser.email,
+      });
+      await user.click(opener);
+      const shown = await screen.findAllByText(state);
+      expect(shown.some((el) => !el.closest("table"))).toBe(true);
+      if (person !== null) {
+        expect(
+          screen.getAllByText(person).some((el) => !el.closest("table")),
+        ).toBe(true);
+      }
+    },
+  );
+});
+
+// Design System - LiteLLM users tab, D-LF3: "Members of one team" lists the
+// teams that exist in LiteLLM (listTeams, linked or not); an app team with no
+// LiteLLM team is absent. A linked team lists through its app team (the stored
+// link); a LiteLLM team with no app team lists its members through RS2's
+// GET /api/litellm/proxy-teams/[litellmTeamId]/members.
+describe("LiteLLMUsersList team picker (D-LF3, T-LF4)", () => {
+  const openPicker = async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    await user.click(
+      screen.getByRole("radio", { name: "Members of one team" }),
+    );
+    return { user, picker: await screen.findByLabelText("Team") };
+  };
+
+  it("lists only LiteLLM teams, linked or not; an app team with no LiteLLM team is absent", async () => {
+    stub();
+    const { picker } = await openPicker();
+    const labels = within(picker)
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(labels).toEqual(["Choose a team", "Alpha", "Shared platform"]);
+    expect(within(picker).queryByRole("option", { name: "Team U" })).toBeNull();
+  });
+
+  it("a LiteLLM team with no app team lists its members through the proxy-team read, never through ?team=", async () => {
+    const calls = stub({
+      proxyMembers: [
+        {
+          userId: "ll-zed",
+          email: "zed@example.com",
+          spend: 4,
+          maxBudget: null,
+          person: null,
+        },
+      ],
+    });
+    const { user, picker } = await openPicker();
+    await user.selectOptions(picker, "Shared platform");
+    expect(await screen.findByText("zed@example.com")).toBeInTheDocument();
+    expect(
+      calls.urls.some(
+        (u) => u.pathname === "/api/litellm/proxy-teams/ll-team-shared/members",
+      ),
+    ).toBe(true);
+    expect(calls.listUrls().some((u) => u.searchParams.has("team"))).toBe(
+      false,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+// Design System - LiteLLM users tab, LF1 F1 (agent decision 2026-11-24):
+// *Reset any LiteLLM user* (RS2) puts Reset spend on every row of the table,
+// including the members of a LiteLLM team with no app team. The members read
+// carries no write flag, so the page passes the server capability as the prop
+// `canReset` (as the LiteLLM teams table gets `canEdit`): true for admin and
+// org-admin, false for the auditor. Link and Unlink stay absent there (no app
+// identity on those rows); never on the caller's own row (Access Control -
+// LiteLLM user links); absent when neither reset operation is on (R1).
+describe("LiteLLMUsersList Reset spend in a LiteLLM team with no app team (LF1 F1, RS2)", () => {
+  const MEMBERS = [
+    {
+      userId: "ll-zed",
+      email: "zed@example.com",
+      spend: 4,
+      maxBudget: null,
+      person: null,
+    },
+    {
+      userId: "ll-me",
+      email: "me@example.com",
+      spend: 1,
+      maxBudget: null,
+      person: { oid: "oid-me", name: "Me Myself" },
+    },
+  ];
+
+  const openShared = async (
+    props: { canReset?: boolean },
+    proxyOps?: string[],
+  ) => {
+    stub({ proxyMembers: MEMBERS, ...(proxyOps ? { proxyOps } : {}) });
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMUsersList {...props} />);
+    await screen.findByText("Ada Lovelace");
+    await user.click(
+      screen.getByRole("radio", { name: "Members of one team" }),
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Team"),
+      "Shared platform",
+    );
+    await screen.findByText("zed@example.com");
+  };
+
+  it.each([
+    ["resetMemberSpend", ["getTeam", "resetMemberSpend"]],
+    ["resetUserSpend", ["getTeam", "resetUserSpend"]],
+    ["both", ["getTeam", "resetMemberSpend", "resetUserSpend"]],
+  ])(
+    "canReset with %s on: Reset spend on each member row, none on the caller's own row, no Link or Unlink (RS2, R1)",
+    async (_n, ops) => {
+      await openShared({ canReset: true }, ops);
+      expect(
+        screen.getByRole("button", { name: "Reset spend for zed@example.com" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /reset spend for me@example/i }),
+      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /link/i })).toBeNull();
+    },
+  );
+
+  it("canReset with both reset operations off: no Reset spend (absent, never dead; R1)", async () => {
+    await openShared({ canReset: true }, ["getTeam"]);
+    expect(screen.queryByRole("button", { name: /reset spend/i })).toBeNull();
+  });
+
+  it.each([
+    ["canReset false (auditor)", { canReset: false }],
+    ["canReset absent (fail closed)", {}],
+  ])("%s: no Reset spend on any member row (RS2)", async (_n, props) => {
+    await openShared(props);
+    expect(screen.queryByRole("button", { name: /reset spend/i })).toBeNull();
+  });
+
+  it("the stacked card layout below md has Reset spend too (RS2)", async () => {
+    mobile.on = true;
+    try {
+      await openShared({ canReset: true });
+      const list = screen.getByRole("list", { name: "LiteLLM users" });
+      expect(
+        within(list).getByRole("button", {
+          name: "Reset spend for zed@example.com",
+        }),
+      ).toBeInTheDocument();
+    } finally {
+      mobile.on = false;
+    }
+  });
+});
+
+// Design System - LiteLLM users tab, LF1 F2 (agent decision 2026-11-24, the
+// users-tab wording): an empty value reads "\u2014" in the list rows, the
+// cards and the detail (D-LF1 uses the same dash for absent spend); never "-".
+describe("LiteLLMUsersList empty value is an em dash (LF1 F2, D-LF1)", () => {
+  const ROW_BARE = {
+    key: "ll-zed",
+    linkState: "unlinked",
+    appUser: null,
+    litellmUser: {
+      userId: "ll-zed",
+      email: "zed@example.com",
+      spend: 1,
+      maxBudget: null,
+      teams: [],
+    },
+  };
+  const cellTexts = (root: HTMLElement) =>
+    within(root)
+      .getAllByRole("cell")
+      .map((c) => c.textContent?.trim());
+
+  it("a row with no teams and an email equal to its name shows \u2014 in those cells, never a hyphen", async () => {
+    stub({ users: [ROW_BARE] });
+    renderWithProviders(<LiteLLMUsersList />);
+    const row = (await screen.findByText("zed@example.com")).closest("tr");
+    expect(row).not.toBeNull();
+    const texts = cellTexts(row as HTMLElement);
+    expect(texts).not.toContain("-");
+    expect(texts.filter((t) => t === "\u2014")).toHaveLength(2);
+  });
+
+  it("the stacked card shows \u2014 for no teams and the same email, never a hyphen", async () => {
+    mobile.on = true;
+    try {
+      stub({ users: [ROW_BARE] });
+      renderWithProviders(<LiteLLMUsersList />);
+      const list = await screen.findByRole("list", { name: "LiteLLM users" });
+      const dds = within(list)
+        .getAllByText(/./, { selector: "dd" })
+        .map((d) => d.textContent?.trim());
+      expect(dds).not.toContain("-");
+      expect(dds.filter((t) => t === "\u2014")).toHaveLength(2);
+    } finally {
+      mobile.on = false;
+    }
+  });
+
+  it("a user whose spend LiteLLM does not report shows \u2014 in the detail, never a hyphen or $0", async () => {
+    stub({
+      users: [ROW_BARE],
+      detail: {
+        userId: "ll-zed",
+        email: "zed@example.com",
+        spend: null,
+        maxBudget: null,
+        enabledOperations: [],
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMUsersList />);
+    await user.click(
+      await screen.findByRole("button", { name: "zed@example.com" }),
+    );
+    const heading = await screen.findByRole("heading", { name: "User usage" });
+    const detail = heading.closest("section") as HTMLElement;
+    expect(await within(detail).findByText("\u2014")).toBeInTheDocument();
+    expect(within(detail).queryByText("-")).toBeNull();
+    expect(within(detail).queryByText("$0.00")).toBeNull();
   });
 });

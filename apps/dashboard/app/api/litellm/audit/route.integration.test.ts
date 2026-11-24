@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   TOKEN_A,
   UNLINKED_LTEAM,
   call,
+  enterProd,
   expectError,
   expectNoSentinels,
   installFake,
@@ -55,7 +56,13 @@ async function viewRecords() {
   );
 }
 
+// The audit log is an Enterprise endpoint (LiteLLM spec - Audit, D-LF2), so
+// the behaviour below runs on Enterprise (APP_ENV=prod); OSS is the next block.
 describe("GET /api/litellm/audit", () => {
+  beforeEach(async () => {
+    await enterProd();
+  });
+
   it.each([
     ["admin", true],
     ["auditor", true],
@@ -206,5 +213,51 @@ describe("GET /api/litellm/audit", () => {
     );
     const { res } = await get();
     expect(res.status).toBe(200);
+  });
+});
+
+// Source: docs/specs/2026-11-10-litellm.md - Audit, D-LF2 (edition state),
+// "Edition" (OPERATION_UNAVAILABLE), Design System - Management pages (Audit
+// page, Gateway source). OSS = APP_ENV=dev.
+describe("GET /api/litellm/audit on LiteLLM OSS (D-LF2)", () => {
+  it.each(["admin", "auditor"] as CallerName[])(
+    "%s -> 403 OPERATION_UNAVAILABLE, no LiteLLM call, no view record",
+    async (who) => {
+      installFake(state, { edition: "oss" });
+      signInAs(who);
+      const { res } = await get();
+      await expectError(res, 403, "OPERATION_UNAVAILABLE");
+      expect(res.headers.get("cache-control")).toBe("private, no-store");
+      expect(state.fake.calls).toHaveLength(0);
+      expect(await viewRecords()).toHaveLength(0);
+    },
+  );
+
+  it("the edition is checked before the toggle: a disabled listProxyAuditLog on OSS is OPERATION_UNAVAILABLE, not OPERATION_DISABLED", async () => {
+    installFake(state, { edition: "oss" });
+    await setToggles({ listProxyAuditLog: false });
+    signInAs("admin");
+    const { res } = await get();
+    await expectError(res, 403, "OPERATION_UNAVAILABLE");
+    expect(state.fake.calls).toHaveLength(0);
+  });
+
+  it.each(["orgAdmin", "teamAdminA", "memberA"] as CallerName[])(
+    "%s has no gateway source: 403 FORBIDDEN, never the Enterprise state",
+    async (who) => {
+      installFake(state, { edition: "oss" });
+      signInAs(who);
+      const { res } = await get();
+      await expectError(res, 403, "FORBIDDEN");
+      expect(state.fake.calls).toHaveLength(0);
+    },
+  );
+
+  it("on Enterprise a real outage stays 503 LITELLM_UNAVAILABLE", async () => {
+    await enterProd();
+    installFake(state, { edition: "enterprise", outage: true });
+    signInAs("admin");
+    const { res } = await get();
+    await expectError(res, 503, "LITELLM_UNAVAILABLE");
   });
 });

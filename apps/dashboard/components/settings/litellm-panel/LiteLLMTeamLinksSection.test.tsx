@@ -180,7 +180,7 @@ describe("LiteLLMTeamLinksSection - spend source column (App Teams: UI)", () => 
     { teamId: "payments", teamName: "Payments", spendSource: "litellm-team" },
   ];
 
-  it("shows a 'Spend source' column with one row for every app team, linked or not", async () => {
+  it("the Spend source column has a row for each linked app team only; an app team with no LiteLLM team is absent (Design System - Management pages, D-LF3 / T-LF4)", async () => {
     stub({ links: [LINK], extra: { appTeams } });
     renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
     const table = await screen.findByRole("table", {
@@ -191,8 +191,24 @@ describe("LiteLLMTeamLinksSection - spend source column (App Teams: UI)", () => 
     ).toBeInTheDocument();
     const payments = within(table).getByRole("row", { name: /Payments/ });
     expect(within(payments).getByText("LiteLLM team")).toBeInTheDocument();
-    const growth = within(table).getByRole("row", { name: /Growth/ });
-    expect(within(growth).getByText("Sum of members")).toBeInTheDocument();
+    expect(within(table).queryByRole("row", { name: /Growth/ })).toBeNull();
+    expect(within(table).queryByText("Sum of members")).toBeNull();
+  });
+
+  it("when no app team is linked to a LiteLLM team the spend-source table is absent (D-LF3 / T-LF4)", async () => {
+    stub({
+      links: [],
+      extra: {
+        appTeams: [
+          { teamId: "growth", teamName: "Growth", spendSource: "member-sum" },
+        ],
+      },
+    });
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
+    await screen.findByRole("table", { name: "LiteLLM teams" });
+    expect(
+      screen.queryByRole("table", { name: "Spend source by app team" }),
+    ).toBeNull();
   });
 
   it("without appTeams in the answer the section renders as before and shows no spend-source table", async () => {
@@ -496,5 +512,81 @@ describe("LiteLLMTeamLinksSection - New LiteLLM team (internal-admin only)", () 
       method: "POST",
       body: { teamId: "growth", teamAlias: "Growth" },
     });
+  });
+});
+
+// Design System - Management pages, LiteLLM area and D-LF3 (T-LF4): the LiteLLM
+// teams table has a row for a team that exists in LiteLLM (listTeams), linked or
+// not; an app team with no LiteLLM team has no row, yet stays choosable in the
+// link form and in New LiteLLM team (internal-admin only); RS2's members action
+// stays on every remaining row.
+describe("LiteLLMTeamLinksSection - LiteLLM teams are the rows (D-LF3, T-LF4)", () => {
+  const appTeams = [
+    { teamId: "growth", teamName: "Growth", spendSource: "member-sum" },
+    { teamId: "payments", teamName: "Payments", spendSource: "litellm-team" },
+    { teamId: "search", teamName: "Search", spendSource: "litellm-team" },
+  ];
+
+  it("lists the LiteLLM teams (linked or not) with a Members action on each, and no row for the unlinked app team Growth", async () => {
+    stub({ extra: { appTeams } });
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringContaining("Alpha"),
+      expect.stringContaining("Beta"),
+      expect.stringContaining("Gamma"),
+    ]);
+    for (const alias of ["Alpha", "Beta", "Gamma"]) {
+      expect(
+        within(table).getByRole("button", { name: `Members of ${alias}` }),
+      ).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("row", { name: /Growth/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Members of Growth/ }),
+    ).toBeNull();
+  });
+
+  it("an app team with no LiteLLM team is still chosen in the link form and in New LiteLLM team (admin)", async () => {
+    stub({ extra: { appTeams } });
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit canCreateTeam />);
+    await screen.findByRole("table", { name: "LiteLLM teams" });
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Team" }),
+    );
+    expect(screen.getByRole("option", { name: /Growth/ })).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await userEvent.keyboard("{Escape}");
+    const form = screen.getByRole("form", { name: "New LiteLLM team" });
+    await userEvent.click(
+      within(form).getByRole("combobox", { name: "Team to create it for" }),
+    );
+    expect(screen.getByRole("option", { name: /Growth/ })).toBeInTheDocument();
+  });
+
+  it("an org-admin (edits, cannot create) links Growth but has no New LiteLLM team; the auditor has the table and Members, no form (LD24)", async () => {
+    stub({ extra: { appTeams } });
+    const { unmount } = renderWithProviders(
+      <LiteLLMTeamLinksSection canEdit />,
+    );
+    await screen.findByRole("table", { name: "LiteLLM teams" });
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Team" }),
+    );
+    expect(screen.getByRole("option", { name: /Growth/ })).toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "New LiteLLM team" })).toBeNull();
+    unmount();
+
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit={false} />);
+    await screen.findByRole("table", { name: "LiteLLM teams" });
+    expect(
+      screen.getByRole("button", { name: "Members of Alpha" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /Growth/ })).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("form", { name: "New LiteLLM team" })).toBeNull();
   });
 });

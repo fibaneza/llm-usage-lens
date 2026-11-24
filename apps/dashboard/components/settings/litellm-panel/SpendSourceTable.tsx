@@ -24,15 +24,18 @@ const SOURCE_LABEL = {
   "member-sum": "Sum of members",
 } as const;
 
-// Source: docs/specs/2026-11-17-app-teams.md -- UI (Settings -> LiteLLM ->
-// Team links: a "Spend source" column for every app team). Absent `appTeams`
-// renders nothing.
+// Source: docs/specs/2026-11-17-app-teams.md -- UI (LiteLLM teams tab, LF1
+// D-LF3): only app teams linked to a LiteLLM team are listed; absent
+// `appTeams` or no linked team renders nothing.
 export function SpendSourceTable({
   appTeams,
 }: {
   appTeams: z.infer<typeof AppTeamsSchema> | undefined;
 }) {
-  if (!appTeams || appTeams.length === 0) return null;
+  const linked = (appTeams ?? []).filter(
+    (team) => team.spendSource === "litellm-team",
+  );
+  if (linked.length === 0) return null;
   return (
     <Table>
       <TableCaption className="mt-0 mb-2 text-left">
@@ -45,7 +48,7 @@ export function SpendSourceTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {appTeams.map((team) => (
+        {linked.map((team) => (
           <TableRow key={team.teamId}>
             <TableCell>{team.teamName}</TableCell>
             <TableCell>{SOURCE_LABEL[team.spendSource]}</TableCell>

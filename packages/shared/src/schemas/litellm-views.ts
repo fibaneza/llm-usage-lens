@@ -266,13 +266,20 @@ export const LiteLLMUserSearchResponseSchema = z.object({
   page: z.number(),
   pageSize: z.number(),
   enabledOperations: EnabledOperations,
+  // The caller may write LiteLLM user links and resets (RS2); false for a
+  // Lead and the auditor, and when an older answer omits it.
+  mayLink: z.boolean().default(false),
+  // The caller's own stored LiteLLM user link, so the search can hide a reset
+  // on the caller's row (LF1 D-LF1 d); null when unlinked. The server decides.
+  callerLitellmUserId: z.string().nullable().default(null),
 });
 
 export const LiteLLMUserDetailResponseSchema = z.object({
   userId: z.string(),
   email: z.string(),
-  // Absent while the Organisation cap hides per-user cost (LD23).
-  spend: z.number().optional(),
+  // Absent while the Organisation cap hides per-user cost (LD23); null when
+  // LiteLLM reports no spend for the user (LF1 D-LF1).
+  spend: z.number().nullable().optional(),
   maxBudget: z.number().nullable().optional(),
   daily: DailySchema.optional(),
   // L6: the person's combined figure, absent while the cap hides per-user cost.

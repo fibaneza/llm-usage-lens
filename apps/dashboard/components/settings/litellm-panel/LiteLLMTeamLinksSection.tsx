@@ -31,7 +31,10 @@ import {
 } from "@/components/ui/table";
 import { fetchApi } from "@/lib/query/fetch-api";
 
-// Moved from Settings to Management -> LiteLLM -> LiteLLM teams (D3, 2026-11-17).
+// Management -> LiteLLM -> LiteLLM teams (D3, 2026-11-17): the link rows, the
+// LiteLLM teams table with a Members action (RS2), a "Spend source" table for
+// the app teams linked to a LiteLLM team only (LF1 D-LF3, 2026-11-18), and the
+// link / New LiteLLM team forms, which still choose from every app team.
 // `canCreateTeam` is Admin only (LD24); `canEdit` is Admin and org-admin.
 export function LiteLLMTeamLinksSection({
   canEdit,

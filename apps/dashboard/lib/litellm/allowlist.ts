@@ -64,7 +64,7 @@ export const LITELLM_OPERATIONS = {
   getKey: read(get("/key/info")),
   listSpendLogs: read(get("/spend/logs/v2")),
   listProxyModels: read(get("/models")),
-  listProxyAuditLog: read(get("/audit")),
+  listProxyAuditLog: read(get("/audit", true)),
   getGlobalSpendReport: read(get("/global/spend/report", true)),
   createTeam: write(true, post("/team/new")),
   setTeamBudget: write(true, post("/team/update")),
