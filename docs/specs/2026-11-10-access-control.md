@@ -191,7 +191,10 @@ Architecture *Sign-in providers*):
   SecureString). Constant-time verification, generic errors.
 - **Lockout (R1, 2026-11-10):** stored on the master identity item
   (`failedAttempts`, `lockedUntil`, atomic `ADD`) so every task shares it;
-  the counter restarts after a lock expires; success resets it.
+  the counter restarts after a lock expires; success resets it. The
+  reservation whose increment reaches the limit reports the lock
+  (`lockedNow`), even when a concurrent refused attempt's repair wrote
+  `lockedUntil` first; a reset in between reports no lock (fix/master-lock-race, 2026-11-24, agent decision; T20).
 - **Lockout:** 5 failures → 15 minutes. The one recorded exception to "no
   rate limiting".
 - **Session:** 1 hour. Every sign-in, failure and lockout is audited and

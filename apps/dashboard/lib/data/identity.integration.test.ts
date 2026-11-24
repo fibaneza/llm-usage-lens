@@ -1,11 +1,20 @@
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   reserveMasterAttempt,
   resetMasterFailures,
   upsertIdentity,
 } from "@/lib/data/identity";
+import { getDocumentClient } from "@/lib/dynamodb";
 
 import {
   TEST_TABLE_NAME,
@@ -200,6 +209,94 @@ describe("master lockout store (atomic reservation)", () => {
     expect(l.lockedUntil).toBeUndefined();
     await expect(reserveMasterAttempt(MASTER, NOW)).resolves.toMatchObject({
       allowed: true,
+    });
+  });
+
+  // Access Control — Master user, Lockout (5 failures lock for 15 minutes,
+  // every lockout is audited and alarms); Threat model T20. The interleaving
+  // is forced by pausing the 5th reservation between its ADD and its lock
+  // SET; real DynamoDB Local, the spy only controls order.
+  describe("the 5th reservation's lock write loses to the 6th's repair (T20)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    // Pauses the first "SET lockedUntil = :until" (the 5th's lock write) until
+    // released; every call still goes to real DynamoDB Local.
+    function holdFirstLockWrite() {
+      const client = getDocumentClient();
+      const realSend = client.send.bind(client) as (
+        c: unknown,
+      ) => Promise<unknown>;
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let paused: () => void = () => undefined;
+      const reachedLockWrite = new Promise<void>((resolve) => {
+        paused = resolve;
+      });
+      let held = false;
+      vi.spyOn(client, "send").mockImplementation((async (command: unknown) => {
+        const expr = (command as { input?: { UpdateExpression?: string } })
+          .input?.UpdateExpression;
+        if (!held && expr === "SET lockedUntil = :until") {
+          held = true;
+          paused();
+          await gate;
+        }
+        return realSend(command);
+      }) as unknown as typeof client.send);
+      return { reachedLockWrite, release };
+    }
+
+    it("reports lockedNow exactly once, on the allowed 5th, and sets one 15-minute lock", async () => {
+      for (let i = 0; i < 4; i++) await reserveMasterAttempt(MASTER, NOW);
+
+      const { reachedLockWrite, release } = holdFirstLockWrite();
+
+      const fifth = reserveMasterAttempt(MASTER, NOW);
+      await reachedLockWrite;
+      const sixth = await reserveMasterAttempt(MASTER, NOW);
+      release();
+      const fifthResult = await fifth;
+
+      expect(sixth).toEqual({ allowed: false, lockedNow: false });
+      expect(fifthResult).toEqual({ allowed: true, lockedNow: true });
+      const l = await getMasterLockout(MASTER);
+      expect(l.failedAttempts).toBe(5);
+      expect(l.lockedUntil).toBe(
+        new Date(NOW.getTime() + FIFTEEN).toISOString(),
+      );
+
+      vi.restoreAllMocks();
+      await expect(
+        reserveMasterAttempt(MASTER, new Date(NOW.getTime() + 60000)),
+      ).resolves.toEqual({ allowed: false, lockedNow: false });
+      expect((await getMasterLockout(MASTER)).lockedUntil).toBe(l.lockedUntil);
+    });
+
+    // Access Control — Master user, Lockout ("success resets it"); T20. A
+    // sign-in reset between the 5th's ADD and its lock write leaves no lock,
+    // so no lockout may be reported.
+    it("a reset between the 5th's ADD and its lock write reports no lockout and leaves no lock", async () => {
+      for (let i = 0; i < 4; i++) await reserveMasterAttempt(MASTER, NOW);
+
+      const { reachedLockWrite, release } = holdFirstLockWrite();
+      const fifth = reserveMasterAttempt(MASTER, NOW);
+      await reachedLockWrite;
+      await resetMasterFailures(MASTER);
+      release();
+
+      await expect(fifth).resolves.toEqual({ allowed: true, lockedNow: false });
+      const l = await getMasterLockout(MASTER);
+      expect(l.lockedUntil).toBeUndefined();
+      expect(l.failedAttempts).toBe(0);
+      vi.restoreAllMocks();
+      await expect(reserveMasterAttempt(MASTER, NOW)).resolves.toEqual({
+        allowed: true,
+        lockedNow: false,
+      });
     });
   });
 

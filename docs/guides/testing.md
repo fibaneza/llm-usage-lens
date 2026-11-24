@@ -16,7 +16,7 @@ One root [`vitest.config.ts`](../../vitest.config.ts) with four projects.
 |---|---|---|---|
 | `unit` | jsdom (React Testing Library, jest-dom, user-event) | `apps/**`, `packages/**`, `scripts/**` — `*.test.ts(x)` | nothing |
 | `integration` | node | `*.integration.test.{ts,tsx}` under `apps/`, `packages/`, `scripts/` | DynamoDB Local on `:8000` |
-| `integration-serial` | node | two `*.integration.test.ts` files that cannot run beside others (below) | DynamoDB Local on `:8000` |
+| `integration-serial` | node | the `*.integration.test.ts` files that cannot run beside others (below; today one) | DynamoDB Local on `:8000` |
 | `infra` | node | `infra/**/*.test.ts` (CDK stack tests) | nothing |
 
 - `unit` loads [`test/setup/vitest.setup.ts`](../../apps/dashboard/test/setup/vitest.setup.ts)
@@ -25,14 +25,9 @@ One root [`vitest.config.ts`](../../vitest.config.ts) with four projects.
   object in `vitest.config.ts`) but lists only the files in
   `SERIAL_INTEGRATION_FILES`, runs them one after the other (`fileParallelism:
   false`, `maxWorkers: 1`) and after the `integration` group
-  (`sequence.groupOrder: 2`). Both are excluded from `integration`. Its global
+  (`sequence.groupOrder: 2`). Its files are excluded from `integration`. Its global
   setup teardown runs once per project at the end of the whole run and only
   deletes this run's tables, so the repeat is harmless. Files (implementation-phases — *Maintenance — test clean-up, second pass, and test speed*, D-TS5):
-  - `apps/dashboard/lib/data/identity.integration.test.ts`: temporary, serial
-    only until `fix/master-lock-race` lands. A production race in
-    `reserveMasterAttempt` (`repairMissingLock` writes `lockedUntil` first, so
-    `lockedNow` is lost) shows under parallel load; after the fix the file
-    returns to `integration`.
   - `scripts/lib/run-seed.integration.test.ts`: a heavy writer that reaches the
     60 s timeout beside parallel files.
   A unit whose new integration test fails only in parallel reports it and adds

@@ -166,12 +166,27 @@ export async function reserveMasterAttempt(
           ":until": new Date(now.getTime() + LOCK_MS).toISOString(),
           ":limit": LOCK_AFTER_FAILURES,
         },
+        ReturnValuesOnConditionCheckFailure: "ALL_OLD",
       }),
     );
     return { allowed: true, lockedNow: true };
   } catch (error) {
     if (!(error instanceof ConditionalCheckFailedException)) throw error;
-    return { allowed: true, lockedNow: false };
+    // A refused attempt's repair may have written lockedUntil first: report
+    // the lock only when the stored item shows it (a reset in between leaves
+    // none; T20).
+    const old = error.Item;
+    // Item is typed as a marshalled AttributeValue ({N}); a plain number is accepted in case the document client unmarshals it; anything else is NaN, so lockedNow is false (fails safe).
+    const stored = old?.failedAttempts;
+    const count = Number(
+      typeof stored === "object" && stored !== null && "N" in stored
+        ? stored.N
+        : stored,
+    );
+    return {
+      allowed: true,
+      lockedNow: old?.lockedUntil !== undefined && count >= LOCK_AFTER_FAILURES,
+    };
   }
 }
 

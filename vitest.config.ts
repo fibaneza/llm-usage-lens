@@ -51,10 +51,7 @@ const integrationTableName = `bedrock-usage-test-${process.pid}`;
 // Files that cannot run beside others (implementation-phases, test speed, D-TS5); each stays out
 // of `integration` (exclude) and runs in `integration-serial`, whose include
 // names them literally.
-const SERIAL_INTEGRATION_FILES = [
-  "apps/dashboard/lib/data/identity.integration.test.ts",
-  "scripts/lib/run-seed.integration.test.ts",
-];
+const SERIAL_INTEGRATION_FILES = ["scripts/lib/run-seed.integration.test.ts"];
 
 const integrationTest = {
   environment: "node" as const,
@@ -185,8 +182,6 @@ export default defineConfig({
           // Include lists stay literal arrays: probe-structure.test.ts reads
           // them as text (LiteLLM spec LD28).
           include: [
-            // Serial until fix/master-lock-race lands (production race in reserveMasterAttempt: repairMissingLock writes lockedUntil first, so lockedNow is lost). Failed 1 of 7 parallel runs; passes alone.
-            "apps/dashboard/lib/data/identity.integration.test.ts",
             // A heavy writer (thousands of items): 23 s alone, 31-41 s beside parallel files, and it reaches the 60 s timeout when DynamoDB Local is loaded.
             "scripts/lib/run-seed.integration.test.ts",
           ],

@@ -270,6 +270,14 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 
 ---
 
+### Master lockout cycle marker
+
+- **Status:** Deferred.
+- **What:** Tag each lockout cycle on the master identity item (a `lockCycle` counter bumped by `clearExpiredLock` and `resetMasterFailures`, returned by the reservation's `ADD` and checked by the lock write), and report or keep a lock only while `old.lockedUntil > now`, with the lock time taken from a fresh clock reading.
+- **Why deferred:** Two residual interleavings left after fix/master-lock-race (review W1, W2, coordinator ruling, 2026-11-24). (1) A 5th reservation whose lock write stalls across a reset and five new failures can report `lockedNow` as well, so one lock is audited as two lockout events; it only over-reports and never drops a lockout. (2) A lock write stalled past 15 minutes can land in the next cycle with an already expired `lockedUntil`, leaving that cycle unlocked; this predates the fix and needs a single DynamoDB write to stall for a whole lock period.
+- **Adopt when:** any report of a lockout without a lock (an `auth.master.lockout` event with no stored `lockedUntil`), or DynamoDB write latency over 1 minute.
+- **References:** [Access Control](specs/2026-11-10-access-control.md) — *Master user*, *Lockout*; T20; `apps/dashboard/lib/data/identity.ts` (`reserveMasterAttempt`).
+
 ## LiteLLM
 
 ### A LiteLLM team list view on Management → LiteLLM → LiteLLM teams
