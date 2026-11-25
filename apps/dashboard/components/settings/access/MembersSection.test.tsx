@@ -16,6 +16,7 @@ import {
 } from "@/test/fakes/access-ui-stubs";
 import { ADMIN, TEAM_ADMIN } from "@/test/fixtures/access-viewers";
 import { renderWithProviders } from "@/test/support/render-providers";
+import { expectFieldHelp } from "@/test/support/team-field-help";
 
 import { MembersSection } from "./MembersSection";
 
@@ -143,7 +144,7 @@ describe("MembersSection", () => {
     renderWithProviders(<MembersSection viewer={ADMIN} />);
     expect(await screen.findByText(/no teams/i)).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /add member/i }),
+      screen.queryByRole("button", { name: "Add member" }),
     ).not.toBeInTheDocument();
   });
 
@@ -168,10 +169,10 @@ describe("MembersSection", () => {
     renderWithProviders(<MembersSection viewer={ADMIN} />);
     await screen.findByRole("row", { name: /Alice Adams/ });
     await user.type(
-      screen.getByLabelText(/work email or upn/i),
+      screen.getByLabelText("Work email or UPN"),
       "dana@example.com",
     );
-    await user.click(screen.getByRole("button", { name: /add member/i }));
+    await user.click(screen.getByRole("button", { name: "Add member" }));
     expect(
       await screen.findByText(/dana@example\.com.*(pending|first sign-in)/is),
     ).toBeInTheDocument();
@@ -206,7 +207,7 @@ describe("MembersSection", () => {
     renderWithProviders(<MembersSection viewer={ADMIN} />);
     await screen.findByRole("row", { name: /Alice Adams/ });
     await user.type(
-      screen.getByLabelText(/work email or upn/i),
+      screen.getByLabelText("Work email or UPN"),
       "dana@example.com{Enter}",
     );
     await screen.findByText(/dana@example\.com/);
@@ -218,9 +219,9 @@ describe("MembersSection", () => {
     const api = stubAccessApi(routes());
     renderWithProviders(<MembersSection viewer={ADMIN} />);
     await screen.findByRole("row", { name: /Alice Adams/ });
-    const field = screen.getByLabelText(/work email or upn/i);
+    const field = screen.getByLabelText("Work email or UPN");
     await user.type(field, "not-an-email");
-    await user.click(screen.getByRole("button", { name: /add member/i }));
+    await user.click(screen.getByRole("button", { name: "Add member" }));
     expect(await screen.findByText(/valid email/i)).toBeInTheDocument();
     expect(field).toHaveAttribute("aria-invalid", "true");
     expect(api.writes()).toEqual([]);
@@ -237,10 +238,10 @@ describe("MembersSection", () => {
     renderWithProviders(<MembersSection viewer={ADMIN} />);
     await screen.findByRole("row", { name: /Alice Adams/ });
     await user.type(
-      screen.getByLabelText(/work email or upn/i),
+      screen.getByLabelText("Work email or UPN"),
       "dana@example.com",
     );
-    await user.click(screen.getByRole("button", { name: /add member/i }));
+    await user.click(screen.getByRole("button", { name: "Add member" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/move/i);
   });
 
@@ -345,7 +346,7 @@ describe("MembersSection", () => {
       screen.getByRole("button", { name: "Remove Alice Adams" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /add member/i }),
+      screen.getByRole("button", { name: "Add member" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Move Alice Adams" }),
@@ -466,5 +467,18 @@ describe("MembersSection with a teamId prop (TM1 D-TM2)", () => {
       path: "/api/teams/team-risk/members",
       body: { emailOrUpn: "new.hire@example.com" },
     });
+  });
+});
+
+// Design System - Team page, round 3 (unit TP1), FieldHelp table, T-TP6: the
+// add-member field carries its help. Guard: MembersSection.tsx (FormField
+// "Work email or UPN") renders <FieldHelp field="Work email or UPN (add member)">.
+describe("MembersSection FieldHelp (T-TP6)", () => {
+  it("the add-member field has the help 'Work email or UPN (add member)' with the spec text, and keeps its label", async () => {
+    stubAccessApi(routes());
+    renderWithProviders(<MembersSection viewer={ADMIN} />);
+    await screen.findByRole("row", { name: /Alice Adams/ });
+    expect(screen.getByLabelText("Work email or UPN")).toBeInTheDocument();
+    await expectFieldHelp("Work email or UPN (add member)");
   });
 });

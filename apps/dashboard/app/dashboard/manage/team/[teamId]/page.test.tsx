@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { render, screen } from "@testing-library/react";
+import { cloneElement, isValidElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Sources: Design System - Management pages, Team, "List, then the team (unit
@@ -102,6 +103,7 @@ vi.mock("@/components/manage/TeamPageContent", () => ({
     canCreateTeam?: boolean;
     scopeLabel: string | null;
     access?: React.ReactNode;
+    summary?: React.ReactNode;
   }) => (
     <div
       data-testid="team"
@@ -110,10 +112,64 @@ vi.mock("@/components/manage/TeamPageContent", () => ({
       data-has-create={String(props.canCreateTeam !== undefined)}
       data-scope-label={props.scopeLabel ?? ""}
     >
+      {props.summary}
       {props.access}
     </div>
   ),
 }));
+
+// Unit TP1 (Design System - Team page, round 3, Summary and Edit team). Contract
+// for the developer: the page builds the summary on the server with
+// loadTeamSummary(entry, { global }) from lib/manage/team-summary.ts (server-only;
+// `global` is access.global: the LiteLLM alias and id are in the result only
+// when true, ruling Q-B1) and renders it as <TeamSummaryPanel {...summary}
+// canEdit /> passed to TeamPageContent as its `summary` prop. canEdit is true
+// only for internal-admin and internal-org-admin (legacy Admin alias outside
+// prod) on a created team (Access Control - Edit a created team).
+const loadTeamSummary = vi.fn<
+  (
+    entry: { teamId: string; hasAwsAccount: boolean },
+    opts: { global: boolean; range?: unknown },
+  ) => Promise<Record<string, unknown>>
+>(async (entry) => ({
+  name: `name-of-${entry.teamId}`,
+  departmentName: "Engineering",
+  kind: entry.hasAwsAccount ? "registry" : "created",
+  leadNames: [],
+  memberCount: 0,
+  litellm: null,
+  budgetResetsInRange: 0,
+  ...(entry.hasAwsAccount
+    ? {}
+    : {
+        editTarget: {
+          teamId: entry.teamId,
+          name: `name-of-${entry.teamId}`,
+          departmentId: "dept-eng",
+          version: 1,
+        },
+      }),
+}));
+vi.mock("@/lib/manage/team-summary", () => ({
+  loadTeamSummary: (entry: unknown, opts: unknown) =>
+    loadTeamSummary(entry as never, opts as never),
+}));
+vi.mock("@/components/manage/TeamSummaryPanel", () => ({
+  TeamSummaryPanel: (props: {
+    kind: string;
+    canEdit: boolean;
+    editTarget?: { teamId: string };
+  }) => (
+    <div
+      data-testid="summary"
+      data-kind={props.kind}
+      data-can-edit={String(props.canEdit)}
+      data-edit-target={props.editTarget?.teamId ?? ""}
+    />
+  ),
+}));
+
+import { renderWithProviders } from "@/test/support/render-providers";
 
 import TeamDetailPage from "./page";
 
@@ -150,6 +206,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  // mockReset drops an unconsumed once-value (the never-resolving read the
+  // page correctly never awaits) and restores the vi.fn(impl) default.
+  loadTeamSummary.mockReset();
 });
 
 describe("TeamDetailPage (/dashboard/manage/team/[teamId])", () => {
@@ -372,4 +431,178 @@ describe("TeamDetailPage access sections (B2-4)", () => {
     render(await open("t1"));
     expect(screen.queryByTestId("access-sections")).not.toBeInTheDocument();
   });
+});
+
+// Unit TP1 (Design System - Team page, round 3: Summary, Edit team; Access
+// Control - Edit a created team, T-TP1, T-TP7). The role table of who gets
+// canEdit is complete (Rule 60.24a: a security case). Guard for every canEdit
+// row: page.tsx derives it from globalRolesOf(...) with INTERNAL_ADMIN_ROLE and
+// INTERNAL_ORG_ADMIN_ROLE (lib/auth/roles.ts), never from scope.
+// Resolves the async Server Components inside a returned tree (as a server
+// would) so jsdom can render it. An async component that rejects becomes a
+// component that throws, so the nearest error boundary around it decides what
+// the page shows - the behaviour Rule 40.4 / 60.12 specify.
+async function settled(node: ReactNode): Promise<ReactNode> {
+  if (Array.isArray(node)) return Promise.all(node.map((n) => settled(n)));
+  if (!isValidElement(node)) return node;
+  const element = node as React.ReactElement<Record<string, unknown>>;
+  const props: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(element.props)) {
+    props[key] =
+      key === "children" || isValidElement(value) || Array.isArray(value)
+        ? await settled(value as ReactNode)
+        : value;
+  }
+  const type = element.type as unknown;
+  if (typeof type === "function" && type.constructor.name === "AsyncFunction") {
+    try {
+      return await settled(
+        await (type as (p: unknown) => Promise<ReactNode>)(element.props),
+      );
+    } catch (error) {
+      const Thrower = () => {
+        throw error;
+      };
+      return <Thrower />;
+    }
+  }
+  return cloneElement(element, props);
+}
+
+describe("TeamDetailPage summary and Edit team (TP1)", () => {
+  const CREATED = "appteam-00000000-0000-4000-8000-000000000001";
+
+  it("renders the summary for the route's team through TeamPageContent's summary slot", async () => {
+    as(["internal-admin"]);
+    render(await settled(await open(CREATED)));
+    expect(screen.getByTestId("summary")).toHaveAttribute(
+      "data-kind",
+      "created",
+    );
+    expect(loadTeamSummary).toHaveBeenCalledTimes(1);
+    expect(loadTeamSummary.mock.calls[0]?.[0]).toMatchObject({
+      teamId: CREATED,
+    });
+  });
+
+  it("a team from an AWS account is kind registry and carries no edit target", async () => {
+    as(["internal-admin"]);
+    render(await settled(await open("t1")));
+    expect(screen.getByTestId("summary")).toHaveAttribute(
+      "data-kind",
+      "registry",
+    );
+    expect(screen.getByTestId("summary")).toHaveAttribute(
+      "data-edit-target",
+      "",
+    );
+  });
+
+  it.each([
+    ["an internal-admin", ["internal-admin"], {}, "true"],
+    ["an internal-org-admin", ["internal-org-admin"], {}, "true"],
+    ["the legacy Admin alias outside prod", ["Admin"], {}, "true"],
+    ["the internal-auditor", ["internal-auditor"], {}, "false"],
+    [
+      "a department Lead of the team's department",
+      ["internal-viewer"],
+      deptLead("dept-eng"),
+      "false",
+    ],
+    [
+      "a team Lead of the team",
+      ["internal-viewer"],
+      teamLead(CREATED),
+      "false",
+    ],
+    [
+      "a stored internal-org-admin grant on a viewer claim (Rule 50.4)",
+      ["internal-viewer"],
+      { roleGrants: [{ role: "internal-org-admin" }] },
+      "true",
+    ],
+  ])(
+    "%s on a created team: canEdit follows the role table (T-TP7)",
+    async (_n, roles, authorization, canEdit) => {
+      as(roles, authorization);
+      render(await settled(await open(CREATED)));
+      expect(screen.getByTestId("summary")).toHaveAttribute(
+        "data-can-edit",
+        canEdit,
+      );
+      if (canEdit === "true") {
+        expect(screen.getByTestId("summary")).toHaveAttribute(
+          "data-edit-target",
+          CREATED,
+        );
+      }
+    },
+  );
+
+  it.each([
+    ["an internal-admin", ["internal-admin"], {}, true],
+    ["an internal-org-admin", ["internal-org-admin"], {}, true],
+    ["the internal-auditor", ["internal-auditor"], {}, true],
+    ["a Lead", ["internal-viewer"], deptLead("dept-eng"), false],
+  ])(
+    "%s: the summary is built with the matching global flag (the LiteLLM id only for global roles, ruling Q-B1; T-TP1)",
+    async (_n, roles, authorization, isGlobal) => {
+      as(roles, authorization);
+      render(await settled(await open(CREATED)));
+      expect(loadTeamSummary.mock.calls[0]?.[1]).toMatchObject({
+        global: isGlobal,
+      });
+    },
+  );
+
+  it("a team outside the caller's scope is notFound() and no summary is loaded", async () => {
+    as(["internal-viewer"], teamLead("t1"));
+    await expect(open("t2")).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(loadTeamSummary).not.toHaveBeenCalled();
+  });
+
+  // Q-B1 (Design System - Team page, round 3; Rule 40.4, 60.12: every page
+  // section has its own Suspense + ErrorBoundary, one failing or slow section
+  // never breaks or delays the page). Guard: page.tsx must not await
+  // loadTeamSummary; the summary is an async TeamSummarySection inside
+  // Suspense + SectionBoundary (page.tsx:61 today awaits it).
+  it("a failing summary read does not break the page: the access sections render and the summary area shows its error fallback (Rule 40.4, 60.12)", async () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    loadTeamSummary.mockRejectedValueOnce(new Error("dynamo down"));
+    as(["internal-admin"]);
+    const tree = await open(CREATED);
+    renderWithProviders(<>{await settled(tree)}</>);
+    expect(screen.getByTestId("access-sections")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByTestId("summary")).not.toBeInTheDocument();
+    quiet.mockRestore();
+  });
+
+  it("the page does not wait for the summary read: it returns while loadTeamSummary is still pending (Rule 60.12)", async () => {
+    loadTeamSummary.mockReturnValueOnce(new Promise(() => {}));
+    as(["internal-admin"]);
+    const outcome = await Promise.race([
+      open(CREATED).then(() => "returned"),
+      new Promise((resolve) => setImmediate(() => resolve("waited"))),
+    ]);
+    expect(outcome).toBe("returned");
+  });
+
+  // Nit (review r1): editTarget is the edit form's data; give it only to a
+  // caller who may edit. Guard: page.tsx passes editTarget only when canEdit.
+  it.each([
+    ["the internal-auditor", ["internal-auditor"], {}],
+    ["a department Lead", ["internal-viewer"], deptLead("dept-eng")],
+    ["a team Lead", ["internal-viewer"], teamLead(CREATED)],
+  ])(
+    "%s: the summary props carry no editTarget (T-TP7)",
+    async (_n, roles, authorization) => {
+      as(roles, authorization);
+      render(await settled(await open(CREATED)));
+      expect(screen.getByTestId("summary")).toHaveAttribute(
+        "data-edit-target",
+        "",
+      );
+    },
+  );
 });

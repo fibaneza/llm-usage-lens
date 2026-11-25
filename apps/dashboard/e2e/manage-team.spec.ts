@@ -222,6 +222,41 @@ test.describe("Management -> Team page", () => {
     });
   }
 
+  // Unit TP1 (Design System - Team page, round 3, FieldHelp table, T-TP6, T-TP7):
+  // the LiteLLM fields carry their help; one popover opens in the real shell
+  // and the page stays axe-clean with it open, at 375px and desktop.
+  for (const width of [375, 1440]) {
+    test(`a field's help opens beside Max budget and Models and stays axe-clean at ${width}px (T-TP6)`, async ({
+      page,
+      context,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await signInAsTestUser(context, { roles: ["internal-admin"] });
+      await mockApi(page);
+      await page.goto(`${TEAM_URL}?view=budgets`);
+      await waitForHydration(page);
+      await page.getByRole("button", { name: "About Max budget" }).click();
+      await expect(
+        page.getByText(
+          "The most this LiteLLM team may spend in one budget period. LiteLLM refuses requests above it.",
+        ),
+      ).toBeVisible();
+      await expectNoBlockingViolations(page, "Max budget help open");
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("button", { name: "About Max budget" }),
+      ).toBeFocused();
+
+      await page.goto(`${TEAM_URL}?view=keys`);
+      await waitForHydration(page);
+      await page.getByRole("button", { name: "About Models" }).click();
+      await expect(
+        page.getByText("The models this LiteLLM team may call."),
+      ).toBeVisible();
+      await expectNoBlockingViolations(page, "Models help open");
+    });
+  }
+
   // C1 item 5 (review of unit L5b; Rule 40.6 breakpoints, Design System -
   // Layout, Key-value lists): the "Current rate limits" value wraps inside its
   // Budget and limits panel at 375px instead of running past the panel edge.

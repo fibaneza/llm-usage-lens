@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import { TeamResetCount } from "@/components/budget-resets/BudgetResetCount";
 import { OpenResetRequests } from "@/components/budget-resets/OpenResetRequests";
 import { KeyValueList } from "@/components/display/KeyValueList";
 import { formatUsd } from "@/components/charts/chart-data";
+import { FieldHelp } from "@/components/display/FieldHelp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -32,17 +33,24 @@ function Field({
   onChange,
   ceiling,
   step,
+  help,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   ceiling: number | undefined;
   step: number | "any";
+  help?: ReactNode;
 }) {
+  const id = useId();
   return (
-    <label className="grid gap-1 text-sm font-medium">
-      {label}
+    <div className="grid gap-1 text-sm font-medium">
+      <span className="flex items-center gap-1">
+        <label htmlFor={id}>{label}</label>
+        {help}
+      </span>
       <Input
+        id={id}
         type="number"
         min={step === "any" ? 0 : 1}
         step={step}
@@ -50,7 +58,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-    </label>
+    </div>
   );
 }
 
@@ -109,6 +117,12 @@ function BudgetAndLimits({
           },
         ]}
       />
+      <div className="text-cell text-muted-foreground flex items-center gap-1">
+        Budget period
+        <FieldHelp field="Budget period">
+          How often LiteLLM sets the spend counter back to zero.
+        </FieldHelp>
+      </div>
       <WriteError message={error} />
       {canSetBudget ? (
         <form
@@ -126,6 +140,12 @@ function BudgetAndLimits({
             onChange={setBudget}
             ceiling={ceiling(current.maxBudget)}
             step="any"
+            help={
+              <FieldHelp field="Max budget">
+                The most this LiteLLM team may spend in one budget period.
+                LiteLLM refuses requests above it.
+              </FieldHelp>
+            }
           />
           <Button type="submit" disabled={pending || maxBudget === undefined}>
             Save budget
@@ -154,6 +174,12 @@ function BudgetAndLimits({
             onChange={setRpm}
             ceiling={ceiling(current.rpmLimit)}
             step={1}
+            help={
+              <FieldHelp field="Requests per minute">
+                The most tokens, or requests, per minute LiteLLM accepts for
+                this team.
+              </FieldHelp>
+            }
           />
           <Field
             label="Tokens per minute"
@@ -161,6 +187,12 @@ function BudgetAndLimits({
             onChange={setTpm}
             ceiling={ceiling(current.tpmLimit)}
             step={1}
+            help={
+              <FieldHelp field="Tokens per minute">
+                The most tokens, or requests, per minute LiteLLM accepts for
+                this team.
+              </FieldHelp>
+            }
           />
           <Button
             type="submit"

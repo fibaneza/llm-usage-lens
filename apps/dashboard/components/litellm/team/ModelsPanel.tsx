@@ -3,6 +3,7 @@
 import { LiteLLMModelsResponseSchema } from "@llm-usage-lens/shared";
 import { useState } from "react";
 
+import { FieldHelp } from "@/components/display/FieldHelp";
 import { Button } from "@/components/ui/button";
 
 import type { TeamPanelProps } from "./panel-props";
@@ -39,6 +40,12 @@ function ModelChoices({
       }}
     >
       <WriteError message={error} />
+      <div className="flex items-center gap-1 text-sm font-medium">
+        <span>Models</span>
+        <FieldHelp field="Models">
+          The models this LiteLLM team may call.
+        </FieldHelp>
+      </div>
       <fieldset className="flex flex-col gap-2">
         <legend className="sr-only">Models this team can use</legend>
         {choices.map((model) => (

@@ -235,6 +235,30 @@ function matrixWrite(
 
 const alice = PEOPLE.alice;
 
+// Unit TP1 (Access Control - Edit a created team): a created team under a
+// fixed id so the registry can name it; keys as the Data Model spec names them.
+const EDIT_TEAM_ID = "appteam-00000000-0000-4000-8000-0000000000e1";
+async function seedEditableTeam(): Promise<void> {
+  await putRaw({
+    PK: `APPTEAM#${EDIT_TEAM_ID}`,
+    SK: "META",
+    gsi1pk: "APPTEAMS",
+    gsi1sk: `APPTEAM#${EDIT_TEAM_ID}`,
+    teamId: EDIT_TEAM_ID,
+    name: "Seeded Guild",
+    departmentId: "dept-eng",
+    departmentName: "Engineering",
+    createdBy: alice.oid,
+    createdAt: "2026-01-02T03:04:05.000Z",
+    version: 1,
+  });
+  await putRaw({
+    PK: "APPTEAMNAME#seeded guild",
+    SK: "OWNER",
+    teamId: EDIT_TEAM_ID,
+  });
+}
+
 // ---- unit M4 seeds: keys and fields as the Data Model spec names them ----
 const RESET_REQUEST_ID = "00000000-0000-4000-8000-0000000000b1";
 const RESET_TOGGLES = {
@@ -1042,6 +1066,16 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     action: "appteam.create",
     validBody: { name: "Platform Guild 2", departmentId: "dept-eng" },
     successStatuses: [201],
+  }),
+  // TP1 (Access Control - Edit a created team; T-TP2): admin and org-admin
+  // edit a created team; everyone else 403 before parsing with one `denied`
+  // record. Planned guard: PATCH `permit` in app/api/teams/[id]/route.ts.
+  matrixWrite("PATCH", "teams/[id]/route.ts", {
+    action: "appteam.update",
+    validParams: { id: EDIT_TEAM_ID },
+    seed: seedEditableTeam,
+    validBody: { name: "Renamed Guild", departmentId: "dept-ops", version: 1 },
+    successStatuses: [200],
   }),
   // ---- unit M4: budget reset requests (Access Control - Permission matrix ->
   // Budget reset requests). The request is the caller's own member-team write;

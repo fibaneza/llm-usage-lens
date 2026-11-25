@@ -1107,7 +1107,7 @@ Phase 5 (user, 2026-11-25; Rule 30).
   Verify: T-SI1–T-SI7 (Design System — *Sign-in page*; Access Control —
   *Password users*, T20, T23); the existing sign-in suites unchanged and
   green; the full e2e once and the `base-path` project; security review
-- [ ] **TP1** Team page (`feature/team-page-detail`)
+- [x] **TP1** Team page (`feature/team-page-detail`)
   Verify: T-TP1–T-TP7 (Design System — *Team page, round 3*; Access Control
   — *Edit a created team*); `403` before parsing and one `denied` record per
   refused write; security review

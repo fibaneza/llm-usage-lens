@@ -28,6 +28,7 @@ import {
 } from "@/test/fixtures/access-viewers";
 import { NEVER } from "@/test/fakes/api-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
+import { expectFieldHelp } from "@/test/support/team-field-help";
 
 import { AccessSections } from "./AccessSections";
 import type { AccessViewer, StepUpActions } from "./types";
@@ -629,4 +630,21 @@ describe("AccessSections with a teamId prop (TM1 D-TM2)", () => {
     await screen.findByLabelText("Team");
     expect(screen.getAllByLabelText("Scope")).toHaveLength(2);
   });
+});
+
+// Design System - Team page, round 3 (unit TP1), FieldHelp table, T-TP6.
+// Guard: AccessSections.tsx puts the help beside the Members and Team admins
+// section headings (not inside the h2, so headingOf() keeps matching).
+describe("AccessSections FieldHelp on the section headings (T-TP6)", () => {
+  it.each(["Members", "Team admins"] as const)(
+    "%s has its help text and the h2 keeps its exact name",
+    async (field) => {
+      stubAccessApi(baseRoutes());
+      renderSections(ADMIN);
+      expect(
+        await screen.findByRole("heading", { level: 2, name: field }),
+      ).toBeInTheDocument();
+      await expectFieldHelp(field);
+    },
+  );
 });

@@ -359,6 +359,7 @@ export {
   AppTeamSchema,
   CreateAppTeamInputSchema,
   CreateAppTeamResponseSchema,
+  UpdateAppTeamInputSchema,
   OrgUnitTeamSchema,
   OrgUnitsResponseSchema,
   appTeamNameKey,
@@ -367,6 +368,7 @@ export {
 export type {
   AppTeam,
   CreateAppTeamInput,
+  UpdateAppTeamInput,
   OrgUnitsResponse,
 } from "./schemas/app-team";
 

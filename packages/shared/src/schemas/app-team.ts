@@ -31,6 +31,14 @@ export const CreateAppTeamInputSchema = z.strictObject({
   departmentId: z.string().trim().min(1).max(128),
 });
 
+// Strict: the id comes from the path, never the body (Access Control spec -
+// "Edit a created team", unit TP1).
+export const UpdateAppTeamInputSchema = z.strictObject({
+  name: AppTeamNameSchema,
+  departmentId: z.string().trim().min(1).max(128),
+  version: z.number().int().min(1),
+});
+
 export const CreateAppTeamResponseSchema = AppTeamSchema;
 
 export const OrgUnitTeamSchema = OrgUnitsSchema.shape.teams.element.extend({
@@ -49,4 +57,5 @@ export const isReservedTeamId = (id: string): boolean =>
 
 export type AppTeam = z.infer<typeof AppTeamSchema>;
 export type CreateAppTeamInput = z.infer<typeof CreateAppTeamInputSchema>;
+export type UpdateAppTeamInput = z.infer<typeof UpdateAppTeamInputSchema>;
 export type OrgUnitsResponse = z.infer<typeof OrgUnitsResponseSchema>;

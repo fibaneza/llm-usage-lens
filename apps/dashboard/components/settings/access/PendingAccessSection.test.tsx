@@ -18,6 +18,7 @@ import {
   TEAM_ADMIN,
 } from "@/test/fixtures/access-viewers";
 import { renderWithProviders } from "@/test/support/render-providers";
+import { expectFieldHelp } from "@/test/support/team-field-help";
 
 import { PendingAccessSection } from "./PendingAccessSection";
 
@@ -516,4 +517,23 @@ describe("PendingAccessSection with a teamId prop (TM1 D-TM3)", () => {
     ).toBeVisible();
     expect(screen.getByRole("row", { name: /risk\.hire@/ })).toBeVisible();
   });
+});
+
+// Design System - Team page, round 3 (unit TP1), FieldHelp table, T-TP6.
+// Guard: PendingAccessSection.tsx beside the two h3 headings; the headings'
+// own accessible names stay "Pending invitations" and "Stale access" (the
+// button sits beside the heading, not inside it).
+describe("PendingAccessSection FieldHelp (T-TP6)", () => {
+  it.each(["Pending invitations", "Stale access"] as const)(
+    "%s has its help text and the heading keeps its exact name",
+    async (field) => {
+      stubAccessApi(routes());
+      renderWithProviders(<PendingAccessSection viewer={ADMIN} />);
+      await screen.findByRole("row", { name: /new\.hire@/ });
+      expect(
+        screen.getByRole("heading", { level: 3, name: field }),
+      ).toBeInTheDocument();
+      await expectFieldHelp(field);
+    },
+  );
 });

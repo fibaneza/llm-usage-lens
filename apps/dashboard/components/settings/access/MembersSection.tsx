@@ -9,6 +9,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { z } from "zod";
 
+import { FieldHelp } from "@/components/display/FieldHelp";
 import { EmptyState } from "@/components/display/EmptyState";
 import { accessErrorMessage } from "@/components/settings/access/access-error-message";
 import {
@@ -347,7 +348,16 @@ export function MembersSection({
         noValidate
         className="flex max-w-[72ch] flex-col gap-3"
       >
-        <FormField label="Work email or UPN" error={emailError}>
+        <FormField
+          label="Work email or UPN"
+          error={emailError}
+          help={
+            <FieldHelp field="Work email or UPN (add member)">
+              The address the person signs in with. If they have not signed in
+              yet, they get an invitation that binds when they do.
+            </FieldHelp>
+          }
+        >
           {(props) => (
             <Input
               {...props}

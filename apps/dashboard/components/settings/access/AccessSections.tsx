@@ -1,6 +1,7 @@
 "use client";
 
 import { AccessReviewSection } from "@/components/settings/access/AccessReviewSection";
+import { FieldHelp } from "@/components/display/FieldHelp";
 import { AccessSection } from "@/components/settings/access/AccessSection";
 import { AuditLogSection } from "@/components/settings/access/AuditLogSection";
 import { accessCapabilities } from "@/components/settings/access/capabilities";
@@ -55,6 +56,11 @@ export function AccessSections({
           slug="members"
           heading="Members"
           title="the members"
+          help={
+            <FieldHelp field="Members">
+              The people in this team. A person is in one team at most.
+            </FieldHelp>
+          }
           description="Each person belongs to at most one team."
         >
           <MembersSection viewer={viewer} teamId={teamId} />
@@ -65,6 +71,12 @@ export function AccessSections({
           slug="team-admins"
           heading="Team admins"
           title="the team admins"
+          help={
+            <FieldHelp field="Team admins">
+              People who lead this team: they manage its members and what it
+              shows.
+            </FieldHelp>
+          }
           description="Admins of a team or department manage its members and visibility."
         >
           <TeamAdminsSection viewer={viewer} teamId={teamId} />

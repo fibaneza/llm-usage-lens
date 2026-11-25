@@ -14,6 +14,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import type { z } from "zod";
 
+import { FieldHelp } from "@/components/display/FieldHelp";
 import { EmptyState } from "@/components/display/EmptyState";
 import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { useOrgUnits } from "@/components/settings/access/access-queries";
@@ -172,7 +173,12 @@ export function PendingAccessSection({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium">Pending invitations</h3>
+        <div className="flex items-center gap-1">
+          <h3 className="text-sm font-medium">Pending invitations</h3>
+          <FieldHelp field="Pending invitations">
+            People invited by email who have not signed in yet.
+          </FieldHelp>
+        </div>
         <SectionBoundary
           title="the pending invitations"
           fallback={<Skeleton className="h-24 w-full" />}
@@ -244,7 +250,13 @@ export function PendingAccessSection({
         />
       ) : null}
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium">Stale access</h3>
+        <div className="flex items-center gap-1">
+          <h3 className="text-sm font-medium">Stale access</h3>
+          <FieldHelp field="Stale access">
+            Access held by someone who has not signed in for a long time. Review
+            it and remove what is not needed.
+          </FieldHelp>
+        </div>
         <SectionBoundary
           title="the stale access"
           fallback={<Skeleton className="h-24 w-full" />}

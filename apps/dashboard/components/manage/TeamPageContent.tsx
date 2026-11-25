@@ -42,6 +42,8 @@ type TeamPageContentProps = {
   scopeLabel: string | null;
   // Server-rendered team-level access sections, when the caller has any.
   access?: ReactNode;
+  // Server-rendered team summary (Design System - Team page, round 3, TP1).
+  summary?: ReactNode;
 };
 
 // The Team Management page body (Design System - Management pages, Team; LiteLLM
@@ -53,6 +55,7 @@ export function TeamPageContent({
   canRaiseLimits,
   scopeLabel,
   access,
+  summary,
 }: TeamPageContentProps) {
   const me = useMeQuery();
 
@@ -70,6 +73,7 @@ export function TeamPageContent({
     return (
       <div className="flex flex-col gap-4">
         <PageHeader description={DESCRIPTION} />
+        {summary}
         <p className="text-muted-foreground text-sm">
           This team is not available.
         </p>
@@ -88,6 +92,7 @@ export function TeamPageContent({
             : undefined
         }
       />
+      {summary}
       {team.linked ? (
         <LinkedTeamViews
           teamId={team.teamId}

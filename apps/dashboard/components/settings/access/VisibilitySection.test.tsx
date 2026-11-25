@@ -12,6 +12,7 @@ import {
 } from "@/test/fakes/access-ui-stubs";
 import { ADMIN, DEPT_ADMIN, TEAM_ADMIN } from "@/test/fixtures/access-viewers";
 import { renderWithProviders } from "@/test/support/render-providers";
+import { expectFieldHelp } from "@/test/support/team-field-help";
 
 import { VisibilitySection } from "./VisibilitySection";
 
@@ -446,4 +447,35 @@ describe("VisibilitySection department panel on the team page (Q-B2)", () => {
     await screen.findByLabelText("User level");
     expect(screen.queryByLabelText("Department totals")).toBeNull();
   });
+});
+
+// Design System - Team page, round 3 (unit TP1), FieldHelp table, T-TP6.
+// Guard: VisibilitySection.tsx TeamForm and DepartmentForm place
+// <FieldHelp> beside each FormField label; the labels stay unchanged.
+describe("VisibilitySection FieldHelp (T-TP6)", () => {
+  it.each(["Team totals", "User level"] as const)(
+    "the team form's %s field has its help text",
+    async (field) => {
+      stubAccessApi(routes());
+      renderWithProviders(<VisibilitySection viewer={ADMIN} />);
+      await screen.findByLabelText("User level");
+      await expectFieldHelp(field);
+    },
+  );
+
+  it.each(["Department totals", "User level cap"] as const)(
+    "the department form's %s field has its help text",
+    async (field) => {
+      stubAccessApi(routes());
+      renderWithProviders(
+        <VisibilitySection
+          viewer={DEPT_ADMIN}
+          teamId="team-pay"
+          departmentId="dept-eng"
+        />,
+      );
+      await screen.findByLabelText("Department totals");
+      await expectFieldHelp(field);
+    },
+  );
 });

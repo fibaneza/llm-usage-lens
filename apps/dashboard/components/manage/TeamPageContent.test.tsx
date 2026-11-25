@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiError, apiResponse } from "@/test/fakes/api-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
+import { expectFieldHelp } from "@/test/support/team-field-help";
 
 import { TeamPageContent } from "./TeamPageContent";
 
@@ -1674,5 +1675,99 @@ describe("TeamPageContent open budget reset requests (M4; MG-D12)", () => {
       await screen.findByLabelText("Max budget (USD)"),
     ).toBeInTheDocument();
     expect(within(budgets).queryByText(/resets/i)).toBeNull();
+  });
+});
+
+// Design System - Team page, round 3 (unit TP1): "The page opens with a panel"
+// (Summary), built on the server and handed in. Contract: TeamPageContent
+// takes an optional `summary?: ReactNode` prop (the server page passes
+// <TeamSummaryPanel .../>) and renders it directly after the PageHeader,
+// before the tabs and the access slot, in every state that renders the
+// header (linked, unlinked, team not in the LiteLLM list).
+describe("TeamPageContent summary slot (TP1 Summary)", () => {
+  const summary = <section aria-label="Summary slot">summary body</section>;
+  const renderSummary = (teamId: string, searchParams = {}) =>
+    renderWithProviders(
+      <TeamPageContent
+        teamId={teamId}
+        canRaiseLimits={false}
+        scopeLabel={null}
+        summary={summary}
+      />,
+      { searchParams },
+    );
+
+  it("renders the summary before the view tabs of a linked team", async () => {
+    stub();
+    renderSummary("t1");
+    const slot = await screen.findByRole("region", { name: "Summary slot" });
+    const tabs = await screen.findByRole("tablist");
+    expect(
+      slot.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders the summary for a team with no LiteLLM team of its own", async () => {
+    stub({
+      "GET /api/litellm/me": () =>
+        apiResponse({
+          data: {
+            linked: false,
+            enabledOperations: [],
+            teams: [
+              {
+                teamId: "t1",
+                teamName: "Guild",
+                linked: false,
+                configurable: false,
+              },
+            ],
+          },
+        }),
+    });
+    renderSummary("t1");
+    expect(
+      await screen.findByRole("region", { name: "Summary slot" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/This team has no LiteLLM team of its own/),
+    ).toBeVisible();
+  });
+
+  it("renders the summary when the team is not in the LiteLLM list", async () => {
+    stub();
+    renderSummary("t-unknown");
+    expect(
+      await screen.findByRole("region", { name: "Summary slot" }),
+    ).toBeVisible();
+    expect(screen.getByText("This team is not available.")).toBeVisible();
+  });
+});
+
+// Design System - Team page, round 3 (unit TP1), FieldHelp table, T-TP6.
+// Guard: ModelsPanel.tsx puts <FieldHelp field="Models"> in the Models panel.
+describe("TeamPageContent FieldHelp (T-TP6)", () => {
+  it("the Models panel has its help text", async () => {
+    stub();
+    renderView("keys");
+    await region("Models");
+    await expectFieldHelp("Models");
+  });
+
+  // WCAG 2.5.3 Label in Name; Design System - Team page, round 3, FieldHelp:
+  // the help sits beside a VISIBLE label. Guard: ModelsPanel.tsx:43-47 puts
+  // the button in a row with a visible "Models" label or legend (today the
+  // legend is sr-only and the button stands alone).
+  it("the Models help button sits in the same row as a visible Models label, not alone (T-TP6)", async () => {
+    stub();
+    renderView("keys");
+    const models = await region("Models");
+    const button = await within(models).findByRole("button", {
+      name: "About Models",
+    });
+    const row = button.parentElement as HTMLElement;
+    const label = within(row).getByText(/^Models\b/);
+    expect(label).toBeVisible();
+    expect(label.closest(".sr-only")).toBeNull();
   });
 });

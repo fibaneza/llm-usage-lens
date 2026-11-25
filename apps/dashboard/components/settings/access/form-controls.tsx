@@ -16,11 +16,13 @@ export function FormField({
   label,
   error,
   hint,
+  help,
   children,
 }: {
   label: string;
   error?: string | undefined;
   hint?: string;
+  help?: ReactNode;
   children: (props: FieldChildProps) => ReactElement;
 }) {
   const id = useId();
@@ -30,9 +32,18 @@ export function FormField({
       .join(" ") || undefined;
   return (
     <div className="flex max-w-[72ch] flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium">
-        {label}
-      </label>
+      {help ? (
+        <div className="flex items-center gap-1">
+          <label htmlFor={id} className="text-sm font-medium">
+            {label}
+          </label>
+          {help}
+        </div>
+      ) : (
+        <label htmlFor={id} className="text-sm font-medium">
+          {label}
+        </label>
+      )}
       {children({
         id,
         "aria-invalid": error !== undefined,

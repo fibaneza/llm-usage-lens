@@ -1293,6 +1293,8 @@ in scope from the next request (scopes are read per request, never cached).
 The write records `appteam.update` (who, when, the old and the new name and
 department) and refreshes the cached team directory.
 
+*Agent decision (2026-11-26, unit TP1, review r1 Q-W3; Rule 60.10):* once a team can move, its department is authorization data. Every scope decision about a created team (the Team page read, the team-scoped writes) reads the team's department per request, uncached; the cached team directory serves display only (names, pickers, lists). Reason: other server instances would otherwise keep the old department's lead in scope until the cache expires.
+
 Threats: T-items for a write route as for team creation — elevation by a
 lead or an auditor (the role check before parsing; T-TP2), a lost update
 (the version; T-TP3), and a stale name after the change (the cache refresh;

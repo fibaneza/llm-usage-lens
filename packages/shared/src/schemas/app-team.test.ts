@@ -5,6 +5,7 @@ import {
   AppTeamNameSchema,
   AppTeamSchema,
   CreateAppTeamInputSchema,
+  UpdateAppTeamInputSchema,
   OrgUnitsResponseSchema,
   appTeamNameKey,
   isReservedTeamId,
@@ -116,6 +117,51 @@ describe("CreateAppTeamInputSchema (T-MI3: the id is server-generated)", () => {
       false,
     );
   });
+});
+
+// Source: docs/specs/2026-11-10-access-control.md - "Edit a created team" (unit
+// TP1): body { name, departmentId, version }; name 1-80 after trimming,
+// departmentId as the creation body, the version the caller was shown; the id
+// comes from the path, never the body (T-MI3 precedent, as for creation).
+describe("UpdateAppTeamInputSchema (Edit a created team, T-TP3)", () => {
+  const body = { name: "Platform Guild", departmentId: "dept-eng", version: 1 };
+
+  it("accepts name, departmentId and version, trimming the name", () => {
+    expect(
+      UpdateAppTeamInputSchema.parse({ ...body, name: "  Platform Guild " }),
+    ).toEqual(body);
+  });
+
+  it("accepts an 80 character name after trimming", () => {
+    const name = "x".repeat(80);
+    expect(
+      UpdateAppTeamInputSchema.parse({ ...body, name: ` ${name} ` }).name,
+    ).toBe(name);
+  });
+
+  it.each([
+    ["an empty name", { name: "  " }],
+    ["an 81 character name", { name: "a".repeat(81) }],
+    ["a blank departmentId", { departmentId: "   " }],
+    ["a 129 character departmentId", { departmentId: "d".repeat(129) }],
+    ["a fractional version", { version: 1.5 }],
+    ["version 0 (an integer of at least 1)", { version: 0 }],
+    ["a string version", { version: "1" }],
+    ["a body teamId", { teamId: ID }],
+  ])("rejects %s", (_label, patch) => {
+    expect(
+      UpdateAppTeamInputSchema.safeParse({ ...body, ...patch }).success,
+    ).toBe(false);
+  });
+
+  it.each(["name", "departmentId", "version"])(
+    "rejects a missing %s",
+    (key) => {
+      const rest: Record<string, unknown> = { ...body };
+      delete rest[key];
+      expect(UpdateAppTeamInputSchema.safeParse(rest).success).toBe(false);
+    },
+  );
 });
 
 describe("appTeamNameKey (AppTeamNameClaim key: lower(trim(name)))", () => {

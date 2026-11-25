@@ -4,7 +4,7 @@ import { unstable_cache } from "next/cache";
 
 import type { AccountMeta, AppTeam } from "@llm-usage-lens/shared";
 
-import { listAppTeams } from "@/lib/data/access/app-teams";
+import { getAppTeam, listAppTeams } from "@/lib/data/access/app-teams";
 
 import { getAllAccountsCached } from "./cached-reads";
 
@@ -66,6 +66,13 @@ export async function listTeamDirectory(): Promise<TeamDirectoryEntry[]> {
 export async function findTeamEntry(
   teamId: string,
 ): Promise<TeamDirectoryEntry | null> {
-  const directory = await listTeamDirectory();
-  return directory.find((e) => e.teamId === teamId) ?? null;
+  // Rule 60.10, Access Control - "Edit a created team": a created team's
+  // department is read per request, never from the cached list.
+  const accounts = await getAllAccountsCached();
+  const fromRegistry = buildTeamDirectory(accounts, []).find(
+    (e) => e.teamId === teamId,
+  );
+  if (fromRegistry) return fromRegistry;
+  const created = await getAppTeam(teamId);
+  return created ? (buildTeamDirectory([], [created])[0] ?? null) : null;
 }

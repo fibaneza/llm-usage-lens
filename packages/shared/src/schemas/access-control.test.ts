@@ -347,7 +347,8 @@ describe("audit schemas", () => {
     // RS2 adds litellm.user.reset-spend (Access Control - Audit log; LiteLLM spec LD39).
     // SYNC1 adds litellm.user.sync, identity.litellm-pending.set and
     // identity.litellm-pending.remove (Access Control - Audit log, Covered).
-    expect(AUDIT_ACTIONS).toHaveLength(78);
+    // TP1 adds appteam.update (Access Control - Edit a created team; Audit log).
+    expect(AUDIT_ACTIONS).toHaveLength(79);
     for (const action of [
       "litellm.user.sync",
       "identity.litellm-pending.set",
@@ -359,6 +360,7 @@ describe("audit schemas", () => {
     expect(AUDIT_ACTIONS).toContain("affiliation.invite.accept");
     for (const action of [
       "appteam.create",
+      "appteam.update",
       "budgetreset.request.create",
       "budgetreset.request.approve",
       "budgetreset.request.deny",
@@ -593,6 +595,12 @@ describe("sanitizeAuditSnapshot (T17)", () => {
       version: 2,
     };
     expect(sanitizeAuditSnapshot({ ...link, key: "sk-secret" })).toEqual(link);
+  });
+  // Access Control - Edit a created team, T-TP4: the appteam.update snapshot
+  // holds the team's old and new name and department.
+  it("keeps the name and departmentId of a team edit (appteam.update, T-TP4)", () => {
+    const team = { name: "Platform Guild", departmentId: "dept-eng" };
+    expect(sanitizeAuditSnapshot({ ...team, key: "sk-secret" })).toEqual(team);
   });
   it("drops secrets and claim-like keys", () => {
     const out = sanitizeAuditSnapshot({

@@ -1,12 +1,16 @@
 import { notFound } from "next/navigation";
 
 import { auth } from "@/auth";
+import { SectionBoundary } from "@/components/display/SectionBoundary";
 import { AccessSections } from "@/components/settings/access/AccessSections";
 import { accessCapabilities } from "@/components/settings/access/capabilities";
 import { TeamPageContent } from "@/components/manage/TeamPageContent";
+import { TeamSummarySection } from "@/components/manage/TeamSummarySection";
 import { globalRolesOf, resolveScope } from "@/lib/auth/policy";
+import { resolveUrlRange } from "@/lib/date-range";
 import { INTERNAL_ADMIN_ROLE } from "@/lib/auth/roles";
 import { loadSettingsAccessViewer } from "@/lib/auth/settings-access";
+import { isMatrixWriter } from "@/lib/auth/write-policy";
 import { authorizationFor } from "@/lib/litellm/route-guard";
 import { managementAccessFor } from "@/lib/manage-access";
 import { findTeamInScope } from "@/lib/manage/team-scope";
@@ -33,10 +37,13 @@ const ACCESS_SECTIONS: readonly AccessSectionSlug[] = [
 // page. Each write route still enforces its own rights.
 export default async function TeamDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ teamId: string }>;
+  searchParams?: Promise<{ dateFrom?: string; dateTo?: string }>;
 }) {
   const { teamId } = await params;
+  const { dateFrom, dateTo } = (await searchParams) ?? {};
   const session = await auth();
   const access = await managementAccessFor(session);
   if (!access.team) notFound();
@@ -52,6 +59,8 @@ export default async function TeamDetailPage({
   const entry = await findTeamInScope(teamId, access.global, scope);
   if (!entry) notFound();
 
+  const canEdit = isMatrixWriter(roles);
+
   const viewer = await loadSettingsAccessViewer(session);
   const capabilities = viewer ? accessCapabilities(viewer) : null;
   const hasAccessSections =
@@ -64,6 +73,16 @@ export default async function TeamDetailPage({
       teamId={teamId}
       canRaiseLimits={roles.includes(INTERNAL_ADMIN_ROLE)}
       scopeLabel={access.global ? null : scopeLabelFor(scope)}
+      summary={
+        <SectionBoundary title="summary">
+          <TeamSummarySection
+            entry={entry}
+            global={access.global}
+            range={resolveUrlRange(dateFrom, dateTo)}
+            canEdit={canEdit}
+          />
+        </SectionBoundary>
+      }
       access={
         hasAccessSections ? (
           <AccessSections

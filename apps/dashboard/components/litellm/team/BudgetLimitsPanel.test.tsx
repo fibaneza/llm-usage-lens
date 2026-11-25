@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiError, apiResponse } from "@/test/fakes/api-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
+import { expectFieldHelp } from "@/test/support/team-field-help";
 
 import { BudgetLimitsPanel } from "./BudgetLimitsPanel";
 
@@ -123,5 +124,22 @@ describe("open budget reset requests on the Team page with the toggles off (revi
     await screen.findByText("Ada");
     expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
     expect(screen.queryByText(/switched off/i)).toBeNull();
+  });
+});
+
+// Design System - Team page, round 3 (unit TP1), FieldHelp table, T-TP6.
+// Guard: BudgetLimitsPanel.tsx beside "Max budget (USD)", the period and the
+// two limit inputs; the input labels stay as they are.
+describe("BudgetLimitsPanel FieldHelp (T-TP6)", () => {
+  it.each([
+    "Max budget",
+    "Budget period",
+    "Tokens per minute",
+    "Requests per minute",
+  ] as const)("%s has its help text", async (field) => {
+    stub(["setTeamBudget", "setTeamLimits"]);
+    renderPanel();
+    await screen.findByLabelText("Max budget (USD)");
+    await expectFieldHelp(field);
   });
 });

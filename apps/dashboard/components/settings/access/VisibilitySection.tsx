@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { parseAsString, useQueryState } from "nuqs";
 import { useState } from "react";
 
+import { FieldHelp } from "@/components/display/FieldHelp";
 import { EmptyState } from "@/components/display/EmptyState";
 import { accessErrorMessage } from "@/components/settings/access/access-error-message";
 import {
@@ -94,7 +95,14 @@ function TeamForm({
         save.mutate();
       }}
     >
-      <FormField label="Team totals">
+      <FormField
+        label="Team totals"
+        help={
+          <FieldHelp field="Team totals">
+            Whether members see this team&apos;s total cost and its breakdowns.
+          </FieldHelp>
+        }
+      >
         {(props) => (
           <NativeSelect
             {...props}
@@ -108,7 +116,15 @@ function TeamForm({
           </NativeSelect>
         )}
       </FormField>
-      <FormField label="User level">
+      <FormField
+        label="User level"
+        help={
+          <FieldHelp field="User level">
+            Which per-person rows members see: everyone&apos;s (All), only their
+            own (Own), or none.
+          </FieldHelp>
+        }
+      >
         {(props) => (
           <NativeSelect
             {...props}
@@ -171,7 +187,16 @@ function DepartmentForm({ data }: { data: DepartmentVisibility }) {
         save.mutate();
       }}
     >
-      <FormField label="Department totals">
+      <FormField
+        label="Department totals"
+        help={
+          <FieldHelp field="Department totals">
+            Whether members of this department&apos;s teams see the
+            department&apos;s total. It reveals the other teams&apos; combined
+            spend.
+          </FieldHelp>
+        }
+      >
         {(props) => (
           <NativeSelect
             {...props}
@@ -187,6 +212,12 @@ function DepartmentForm({ data }: { data: DepartmentVisibility }) {
       </FormField>
       <FormField
         label="User level cap"
+        help={
+          <FieldHelp field="User level cap">
+            The most any team in this department may show per person. A team set
+            higher is limited to this.
+          </FieldHelp>
+        }
         hint="No team in this department can show users above this level."
       >
         {(props) => (

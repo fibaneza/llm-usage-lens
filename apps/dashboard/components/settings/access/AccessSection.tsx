@@ -10,12 +10,14 @@ export function AccessSection({
   heading,
   title,
   description,
+  help,
   children,
 }: {
   slug: string;
   heading: string;
   title: string;
   description?: string;
+  help?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -25,9 +27,18 @@ export function AccessSection({
       className="flex scroll-mt-20 flex-col gap-3"
     >
       <div className="flex max-w-[72ch] flex-col gap-1">
-        <h2 id={`${slug}-heading`} className="text-base font-semibold">
-          {heading}
-        </h2>
+        {help ? (
+          <div className="flex items-center gap-1">
+            <h2 id={`${slug}-heading`} className="text-base font-semibold">
+              {heading}
+            </h2>
+            {help}
+          </div>
+        ) : (
+          <h2 id={`${slug}-heading`} className="text-base font-semibold">
+            {heading}
+          </h2>
+        )}
         {description ? (
           <p className="text-muted-foreground text-sm">{description}</p>
         ) : null}
