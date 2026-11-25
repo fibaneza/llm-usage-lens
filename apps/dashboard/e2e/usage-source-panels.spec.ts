@@ -146,16 +146,24 @@ const MEMBER_SUM = {
   },
 };
 
+// Design System - LiteLLM client requests (unit FX1), T-FX5: without q the
+// route answers the LIST shape (UsersListResponseSchema, D-LF1).
 const LITELLM_USERS = {
   users: [
     {
-      userId: "u-1",
-      email: "lite@example.test",
-      teams: [{ teamId: "t-1", teamName: "Platform" }],
+      key: "u-1",
+      linkState: "unlinked",
+      appUser: null,
+      litellmUser: {
+        userId: "u-1",
+        email: "lite@example.test",
+        teams: [{ teamId: "t-1", teamName: "Platform" }],
+      },
     },
   ],
   page: 1,
   pageSize: 25,
+  hasMore: false,
   enabledOperations: [],
 };
 
@@ -442,6 +450,18 @@ test.describe("Usage source panels (M5)", () => {
       }),
     ).toHaveAttribute("href", /\/dashboard\/manage\/litellm\/users$/);
     await expectNoBlockingViolations(page);
+  });
+
+  test("T-FX5 Cost by user with a list-shaped users answer: the LiteLLM users render and no alert shows (Design System - LiteLLM client requests)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await mockBedrock(page);
+    await mockLiteLLM(page);
+    await open(page, "/dashboard/users");
+    const litellm = page.getByRole("region", { name: "LiteLLM" });
+    await expect(litellm.getByText("lite@example.test")).toBeVisible();
+    await expect(litellm.getByRole("alert")).toHaveCount(0);
   });
 
   test("Cost by service at 1440px and 375px: the honest gap line and the provider split, no service rows from LiteLLM", async ({

@@ -29,7 +29,7 @@ import { CombinedPersonCard } from "./combined/CombinedPersonCard";
 import { DailySpend } from "./DailySpend";
 import { LiteLLMReportedBadge } from "./LiteLLMReportedBadge";
 import { Empty, Unavailable } from "./LiteLLMSection";
-import { useLiteLLMQueryState } from "./use-litellm-query";
+import { useLiteLLMQueryState, useUrlRange } from "./use-litellm-query";
 
 // searchUsers takes 2-100 characters (LiteLLM spec -- Gateway allowlist).
 const MIN_TERM = 2;
@@ -62,9 +62,10 @@ export function UserDetail({
   userId: string;
   account?: ReactNode;
 }) {
+  const { keyParts, query: range } = useUrlRange();
   const query = useLiteLLMQueryState(
-    ["user", userId],
-    `/api/litellm/users/${encodeURIComponent(userId)}`,
+    ["user", userId, ...keyParts],
+    `/api/litellm/users/${encodeURIComponent(userId)}?${range}`,
     LiteLLMUserDetailResponseSchema,
   );
   const headingId = useId();

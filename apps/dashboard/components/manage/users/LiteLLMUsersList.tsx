@@ -15,7 +15,10 @@ import type { ReactNode } from "react";
 
 import { ResetMemberSpendDialog } from "@/components/litellm/ResetMemberSpendDialog";
 import { Empty, Unavailable } from "@/components/litellm/LiteLLMSection";
-import { useLiteLLMQueryState } from "@/components/litellm/use-litellm-query";
+import {
+  useLiteLLMQueryState,
+  useUrlRange,
+} from "@/components/litellm/use-litellm-query";
 import { UserDetail, budget, spend } from "@/components/litellm/UserSearch";
 import { LiteLLMReportedBadge } from "@/components/litellm/LiteLLMReportedBadge";
 import { LiteLLMLinkCell } from "@/components/manage/users/LiteLLMLinkCell";
@@ -644,9 +647,10 @@ function TeamMode({
 }: ViewProps & { onTeamChange: () => void; canReset: boolean }) {
   const teamId = useId();
   const [litellmTeamId, setLitellmTeamId] = useState("");
+  const { keyParts, query: range } = useUrlRange();
   const org = useLiteLLMQueryState(
-    ["users-team-picker"],
-    "/api/litellm/org",
+    ["users-team-picker", ...keyParts],
+    `/api/litellm/org?${range}`,
     LiteLLMOrgResponseSchema,
   );
   const notice = queryNotice(org);

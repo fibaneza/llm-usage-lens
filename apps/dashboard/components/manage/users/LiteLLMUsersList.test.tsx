@@ -1223,3 +1223,46 @@ describe("LiteLLMUsersList sorting (unit SRT1, D-SR1)", () => {
     expect(lastList.searchParams.has("dir")).toBe(false);
   });
 });
+
+// Design System - LiteLLM client requests (unit FX1; D-R3-16), T-FX3: the team
+// picker reads GET /api/litellm/org, which requires a date range, so the
+// request carries the URL range and the picker lists the teams.
+describe("LiteLLMUsersList team picker request (T-FX3)", () => {
+  const RANGE = { dateFrom: "2026-10-01", dateTo: "2026-10-31" };
+
+  it("T-FX3: GET /api/litellm/org has dateFrom and dateTo from the URL, and the picker lists the teams", async () => {
+    const urls: URL[] = [];
+    stub();
+    const base = globalThis.fetch;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://localhost");
+      urls.push(url);
+      if (
+        url.pathname === "/api/litellm/org" &&
+        !(url.searchParams.has("dateFrom") && url.searchParams.has("dateTo"))
+      ) {
+        return Promise.resolve(
+          apiError(400, "BAD_REQUEST", "dateFrom and dateTo are required"),
+        );
+      }
+      return base(input, init);
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMUsersList />, { searchParams: RANGE });
+    await screen.findByText("Ada Lovelace");
+    await user.click(
+      screen.getByRole("radio", { name: "Members of one team" }),
+    );
+
+    const picker = await screen.findByLabelText("Team");
+    expect(
+      within(picker)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(expect.arrayContaining(["Alpha", "Shared platform"]));
+    expect(screen.queryByRole("alert")).toBeNull();
+    const org = urls.find((u) => u.pathname === "/api/litellm/org");
+    expect(org?.searchParams.get("dateFrom")).toBe(RANGE.dateFrom);
+    expect(org?.searchParams.get("dateTo")).toBe(RANGE.dateTo);
+  });
+});

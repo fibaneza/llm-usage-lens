@@ -35,6 +35,37 @@ export function apiError(
 
 export const NEVER = (): Promise<Response> => new Promise<Response>(() => {});
 
+// The default answers of the /api/litellm/** and org-units stubs. Exported so
+// a contract test can parse each with its route's answer schema (Design System
+// - LiteLLM client requests, T-FX4).
+export const DEFAULT_COMBINED_BODY = {
+  data: { visibility: "hidden", configured: true, gatewayConfigured: false },
+};
+export const DEFAULT_LITELLM_ORG_BODY = {
+  data: {
+    configured: false,
+    totals: { spend: 0 },
+    daily: [],
+    litellmTeams: [],
+    appTeams: [],
+    enabledOperations: [],
+  },
+};
+export const DEFAULT_ORG_UNITS_BODY = {
+  data: { teams: [], departments: [] },
+};
+// GET /api/litellm/users: the search shape with q, the list shape without
+// (LiteLLM spec D-LF1; users/route.ts).
+export function defaultLiteLLMUsersBody(url: URL) {
+  const base = { users: [], page: 1, pageSize: 25, enabledOperations: [] };
+  return {
+    data:
+      url.searchParams.has("q") && !url.searchParams.has("team")
+        ? base
+        : { ...base, hasMore: false },
+  };
+}
+
 type Handler = (url: URL) => Response | Promise<Response>;
 
 export type ApiStub = {
@@ -177,40 +208,19 @@ export function stubApi(handlers: {
             : path === "me"
               ? handlers.combinedMe
               : handlers.combinedTeam;
-      return (
-        handler?.(url) ??
-        apiResponse({
-          data: {
-            visibility: "hidden",
-            configured: true,
-            gatewayConfigured: false,
-          },
-        })
-      );
+      return handler?.(url) ?? apiResponse(DEFAULT_COMBINED_BODY);
     }
     if (url.pathname === "/api/litellm/org") {
       litellmOrgUrls.push(url);
       return (
-        handlers.litellmOrg?.(url) ??
-        apiResponse({
-          data: {
-            configured: false,
-            totals: { spend: 0 },
-            daily: [],
-            litellmTeams: [],
-            appTeams: [],
-            enabledOperations: [],
-          },
-        })
+        handlers.litellmOrg?.(url) ?? apiResponse(DEFAULT_LITELLM_ORG_BODY)
       );
     }
     if (url.pathname === "/api/litellm/users") {
       litellmUsersUrls.push(url);
       return (
         handlers.litellmUsers?.(url) ??
-        apiResponse({
-          data: { users: [], page: 1, pageSize: 25, enabledOperations: [] },
-        })
+        apiResponse(defaultLiteLLMUsersBody(url))
       );
     }
     if (url.pathname.startsWith("/api/litellm/teams/")) {
@@ -222,10 +232,7 @@ export function stubApi(handlers: {
     }
     if (url.pathname === "/api/access/org-units") {
       orgUnitsUrls.push(url);
-      return (
-        handlers.orgUnits?.(url) ??
-        apiResponse({ data: { teams: [], departments: [] } })
-      );
+      return handlers.orgUnits?.(url) ?? apiResponse(DEFAULT_ORG_UNITS_BODY);
     }
     if (url.pathname === "/api/me" && handlers.me) return handlers.me(url);
     throw new Error(`unexpected fetch: ${url.pathname}`);

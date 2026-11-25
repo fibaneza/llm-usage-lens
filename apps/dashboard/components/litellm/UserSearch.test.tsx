@@ -80,7 +80,7 @@ const defaultRoutes: Routes = (url) =>
     ? apiResponse({ data: USERS })
     : apiResponse({ data: DETAIL });
 
-function setup() {
+function setup(searchParams?: Record<string, string>) {
   // Only timers are faked (Rule 60.24); fetch and promises stay real.
   vi.useFakeTimers({
     toFake: ["setTimeout", "clearTimeout"],
@@ -91,7 +91,7 @@ function setup() {
     advanceTimers: (ms) => vi.advanceTimersByTime(ms),
     delay: null,
   });
-  renderWithProviders(<UserSearch />);
+  renderWithProviders(<UserSearch />, searchParams ? { searchParams } : {});
   return user;
 }
 const settle = () =>
@@ -363,5 +363,41 @@ describe("UserSearch selected user - combined figure (L6)", () => {
     expect(await within(detail).findByRole("status")).toHaveTextContent(
       "gateway not configured — totals may double count",
     );
+  });
+});
+
+// Design System - LiteLLM client requests (unit FX1; D-R3-16), T-FX2: the user
+// detail route requires a date range (DateRangeQuerySchema), so the request
+// carries the URL range and the detail renders. The stub refuses a request
+// without dateFrom and dateTo with the standard 400 body.
+describe("UserSearch detail request carries the URL date range (T-FX2)", () => {
+  const RANGE = { dateFrom: "2026-10-01", dateTo: "2026-10-31" };
+
+  it("T-FX2: GET /api/litellm/users/[id] has dateFrom and dateTo from the URL, and the detail renders", async () => {
+    const calls = stub((url) => {
+      if (url.pathname === "/api/litellm/users") {
+        return apiResponse({ data: USERS });
+      }
+      return url.searchParams.has("dateFrom") && url.searchParams.has("dateTo")
+        ? apiResponse({ data: DETAIL })
+        : apiError(400, "BAD_REQUEST", "dateFrom and dateTo are required");
+    });
+    const user = setup(RANGE);
+    await user.type(
+      screen.getByRole("searchbox", { name: /search users/i }),
+      "ad",
+    );
+    await settle();
+    await user.click(
+      await screen.findByRole("button", { name: "ada@example.test" }),
+    );
+    await settle();
+
+    const detail = await screen.findByRole("region", { name: /user usage/i });
+    expect(within(detail).getByText("$77.10")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    const asked = calls.find((u) => u.pathname === "/api/litellm/users/u-ada");
+    expect(asked?.searchParams.get("dateFrom")).toBe(RANGE.dateFrom);
+    expect(asked?.searchParams.get("dateTo")).toBe(RANGE.dateTo);
   });
 });

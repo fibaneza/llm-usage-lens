@@ -1,6 +1,6 @@
 "use client";
 
-import { LiteLLMUserSearchResponseSchema } from "@llm-usage-lens/shared";
+import { UsersListResponseSchema } from "@llm-usage-lens/shared";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -29,11 +29,14 @@ export function UsersLiteLLMPanel() {
   const result = useLiteLLMQuery(
     ["users", "all", String(page)],
     `/api/litellm/users?page=${page}`,
-    LiteLLMUserSearchResponseSchema,
+    UsersListResponseSchema,
   );
 
   if (result.status === "unavailable") return <Unavailable />;
-  const { users, pageSize } = result.data;
+  const { hasMore } = result.data;
+  const users = result.data.users.flatMap((row) =>
+    row.litellmUser ? [{ key: row.key, ...row.litellmUser }] : [],
+  );
   if (users.length === 0 && page === 1) {
     return (
       <>
@@ -59,7 +62,7 @@ export function UsersLiteLLMPanel() {
         <ul aria-label="LiteLLM users" className="flex flex-col gap-2">
           {users.map((u) => (
             <li
-              key={u.userId}
+              key={u.key}
               className="rounded-card border-border flex flex-col gap-1 border p-3"
             >
               <span className="text-sm font-medium">{u.email}</span>
@@ -84,7 +87,7 @@ export function UsersLiteLLMPanel() {
           </TableHeader>
           <TableBody>
             {users.map((u) => (
-              <TableRow key={u.userId}>
+              <TableRow key={u.key}>
                 <TableCell>{u.email}</TableCell>
                 <TableCell>
                   {u.teams.map((t) => t.teamName).join(", ") || "No teams"}
@@ -110,7 +113,7 @@ export function UsersLiteLLMPanel() {
         <Button
           variant="outline"
           size="sm"
-          disabled={users.length < pageSize}
+          disabled={!hasMore}
           onClick={() => setPage((p) => p + 1)}
         >
           Next

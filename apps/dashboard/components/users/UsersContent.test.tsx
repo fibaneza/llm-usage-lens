@@ -311,14 +311,21 @@ describe("UsersContent -- source panels (M5)", () => {
           data: {
             users: [
               {
-                userId: "u-1",
-                email: "lite@example.test",
-                spend: 2,
-                teams: [],
+                key: "u-1",
+                linkState: "unlinked",
+                appUser: null,
+                litellmUser: {
+                  userId: "u-1",
+                  email: "lite@example.test",
+                  spend: 2,
+                  maxBudget: null,
+                  teams: [],
+                },
               },
             ],
             page: 1,
             pageSize: 25,
+            hasMore: false,
             enabledOperations: [],
           },
         }),
@@ -334,8 +341,35 @@ describe("UsersContent -- source panels (M5)", () => {
     expect(within(litellm).queryByText("alice@example.com")).toBeNull();
   });
 
-  it("M5-D4: the old 'Management → Users' note is gone; the pointer is in the LiteLLM panel", async () => {
+  // Design System - LiteLLM client requests, T-FX4: the default stub answer must
+  // mount the panel, not its error boundary.
+  it("D17 + T-FX4: with the default stub the LiteLLM region renders its panel (empty state and pointer), not an error", async () => {
     stubApi({ users: usersFor() });
+    renderWithProviders(<UsersContent />, URL_PARAMS);
+    const litellm = await screen.findByRole("region", { name: "LiteLLM" });
+    expect(await within(litellm).findByText("No LiteLLM users")).toBeVisible();
+    expect(
+      within(litellm).getByRole("link", {
+        name: "Management → LiteLLM → LiteLLM users",
+      }),
+    ).toBeVisible();
+    expect(within(litellm).queryByRole("alert")).toBeNull();
+  });
+
+  it("M5-D4: the old 'Management → Users' note is gone; the pointer is in the LiteLLM panel", async () => {
+    stubApi({
+      users: usersFor(),
+      litellmUsers: () =>
+        apiResponse({
+          data: {
+            users: [],
+            page: 1,
+            pageSize: 25,
+            hasMore: false,
+            enabledOperations: [],
+          },
+        }),
+    });
     renderWithProviders(<UsersContent />, URL_PARAMS);
     await screen.findByRole("table");
     expect(

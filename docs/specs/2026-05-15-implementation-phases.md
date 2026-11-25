@@ -1092,7 +1092,7 @@ Phase 5 (user, 2026-11-25; Rule 30).
 
 - [ ] **MR0** spec and rules (`docs/management-round3`)
   Verify: `spec-guardian` approves; every superseded statement is marked
-- [ ] **FX1** the three LiteLLM client defects (`fix/litellm-client-contracts`)
+- [x] **FX1** the three LiteLLM client defects (`fix/litellm-client-contracts`)
   Verify: T-FX1–T-FX5 (Design System — *LiteLLM client requests*); no alert on
   Cost by user, on a user click, or on "Members of one team"
 - [ ] **RF1** refresh button, PERF-R (`feature/phase-5-perf-r-refresh-button`)

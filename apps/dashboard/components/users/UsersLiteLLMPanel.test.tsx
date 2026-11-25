@@ -19,20 +19,29 @@ import { UsersLiteLLMPanel } from "./UsersLiteLLMPanel";
 // Module under test: `components/users/UsersLiteLLMPanel.tsx` (client)
 const PAGE_SIZE = 25;
 
+// Design System - LiteLLM client requests (unit FX1; D-R3-16, D-R3-18) and
+// LiteLLM spec D-LF1: GET /api/litellm/users without q answers the LIST shape
+// (UsersListResponseSchema: rows with `litellmUser`, page, hasMore), not the
+// search shape; the panel pages from page and hasMore.
 function user(i: number, overrides: Record<string, unknown> = {}) {
   return {
-    userId: `u-${i}`,
-    email: `person${String(i).padStart(2, "0")}@example.test`,
-    spend: i + 0.5,
-    maxBudget: null,
-    teams: i % 2 ? [{ teamId: "t-1", teamName: "Platform" }] : [],
-    ...overrides,
+    key: `u-${i}`,
+    linkState: "unlinked",
+    appUser: null,
+    litellmUser: {
+      userId: `u-${i}`,
+      email: `person${String(i).padStart(2, "0")}@example.test`,
+      spend: i + 0.5,
+      maxBudget: null,
+      teams: i % 2 ? [{ teamId: "t-1", teamName: "Platform" }] : [],
+      ...overrides,
+    },
   };
 }
 
-function usersBody(users: unknown[], page = 1) {
+function usersBody(users: unknown[], page = 1, hasMore = false) {
   return apiResponse({
-    data: { users, page, pageSize: PAGE_SIZE, enabledOperations: [] },
+    data: { users, page, pageSize: PAGE_SIZE, hasMore, enabledOperations: [] },
   });
 }
 
@@ -49,6 +58,23 @@ function renderPanel() {
 }
 
 describe("UsersLiteLLMPanel", () => {
+  // Design System - LiteLLM client requests, T-FX1: the list-shaped answer
+  // renders the LiteLLM users; spend is "Hidden" under the cap (LD23).
+  it("T-FX1: a list-shaped answer renders the LiteLLM users, and a user without spend reads Hidden", async () => {
+    stubApi({
+      litellmUsers: () => usersBody([user(1), user(2, { spend: undefined })]),
+    });
+    renderPanel();
+    const table = await screen.findByRole("table", { name: "LiteLLM users" });
+    expect(
+      within(table).getByRole("row", { name: /person01/ }),
+    ).toHaveTextContent("$1.50");
+    expect(
+      within(table).getByRole("row", { name: /person02/ }),
+    ).toHaveTextContent("Hidden");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("lists users with email, teams and spend under the 'LiteLLM-reported, total to date' header", async () => {
     stubApi({ litellmUsers: () => usersBody([user(1), user(2)]) });
     renderPanel();
@@ -78,7 +104,7 @@ describe("UsersLiteLLMPanel", () => {
       litellmUsers: (url) =>
         url.searchParams.get("page") === "2"
           ? usersBody([user(40)], 2)
-          : usersBody(full),
+          : usersBody(full, 1, true),
     });
     renderPanel();
     await screen.findByRole("table");
@@ -124,7 +150,7 @@ describe("UsersLiteLLMPanel", () => {
   });
 
   it("M5-D6 empty: 'No LiteLLM users' and no table", async () => {
-    stubApi({}); // default users body is an empty page
+    stubApi({ litellmUsers: () => usersBody([]) });
     renderPanel();
     expect(await screen.findByText("No LiteLLM users")).toBeVisible();
     expect(screen.queryByRole("table")).toBeNull();
