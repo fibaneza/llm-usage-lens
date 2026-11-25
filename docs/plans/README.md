@@ -36,6 +36,7 @@ Run plans, named `<YYYYMMDD>_<slug>.md` by the date each was first written (user
 | `20261125_management_round3.md` | Management round 3 (user, 2026-11-25): three LiteLLM client defects, a page per LiteLLM team and user, field help, Edit team, the refresh button, the sign-in form (units MR0, FX1, RF1, UP1, LP1, SI1, TP1, LP2) | Queued |
 | `20261126_litellm_spend_charts.md` | LiteLLM Organisation spend as a timeline chart (user, 2026-11-26): unit OC1, `improvements_worker` | Queued |
 | `20261126_round3_followups.md` | Round 3 follow-ups (user, 2026-11-26): FX2 three UI fixes (select arrow, connection test, sidebar brand line), OC2 Organisation weekly buckets, ok/failed, share and usage per team | Queued |
+| `20261126_litellm_chart_by_model.md` | LiteLLM Organisation chart by model (user, 2026-11-26: "Yes, plan it"; series by LiteLLM model name): unit OC3, `improvements_worker` after OC2 | Queued |
 
 Removed on 2026-11-18, all units on `main`: the POC plan (`poc/` is built),
 the app config file plan (unit CFG, `5484f12`), the base path plan (unit BP,
@@ -89,6 +90,7 @@ Spec units come before code.
 | 24b | **Round 3:** MR0, FX1, RF1, UP1, LP1, SI1, TP1, LP2 | `20261125_management_round3.md` | queued | Three LiteLLM client defects, a page per LiteLLM team and user, field help, Edit team, the refresh button, the sign-in form |
 | 24c | **OC1:** Organisation spend timeline chart | `20261126_litellm_spend_charts.md` | queued | The daily spend table on LiteLLM → Organisation becomes a timeline chart |
 | 24d | **Follow-ups:** FX2, OC2 | `20261126_round3_followups.md` | queued | FX2 the three UI fixes; OC2 the Organisation usage parity with LiteLLM |
+| 24e | **OC3:** Organisation chart by model | `20261126_litellm_chart_by_model.md` | queued, after OC2 | By-model series (LiteLLM model names) and a Models table |
 | 25 | **Phase 5** polish and accessibility | `20261103_master.md` | fluid workspace done (`85609ea`); compact workspace slices A, B1, B2, B2b on `main`; **the rest is open** | Full accessibility audit (includes the focus-ring token), responsive checks, e2e journeys, and the periodic read-only **security and best-practices review** (HIGH findings block the next unit) |
 
 **Parallel allowances** (user direction, recorded in Rule 30 and
@@ -127,6 +129,7 @@ and gets the Settings → Sync **Refresh now** button (user, 2026-11-18).
 | `20261125_management_round3.md` | `/goal FX1, then LP1, then LP2 of docs/plans/20261125_management_round3.md are ready: each at a green branch gate with its handover sent, in that order` (`litellm_worker`); `/goal RF1, then SI1 of docs/plans/20261125_management_round3.md are ready: each at a green branch gate with its handover sent, in that order` (`improvements_worker`); `/goal UP1, then TP1 of docs/plans/20261125_management_round3.md are ready: each at a green branch gate with its handover sent, in that order` (`bedrock_worker`) |
 | `20261126_litellm_spend_charts.md` | `/goal OC1 of docs/plans/20261126_litellm_spend_charts.md is ready: at a green branch gate with its handover sent` (`improvements_worker`) |
 | `20261126_round3_followups.md` | `/goal FX2 of docs/plans/20261126_round3_followups.md is ready: at a green branch gate with its handover sent` (`bedrock_worker`); `/goal OC2 of docs/plans/20261126_round3_followups.md is ready: at a green branch gate with its handover sent` (`improvements_worker`) |
+| `20261126_litellm_chart_by_model.md` | `/goal OC3 of docs/plans/20261126_litellm_chart_by_model.md is ready: at a green branch gate with its handover sent` (`improvements_worker`) |
 
 Send the instruction first (for example "Run docs/plans/20261109_rbac.md for unit
 R3 in this worktree…", mentioning the plan with `@docs/plans/20261109_rbac.md`),
