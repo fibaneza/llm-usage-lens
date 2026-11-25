@@ -84,8 +84,9 @@ export const GET = withRoute(async (request, _ctx, session) => {
       return jsonData(
         LiteLLMOrgResponseSchema.parse({
           configured: false,
-          totals: { spend: 0 },
+          totals: { spend: 0, requests: 0, tokens: 0, failedRequests: 0 },
           daily: [],
+          dailyByTeam: [],
           litellmTeams: [],
           appTeams: [...appTeams]
             .sort(([, a], [, b]) => a.localeCompare(b))
@@ -120,19 +121,40 @@ export const GET = withRoute(async (request, _ctx, session) => {
       ],
     );
     await runBoundedSettled(reads, READ_CONCURRENCY, (read) => read());
-    const byDate = new Map<string, number>();
+    const byDate = new Map<
+      string,
+      { spend: number; requests: number; tokens: number }
+    >();
     const rangeSpend = new Map<string, number>();
+    let failedRequests = 0;
     for (const [litellmTeamId, days] of rangeOf) {
       let spend = 0;
       for (const d of days) {
         spend += d.spend;
-        byDate.set(d.date, (byDate.get(d.date) ?? 0) + d.spend);
+        failedRequests += d.failedRequests;
+        const day = byDate.get(d.date) ?? { spend: 0, requests: 0, tokens: 0 };
+        day.spend += d.spend;
+        day.requests += d.apiRequests;
+        day.tokens += d.totalTokens;
+        byDate.set(d.date, day);
       }
       rangeSpend.set(litellmTeamId, spend);
     }
     const rows = [...byDate]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, spend]) => ({ date, spend }));
+      .map(([date, day]) => ({ date, ...day }));
+    const dailyByTeam = proxyTeams.map((t) => ({
+      litellmTeamId: t.team_id,
+      alias: t.team_alias ?? null,
+      daily: (rangeOf.get(t.team_id) ?? [])
+        .map((d) => ({
+          date: d.date,
+          spend: d.spend,
+          requests: d.apiRequests,
+          tokens: d.totalTokens,
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    }));
 
     const appOfLiteLLM = new Map(
       links.map((l) => [
@@ -240,8 +262,14 @@ export const GET = withRoute(async (request, _ctx, session) => {
     return jsonData(
       LiteLLMOrgResponseSchema.parse({
         configured: true,
-        totals: { spend: rows.reduce((sum, r) => sum + r.spend, 0) },
+        totals: {
+          spend: rows.reduce((sum, r) => sum + r.spend, 0),
+          requests: rows.reduce((sum, r) => sum + r.requests, 0),
+          tokens: rows.reduce((sum, r) => sum + r.tokens, 0),
+          failedRequests,
+        },
         daily: rows,
+        dailyByTeam,
         litellmTeams,
         appTeams: appRows,
         enabledOperations: enabled,

@@ -928,3 +928,72 @@ describe("LiteLLMUserSearchResponseSchema (D-LF1, T-LF2)", () => {
     expect(LiteLLMUserSearchResponseSchema.parse(body).mayLink).toBe(false);
   });
 });
+
+// Unit OC1 - Design System, "LiteLLM Organisation spend chart" (T-OC2): the
+// new fields are optional, so an answer in today's shape still parses.
+describe("LiteLLMOrgResponseSchema spend-over-time fields (OC1, T-OC2)", () => {
+  const dayRow = { date: "2026-11-02", spend: 1.5, requests: 3, tokens: 45 };
+  const base = {
+    configured: true,
+    totals: { spend: 1.5 },
+    daily,
+    litellmTeams: [],
+    appTeams: [],
+    enabledOperations,
+  };
+  const withNew = {
+    ...base,
+    totals: { spend: 1.5, requests: 3, tokens: 45, failedRequests: 0 },
+    daily: [dayRow],
+    dailyByTeam: [{ litellmTeamId: "ll-1", alias: null, daily: [dayRow] }],
+  };
+
+  it("an answer with per-day requests and tokens, totals and dailyByTeam parses and keeps them", () => {
+    const parsed = LiteLLMOrgResponseSchema.parse(withNew);
+    expect(parsed.totals).toEqual(withNew.totals);
+    expect(parsed.daily).toEqual([dayRow]);
+    expect(parsed.dailyByTeam).toEqual(withNew.dailyByTeam);
+  });
+
+  it("an answer without the new fields (today's shape) parses, and dailyByTeam stays absent", () => {
+    const parsed = LiteLLMOrgResponseSchema.parse(base);
+    expect(parsed.dailyByTeam).toBeUndefined();
+  });
+
+  it.each([
+    ["totals.requests", { ...withNew.totals, requests: -1 }, "totals"],
+    ["totals.tokens", { ...withNew.totals, tokens: -1 }, "totals"],
+    [
+      "totals.failedRequests",
+      { ...withNew.totals, failedRequests: -1 },
+      "totals",
+    ],
+    ["totals.requests", { ...withNew.totals, requests: "3" }, "totals"],
+    [
+      "totals.failedRequests",
+      { ...withNew.totals, failedRequests: "0" },
+      "totals",
+    ],
+  ])("rejects a negative or non-numeric %s", (_name, value, field) => {
+    expect(
+      LiteLLMOrgResponseSchema.safeParse({ ...withNew, [field]: value })
+        .success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["negative requests", { ...dayRow, requests: -1 }],
+    ["negative tokens", { ...dayRow, tokens: -1 }],
+    ["non-numeric tokens", { ...dayRow, tokens: "45" }],
+  ])("rejects a daily row with %s, in daily and in dailyByTeam", (_n, row) => {
+    expect(
+      LiteLLMOrgResponseSchema.safeParse({ ...withNew, daily: [row] }).success,
+    ).toBe(false);
+    expect(
+      LiteLLMOrgResponseSchema.safeParse({
+        ...withNew,
+        dailyByTeam: [{ litellmTeamId: "ll-1", alias: null, daily: [row] }],
+      }).success,
+    ).toBe(false);
+  });
+});

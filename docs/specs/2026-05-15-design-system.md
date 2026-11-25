@@ -283,6 +283,8 @@ Each Bedrock model gets a consistent color across all charts:
 
 Every team token passes WCAG 1.4.11's 3:1 non-text minimum against the card (lowest: `--color-team-8`, 4.80:1). No team token reuses the value of a model token, `--color-cost-non-model`, `--color-primary`, `--color-success` or `--color-destructive`. A team series never uses a model token and a model series never uses a team token (Rule 40.2). Values are defined once in `apps/dashboard/app/globals.css`; components reference the tokens only. `apps/dashboard/app/globals-contrast.test.ts` enforces contrast and distinctness.
 
+The same palette colours the LiteLLM team series of the Organisation spend chart (unit OC1, 2026-11-26): `--color-team-1` … `--color-team-7` for the seven largest teams of the range, largest first, and `--color-team-8` for "Other teams". A single total series takes the primary token, as `DailyCostBarChart` does.
+
 ### Avatar Colors (Per User)
 
 From the compact refresh, avatars in tables are neutral (20px, `--color-muted` fill, foreground initials) because the colour carried no information (agent decision, 2026-11-16). The palette below is kept for non-table uses until a later clean-up. `UserAvatar` (Team Detail users table, Phase 4.6; reused on Users, Phase 4.8) previously filled each initials avatar from a dedicated palette, `--color-avatar-1` … `--color-avatar-8`, chosen by a stable hash of the user id so the same user always gets the same colour (adopted 2026-11-06). The initials are white; every fill meets 4.5:1 against white. Avatars are decorative (`aria-hidden`): the user id is always shown as text beside them, so colour never identifies a user. `apps/dashboard/app/globals-contrast.test.ts` enforces the 4.5:1 contrast and the distinctness from the other families. This family is distinct from the model, team and non-model tokens and never stands in for them (Rule 40.2).
@@ -792,6 +794,49 @@ The top-bar `h1` reads "Account"; the page renders the sign-in facts as a key–
   | T-LP9 | The user cell links to the page; nothing renders under the table; Reset spend and Link / Unlink work from the page for the roles that have them |
   | T-LP10 | The user page and the Team page summary link to the LiteLLM pages only for the three global roles |
 
+- **LiteLLM Organisation spend chart (unit OC1, user, 2026-11-26: "i
+  prefer to display as a chart, timeline for example"; D-OC-1 to
+  D-OC-11).** The Organisation tab opens with four tiles — Total spend,
+  Requests, Tokens, Average cost per request ("—" with no requests) — then
+  the panel **Spend over time**, then the LiteLLM teams table. All figures
+  are LiteLLM-reported, for the range in the top bar, by UTC day (LD20).
+  - **The chart** is a `SpendTimelineChart`: one bar per UTC day; the axis
+    covers every day of the range, and a day LiteLLM reports nothing for
+    has no bar.
+  - **Three switches**, kept in the URL (`metric`, `by`, `view`; a default
+    is not written):
+    - *Metric*: Spend (default), Requests, Tokens.
+    - *Breakdown*: Total (default), By team. By team stacks the LiteLLM
+      teams: the seven largest of the range by the chosen metric, then
+      "Other teams"; a legend names them.
+    - *View*: Chart (default), Table. The table shows the same numbers:
+      per day, the chosen metric for each series and the total.
+  - An option the answer carries no data for is disabled and says "Not
+    reported by LiteLLM".
+  - The daily table that stood here ("Daily spend by UTC day") is now the
+    Table view (superseded 2026-11-26: the table as the only view). The
+    other pages that show that table are unchanged.
+  - Below `md` the switches wrap, targets are 44px, and the page does not
+    scroll sideways.
+  - Not shown: a breakdown by model, provider or key; an export.
+
+  | Test | Proves |
+  |---|---|
+  | T-OC1 | `GET /api/litellm/org`: per-day `requests` and `tokens`; range totals; for every day the sum of `dailyByTeam` equals `daily` (within 1e-6) and each team's days sum to its `spend`; no LiteLLM call is added; the role table is unchanged (`401`; `403` for a lead and a member, before parsing); not configured → empty lists and no call |
+  | T-OC2 | The answer schema: an answer with the new fields and one without both parse; a negative or non-numeric figure does not |
+  | T-OC3 | The chart: one slot per UTC day of the range, a bar only for reported days; several series stack; colours come from tokens; the `role="img"` label; the empty state; no animation under reduced motion |
+  | T-OC4 | The panel: defaults Spend, Total, Chart; each switch changes the view and the URL, and a URL with the three values restores it; By team shows seven teams and "Other teams" for nine; the Table view shows the same numbers; an option without data is disabled with its reason |
+  | T-OC5 | The tiles: the four figures; "—" for the average with no requests |
+  | T-OC6 | The tab: no daily table by default; tiles, panel and the teams table in that order; "LiteLLM not configured", "No teams" and "LiteLLM unavailable" unchanged |
+  | T-OC7 | E2E for `internal-admin`, `internal-org-admin` and `internal-auditor`: the chart is shown; By team and Table by click; axe clean at 375px and desktop in both views; no horizontal page scroll at 375px |
+
+  *How OC1 builds it (agent decisions, 2026-11-26, unit OC1).*
+  - **The switches are segmented toggle groups, not radio groups.** Each switch is a `role="group"` named by its visible label, and each option a button with `aria-pressed`; Tab moves between the options and Enter or Space selects. Reason: a single-choice control of three or fewer options reads well as toggle buttons, and the ARIA radio pattern would also need one tab stop and arrow keys; the project has no radio-group primitive.
+  - **The By team URL value is `by=team`.** Reason: the spec names the option "By team" but not its value; `metric`, `by`, `view` stay short.
+  - ~~**A team whose range read fails is left out of `dailyByTeam`** and, as today, out of `daily` and the totals (the route tolerates a failed read, LD34); the sums therefore stay equal (T-OC1).~~ *(superseded 2026-11-26, OC1 review Q-B1: the route does not tolerate a failed range read.)* **A failed range read fails the request** (App Teams AT7, LD34), so `dailyByTeam` always holds every proxy team and its sums equal `daily` (T-OC1).
+  - **The new counts stay strict.** `requests`, `tokens` and `failedRequests` are `.nonnegative()` in the schema: a negative count from LiteLLM is contract drift and fails the answer visibly, as for the other LiteLLM views (coordinator ruling, 2026-11-26, OC1 review Q-W1; FX1).
+  - **The Table view lists only the days that have a value;** the chart keeps every day of the range on its axis (D-OC-6).
+
 - **Users, round 3 (unit UP1, user, 2026-11-25; D-R3-10 to D-R3-13).**
   - "Create and link" is renamed **"Create LiteLLM user"** (superseded:
     the label "Create and link", LW1 and D16; the gate of LW1 is unchanged).
@@ -991,6 +1036,7 @@ Conventions for interactive controls, established with the global
 |-----------|--------|---------|
 | `CostTrendChart` | Recharts | Stacked area chart; `groupBy: 'model' \| 'team'` (loaded with `next/dynamic`, `ssr: false`) |
 | `ModelBreakdownChart` | Recharts | Donut chart showing model distribution |
+| `SpendTimelineChart` | Custom (Recharts `BarChart`, lazy, in `ResponsiveContainer`) | One bar per UTC day over the whole range; one series, or several stacked. Series colours come from the caller as CSS tokens. `role="img"` with a label that names the metric, the range and the total; a tooltip with the day, each series and the day's total; no animation under reduced motion; `ChartEmptyState` with no data. First used on LiteLLM → Organisation (unit OC1, 2026-11-26) |
 
 Legends are a custom swatch + foreground-text legend (series colour never used as text colour); entry animation ≤250ms and off under `prefers-reduced-motion` (agent decision, 2026-11-16: legend text in model colours failed 4.5:1).
 

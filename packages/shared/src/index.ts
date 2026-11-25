@@ -316,6 +316,7 @@ export {
   LiteLLMMeResponseSchema,
   LiteLLMMembersResponseSchema,
   LiteLLMModelsResponseSchema,
+  LiteLLMOrgDailyRowSchema,
   LiteLLMOrgResponseSchema,
   LiteLLMProxyTeamMembersResponseSchema,
   LiteLLMProxyTeamResponseSchema,
@@ -416,3 +417,4 @@ export {
 export type { BudgetResetCounts } from "./schemas/budget-reset-counts";
 export * from "./schemas/user-links";
 export * from "./schemas/litellm-user-sync";
+export type { LiteLLMOrgDailyRow } from "./schemas/litellm-views";

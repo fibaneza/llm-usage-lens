@@ -1,10 +1,8 @@
 "use client";
 
-import { CircleDollarSign } from "lucide-react";
 import Link from "next/link";
 
 import { formatUsd } from "@/components/charts/chart-data";
-import { MetricCard } from "@/components/display/MetricCard";
 import {
   Table,
   TableBody,
@@ -17,8 +15,9 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { LiteLLMOrgResponseSchema } from "@llm-usage-lens/shared";
 
-import { DailySpend } from "./DailySpend";
 import { Empty, Unavailable } from "./LiteLLMSection";
+import { OrgSpendPanel } from "./organisation/OrgSpendPanel";
+import { OrgUsageTiles } from "./organisation/OrgUsageTiles";
 import { useLiteLLMQuery, useUrlRange } from "./use-litellm-query";
 
 const NUMERIC = "text-right font-mono tabular-nums";
@@ -64,7 +63,7 @@ export function OrganisationSection() {
     LiteLLMOrgResponseSchema,
   );
   if (result.status === "unavailable") return <Unavailable />;
-  const { configured, totals, daily, litellmTeams } = result.data;
+  const { configured, totals, daily, dailyByTeam, litellmTeams } = result.data;
   if (configured && litellmTeams.length === 0) {
     return <Empty>No teams</Empty>;
   }
@@ -72,12 +71,13 @@ export function OrganisationSection() {
     <div className="flex flex-col gap-4">
       {configured ? (
         <>
-          <MetricCard
-            title="Total spend"
-            value={formatUsd(totals.spend)}
-            icon={CircleDollarSign}
+          <OrgUsageTiles totals={totals} />
+          <OrgSpendPanel
+            daily={daily}
+            dailyByTeam={dailyByTeam}
+            dateFrom={keyParts[0]}
+            dateTo={keyParts[1]}
           />
-          <DailySpend daily={daily} />
         </>
       ) : null}
       {!configured ? (

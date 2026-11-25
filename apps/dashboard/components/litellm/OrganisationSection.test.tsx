@@ -111,6 +111,85 @@ function renderSection() {
   );
 }
 
+// Unit OC1 (Design System -- LiteLLM Organisation spend chart, T-OC6): the
+// tab opens with four tiles, then the panel "Spend over time", then the
+// LiteLLM teams table; the daily table stands only as the panel's Table view.
+// The lazy chart is a probe here (the chart has its own test, Rule 60.24a).
+vi.mock("@/components/charts/LazyCharts", () => ({
+  LazySpendTimelineChart: (props: { label: string }) => (
+    <div role="img" aria-label={props.label} />
+  ),
+}));
+
+const ORG_OC1 = {
+  ...ORG,
+  totals: { spend: 1234.5, requests: 2469, tokens: 5_000_000 },
+  daily: [
+    { date: "2026-11-14", spend: 100, requests: 200, tokens: 400_000 },
+    { date: "2026-11-15", spend: 50, requests: 100, tokens: 300_000 },
+  ],
+  dailyByTeam: [
+    {
+      litellmTeamId: "ll-1",
+      alias: "Payments LLM",
+      daily: [
+        { date: "2026-11-14", spend: 100, requests: 200, tokens: 400_000 },
+      ],
+    },
+  ],
+};
+
+describe("OrganisationSection -- OC1 chart tab (T-OC6)", () => {
+  it("T-OC6: no daily table by default; the tiles, the panel and the teams table come in that order", async () => {
+    stub(() => apiResponse({ data: ORG_OC1 }));
+    renderSection();
+    const teams = await screen.findByRole("table", { name: "LiteLLM teams" });
+    expect(screen.getAllByRole("table")).toHaveLength(1);
+    expect(screen.queryByText("Daily spend by UTC day")).toBeNull();
+
+    const tile = screen.getByRole("group", { name: "Total spend" });
+    expect(tile).toHaveTextContent("$1,234.50");
+    expect(
+      screen.getByRole("group", { name: "Average cost per request" }),
+    ).toBeInTheDocument();
+    const heading = screen.getByRole("heading", { name: "Spend over time" });
+    const following = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(tile.compareDocumentPosition(heading) & following).toBeTruthy();
+    expect(heading.compareDocumentPosition(teams) & following).toBeTruthy();
+  });
+
+  it("T-OC6: 'LiteLLM not configured' and 'No teams' show no tiles and no panel", async () => {
+    stub(() =>
+      apiResponse({
+        data: {
+          ...ORG_OC1,
+          configured: false,
+          litellmTeams: [],
+          dailyByTeam: [],
+        },
+      }),
+    );
+    const first = renderSection();
+    await screen.findByText(/LiteLLM not configured/i);
+    expect(screen.queryByRole("group", { name: "Total spend" })).toBeNull();
+    expect(screen.queryByText("Spend over time")).toBeNull();
+    first.unmount();
+
+    stub(() => apiResponse({ data: { ...ORG_OC1, litellmTeams: [] } }));
+    renderSection();
+    await screen.findByText(/no teams/i);
+    expect(screen.queryByText("Spend over time")).toBeNull();
+  });
+
+  it("T-OC6: 'LiteLLM unavailable' shows no tiles and no panel", async () => {
+    stub(() => apiError(503, "LITELLM_UNAVAILABLE", "LiteLLM is unavailable"));
+    renderSection();
+    await screen.findByText(/LiteLLM unavailable/i);
+    expect(screen.queryByText("Spend over time")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Total spend" })).toBeNull();
+  });
+});
+
 describe("OrganisationSection (L3b Organisation tab)", () => {
   it("shows org totals in USD labelled LiteLLM-reported (LT8)", async () => {
     stub(() => apiResponse({ data: ORG }));

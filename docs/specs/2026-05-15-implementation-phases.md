@@ -1114,6 +1114,11 @@ Phase 5 (user, 2026-11-25; Rule 30).
 - [ ] **LP2** LiteLLM users and the LiteLLM user page (`feature/litellm-user-page`)
   Verify: T-LP6–T-LP10 (Design System — *LiteLLM user page*); a lead's
   answer from the detail read is unchanged; security-scope review
+- [ ] **OC1** Organisation: spend timeline chart (`feature/litellm-org-spend-chart`; user, 2026-11-26; plan `docs/plans/20261126_litellm_spend_charts.md`)
+  Verify: T-OC1–T-OC7 (Design System — *LiteLLM Organisation spend chart*;
+  LiteLLM spec — *API routes*, `/api/litellm/org`); no LiteLLM call added;
+  the route's role table unchanged; axe at 375px and desktop in the chart
+  and the table view
 - [ ] Verify (the round): `pnpm check` and the full `pnpm test:e2e` green in
   CI on the push of each unit
 

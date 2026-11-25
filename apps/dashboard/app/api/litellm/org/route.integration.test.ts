@@ -643,8 +643,16 @@ describe("GET /api/litellm/org", () => {
     const expectUnconfigured = async (data: Record<string, unknown>) => {
       expect(data.configured).toBe(false);
       expect(data.litellmTeams).toEqual([]);
-      expect(data.totals).toEqual({ spend: 0 });
+      // OC1 (Design System - LiteLLM Organisation spend chart, T-OC1): the
+      // new totals are 0, never absent, and dailyByTeam is empty.
+      expect(data.totals).toEqual({
+        spend: 0,
+        requests: 0,
+        tokens: 0,
+        failedRequests: 0,
+      });
       expect(data.daily).toEqual([]);
+      expect(data.dailyByTeam).toEqual([]);
       const rows = data.appTeams as Array<Record<string, unknown>>;
       expect(rows.map((r) => r.teamId).sort()).toEqual([
         "team-a",
@@ -704,6 +712,131 @@ describe("GET /api/litellm/org", () => {
       signInAs("admin");
       const { res } = await get();
       await expectError(res, 503, "LITELLM_UNAVAILABLE");
+    });
+  });
+
+  // Unit OC1 - Design System, "LiteLLM Organisation spend chart" (T-OC1);
+  // LiteLLM spec - API routes, /api/litellm/org (OC1 note), LD34/LD36 (call
+  // budget), LD42, LT1 (no key, key alias or per-user figure). The views fake
+  // answers each proxy team's range read with one row on 2026-11-02 of
+  // api_requests 1, total_tokens 15, failed_requests 0 and the team's spend
+  // (TEAM_DAILY_SPEND), over five proxy teams.
+  describe("spend over time (OC1; Design System - LiteLLM Organisation spend chart, T-OC1)", () => {
+    type Row = {
+      date: string;
+      spend: number;
+      requests?: number;
+      tokens?: number;
+    };
+    type TeamSeries = {
+      litellmTeamId: string;
+      alias: string | null;
+      daily: Row[];
+    };
+    const TEAMS = 5;
+
+    it("daily carries per-day requests and tokens and totals carry requests, tokens and failedRequests (T-OC1)", async () => {
+      withRangeSpend();
+      signInAs("orgAdmin");
+      const { body } = await get();
+      expect(body.data.daily).toEqual([
+        {
+          date: "2026-11-02",
+          spend: TEAM_DAILY_TOTAL,
+          requests: TEAMS,
+          tokens: 15 * TEAMS,
+        },
+      ]);
+      expect(body.data.totals).toEqual({
+        spend: TEAM_DAILY_TOTAL,
+        requests: TEAMS,
+        tokens: 15 * TEAMS,
+        failedRequests: 0,
+      });
+    });
+
+    it("dailyByTeam has one entry per proxy team with its alias, and for every day the teams sum to daily within 1e-6 (T-OC1)", async () => {
+      withRangeSpend();
+      signInAs("orgAdmin");
+      const { body } = await get();
+      const byTeam = body.data.dailyByTeam as TeamSeries[];
+      expect(byTeam.map((t) => t.litellmTeamId).sort()).toEqual(
+        [...Object.values(LTEAM), UNLINKED_LTEAM].sort(),
+      );
+      expect(
+        byTeam.find((t) => t.litellmTeamId === UNLINKED_LTEAM)?.alias,
+      ).toBe(SHARED_ALIAS);
+      expect(
+        byTeam.find((t) => t.litellmTeamId === LTEAM["team-a"])?.alias,
+      ).toBe("Alpha");
+      for (const t of byTeam) {
+        const dates = t.daily.map((d) => d.date);
+        expect(dates, t.litellmTeamId).toEqual([...dates].sort());
+      }
+      for (const day of body.data.daily as Row[]) {
+        for (const field of ["spend", "requests", "tokens"] as const) {
+          const sum = byTeam.reduce(
+            (acc, t) =>
+              acc + (t.daily.find((d) => d.date === day.date)?.[field] ?? 0),
+            0,
+          );
+          expect(
+            Math.abs(sum - (day[field] ?? 0)),
+            `${day.date} ${field}`,
+          ).toBeLessThan(1e-6);
+        }
+      }
+    });
+
+    it("each team's days sum to its LiteLLM teams row spend (T-OC1; LD36)", async () => {
+      withRangeSpend();
+      signInAs("auditor");
+      const { body } = await get();
+      const byTeam = body.data.dailyByTeam as TeamSeries[];
+      const rows = body.data.litellmTeams as Array<{
+        litellmTeamId: string;
+        spend: number;
+      }>;
+      expect(byTeam).toHaveLength(rows.length);
+      for (const r of rows) {
+        const team = byTeam.find((t) => t.litellmTeamId === r.litellmTeamId);
+        const sum = (team?.daily ?? []).reduce((a, d) => a + d.spend, 0);
+        expect(Math.abs(sum - r.spend), r.litellmTeamId).toBeLessThan(1e-6);
+      }
+    });
+
+    it("dailyByTeam entries carry only litellmTeamId, alias and daily, and a day only date, spend, requests, tokens: no key, key alias or user figure (T-OC1; LT1)", async () => {
+      withRangeSpend();
+      signInAs("admin");
+      const { body } = await get();
+      const byTeam = body.data.dailyByTeam as TeamSeries[];
+      expect(byTeam.length).toBeGreaterThan(0);
+      for (const t of byTeam) {
+        expect(Object.keys(t).sort()).toEqual([
+          "alias",
+          "daily",
+          "litellmTeamId",
+        ]);
+        for (const d of t.daily) {
+          expect(Object.keys(d).sort()).toEqual([
+            "date",
+            "requests",
+            "spend",
+            "tokens",
+          ]);
+        }
+      }
+      expectNoSentinels(body);
+    });
+
+    // Measured on the unchanged route (temp/run-oc1/red-r1.txt): one
+    // /team/list, one /team/info and one /team/daily/activity/aggregated per
+    // proxy team (5): 1 + 5 + 5 = 11. The new fields add no call.
+    it("no LiteLLM call is added: the range read still costs 11 calls (T-OC1; LD34; LD36)", async () => {
+      withRangeSpend();
+      signInAs("orgAdmin");
+      await get();
+      expect(state.fake.calls).toHaveLength(11);
     });
   });
 

@@ -34,3 +34,8 @@ export const LazyModelUsageBarChart = dynamic(
   () => import("./ModelUsageBarChart").then((m) => m.ModelUsageBarChart),
   { ssr: false, loading: ChartSkeleton },
 );
+
+export const LazySpendTimelineChart = dynamic(
+  () => import("./SpendTimelineChart").then((m) => m.SpendTimelineChart),
+  { ssr: false, loading: ChartSkeleton },
+);

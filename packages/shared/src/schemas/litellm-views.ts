@@ -248,12 +248,37 @@ export const LiteLLMAuditResponseSchema = z.object({
   total: z.number().optional(),
 });
 
+// OC1: one UTC day of the Organisation spend chart; requests and tokens are
+// optional so an older answer shape still parses (Design System — LiteLLM
+// Organisation spend chart).
+export const LiteLLMOrgDailyRowSchema = z.object({
+  date: z.string(),
+  spend: z.number(),
+  requests: z.number().nonnegative().optional(),
+  tokens: z.number().nonnegative().optional(),
+});
+export type LiteLLMOrgDailyRow = z.infer<typeof LiteLLMOrgDailyRowSchema>;
+
 // L3b: Views by role (Organisation, Users tabs).
 export const LiteLLMOrgResponseSchema = z
   .object({
     configured: z.boolean(),
-    totals: z.object({ spend: z.number() }),
-    daily: DailySchema,
+    totals: z.object({
+      spend: z.number(),
+      requests: z.number().nonnegative().optional(),
+      tokens: z.number().nonnegative().optional(),
+      failedRequests: z.number().nonnegative().optional(),
+    }),
+    daily: z.array(LiteLLMOrgDailyRowSchema),
+    dailyByTeam: z
+      .array(
+        z.object({
+          litellmTeamId: z.string(),
+          alias: z.string().nullable(),
+          daily: z.array(LiteLLMOrgDailyRowSchema),
+        }),
+      )
+      .optional(),
     litellmTeams: z.array(
       z.object({
         litellmTeamId: z.string(),
