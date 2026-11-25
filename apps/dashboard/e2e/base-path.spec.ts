@@ -144,7 +144,9 @@ test.describe("prefixed smoke (T11)", () => {
     // path-scoped session cookie.
     await page.goto(`${P}/dashboard/manage/audit`);
     await waitForHydration(page);
-    const download = page.getByRole("link", { name: /export access review/i });
+    const download = page
+      .getByRole("region", { name: "Access review" })
+      .getByRole("link", { name: /export access review/i });
     await expect(download).toHaveAttribute("href", `${P}/api/access-review`);
     const csv = await page.request.get(`${P}/api/access-review`);
     expect(csv.status()).toBe(200);

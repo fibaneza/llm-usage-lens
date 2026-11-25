@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -262,5 +262,461 @@ describe("SignInOptions team lead sign-in", () => {
     render(<SignInOptions entra devLogin={false} {...actions} />);
     expect(screen.queryByRole("option", { name: "Team lead" })).toBeNull();
     expect(screen.queryByText(/team lead/i)).toBeNull();
+  });
+});
+// Unit SI1 - Design System, Sign-in page, "The forms" (T-SI1, T-SI2, T-SI4);
+// Access Control - Password users (Sign-in), threats T20 and T23.
+type FormAction = (formData: FormData) => Promise<{ ok: false } | void>;
+const GENERIC = "Those details are not right. Check them and try again.";
+const HINT =
+  "6-digit code from your authenticator app. Leave empty if you have not set one up.";
+
+function ok() {
+  return vi.fn<FormAction>(async () => undefined);
+}
+function refused() {
+  return vi.fn<FormAction>(async () => ({ ok: false }));
+}
+
+function passwordOnly(passwordAction: FormAction = ok()) {
+  return render(
+    <SignInOptions
+      entra={false}
+      devLogin={false}
+      password
+      passwordAction={passwordAction}
+      {...actions}
+    />,
+  );
+}
+function masterOnly(masterAction: FormAction = ok()) {
+  return render(
+    <SignInOptions
+      entra={false}
+      devLogin={false}
+      master
+      masterAction={masterAction}
+      {...actions}
+    />,
+  );
+}
+
+// "A placeholder or an aria-label alone is not a label": a visible <label for>.
+function expectVisibleLabel(input: HTMLElement, text: string) {
+  expect(input.id).not.toBe("");
+  expect(input).not.toHaveAttribute("aria-label");
+  const label = document.querySelector(`label[for="${input.id}"]`);
+  expect(label).not.toBeNull();
+  expect(label?.textContent?.trim()).toBe(text);
+  expect(label).toBeVisible();
+}
+
+function expectHint(input: HTMLElement) {
+  const id = input.getAttribute("aria-describedby");
+  expect(id).toBeTruthy();
+  const hint = document.getElementById(String(id));
+  expect(hint?.textContent?.trim()).toBe(HINT);
+}
+
+// A group is a <section aria-labelledby> or a <fieldset> with a legend.
+function groupsOf(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      "section[aria-labelledby], fieldset",
+    ),
+  );
+}
+function titleOf(group: HTMLElement): string {
+  if (group.tagName === "FIELDSET") {
+    return group.querySelector("legend")?.textContent?.trim() ?? "";
+  }
+  const id = group.getAttribute("aria-labelledby") ?? "";
+  return document.getElementById(id)?.textContent?.trim() ?? "";
+}
+
+describe("SignInOptions email and password form (T-SI1)", () => {
+  it("binds a visible label and the autocomplete value to the email field (T-SI1, D-R3-15)", () => {
+    passwordOnly();
+    const email = screen.getByLabelText("Email", { exact: true });
+    expect(email).toHaveAttribute("type", "email");
+    expect(email).toHaveAttribute("name", "email");
+    expect(email).toHaveAttribute("autocomplete", "username");
+    expect(email).toBeRequired();
+    expectVisibleLabel(email, "Email");
+  });
+
+  it("binds a visible label and autocomplete to the password field (T-SI1)", () => {
+    passwordOnly();
+    const password = screen.getByLabelText("Password", { exact: true });
+    expect(password).toHaveAttribute("type", "password");
+    expect(password).toHaveAttribute("name", "password");
+    expect(password).toHaveAttribute("autocomplete", "current-password");
+    expect(password).toBeRequired();
+    expectVisibleLabel(password, "Password");
+  });
+
+  // WCAG 4.1.2: the name states the action, aria-pressed the state.
+  it("shows and hides the password with a toggle named Show/Hide password and aria-pressed (T-SI1)", async () => {
+    passwordOnly();
+    const user = userEvent.setup();
+    const password = screen.getByLabelText("Password", { exact: true });
+    const toggle = screen.getByRole("button", { name: "Show password" });
+    expect(toggle).toHaveAttribute("type", "button");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(toggle);
+    expect(password).toHaveAttribute("type", "text");
+    expect(
+      screen.getByRole("button", { name: "Hide password" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Show password" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(password).toHaveAttribute("type", "password");
+    expect(
+      screen.getByRole("button", { name: "Show password" }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("labels the optional authenticator code and binds its hint by aria-describedby (T-SI1)", () => {
+    passwordOnly();
+    const code = screen.getByLabelText("Authenticator code");
+    expect(code).toHaveAttribute("name", "totp");
+    expect(code).toHaveAttribute("inputmode", "numeric");
+    expect(code).toHaveAttribute("autocomplete", "one-time-code");
+    expect(code).not.toBeRequired();
+    expectVisibleLabel(code, "Authenticator code");
+    expectHint(code);
+  });
+
+  it("has one submit button named Sign in, and prefills nothing (T-SI1, T-SI4: no echo)", () => {
+    passwordOnly();
+    expect(screen.getByRole("button", { name: "Sign in" })).toHaveAttribute(
+      "type",
+      "submit",
+    );
+    for (const field of [
+      screen.getByLabelText("Email", { exact: true }),
+      screen.getByLabelText("Password", { exact: true }),
+      screen.getByLabelText("Authenticator code"),
+    ]) {
+      expect(field).toHaveValue("");
+    }
+  });
+
+  it("does not submit with GET, so nothing typed can reach the URL (T-SI4)", () => {
+    const { container } = passwordOnly();
+    const form = container.querySelector("form");
+    expect(form).not.toBeNull();
+    expect(form?.getAttribute("method")?.toLowerCase() ?? "post").not.toBe(
+      "get",
+    );
+  });
+
+  it("posts email, password and totp to the action (T-SI3, contract)", async () => {
+    const passwordAction = ok();
+    passwordOnly(passwordAction);
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Email", { exact: true }),
+      "ada@example.com",
+    );
+    await user.type(screen.getByLabelText("Password", { exact: true }), "pw-1");
+    await user.type(screen.getByLabelText("Authenticator code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => expect(passwordAction).toHaveBeenCalledTimes(1));
+    const formData = passwordAction.mock.calls[0]?.[0];
+    expect(formData?.get("email")).toBe("ada@example.com");
+    expect(formData?.get("password")).toBe("pw-1");
+    expect(formData?.get("totp")).toBe("123456");
+  });
+});
+
+describe("SignInOptions master user form (T-SI1, T-SI2)", () => {
+  it("keeps the master form out of the page until Sign in as master user is chosen, by click (T-SI2)", async () => {
+    masterOnly();
+    const disclosure = screen.getByRole("button", {
+      name: "Sign in as master user",
+    });
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("Username")).toBeNull();
+    expect(screen.queryByLabelText("Authenticator code")).toBeNull();
+
+    await userEvent.setup().click(disclosure);
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Username")).toBeInTheDocument();
+  });
+
+  it.each(["{Enter}", " "])(
+    "opens the master form from the keyboard (key %j) (T-SI2)",
+    async (key) => {
+      masterOnly();
+      const user = userEvent.setup();
+      await user.tab();
+      const disclosure = screen.getByRole("button", {
+        name: "Sign in as master user",
+      });
+      expect(disclosure).toHaveFocus();
+      await user.keyboard(key);
+      expect(disclosure).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByLabelText("Username")).toBeInTheDocument();
+    },
+  );
+
+  it("labels Username, Password and Authenticator code visibly, with autocomplete and the same hint (T-SI1)", async () => {
+    masterOnly();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Sign in as master user" }));
+
+    const username = screen.getByLabelText("Username");
+    expect(username).toHaveAttribute("name", "username");
+    expect(username).toHaveAttribute("autocomplete", "username");
+    expect(username).toBeRequired();
+    expectVisibleLabel(username, "Username");
+
+    const password = screen.getByLabelText("Password", { exact: true });
+    expect(password).toHaveAttribute("name", "password");
+    expect(password).toHaveAttribute("type", "password");
+    expect(password).toHaveAttribute("autocomplete", "current-password");
+    expect(password).toBeRequired();
+    expectVisibleLabel(password, "Password");
+
+    const code = screen.getByLabelText("Authenticator code");
+    expect(code).toHaveAttribute("name", "totp");
+    expect(code).toHaveAttribute("inputmode", "numeric");
+    expect(code).toHaveAttribute("autocomplete", "one-time-code");
+    expect(code).not.toBeRequired();
+    expectVisibleLabel(code, "Authenticator code");
+    expectHint(code);
+    for (const field of [username, password, code]) {
+      expect(field).toHaveValue("");
+    }
+    expect(screen.getByRole("button", { name: "Sign in" })).toHaveAttribute(
+      "type",
+      "submit",
+    );
+  });
+});
+
+describe("SignInOptions dev login labels (T-SI1)", () => {
+  it("keeps visible labels on the dev login fields (T-SI1: kept, not aria-label)", () => {
+    render(<SignInOptions entra={false} devLogin {...actions} />);
+    for (const [field, text] of [
+      [screen.getByLabelText(/^role/i), "Role"],
+      [
+        screen.getByLabelText("Sign in as (email or user id)"),
+        "Sign in as (email or user id)",
+      ],
+    ] as const) {
+      expect(field).not.toHaveAttribute("aria-label");
+      const label = (field as HTMLInputElement).labels?.[0];
+      expect(label).toBeVisible();
+      expect(label?.textContent).toContain(text);
+    }
+  });
+});
+
+describe("SignInOptions groups per method (T-SI2)", () => {
+  const ALL = {
+    entra: true,
+    devLogin: true,
+    master: true,
+    password: true,
+  };
+  const NONE = {
+    entra: false,
+    devLogin: false,
+    master: false,
+    password: false,
+  };
+
+  it.each([
+    ["Microsoft only", { ...NONE, entra: true }, 1],
+    ["dev login only", { ...NONE, devLogin: true }, 1],
+    ["email and password only", { ...NONE, password: true }, 1],
+    ["master only", { ...NONE, master: true }, 1],
+    ["all four", ALL, 4],
+    ["none", NONE, 0],
+  ])(
+    "renders one titled group per enabled method: %s (T-SI2)",
+    (_name, flags, count) => {
+      const { container } = render(
+        <SignInOptions
+          {...flags}
+          passwordAction={ok()}
+          masterAction={ok()}
+          {...actions}
+        />,
+      );
+      const groups = groupsOf(container);
+      expect(groups).toHaveLength(count);
+      const titles = groups.map(titleOf);
+      for (const title of titles) expect(title).not.toBe("");
+      expect(new Set(titles).size).toBe(titles.length);
+    },
+  );
+
+  it("renders nothing for a method that is off, even when its action is given (T-SI2, T-SI5)", () => {
+    render(
+      <SignInOptions
+        entra
+        devLogin={false}
+        master={false}
+        password={false}
+        passwordAction={ok()}
+        masterAction={ok()}
+        {...actions}
+      />,
+    );
+    expect(screen.queryByLabelText("Email", { exact: true })).toBeNull();
+    expect(screen.queryByLabelText("Authenticator code")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show password" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Sign in as master user" }),
+    ).toBeNull();
+  });
+});
+
+describe("SignInOptions one generic failure message (T-SI4; Access Control T20, T23)", () => {
+  async function submitPassword() {
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Email", { exact: true }),
+      "ada@example.com",
+    );
+    await user.type(
+      screen.getByLabelText("Password", { exact: true }),
+      "wrong-password",
+    );
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+  }
+
+  it("shows the generic alert and moves focus to Email after a refused password sign-in (T-SI4)", async () => {
+    passwordOnly(refused());
+    expect(screen.queryByRole("alert")).toBeNull();
+    await submitPassword();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent?.trim()).toBe(GENERIC);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Email", { exact: true })).toHaveFocus(),
+    );
+  });
+
+  it("shows no alert when the action succeeds (returns nothing) (T-SI4)", async () => {
+    const passwordAction = ok();
+    passwordOnly(passwordAction);
+    await submitPassword();
+    await waitFor(() => expect(passwordAction).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows the same alert and focuses Username after a refused master sign-in (T-SI4)", async () => {
+    masterOnly(refused());
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "Sign in as master user" }),
+    );
+    await user.type(screen.getByLabelText("Username"), "root");
+    await user.type(
+      screen.getByLabelText("Password", { exact: true }),
+      "wrong-password",
+    );
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent?.trim()).toBe(GENERIC);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Username")).toHaveFocus(),
+    );
+  });
+
+  it("puts the alert in the group that failed, not in the other (T-SI4, T-SI2)", async () => {
+    const { container } = render(
+      <SignInOptions
+        entra={false}
+        devLogin={false}
+        master
+        password
+        masterAction={ok()}
+        passwordAction={refused()}
+        {...actions}
+      />,
+    );
+    await submitPassword();
+    const alert = await screen.findByRole("alert");
+    const group = groupsOf(container).find((g) => g.contains(alert));
+    expect(group).toBeDefined();
+    expect(
+      within(group as HTMLElement).getByLabelText("Email", { exact: true }),
+    ).toBeInTheDocument();
+    expect(
+      within(group as HTMLElement).queryByLabelText("Username"),
+    ).toBeNull();
+  });
+});
+
+// Design System - Sign-in page, The forms (T-SI1, T-SI4); WCAG 3.3.1 and 4.1.2:
+// while the group's failure alert shows, every input of that group points at it
+// (aria-describedby, the code field keeping its hint id too) and is
+// aria-invalid; with no failure neither attribute is set.
+describe("SignInOptions failure association (T-SI1, T-SI4; WCAG 3.3.1)", () => {
+  function inputsOf(group: HTMLElement) {
+    return Array.from(group.querySelectorAll<HTMLInputElement>("input"));
+  }
+  function expectNoFailureMarks(group: HTMLElement) {
+    for (const input of inputsOf(group)) {
+      expect(input).not.toHaveAttribute("aria-invalid");
+      if (input.name === "totp") expectHint(input);
+      else expect(input).not.toHaveAttribute("aria-describedby");
+    }
+  }
+  function expectFailureMarks(group: HTMLElement, alert: HTMLElement) {
+    expect(alert.id).not.toBe("");
+    const inputs = inputsOf(group);
+    expect(inputs.length).toBeGreaterThan(0);
+    for (const input of inputs) {
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      const ids = (input.getAttribute("aria-describedby") ?? "").split(/\s+/);
+      expect(ids).toContain(alert.id);
+      if (input.name === "totp") {
+        const hintId = ids.find((id) => id !== alert.id);
+        expect(
+          document.getElementById(String(hintId))?.textContent?.trim(),
+        ).toBe(HINT);
+      }
+    }
+  }
+
+  it("marks every password-group input invalid and described by the alert after a refusal, and none before (T-SI4)", async () => {
+    const { container } = passwordOnly(refused());
+    const group = groupsOf(container)[0] as HTMLElement;
+    expectNoFailureMarks(group);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Email", { exact: true }), "a@b.co");
+    await user.type(screen.getByLabelText("Password", { exact: true }), "x");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expectFailureMarks(group, await screen.findByRole("alert"));
+  });
+
+  it("marks every master-group input invalid and described by the alert after a refusal, and none before (T-SI4)", async () => {
+    const { container } = masterOnly(refused());
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "Sign in as master user" }),
+    );
+    const group = groupsOf(container)[0] as HTMLElement;
+    expectNoFailureMarks(group);
+
+    await user.type(screen.getByLabelText("Username"), "root");
+    await user.type(screen.getByLabelText("Password", { exact: true }), "x");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expectFailureMarks(group, await screen.findByRole("alert"));
   });
 });

@@ -6,6 +6,7 @@ import type { JWT } from "next-auth/jwt";
 import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
+import { z } from "zod";
 
 import { env } from "@/env";
 import { unauthenticatedResponse } from "@/lib/api/unauthenticated";
@@ -555,6 +556,41 @@ export async function signInWithPasswordSetup(
       password: text("password"),
       totpSecret: text("totpSecret"),
       totpCode: text("totpCode"),
+      redirectTo: "/dashboard",
+    });
+  } catch (error) {
+    if (error instanceof AuthError) return { ok: false };
+    throw error;
+  }
+}
+
+// Source: docs/specs/2026-11-10-access-control.md - "Password users" (Sign-in),
+// T20 and T23. The action never refuses on its own, so the provider is the
+// only place that decides; every valid-shaped attempt gets the same Argon2id
+// work whether the account exists or not; malformed input is refused by the
+// provider's schema and says nothing about any account; the lockout applies
+// to existing usable accounts (T20, T23). A refused sign-in is the one
+// generic `{ ok: false }`; success redirects.
+const PasswordSignInSchema = z.object({
+  email: z.string().max(256).catch(""),
+  password: z.string().max(256).catch(""),
+  totp: z.string().max(256).catch(""),
+});
+
+export async function signInWithPassword(
+  formData: FormData,
+): Promise<{ ok: false } | void> {
+  "use server";
+  const { email, password, totp } = PasswordSignInSchema.parse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+    totp: formData.get("totp"),
+  });
+  try {
+    await signIn(PASSWORD_PROVIDER_ID, {
+      email,
+      password,
+      totp,
       redirectTo: "/dashboard",
     });
   } catch (error) {
