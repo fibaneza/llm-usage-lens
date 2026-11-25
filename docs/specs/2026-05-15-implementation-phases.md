@@ -1080,6 +1080,45 @@ After SYNC1. *User, 2026-11-18: "with option to invite", "also a button to appro
 
 ---
 
+## Management improvements, round 3 (units MR0, FX1, RF1, UP1, LP1, SI1, TP1, LP2; user-directed 2026-11-25)
+
+The user, 2026-11-25: a list of eight items found while using the deployed
+app (three errors on the LiteLLM pages, a page for one LiteLLM team and one
+LiteLLM user, help on fields, an Edit team action, a refresh button, a
+clearer sign-in page). Plan: `docs/plans/20261125_management_round3.md`;
+decisions D-R3-1 to D-R3-18 there. Tests first (Rule 70). One branch and
+one squash commit per unit (Rule 30.4). Runs before L7, L8 and the rest of
+Phase 5 (user, 2026-11-25; Rule 30).
+
+- [ ] **MR0** spec and rules (`docs/management-round3`)
+  Verify: `spec-guardian` approves; every superseded statement is marked
+- [ ] **FX1** the three LiteLLM client defects (`fix/litellm-client-contracts`)
+  Verify: T-FX1–T-FX5 (Design System — *LiteLLM client requests*); no alert on
+  Cost by user, on a user click, or on "Members of one team"
+- [ ] **RF1** refresh button, PERF-R (`feature/phase-5-perf-r-refresh-button`)
+  Verify: T-RF1–T-RF6 (Design System — *Caching Strategy*, Refresh); the
+  full e2e once (a shared file); security-scope review of the bypass limit
+- [ ] **UP1** Users page (`feature/users-page-round3`)
+  Verify: T-UP1–T-UP7 (Design System — *Users, round 3*)
+- [ ] **LP1** LiteLLM teams and the LiteLLM team page (`feature/litellm-team-page`)
+  Verify: T-LP1–T-LP5 (Design System — *LiteLLM team page*; LiteLLM spec —
+  *API routes*); the role table of the new read; security-scope review
+- [ ] **SI1** sign-in page (`feature/sign-in-form`)
+  Verify: T-SI1–T-SI7 (Design System — *Sign-in page*; Access Control —
+  *Password users*, T20, T23); the existing sign-in suites unchanged and
+  green; the full e2e once and the `base-path` project; security review
+- [ ] **TP1** Team page (`feature/team-page-detail`)
+  Verify: T-TP1–T-TP7 (Design System — *Team page, round 3*; Access Control
+  — *Edit a created team*); `403` before parsing and one `denied` record per
+  refused write; security review
+- [ ] **LP2** LiteLLM users and the LiteLLM user page (`feature/litellm-user-page`)
+  Verify: T-LP6–T-LP10 (Design System — *LiteLLM user page*); a lead's
+  answer from the detail read is unchanged; security-scope review
+- [ ] Verify (the round): `pnpm check` and the full `pnpm test:e2e` green in
+  CI on the push of each unit
+
+---
+
 ## Decision policy (decided 2026-11-15, user)
 
 When a unit meets an open decision — a spec gap, an ambiguity, a choice
@@ -1294,12 +1333,12 @@ up building inside a unit; it never merges or skips the review.
   - Sidebar behavior correct per breakpoint
   - Touch targets: minimum 44x44px on mobile
 - [ ] Empty states for all pages and sections (verify with `seed-empty.ts`)
-- [ ] Performance and caching (user direction 2026-11-17: **specified only — no unit starts until the user says so**). Sources: Design System — *Caching Strategy* and *Component Inventory* (`RefreshButton`), Data Model — *Access Patterns* (account list), LiteLLM spec — *Caching*, Platform — *Runtime*. Each unit is one branch and one squash commit (Rule 30.4) through the Rule 70 loop, in this order; call counts are the regression guard and timings are reported, never asserted (Rule 60.24). The units keep Rule 30's order: they are Phase 5 work and start after the LiteLLM units (L8). An earlier start needs the user's direction recorded as a dated exception in Rule 30, like the two UI-refresh exceptions; none is recorded
+- [ ] Performance and caching (user direction 2026-11-17: **specified only — no unit starts until the user says so** *(PERF-R started 2026-11-25, user; the other units still wait)*). Sources: Design System — *Caching Strategy* and *Component Inventory* (`RefreshButton`), Data Model — *Access Patterns* (account list), LiteLLM spec — *Caching*, Platform — *Runtime*. Each unit is one branch and one squash commit (Rule 30.4) through the Rule 70 loop, in this order; call counts are the regression guard and timings are reported, never asserted (Rule 60.24). The units keep Rule 30's order: they are Phase 5 work and start after the LiteLLM units (L8). An earlier start needs the user's direction recorded as a dated exception in Rule 30, like the two UI-refresh exceptions; one is recorded: PERF-R as unit RF1 (2026-11-25, Rule 30)
   - [ ] **PERF-0 — Baseline** (`feature/phase-5-perf-0-baseline`; the spec amendments landed separately on `docs/perf-caching-spec`, 2026-11-17). A call-budget test helper that counts DynamoDB commands and LiteLLM gateway calls per route, and `scripts/perf-baseline.ts`, which times each read route against a production build seeded with `db:seed:large` and `db:seed:ranking` and writes a table to `temp/`. Includes the former "performance testing with large dataset" checks: tables paginate at scale, charts render without lag, no memory issue at 50 accounts × 90 days, and the per-day rollup entries stay in Next's cache in the built container (`cacheMaxMemorySize` set in `next.config.ts` if they do not)
   - [ ] **PERF-1 — Server: remove repeated reads** (no new staleness beyond the existing 1-hour account cache, no security change). Request memo in `withRoute` for `GET`; LiteLLM read and write paths read the account list through `getAllAccountsCached`, as the Phase 4R write routes already do (the account registry is not authorization data; residual risk recorded in Data Model — *Access Patterns*); `getVisibility` joins the parallel reads in `loadAuthorization`; add-member candidates use `BatchGetItem` (closes the LD26 follow-up); identical concurrent read-path LiteLLM `GET`s of the cacheable operations share one in-flight call, and a write path never joins one (LiteLLM spec — *Caching*). Security-scoped review (it touches `lib/api/respond.ts` and the authorization reads)
   - [ ] **PERF-1b — Account registry index** (Data Model — *Access Patterns*): `AccountMeta` on the `ACCOUNTS` GSI1 partition; account writes, seeds and `scripts/create-table.ts` follow; the idempotent backfill script and the dual read (Query, with the Scan as fallback until the backfill marker exists); the runbook gets the backfill step. Running the backfill against a deployed table is a user action and a user decision (Data Model — *Access Patterns*)
   - [ ] **PERF-2 — Client: TanStack Query tuning.** Key factory and `queryOptions`; `gcTime` 30 minutes; previous data kept on date-range changes; rollup queries stale after 10 minutes and invalidated on a new sync; LiteLLM queries stale after 60 seconds; sidebar prefetch on hover and focus
-  - [ ] **PERF-R — Refresh button** (after PERF-2). `RefreshButton` in the top bar; `Cache-Control: no-cache` on the refresh round; `GET /api/sync-status` honours it, at most once per 10 seconds per key and task; the rollup cache key gains the last sync run. `AppHeader` is a shared file, so the full e2e runs once at the green gate (Rule 70.12)
+  - [ ] **PERF-R — Refresh button** ~~(after PERF-2)~~ *(superseded 2026-11-25, user: built as unit RF1 of Management improvements, round 3, before PERF-2; D-R3-1: invalidating every query needs no key factory. The LiteLLM read-cache bypass lands with PERF-3)*. `RefreshButton` in the top bar; `Cache-Control: no-cache` on the refresh round; `GET /api/sync-status` honours it, at most once per 10 seconds per key and task; the rollup cache key gains the last sync run. `AppHeader` is a shared file, so the full e2e runs once at the green gate (Rule 70.12). *PERF-R started 2026-11-25, user; the other units still wait.*
   - [ ] **PERF-3 — LiteLLM read cache** (LiteLLM spec — *Caching*; user decision 2026-11-17). The fixed cached list, the size cap, eviction on writes, the `no-cache` bypass with its 10-second minimum refresh interval, and the structural test that pins the list. Security-scoped review
   - [ ] **PERF-4 — Server prefetch pilot** (Overview only). The route body becomes a loader shared with the page; measured with PERF-0's script; other pages follow only if the gain is clear
   - [ ] **PERF-5 — Shared cache (Valkey)**: not built unless a trigger in `docs/future-improvements.md` — *Shared cache (Valkey)* is met

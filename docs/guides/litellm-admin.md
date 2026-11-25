@@ -289,14 +289,16 @@ in LiteLLM", never $0. To fix one, either:
 
 ### Organisation page
 
-Two tables, because the cuts do not add up to each other:
+~~Two tables, because the cuts do not add up to each other:~~
+
+*Superseded 2026-11-25 (LP1, D-R3-4; user, Q-R3-1): the page shows the LiteLLM teams table only; App Teams spec — Organisation view.*
 
 - **LiteLLM teams:** every proxy team, with spend, budget, members and its
   linked app team. **The headline total comes from this table** (LD33):
   summing app teams would count twice a member of an unlinked team who spends
   through a LiteLLM team linked to another app team.
-- **App teams:** per app team, labelled as overlapping rows that do not add
-  up to the total.
+- ~~**App teams:** per app team, labelled as overlapping rows that do not add
+  up to the total.~~
 - One request makes at most 200 LiteLLM calls (LD34). Unlinked teams are
   summed smallest first; one that does not fit shows no spend with
   `open-team` and a link to its Team usage page
@@ -321,13 +323,13 @@ In **Management → LiteLLM → LiteLLM users**, an `internal-admin` or
 `internal-org-admin` links an app user to a LiteLLM user (never their own
 identity):
 
-- **Match found:** a LiteLLM user with the same verified email. Click
+- **Match found** (the state; no badge is shown from 2026-11-25): a LiteLLM user with the same verified email. Click
   *Link* and confirm the dialog that names both sides. Nothing is linked
   automatically.
 - **No LiteLLM user with that email:** link to an existing LiteLLM user
   found by search, with a written reason (the emails differ), or, on OSS
   only, and only when SSO is not enabled (user, 2026-11-18: "only when SSO is not
-  enable"), *Create and link* (`createUser`, `POST /user/new` with
+  enable"), *Create and link* (the button reads "Create LiteLLM user" from 2026-11-25; `createUser`, `POST /user/new` with
   `auto_create_key:false`; toggle `createUser`, default on). On Enterprise
   the person signs in to LiteLLM once, then the admin retries the match.
 - A LiteLLM user already linked to someone else, or holding a proxy role

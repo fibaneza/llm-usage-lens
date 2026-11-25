@@ -41,6 +41,14 @@ directions). They keep one branch and one squash commit per unit; M4 lands
 next and every later unit merges `main` (amended 2026-11-18: "land M4
 first" is superseded because M0 and M1 had already landed).
 
+The Phase 5 **PERF-R** task (the refresh button) may run before the rest
+of *Performance and caching*, as unit RF1 of *Management improvements,
+round 3*, at the user's direction (decided 2026-11-25: "a button to reload
+data/sync in all Usage and Management pages"; implementation-phases —
+*Management improvements, round 3*). PERF-0 to PERF-4 keep their place. The
+round's other units (FX1, UP1, LP1, SI1, TP1, LP2) run now at the same
+direction.
+
 ## Rules
 
 1. **Do not start a phase whose dependencies are unmet.** Run `/phase-status`

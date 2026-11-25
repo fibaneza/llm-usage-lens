@@ -57,7 +57,10 @@ Source: `docs/specs/2026-05-15-design-system.md`.
    is a `Panel` with its own Suspense + ErrorBoundary; one filled primary
    button per view; tabs only for peer views with URL state; Settings uses
    route tabs (AWS accounts, Sync and data, LiteLLM, Access) on the one
-   `Tabs` component (Design System — *Layout*, *Settings Page*).
+   `Tabs` component (Design System — *Layout*, *Settings Page*). A field or
+   a column whose meaning is not plain from its label carries a `FieldHelp`
+   (Design System — *Component Inventory*; 2026-11-25). Every form field has
+   a visible label.
 10. **Sidebar order (2026-11-17; management improvements D1 and D7, user;
     D2 and D3, agent decisions).** Usage: Overview, My usage, Team usage, Ranking, Cost by
     department, Cost by team, Cost by service, Cost by user. Management:

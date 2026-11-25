@@ -270,7 +270,7 @@ Keep entries short. Detailed design belongs in a spec once the item is promoted.
 ### App team rename and delete
 
 - **Status:** Deferred (decided 2026-11-17, management improvements D5,
-  agent decision).
+  agent decision). **Rename adopted 2026-11-25 (unit TP1, user); delete stays deferred.**
 - **What:** Rename a created app team (`AppTeam`), and delete one that has no
   members, admin scopes or LiteLLM link.
 - **Why deferred:** The user asked only for creating a team (item 3). A

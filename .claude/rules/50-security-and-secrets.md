@@ -48,6 +48,9 @@
    matrix (Lead in scope, `internal-org-admin`, `internal-admin`; `403` before
    parsing), the user-level reset by a Lead only for a member of a team in
    their scope, otherwise `404`, LiteLLM LD39;
+   unit TP1 (user, 2026-11-25): `PATCH /api/teams/[id]` accepts `internal-admin`
+   or `internal-org-admin` (`matrixWrite`), `403` before parsing, created teams
+   only, Access Control — *Edit a created team*;
    unit SYNC1 (user, 2026-11-18): `POST /api/identities/litellm-sync` and
    `DELETE /api/identities/pending-links` accept `internal-admin` or
    `internal-org-admin` (`403` before parsing; Access Control — *LiteLLM user

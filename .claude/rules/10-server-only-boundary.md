@@ -74,7 +74,10 @@ credentials must never reach the browser.
      and `/reset-budget`) follow the matrix (`matrixWrite`: a Lead in scope,
      `internal-org-admin`, `internal-admin`; `403` before parsing); the
      user-level reset by a Lead only for a member of a team in their scope,
-     otherwise `404`; the auditor resets nothing. Unit SYNC1 (user,
+     otherwise `404`; the auditor resets nothing. Unit TP1 (user, 2026-11-25; Access Control — *Edit a created
+     team*): `PATCH /api/teams/[id]` accepts `internal-admin` or
+     `internal-org-admin` (`matrixWrite`), `403` before parsing; created
+     teams only. Unit SYNC1 (user,
      2026-11-18; Access Control — *LiteLLM user sync*): `POST
      /api/identities/litellm-sync` and `DELETE /api/identities/pending-links`
      accept `internal-admin` or `internal-org-admin` (`403` before parsing,

@@ -194,3 +194,6 @@ apps/dashboard/AGENTS.md
 
 # Built by `pnpm --filter @llm-usage-lens/dashboard run build:jobs` (unit SYNC2)
 apps/dashboard/jobs/*.cjs
+
+# Planner browser scratch (never committed)
+.playwright-mcp/

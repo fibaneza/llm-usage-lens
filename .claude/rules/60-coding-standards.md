@@ -59,10 +59,10 @@ patterns) and current Next.js App Router guidance.
     dependency arrays.
 15. **Settings CRUD's HTTP contract is the `/api/accounts` Route Handlers**
     (Data Model spec — *API Routes*; implementation-phases Phase 4.9). A
-    Server Action, if one is added later (v1 has none), goes through `next-safe-action` with
+    Server Action (the step-up actions in `app/dashboard/settings/step-up-actions.ts` already exist, so "v1 has none" is outdated) goes through `next-safe-action` with
     a Zod input schema, an Auth.js session check and the `internal-admin` role check
     (`lib/auth/`; System Architecture — *Authentication & Access*), and calls
-    the same `lib/data/account-meta.ts` functions.
+    the same `lib/data/account-meta.ts` functions. The sign-in server action is pre-auth: Zod input, lockout and generic error (T20, T23), no session or role check (Access Control — *Password users* → Sign-in, 2026-11-25).
 
 ## Validation & errors
 

@@ -67,7 +67,7 @@ Attributes:
 - **The team list** is the registry teams (`AccountMeta`, deduplicated by `teamId`) plus the created teams, served by `GET /api/access/org-units` with `hasAwsAccount`. Rollup-based routes (`/api/teams`, `/api/teams/[id]`, Ranking) are unchanged: a created team has no `DailyRollup`, so no Bedrock row; pages that list teams show it as "No AWS account", never `$0`.
 - **Ids never collide:** the reserved prefix `appteam-` is refused (`400`) for `teamId` in `CreateAccountInputSchema` (data-function input) and `UpdateAccountPatchSchema` (amended 2026-11-17; from 2026-11-23 the create body carries no id and generated ids start with `team-`, unit ST1), so a registry team can never take a created team's id, and the create route never accepts an id from the body.
 - **Names never collide, both ways (agent decision, 2026-11-17, M0 review round 1):** `POST /api/teams` refuses a name equal (case-insensitively, after trimming) to a created team's or a registry team's name (`409 CONFLICT`), and `POST /api/accounts` and `PATCH /api/accounts/[id]` refuse a `teamName` equal to a created team's name (`409 CONFLICT`, no write; they read the `AppTeamNameClaim`). Reason: two teams with one name would be indistinguishable in every picker (Access Control — *Created app teams*, T-MI3).
-- **Create only** in v1; rename and delete are in `docs/future-improvements.md`. No TTL.
+- **Create only** in v1; rename and delete are in `docs/future-improvements.md`. No TTL. *Amended 2026-11-25 (unit TP1): name and department are editable (Access Control — Edit a created team); delete stays future.*
 
 ## Entity: AccountMeta
 

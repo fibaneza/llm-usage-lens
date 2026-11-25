@@ -328,7 +328,7 @@ v1's dev-only stored local users.
   (D31; no separate enrolment route). The secret is envelope-encrypted
   with a CMK data key before it is stored and never returned; the last used
   time step is stored and a reused code is refused.
-- **Sign-in.** Email + password (+ TOTP) through the Auth.js `password`
+- **Sign-in.** The sign-in page carries the email and password form (Design System — *Sign-in page*, unit SI1, 2026-11-25; user, Q-R3-3, 2026-11-25: yes, the labelled form, shown only where password sign-in is on). It posts to the `password` provider through a server action; a refusal returns one generic state and no detail. Email + password (+ TOTP) through the Auth.js `password`
   credentials provider. Per-user lockout as for the master user (5 failures
   → 15 minutes, atomic `ADD`, shared by every task); an unknown email runs
   the same Argon2id work against a dummy hash and returns the same generic
@@ -801,6 +801,7 @@ the user 2026-11-15; Design System — *Settings Page*).
 | LiteLLM operation toggles (incl. reset) and team links (LiteLLM LD24; user, 2026-11-16, extending D14) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Read one person's global roles and usage identities on the user page (`GET /api/identities/[oid]`; unit US2, D-US11 — **the user's decision, 2026-11-23**; read only: the writes stay in the `internal-admin` rows; `internal-auditor` reads too) | ✓ | ✓ read only | ✗ | ✗ | ✗ (auditor ✓ read) |
 | Create an app team (`POST /api/teams`; management improvements D6, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Edit a created team: name, department (`PATCH /api/teams/[id]`; unit TP1, user, 2026-11-25) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Create, approve or remove a person's LiteLLM user link (`litellmUserId`; never on their own identity; D16, user, 2026-11-17) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Create a LiteLLM user and link it (`POST /api/litellm/users`; D16; OSS only, and only when SSO is not enabled — user, 2026-11-18, unit LW1; with SSO enabled `403 OPERATION_UNAVAILABLE` after the permission check) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Preview and run the LiteLLM user sync (`GET`/`POST /api/identities/litellm-sync`; units SYNC1, SYNC2; user, 2026-11-18: "On demand and scheduled"; the scheduled run is actor `system`) | ✓ | ✓ | ✗ | ✗ | ✗ (`internal-auditor` ✗ `403`) |
@@ -890,7 +891,7 @@ person-kind alias, the own email included; non-person keys are accepted
 holder that person's usage once they sign in, T16; confirmed D27). Links show a
 person their own usage and **never grant access**.
 
-**Create and link only without SSO (D16, user, 2026-11-18, unit LW1).**
+**Create and link only without SSO (D16, user, 2026-11-18, unit LW1; the button reads "Create LiteLLM user" from 2026-11-25, unit UP1).**
 Create-and-link (`createUser`) is offered only when SSO is not enabled
 (the user: "only when SSO is not enable"; "enabled" means Entra ID sign-in
 is configured, `AUTH_MICROSOFT_ENTRA_ID_ID` set, read by one function in
@@ -1058,7 +1059,7 @@ below tighten the match; they open nothing (agent decisions SM1–SM9,
   in". The link is made at their first password sign-in from
   `PENDING#{email}` (no LiteLLM call) or by the next sync run.
 - **SM7 — Password mode has no Entra id**, so the sync and the links match
-  by email only (SM3), and *Create and link* stays allowed on OSS (unit LW1).
+  by email only (SM3), and *Create and link* (renamed "Create LiteLLM user", 2026-11-25, unit UP1) stays allowed on OSS (unit LW1).
 - **SM8 — Invites in password mode: unchanged.** A pending invite binds only
   at an SSO sign-in (`applySignInResolution`: in-tenant and a UPN). In
   password mode the path is **Add user**, then **Add to team**, or the next
@@ -1269,8 +1270,33 @@ registry refuses a `teamId` with the reserved `appteam-` prefix (Data Model
 the team-list tags. A created team appears in `GET /api/access/org-units`,
 can take members, admin scopes, visibility and a LiteLLM team link, and is
 covered by a department scope through its stored `departmentId` (live, not
-per day: it has no rollups). Create only: rename and delete are in
-`docs/future-improvements.md`.
+per day: it has no rollups). ~~Create only: rename and delete are in
+`docs/future-improvements.md`.~~ *Superseded 2026-11-25 (unit TP1): name and
+department are editable, below; delete stays in `docs/future-improvements.md`.*
+
+### Edit a created team (unit TP1, 2026-11-25)
+
+The user, 2026-11-25: "add an edit button to configurate the team (current
+information)". `PATCH /api/teams/[id]` changes the **name** and the
+**department** of a team created in the app (D5). Roles: `internal-admin`
+and `internal-org-admin`, the roles that create a team (D6; D-R3-14, agent
+decision, 2026-11-25, by that precedent; confirmed by the user, 2026-11-25, Q-R3-2: both fields, `internal-admin` and `internal-org-admin`, leads may not).
+`403` before input parsing for everyone else, with one `denied` audit
+record. The body carries the `version` the caller was shown; a stale one is
+`409`. A name another team has is refused with the creation route's error.
+A team that comes from an AWS account is `400` ("Edited in Settings → AWS
+accounts"): its name and department are the account registry's. An unknown
+team, and one outside the caller's scope, are the same `404`.
+
+Moving a team to another department changes which department lead has it
+in scope from the next request (scopes are read per request, never cached).
+The write records `appteam.update` (who, when, the old and the new name and
+department) and refreshes the cached team directory.
+
+Threats: T-items for a write route as for team creation — elevation by a
+lead or an auditor (the role check before parsing; T-TP2), a lost update
+(the version; T-TP3), and a stale name after the change (the cache refresh;
+T-TP4).
 
 **Usage-identity mapping rules (D27, amended 2026-11-14, user).** Some
 Bedrock callers sign in with a session name that is not an email — for
@@ -1556,7 +1582,8 @@ password).
   unit M3, 2026-11-18), the link's `mode` gaining `"sync"`, and the
   LiteLLM user sync (`litellm.user.sync`, `identity.litellm-pending.set`,
   `identity.litellm-pending.remove`; units SYNC1 and SYNC2, 2026-11-18;
-  *LiteLLM user sync* — *Records*). No snapshot holds a secret or a key value
+  *LiteLLM user sync* — *Records*), and created-team edits (`appteam.update`,
+  beside `appteam.create`; unit TP1, 2026-11-25). No snapshot holds a secret or a key value
   (`createUser` sends `auto_create_key: false`).
 - **Atomicity:** a successful write's audit item is written **in the same
   `TransactWriteItems`** as the change, so neither exists without the
@@ -1756,11 +1783,12 @@ All follow Rule 10.3 and set `Cache-Control: private, no-store`.
 | `/api/group-mappings`, `/api/group-mappings/[groupId]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`) |
 | `/api/identities`, `/api/identities/[oid]/links` | GET, PUT | `internal-admin` (GET also `internal-auditor`); never opened to scoped admins (D37) |
 | `/api/identities/directory` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor`; everyone else `403`. From 2026-11-23 (unit ST1, D-ST2; user, 2026-11-18) the route takes `q` (Zod, trimmed, 1–100 characters), a search by name, email or UPN that returns at most 10 results, for the same callers, through `searchIdentities(q, limit)` in `lib/data/access/identities.ts` (server cap 10; GSI1 `IDENTS` pages until the limit, never a Scan; only rows the unfiltered directory shows; no cursor; agent decision with the coordinator's ruling, 2026-11-23, reason: the route stays off access keys and store internals); a lead still gets no people search (D37) and is `403`. Reason: the Settings identity pickers become a search box. The people list of Management → Users and the LiteLLM users tab (management improvements D15, D16, 2026-11-17; *LF1, 2026-11-24: the tab no longer reads this route's link state — it shows the link state in the selected user's detail from the `GET /api/litellm/users` list rows, and the directory serves Management → Users*): per identity `oid`, `displayName`, `email`, `authMethod`, `memberTeamId`, and the LiteLLM link state (`linked` with `litellmUserId`, or `none`); with `?include=litellmMatch` each unlinked row on the page also carries `match` from `findUserByEmail` on its verified email (read only, nothing written). 25 rows a page, opaque cursor; no usage identities or aliases. Agent decision: org-admin approves LiteLLM user links (user, Q4) and needs to see whom it links; it already manages every team, and D37's restriction is about scoped admins. From 2026-11-24 (unit US1, D-US3, D-US3a; user, 2026-11-18): the list takes `sort` (Zod enum `name`, `email`, `createdAt`, `lastSignInAt`, `team`; default `name`) and `dir` (`asc`, `desc`; default `asc`); any other value is `400`. The route reads at most 2,000 identities per request, sorts them in memory with a stable tie-break on `oid` (the precedent of Rule 20.7 for bounded lists), then pages 25 rows; over the bound the response carries `truncated: true` (otherwise `false`). A row without the sort value (no `createdAt` on a record written before US2, no team for `team`) sorts last in both directions. `team` sorts by the team's display name, else its id. The cursor encodes the sort and the direction, so a cursor from another sort or direction is `400`. Each row also carries `createdAt` (when the record has it) and `lastSignInAt`. `q` keeps its own search path (at most 10, no cursor) and takes no `sort`. Nothing of the list is cached (Rule 60.10); a lead is still `403`. Agent decisions (2026-11-24, US1): the empty-sort-value rule, the team sort value, and `q` without sort, because a search result of at most 10 needs no order and the bound keeps the in-memory sort cheap. The cursor is a signed offset into the list as sorted on each request (no snapshot), so a person added or removed between two page reads can shift a row by one place; accepted, because the list is bounded, read by three roles and refreshed on the next load (agent decision, 2026-11-24, US1). `sort=team` reads each listed person's affiliation (at most 2,000, 20 at a time) to order by team; the other sorts read affiliations only for the 25 rows of the page. When `truncated` is `true`, the order is partial: only the first 2,000 identities in GSI1 `IDENTS` order are sorted, and the panel says so (agent decision, 2026-11-24, US1 round 2). **D-US2a** (planner decision, 2026-11-23, Rule 00.3): a person's record carries `createdAt`, written once at the first sign-in and never changed (written since unit US2); a record written before that has none, its Created cell reads "—" and it sorts last in both directions. No backfill, because the true date is unknown and `lastSignInAt` is not it. **D-US3a** (planner decision, 2026-11-23): the record has no `updatedAt`, so that sort key is dropped (superseding the plan's D-US3 list) and `lastSignInAt`, which every record has, replaces it; the keys are `name`, `email`, `createdAt`, `lastSignInAt`, `team`, each a column the three readers see. |
-| `/api/identities/[oid]` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor`; everyone else `403`; an unknown `oid` `404` (unit US2, D-US6, 2026-11-23). One person for the user page (Design System — *Management pages*, *The user page*): `oid`, `displayName`, `email`, `upn`, `authMethod`, `createdAt`, `lastSignInAt`, the team membership and lead scope, the LiteLLM link state, usage identities and aliases and global role grants (admin, auditor, and org-admin read-only: the user, 2026-11-23, D-US11), and — **absent otherwise (D-US12)** — a password user's SSO reference and bound date (admin, auditor; not in an org-admin's body). Never a password hash, a TOTP secret, a lockout state, a setup token or the tenant id. Read per request, never cached (Rule 60.10). The response carries the caller's allowed actions on that person, computed on the server from the effective roles, so the page offers only those, and the `version` of each item a write route takes (agent decision, 2026-11-24, US2). |
+| `/api/identities/[oid]` | GET | `internal-admin`, `internal-org-admin`, `internal-auditor`; everyone else `403`; an unknown `oid` `404` (unit US2, D-US6, 2026-11-23). One person for the user page (Design System — *Management pages*, *The user page*): `oid`, `displayName`, `email`, `upn`, `authMethod`, `createdAt`, `lastSignInAt`, the team membership and lead scope, the LiteLLM link state, usage identities and aliases and global role grants (admin, auditor, and org-admin read-only: the user, 2026-11-23, D-US11), and — **absent otherwise (D-US12)** — a password user's SSO reference and bound date (admin, auditor; not in an org-admin's body). Never a password hash, a TOTP secret, a lockout state, a setup token or the tenant id. Read per request, never cached (Rule 60.10). The response carries the caller's allowed actions on that person, computed on the server from the effective roles, so the page offers only those, and the `version` of each item a write route takes (agent decision, 2026-11-24, US2). From 2026-11-25 (unit UP1, D-R3-13) `litellm.state` may be `match`, with the matched LiteLLM email and user id, **only** for a caller who may link (`internal-admin`, `internal-org-admin`); for an auditor an unlinked person is `none`. The match is the lookup the people list uses. |
 | `/api/identities/litellm-sync` | GET; POST `{ planHash }` | `internal-admin`, `internal-org-admin`; everyone else `403` (the POST before parsing, with one `denied` record `litellm.user.sync`). GET: the plan — users, memberships, drift, the people not placed, counts, `truncated`, `planHash`; LiteLLM not configured → `200` with `configured: false` and no LiteLLM call (LD37). POST: applies when the hash is equal, else `409 PLAN_CHANGED`; a truncated plan `409 PLAN_TRUNCATED`; a run in progress `409 SYNC_RUNNING`; returns the results and `remaining`. Never cached. Rules in *LiteLLM user sync* (units SYNC1, SYNC2) |
 | `/api/identities/pending-links` | GET; DELETE `{ email, version }` or `{ litellmUserId, version }` (a non-email row; GET returns `email` only for an email key) | GET: `internal-admin`, `internal-org-admin`, `internal-auditor`; 25 rows a page, opaque cursor; feeds the **Not signed in yet** panel of Management → Users (Design System — *Sync from LiteLLM*). DELETE: `internal-admin`, `internal-org-admin`; removes the pending link and releases its claim; audited `identity.litellm-pending.remove` |
 | `/api/identities/[oid]/litellm-link` | PUT `{ litellmUserId, mode: "match" \| "manual", reason?, version }`, DELETE `{ version }` | `internal-admin`, `internal-org-admin`; own `oid` `403`; rules in *LiteLLM user links* (D16) |
 | `/api/teams` | POST `{ name, departmentId }` | `internal-admin`, `internal-org-admin`; `201` with the `AppTeam`; rules in *Created app teams* (D5, D6). `GET /api/teams` stays the Bedrock team list (Data Model — *API Routes*) |
+| `/api/teams/[id]` | PATCH | `internal-admin`, `internal-org-admin`; created teams only; versioned; audited `appteam.update` (unit TP1, 2026-11-25) |
 | `/api/governance/identity-map-rules` | GET, PUT | GET `internal-admin`/`internal-auditor`; PUT `internal-admin` (versioned, audited; D27) |
 | `/api/governance/identity-map-rules/suggestions` | GET | `internal-admin`/`internal-auditor`; read-only, not audited; confirming a suggestion is `PUT /api/identities/[oid]/links` (D27) |
 | `/api/password-users`, `/api/password-users/[email]` | GET, POST, PATCH, DELETE | `internal-admin` (GET also `internal-auditor`); POST returns the setup link once; POST and DELETE **re-auth**; DELETE takes the user's `version` (optimistic concurrency, *Enforcement* item 6; amended 2026-11-15); PATCH (enable or disable; and, from unit US2, 2026-11-23, `displayName` with the user's `version` — the name only, never the email, never an SSO-bound user, audited; a stale `version` is `409`, coordinator ruling Q-B1, 2026-11-24) not |
