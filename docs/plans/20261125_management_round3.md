@@ -244,7 +244,7 @@ file's unit.
 | Unit | Owns |
 |---|---|
 | FX1 | `components/users/UsersLiteLLMPanel.tsx`; `components/litellm/UserSearch.tsx` (the `UserDetail` request only); `components/manage/users/LiteLLMUsersList.tsx` (the `TeamMode` request only); `app/api/litellm/__tests__/client-schemas.test.tsx`; `e2e/litellm-users-tab.spec.ts` (new); `e2e/usage-source-panels.spec.ts` (the Cost by user cases) |
-| RF1 | `components/status/RefreshButton.tsx` (new); `components/layout/AppHeader.tsx`; `app/api/sync-status/route.ts`; `lib/api/cached-reads.ts`; `lib/api/load-range-rollups.ts`; `lib/query/fetch-api.ts` (a per-request header option only); `e2e/refresh-button.spec.ts` (new) |
+| RF1 | `components/status/RefreshButton.tsx` (new); `components/layout/AppHeader.tsx`; `app/api/sync-status/route.ts`; `lib/api/cached-reads.ts`; `lib/api/load-range-rollups.ts`; `lib/query/fetch-api.ts` (a per-request header option only); `e2e/refresh-button.spec.ts` (new); `e2e/refresh-button-role-landing.spec.ts` (new; the lead case, role-probe project; added 2026-11-25 in the RF1 review) |
 | UP1 | `components/display/FieldHelp.tsx` (new); `components/manage/users/LiteLLMLinkCell.tsx`; `components/manage/users/UsersPeoplePanel.tsx`; `components/manage/users/detail/**`; `app/api/identities/[oid]/route.ts`; `lib/data/access/litellm-match.ts` (read only; a new function is kind C); `e2e/manage-users.spec.ts`, `e2e/manage-user-page.spec.ts`, `e2e/manage-users-links.spec.ts` |
 | LP1 | `components/table/SearchInput.tsx`; `components/settings/litellm-panel/LiteLLMTeamLinksSection.tsx` and its table parts; `components/litellm/OrganisationSection.tsx`; `app/api/litellm/proxy-teams/[litellmTeamId]/route.ts` (new); `app/dashboard/manage/litellm/[tab]/[id]/page.tsx` (new; the `teams` branch); `components/litellm/proxy-team/**` (new); `e2e/litellm-team-page.spec.ts` (new); `e2e/manage-litellm-teams.spec.ts`; the Organisation cases of `e2e/manage-litellm.spec.ts`, `e2e/manage-team-views.spec.ts`, `e2e/litellm-a11y.spec.ts`, `e2e/manage-pages.spec.ts` (broken on purpose) |
 | SI1 | `components/auth/SignInOptions.tsx`; `app/sign-in/page.tsx`; `auth.ts` (one new server action, `signInWithPassword`; nothing else); `e2e/sign-in-form.spec.ts` (new); `e2e/dev-login.spec.ts`, `e2e/sign-in-role-choice.spec.ts` (broken on purpose) |
@@ -290,7 +290,7 @@ spec section, never this plan (spec-changes §8). Role tables stay complete
 | RF1 | T-RF3 | With `Cache-Control: no-cache`, `GET /api/sync-status` skips its cache; a second bypass for the same key within 10 seconds gets the entry just read (call count, fake timers) |
 | RF1 | T-RF4 | Without the header the route serves its cache; `private, no-store` and the `401` are unchanged |
 | RF1 | T-RF5 | The rollup cache key includes the last sync run: a new run is read from DynamoDB once; the same run is served from the cache |
-| RF1 | T-RF6 | The refresh path never calls `revalidateTag` (structural) |
+| RF1 | T-RF6 | The refresh path never calls `revalidateTag` (structural) *(T-RF2 and T-RF6 amended 2026-11-25 in the RF1 review, U-W1 and Q-W1; the Design System text wins)* |
 | UP1 | T-UP1 | The action reads "Create LiteLLM user" on the people rows and in its dialog; its help text; absent when `createUser` is unavailable (LW1) |
 | UP1 | T-UP2 | No "Match found" badge; a match shows the email and Link; the confirm dialog is unchanged |
 | UP1 | T-UP3 | `FieldHelp`: the button's name, opens on click and Enter, closes on Escape, focus returns, axe clean |

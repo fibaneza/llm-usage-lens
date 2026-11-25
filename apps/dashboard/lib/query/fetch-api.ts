@@ -39,8 +39,12 @@ async function parseApiResponse<S extends z.ZodType>(
 export async function fetchApi<S extends z.ZodType>(
   path: string,
   dataSchema: S,
+  init?: { headers?: Record<string, string> },
 ): Promise<z.output<S>> {
-  return parseApiResponse(await fetch(withBasePath(path)), dataSchema);
+  return parseApiResponse(
+    await fetch(withBasePath(path), init?.headers ? init : undefined),
+    dataSchema,
+  );
 }
 
 export async function mutateApi<S extends z.ZodType>(

@@ -5,6 +5,7 @@ import { DateRangePicker } from "@/components/filters/DateRangePicker";
 import { CommandMenu } from "@/components/layout/CommandMenu";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { RefreshButton } from "@/components/status/RefreshButton";
 import { SyncCountdown } from "@/components/status/SyncCountdown";
 import { SyncStatusBadge } from "@/components/status/SyncStatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -56,6 +57,7 @@ export async function AppHeader({ scope }: { scope?: NavScope } = {}) {
         <Suspense fallback={<CommandMenuSkeleton />}>
           <CommandMenu scope={scope} />
         </Suspense>
+        <RefreshButton syncStatus={showSync} />
         {showSync ? <SyncCountdown /> : null}
         <NotificationBell />
         <UserMenu user={session?.user ?? null} signOutAction={signOutAction} />

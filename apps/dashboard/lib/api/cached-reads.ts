@@ -1,6 +1,6 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 
 import {
   getAccountsByDepartment,
@@ -32,3 +32,19 @@ export const getSyncStatusCached = unstable_cache(
   ["sync-status"],
   { revalidate: FIVE_MINUTES_SECONDS, tags: ["sync-status"] },
 );
+
+let lastBypassAt = Number.NEGATIVE_INFINITY;
+
+export const SYNC_STATUS_BYPASS_MIN_INTERVAL_MS = 10_000;
+
+// Design System - Caching Strategy, Refresh (T-RF3, T-RF6): at most one expiry
+// of the one fixed tag per interval; inside it the current entry is served
+// without a DynamoDB read. Set before awaiting so concurrent callers share it.
+export function refreshSyncStatusCached() {
+  const now = Date.now();
+  if (now - lastBypassAt >= SYNC_STATUS_BYPASS_MIN_INTERVAL_MS) {
+    lastBypassAt = now;
+    revalidateTag("sync-status", { expire: 0 });
+  }
+  return getSyncStatusCached();
+}

@@ -24,6 +24,15 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/status/SyncStatusBadge", () => ({
   SyncStatusBadge: () => <div role="status" aria-label="Sync status" />,
 }));
+// RF1 (Design System - Component Inventory, RefreshButton): composed here;
+// its own behaviour is tested in components/status/RefreshButton.test.tsx.
+vi.mock("@/components/status/RefreshButton", () => ({
+  RefreshButton: ({ syncStatus }: { syncStatus: boolean }) => (
+    <button type="button" data-sync-status={String(syncStatus)}>
+      Refresh data
+    </button>
+  ),
+}));
 vi.mock("@/components/status/SyncCountdown", () => ({
   SyncCountdown: () => <div role="timer" aria-label="Next sync" />,
 }));
@@ -120,5 +129,31 @@ describe("AppHeader sync badges by role", () => {
     render(<SidebarProvider>{await AppHeader()}</SidebarProvider>);
 
     expect(screen.getByRole("button", { name: "Notifications" })).toBeVisible();
+  });
+});
+
+// T-RF1 (Design System - Caching Strategy, Refresh; Component Inventory -
+// RefreshButton, D-R3-2): every signed-in caller gets the button, immediately
+// before SyncCountdown where that is shown, otherwise in its place.
+describe("AppHeader refresh button (T-RF1)", () => {
+  it("shows the button to a global reader, with the sync status, right before the countdown", async () => {
+    await renderHeader(scope({ global: true }));
+
+    const button = screen.getByRole("button", { name: "Refresh data" });
+    const countdown = screen.getByRole("timer", { name: "Next sync" });
+    expect(button).toHaveAttribute("data-sync-status", "true");
+    expect(button.nextElementSibling).toBe(countdown);
+  });
+
+  it.each([
+    ["a team lead", scope({ teamScopes: new Set(["team-a"]) })],
+    ["a member", scope({ memberTeamId: "team-a" })],
+  ])("shows the button to %s, without the sync status", async (_n, s) => {
+    await renderHeader(s);
+
+    const button = screen.getByRole("button", { name: "Refresh data" });
+    expect(button).toBeVisible();
+    expect(button).toHaveAttribute("data-sync-status", "false");
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
   });
 });

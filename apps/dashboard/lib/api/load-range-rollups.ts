@@ -4,6 +4,7 @@ import { runBounded } from "@llm-usage-lens/shared";
 import type { DatedDailyRollup } from "@llm-usage-lens/shared";
 import { unstable_cache } from "next/cache";
 
+import { getSyncStatusCached } from "@/lib/api/cached-reads";
 import { getRollupsByDate } from "@/lib/data/daily-rollups";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -22,9 +23,13 @@ export function utcDaysInRange(dateFrom: string, dateTo: string): string[] {
 }
 
 // Cached per UTC day: a whole-range entry would exceed Next's 2 MB per-entry
-// limit at ~100 accounts x 30 days. The day is the only cache key input.
+// limit at ~100 accounts x 30 days. The key is the day and the last sync run, so a new run re-reads
+// each day once (Design System - Caching Strategy, T-RF5).
 const getRollupsByDateCached = unstable_cache(
-  getRollupsByDate,
+  (day: string, lastRun: string) => {
+    void lastRun;
+    return getRollupsByDate(day);
+  },
   ["rollups-by-date"],
   { revalidate: ONE_HOUR_SECONDS, tags: ["rollups"] },
 );
@@ -41,12 +46,15 @@ export async function loadRangeRollups(
   accountId?: string,
 ): Promise<DatedDailyRollup[]> {
   const days = utcDaysInRange(dateFrom, dateTo);
+  const sync = await getSyncStatusCached();
+  const lastRun =
+    sync.state === "synced" ? sync.status.lastRunAt : "never-synced";
   const perDay: DatedDailyRollup[][] = days.map(() => []);
   await runBounded(
     days.map((day, index) => ({ day, index })),
     MAX_CONCURRENT_DAY_READS,
     async ({ day, index }) => {
-      perDay[index] = await getRollupsByDateCached(day);
+      perDay[index] = await getRollupsByDateCached(day, lastRun);
     },
   );
   const all = perDay.flat();

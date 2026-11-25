@@ -1,15 +1,34 @@
 import type { DatedDailyRollup } from "@llm-usage-lens/shared";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+// Pass-through by default; the RF1 cases switch the in-memory fake cache on.
+const cacheMode = vi.hoisted(() => ({ fake: false }));
 vi.mock("next/cache", async () => {
   const mod = await import("@/test/fakes/next-cache-fake");
-  return mod.passThroughNextCache;
+  return {
+    ...mod.passThroughNextCache,
+    unstable_cache: (fn: never, keyParts?: string[], options?: object) => {
+      const cached = mod.fakeNextCache.unstable_cache(
+        fn,
+        keyParts,
+        options,
+      ) as (...a: unknown[]) => Promise<unknown>;
+      const direct = fn as (...a: unknown[]) => Promise<unknown>;
+      return (...a: unknown[]) =>
+        cacheMode.fake ? cached(...a) : direct(...a);
+    },
+  };
 });
 const getRollupsByDate = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/data/daily-rollups", () => ({ getRollupsByDate }));
+// The sync status is read through getSyncStatusCached (Design System - Caching
+// Strategy, PERF-R); mocked so each case picks the last run.
+const getSyncStatusCached = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/api/cached-reads", () => ({ getSyncStatusCached }));
 
 import { loadRangeRollups, utcDaysInRange } from "@/lib/api/load-range-rollups";
+import { resetFakeCache } from "@/test/fakes/next-cache-fake";
 import { buildRollup } from "@/test/fixtures/rollup-builder";
 
 const acct = (n: number) => String(n).padStart(12, "0");
@@ -30,6 +49,8 @@ beforeEach(() => {
   peak = 0;
   pending = [];
   getRollupsByDate.mockReset();
+  getSyncStatusCached.mockReset();
+  getSyncStatusCached.mockResolvedValue({ state: "never-synced" });
   getRollupsByDate.mockImplementation(
     (date: string) =>
       new Promise<DatedDailyRollup[]>((resolve) => {
@@ -91,5 +112,54 @@ describe("loadRangeRollups concurrency", () => {
     await expect(loadRangeRollups("2026-10-01", "2026-10-03")).rejects.toThrow(
       "ddb down",
     );
+  });
+});
+
+// Design System - Caching Strategy, "Server ... key includes the last sync
+// run" (PERF-R, unit RF1, T-RF5): a new run is a new key, the same run is
+// served from the cache; "never-synced" is a valid key.
+describe("loadRangeRollups cache key (RF1, T-RF5)", () => {
+  const synced = (lastRunAt: string) => ({
+    state: "synced",
+    status: { lastRunAt },
+  });
+  const load = () => loadRangeRollups("2026-10-01", "2026-10-03");
+
+  beforeEach(() => {
+    cacheMode.fake = true;
+    resetFakeCache();
+    getRollupsByDate.mockReset();
+    getRollupsByDate.mockImplementation(async (date: string) => [
+      buildRollup({ date, accountId: acct(1) }),
+    ]);
+  });
+  afterEach(() => {
+    cacheMode.fake = false;
+  });
+
+  it("T-RF5: the same last run is served from the cache (one read per day)", async () => {
+    getSyncStatusCached.mockResolvedValue(synced("2026-10-03T12:00:00.000Z"));
+    await load();
+    await load();
+    expect(getRollupsByDate).toHaveBeenCalledTimes(3);
+  });
+
+  it("T-RF5: a new last run reads each day once more", async () => {
+    getSyncStatusCached.mockResolvedValue(synced("2026-10-03T12:00:00.000Z"));
+    await load();
+    getSyncStatusCached.mockResolvedValue(synced("2026-10-03T13:00:00.000Z"));
+    await load();
+    await load();
+    expect(getRollupsByDate).toHaveBeenCalledTimes(6);
+  });
+
+  it("T-RF5: never-synced is a valid key (cached, then a first run re-reads)", async () => {
+    getSyncStatusCached.mockResolvedValue({ state: "never-synced" });
+    await load();
+    await load();
+    expect(getRollupsByDate).toHaveBeenCalledTimes(3);
+    getSyncStatusCached.mockResolvedValue(synced("2026-10-03T12:00:00.000Z"));
+    await load();
+    expect(getRollupsByDate).toHaveBeenCalledTimes(6);
   });
 });

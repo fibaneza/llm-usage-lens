@@ -239,7 +239,9 @@ test.describe("journey: admin", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Cost overview" }),
     ).toBeVisible();
-    await expect(topBar(page).getByRole("status")).toBeVisible();
+    await expect(
+      topBar(page).getByRole("status", { name: /^Sync status/ }),
+    ).toBeVisible();
     await expect(topBar(page).getByRole("timer")).toBeVisible();
 
     await expectSidebarAndWalk(page, [USAGE, MANAGEMENT_ALL, ADMINISTRATION]);
@@ -293,7 +295,9 @@ test.describe("journey: lead (team admin)", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "My usage" }),
     ).toBeVisible();
-    await expect(topBar(page).getByRole("status")).toHaveCount(0);
+    await expect(
+      topBar(page).getByRole("status", { name: /^Sync status/ }),
+    ).toHaveCount(0);
     await expect(topBar(page).getByRole("timer")).toHaveCount(0);
     // The date range stays for every role (Design System - Layout).
     await expect(
@@ -710,7 +714,9 @@ test.describe("journey: user (member)", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "My usage" }),
     ).toBeVisible();
-    await expect(topBar(page).getByRole("status")).toHaveCount(0);
+    await expect(
+      topBar(page).getByRole("status", { name: /^Sync status/ }),
+    ).toHaveCount(0);
     await expect(topBar(page).getByRole("timer")).toHaveCount(0);
     await expect(
       topBar(page).getByRole("button", { name: "Last 30 days" }),
