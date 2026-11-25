@@ -11,6 +11,7 @@ import {
   LiteLLMMembersResponseSchema,
   LiteLLMModelsResponseSchema,
   LiteLLMOrgResponseSchema,
+  LiteLLMProxyTeamResponseSchema,
   LiteLLMTeamDetailResponseSchema,
   LiteLLMUserMembershipsResponseSchema,
   OperationTogglesViewSchema,
@@ -34,6 +35,7 @@ import { AuditSection } from "@/components/litellm/AuditSection";
 import { useCombinedOrganisation } from "@/components/litellm/combined/use-combined-query";
 import { OrganisationSection } from "@/components/litellm/OrganisationSection";
 import { ResetMemberSpendDialog } from "@/components/litellm/ResetMemberSpendDialog";
+import { useProxyTeam } from "@/components/litellm/proxy-team/use-proxy-team";
 import { MembersPanel } from "@/components/litellm/team/MembersPanel";
 import { ModelsPanel } from "@/components/litellm/team/ModelsPanel";
 import { useMeQuery } from "@/components/litellm/use-me-query";
@@ -66,6 +68,7 @@ import {
   DEFAULT_ORG_UNITS_BODY,
   defaultLiteLLMUsersBody,
 } from "@/test/fakes/api-stubs";
+import { PROXY_TEAM } from "@/test/fixtures/proxy-team";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 // Source: Design System - Management pages, LiteLLM users tab, D-LF1 (one
@@ -151,6 +154,9 @@ function stubFetch() {
             },
           }),
         );
+      }
+      if (/^\/api\/litellm\/proxy-teams\/[^/]+$/.test(path)) {
+        return Promise.resolve(apiResponse({ data: PROXY_TEAM }));
       }
       if (path.startsWith("/api/litellm/proxy-teams/")) {
         return Promise.resolve(
@@ -458,6 +464,12 @@ const ROUTES: RouteContract[] = [
     query: () => [NoQuery],
     answer: () => LiteLLMMembersResponseSchema,
   },
+  // LP1, T-LP3/T-LP4: the LiteLLM team page's read.
+  {
+    pattern: /^\/api\/litellm\/proxy-teams\/[^/]+$/,
+    query: () => [NoQuery],
+    answer: () => LiteLLMProxyTeamResponseSchema,
+  },
   {
     pattern: /^\/api\/litellm\/proxy-teams\/[^/]+\/members$/,
     query: () => [NoQuery],
@@ -643,6 +655,11 @@ const CALLERS: Caller[] = [
     file: "components/litellm/team/ModelsPanel.tsx",
     ui: <ModelsPanel teamId="t1" capabilities={{ canRaiseLimits: false }} />,
     expects: [at(/teams\/t1$/), at(/\/models$/)],
+  },
+  {
+    file: "components/litellm/proxy-team/use-proxy-team.ts",
+    ui: <Probe use={() => useProxyTeam("ll-team-shared")} />,
+    expects: [at(/proxy-teams\/ll-team-shared$/)],
   },
   {
     file: "components/litellm/use-me-query.ts",

@@ -729,7 +729,7 @@ The top-bar `h1` reads "Account"; the page renders the sign-in facts as a key–
   D-R3-6; Q-R3-1, user, 2026-11-25: remove the whole App teams table from Organisation).** "Search teams" is a `SearchInput` and filters the team links
   and the LiteLLM teams table by team name, alias and id, case-insensitive,
   in the browser; "No matching teams" when nothing matches. Each LiteLLM
-  team's name links to its page.
+  team's name links to its page. **Budget resets column (user, 2026-11-26, LP1 review):** the every-team budget reset request count (MG-D10) that lived in the removed App teams table moves to a "Budget resets" column on the LiteLLM teams table, for `internal-admin`, `internal-org-admin` and `internal-auditor` only: a linked team shows its app team's count for the URL range (`GET /api/budget-resets`, read per request), an unlinked team "—".
 - **LiteLLM team page (unit LP1, user, 2026-11-25: "a page with the team
   info, spent, members, team lead name"; D-R3-7, D-R3-9).**
   `/dashboard/manage/litellm/teams/[litellmTeamId]`, for `internal-admin`,
@@ -742,6 +742,21 @@ The top-bar `h1` reads "Account"; the page renders the sign-in facts as a key–
   /api/litellm/proxy-teams/[litellmTeamId]` (LiteLLM spec — *API routes*).
   Under the Organisation cap spend and budget are omitted. A breadcrumb
   leads back to the tab.
+  *LP1 agent decisions (2026-11-26; reasons in brackets):* **(a)** the
+  page checks the caller's role before it asks whether the team exists, and
+  asks only through `getTeam`: when `getTeam` is off (LD19), LiteLLM is not
+  configured or the app is in open mode (LD37) it makes no call and renders
+  the panels' own states; only a LiteLLM `404` is the missing page, an
+  outage shows the panels' unavailable state [a caller without access never
+  learns whether a team exists, and an outage is not a missing team]. **(b)**
+  `budgetResetAt` is LiteLLM's `budget_reset_at` when it parses as a date,
+  else `null`, with an unparseable value recorded on the span and never
+  shown [one source, no raw value in the UI]. **(c)** Not configured: the
+  read answers `200` with `alias: null`, no spend or budget, `memberCount: 0`,
+  `models: []`, `budgetResetAt: null` and the stored link still resolved
+  [LD37: no call, and the link is the app's own data]. **(d)** Lead names
+  are the linked app team's team-scope Leads (App Teams — *Lead in scope*),
+  each by display name, else email. **(e)** A team with a budget but no reset time shows "Budget resets: Not set" [an absent value is named, never left blank].
 
   | Test | Proves |
   |---|---|

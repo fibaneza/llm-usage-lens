@@ -309,3 +309,52 @@ test.describe("Management -> LiteLLM -> LiteLLM teams: sorting (unit SRT1; D-SR1
     ).toHaveAttribute("aria-sort", "ascending");
   });
 });
+
+// Design System - LiteLLM teams tab, round 3 (unit LP1, D-R3-5, T-LP1, T-LP5):
+// "Search teams" is a SearchInput (visible label, magnifier) that filters the
+// team links and the LiteLLM teams table in the browser by name, alias and id;
+// "No matching teams" when nothing matches; each LiteLLM team's name links to
+// its page. Detail (every filter field, the encoded href) is in the component
+// test (Rule 60.24a); this proves it in the real shell.
+test.describe("Management -> LiteLLM -> LiteLLM teams: Search teams and team links (LP1, T-LP1, T-LP5)", () => {
+  test("the search has a visible label (the magnifier is the component test's), filters both tables by alias and id, and says 'No matching teams'", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
+    await mockApi(page);
+    await open(page);
+
+    const box = page.getByRole("searchbox", { name: "Search teams" });
+    await expect(page.getByLabel("Search teams")).toBeVisible();
+    await expect(page.getByText("Search teams", { exact: true })).toBeVisible();
+
+    const table = page.getByRole("table", { name: "LiteLLM teams" });
+    await expect(table.getByRole("row")).toHaveCount(3);
+    await box.fill("BETA");
+    await expect(table.getByRole("link", { name: "Beta" })).toBeVisible();
+    await expect(table.getByRole("link", { name: "Alpha" })).toHaveCount(0);
+    await expect(page.getByText("ll-111")).toHaveCount(0);
+
+    await box.fill("ll-111");
+    await expect(table.getByRole("link", { name: "Alpha" })).toBeVisible();
+    await expect(page.getByText("ll-111").first()).toBeVisible();
+
+    await box.fill("zzz-none");
+    await expect(page.getByText("No matching teams")).toHaveCount(2);
+  });
+
+  test("each LiteLLM team's name links to its page", async ({
+    page,
+    context,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await mockApi(page);
+    await open(page);
+    await expect(
+      page
+        .getByRole("table", { name: "LiteLLM teams" })
+        .getByRole("link", { name: "Alpha" }),
+    ).toHaveAttribute("href", "/dashboard/manage/litellm/teams/ll-111");
+  });
+});

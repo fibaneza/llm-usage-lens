@@ -74,3 +74,44 @@ export async function leadEmailOfTeam(
   const valid = emails.filter((e): e is string => e !== null).sort();
   return valid[0] ?? null;
 }
+
+// Source: docs/specs/2026-11-10-litellm.md - "API routes" row GET
+// /api/litellm/proxy-teams/[litellmTeamId] (unit LP1): the names of a team's
+// Leads, the same people leadEmailOfTeam considers, each by the stored
+// identity's displayName (fallback email), sorted by name. Read per request,
+// never cached (Rule 60.10).
+export async function leadNamesOfTeam(
+  teamId: string,
+  cursorSecret: string,
+): Promise<string[]> {
+  const scopes = new Map<string, AdminScope[]>();
+  let cursor: string | undefined;
+  do {
+    const page = await listScopeAdmins(
+      { scopeType: "team", scopeId: teamId },
+      { cursorSecret, cursor },
+    );
+    if (!page.ok) throw new Error(`team admin listing failed: ${page.code}`);
+    for (const scope of page.value.items) {
+      scopes.set(scope.oid, [...(scopes.get(scope.oid) ?? []), scope]);
+    }
+    cursor = page.value.cursor;
+  } while (cursor);
+
+  const names = await Promise.all(
+    [...scopes].map(async ([oid, held]) => {
+      const item = await getItem(identPk(oid), META_SK);
+      if (!item) return null;
+      const identity = IdentityRecordSchema.parse(item);
+      const name = identity.displayName?.trim() || identity.email?.trim();
+      if (!name) return null;
+      if (held.every((scope) => isAdminScopeSuspended(scope, identity))) {
+        return null;
+      }
+      if (isGlobalHolder(identity.lastSeenRoles)) return null;
+      const granted = await loadGrantedRoles(oid);
+      return isGlobalHolder(granted) ? null : name;
+    }),
+  );
+  return names.filter((n): n is string => n !== null).sort();
+}

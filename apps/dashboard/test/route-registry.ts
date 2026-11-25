@@ -460,6 +460,12 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     family: "litellm",
     validParams: { litellmTeamId: "lt-team-a" },
   }),
+  // Unit LP1 (Design System - LiteLLM team page, T-LP3; LiteLLM spec - API
+  // routes): admin, org-admin, auditor read; a Lead is refused by the route.
+  read("litellm/proxy-teams/[litellmTeamId]/route.ts", {
+    family: "litellm",
+    validParams: { litellmTeamId: "lt-team-a" },
+  }),
   read("litellm/models/route.ts", { family: "litellm" }),
   read("litellm/orphans/route.ts", { family: "litellm" }),
   read("litellm/team-links/route.ts", { family: "litellm" }),

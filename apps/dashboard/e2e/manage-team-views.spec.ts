@@ -215,18 +215,47 @@ test.describe("Team page member daily spend (G1)", () => {
 });
 
 test.describe("Organisation to Team (G2)", () => {
-  test("an org-admin opens a team from the App teams table", async ({
+  // T-LP2 (Design System - LiteLLM team page): the App teams table is gone; a
+  // linked app team's name in the LiteLLM teams table links to its team page.
+  test("an org-admin opens a team from the LiteLLM teams table", async ({
     page,
     context,
   }) => {
     await signInAsTestUser(context, { roles: ["internal-org-admin"] });
     await mockApi(page);
+    // Registered after mockApi, so it wins over the catch-all.
+    await page.route(/\/api\/litellm\/org(\?|$)/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            configured: true,
+            totals: { spend: 321.75 },
+            enabledOperations: [],
+            daily: [],
+            litellmTeams: [
+              {
+                litellmTeamId: "ll-1",
+                alias: "Payments LLM",
+                spend: 321.75,
+                maxBudget: null,
+                memberCount: 1,
+                linkedAppTeam: {
+                  teamId: "team-payments",
+                  teamName: "Payments",
+                },
+              },
+            ],
+            appTeams: [],
+          },
+        },
+      }),
+    );
     await page.goto("/dashboard/manage/litellm/organisation");
     await waitForHydration(page);
 
     await page
-      .getByRole("table", { name: "App teams" })
-      .getByRole("link", { name: "Payments" })
+      .getByRole("table", { name: "LiteLLM teams" })
+      .getByRole("link", { name: "Payments", exact: true })
       .click();
 
     await expect(page).toHaveURL(/\/dashboard\/manage\/team\/team-payments$/);

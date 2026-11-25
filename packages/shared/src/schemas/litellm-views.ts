@@ -175,6 +175,26 @@ export const LiteLLMProxyTeamMembersResponseSchema = z.object({
   ),
 });
 
+// LP1, T-LP3, LD23: one LiteLLM team by LiteLLM id; spend and maxBudget are
+// absent while the Organisation cap hides cost. No key, token or secret (LT1).
+export const LiteLLMProxyTeamResponseSchema = z.object({
+  litellmTeamId: z.string(),
+  alias: z.string().nullable(),
+  spend: z.number().optional(),
+  maxBudget: z.number().nullable().optional(),
+  budgetResetAt: z.string().nullable(),
+  memberCount: z.number(),
+  models: z.array(z.string()),
+  enabledOperations: z.array(z.string()),
+  linkedAppTeam: z
+    .object({
+      teamId: z.string(),
+      name: z.string(),
+      leads: z.array(z.object({ name: z.string() })),
+    })
+    .nullable(),
+});
+
 export const LiteLLMKeysResponseSchema = z.discriminatedUnion("connected", [
   z.object({ connected: z.literal(true), items: z.array(KeyMetadataSchema) }),
   z.object({ connected: z.literal(false), items: z.array(z.never()) }),

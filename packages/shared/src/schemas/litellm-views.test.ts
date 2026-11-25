@@ -8,6 +8,7 @@ import {
   LiteLLMModelsResponseSchema,
   LiteLLMOrgResponseSchema,
   LiteLLMProxyTeamMembersResponseSchema,
+  LiteLLMProxyTeamResponseSchema,
   LiteLLMSpendLogsResponseSchema,
   LiteLLMTeamDetailResponseSchema,
   LiteLLMUserDetailResponseSchema,
@@ -676,6 +677,76 @@ describe("LiteLLMProxyTeamMembersResponseSchema (RS2 spec row, D-RS6, LD23)", ()
     expect(LiteLLMProxyTeamMembersResponseSchema.safeParse(value).success).toBe(
       false,
     );
+  });
+});
+
+// Sources: Design System - "LiteLLM team page (unit LP1)", T-LP3; LiteLLM spec
+// - API routes row GET /api/litellm/proxy-teams/[litellmTeamId]; LD23; LT1.
+describe("LiteLLMProxyTeamResponseSchema (T-LP3, LD23, LT1)", () => {
+  const base = {
+    litellmTeamId: "ll-t1",
+    alias: "Alpha",
+    spend: 12.5,
+    maxBudget: 100,
+    budgetResetAt: "2026-12-01T00:00:00Z",
+    memberCount: 2,
+    models: ["claude-sonnet"],
+    enabledOperations: ["getTeam"],
+    linkedAppTeam: {
+      teamId: "team-a",
+      name: "Alpha team",
+      leads: [{ name: "Tara Lead" }],
+    },
+  };
+  const parse = (v: unknown) =>
+    LiteLLMProxyTeamResponseSchema.safeParse(v).success;
+  it("accepts a full answer, an unlinked team (null) and a team with no leads", () => {
+    expect(parse(base)).toBe(true);
+    expect(parse({ ...base, linkedAppTeam: null })).toBe(true);
+    expect(
+      parse({
+        ...base,
+        linkedAppTeam: { ...base.linkedAppTeam, leads: [] },
+      }),
+    ).toBe(true);
+  });
+  it("accepts a null alias, no budget and no reset time", () => {
+    expect(
+      parse({ ...base, alias: null, maxBudget: null, budgetResetAt: null }),
+    ).toBe(true);
+  });
+  it("accepts an answer without spend and maxBudget (Organisation cap, LD23)", () => {
+    const capped: Record<string, unknown> = { ...base };
+    delete capped.spend;
+    delete capped.maxBudget;
+    expect(parse(capped)).toBe(true);
+  });
+  it.each([
+    ["no litellmTeamId", { ...base, litellmTeamId: undefined }],
+    ["no memberCount", { ...base, memberCount: undefined }],
+    ["no models", { ...base, models: undefined }],
+    ["no enabledOperations", { ...base, enabledOperations: undefined }],
+    [
+      "no linkedAppTeam (null is the unlinked state)",
+      { ...base, linkedAppTeam: undefined },
+    ],
+    [
+      "a lead without a name",
+      { ...base, linkedAppTeam: { ...base.linkedAppTeam, leads: [{}] } },
+    ],
+    ["a non-numeric spend", { ...base, spend: "12" }],
+  ])("rejects %s", (_n, value) => {
+    expect(parse(value)).toBe(false);
+  });
+  it("never carries a key, key alias, token or secret: the parsed answer drops them (LT1)", () => {
+    const out = LiteLLMProxyTeamResponseSchema.parse({
+      ...base,
+      keys: [{ token: "t" }],
+      keyAlias: "a",
+      token: "t",
+      secret: "s",
+    });
+    expect(JSON.stringify(out)).not.toMatch(/keys|keyAlias|token|secret/i);
   });
 });
 

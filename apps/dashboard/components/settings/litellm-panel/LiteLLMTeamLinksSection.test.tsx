@@ -238,7 +238,8 @@ describe("LiteLLMTeamLinksSection list, search and unlink", () => {
     expect(screen.getByText("ll-222")).toBeInTheDocument();
     await userEvent.clear(box);
     await userEvent.type(box, "nomatch");
-    expect(screen.getByText(/no matching teams/i)).toBeInTheDocument();
+    // Design System - LiteLLM teams tab, round 3, T-LP1: both tables show it.
+    expect(screen.getAllByText(/no matching teams/i)).toHaveLength(2);
   });
 
   it("an editor sees Unlink per link (LD24)", async () => {
@@ -705,5 +706,193 @@ describe("LiteLLMTeamLinksSection teams table sorting (unit SRT1; D-SR1)", () =>
     expect(
       within(table).getByRole("columnheader", { name: "LiteLLM team" }),
     ).toHaveAttribute("aria-sort", "ascending");
+  });
+});
+
+// Design System - LiteLLM teams tab, round 3 and LiteLLM team page (unit LP1,
+// D-R3-5, T-LP1, T-LP5): "Search teams" is a SearchInput with a visible label
+// and the magnifier; it filters the team links and the LiteLLM teams table by
+// team name, alias and id, case-insensitively, in the browser, with
+// "No matching teams" in each list that has no match; each LiteLLM team's name
+// links to its page. The existing search case above types and asserts at once,
+// so the section's SearchInput has delayMs 0.
+describe("LiteLLMTeamLinksSection - Search teams and team page links (LP1, T-LP1, T-LP5)", () => {
+  const appTeams = [
+    { teamId: "payments", teamName: "Payments", spendSource: "litellm-team" },
+    { teamId: "search", teamName: "Search", spendSource: "litellm-team" },
+  ];
+  const rows = (table: HTMLElement) =>
+    within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => within(r).getAllByRole("cell")[0]?.textContent);
+
+  async function open() {
+    stub({ extra: { appTeams } });
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit />);
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    await screen.findByText("ll-111");
+    return {
+      table,
+      box: screen.getByRole("searchbox", { name: "Search teams" }),
+    };
+  }
+
+  it("T-LP1: 'Search teams' has a visible label and the magnifier", async () => {
+    const { box } = await open();
+    expect(screen.getByText("Search teams").tagName).toBe("LABEL");
+    expect(screen.getByLabelText("Search teams")).toBe(box);
+    expect(
+      box.parentElement?.querySelector("svg[aria-hidden='true']"),
+    ).not.toBeNull();
+  });
+
+  it.each([
+    ["the LiteLLM alias, in any case", "aLPha", "ll-111", ["Alpha"]],
+    ["the app team's name", "payments", "ll-111", ["Alpha"]],
+    ["the app team's id", "SEARCH", "ll-222", ["Beta"]],
+    ["the LiteLLM team's id", "ll-222", "ll-222", ["Beta"]],
+  ])(
+    "T-LP1: typing %s narrows both the links and the LiteLLM teams table",
+    async (_what, term, linkKept, aliases) => {
+      const { table, box } = await open();
+      await userEvent.type(box, term);
+      expect(rows(table)).toEqual(aliases);
+      const other = linkKept === "ll-111" ? "ll-222" : "ll-111";
+      expect(screen.getByText(linkKept)).toBeInTheDocument();
+      expect(screen.queryByText(other)).toBeNull();
+      expect(screen.queryByText(/no matching teams/i)).toBeNull();
+    },
+  );
+
+  it("T-LP1: a term that matches only an unlinked LiteLLM team keeps its row and shows 'No matching teams' once, for the links", async () => {
+    const { table, box } = await open();
+    await userEvent.type(box, "gamma");
+    expect(rows(table)).toEqual(["Gamma"]);
+    expect(screen.queryByText("ll-111")).toBeNull();
+    expect(screen.getAllByText(/no matching teams/i)).toHaveLength(1);
+  });
+
+  it("T-LP1: a term that matches nothing shows 'No matching teams' in each table, and clearing it restores every row", async () => {
+    const { table, box } = await open();
+    await userEvent.type(box, "zzz-none");
+    expect(screen.getAllByText(/no matching teams/i)).toHaveLength(2);
+    expect(
+      within(table).queryByRole("button", { name: /^Members of/ }),
+    ).toBeNull();
+    await userEvent.clear(box);
+    expect(screen.queryByText(/no matching teams/i)).toBeNull();
+    expect(
+      rows(await screen.findByRole("table", { name: "LiteLLM teams" })),
+    ).toEqual(["Alpha", "Beta", "Gamma"]);
+  });
+
+  it("T-LP5: each LiteLLM team's name links to /dashboard/manage/litellm/teams/<encoded id>, and the Members action stays", async () => {
+    stub({
+      extra: {
+        litellmTeams: [
+          { litellmTeamId: "ll-111", alias: "Alpha" },
+          { litellmTeamId: "ll/odd id", alias: "Odd team" },
+        ],
+      },
+    });
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit={false} />);
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    expect(within(table).getByRole("link", { name: "Alpha" })).toHaveAttribute(
+      "href",
+      "/dashboard/manage/litellm/teams/ll-111",
+    );
+    expect(
+      within(table).getByRole("link", { name: "Odd team" }),
+    ).toHaveAttribute("href", "/dashboard/manage/litellm/teams/ll%2Fodd%20id");
+    expect(
+      within(table).getByRole("button", { name: "Members of Alpha" }),
+    ).toBeInTheDocument();
+  });
+});
+
+// Sources: Design System - "LiteLLM teams tab, round 3 (unit LP1)", Budget
+// resets column (user, 2026-11-26): a "Budget resets" column on the LiteLLM
+// teams table for internal-admin, internal-org-admin and internal-auditor only;
+// a linked team shows its app team's count for the URL range (GET
+// /api/budget-resets, read per request), an unlinked team "—". LiteLLM spec -
+// MG-D10 (every team: Admin, org-admin, Auditor); MG-D9 (count text). A lead or
+// member never reaches this section: the teams tab is the 404 without the
+// litellm management flag (app/dashboard/manage/litellm/[tab]/page.test.tsx,
+// "a caller without the litellm flag (a lead, a user) gets the 404").
+describe("LiteLLMTeamLinksSection - Budget resets column (LP1, MG-D10)", () => {
+  const RANGE = { dateFrom: "2026-11-01", dateTo: "2026-11-20" };
+  const COUNTS = {
+    teams: [{ teamId: "payments", count: 2, amount: 80.25 }],
+    own: { count: 0, amount: 0 },
+  };
+
+  function stubWithCounts() {
+    stub();
+    const inner = globalThis.fetch;
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), "http://localhost");
+        if (url.pathname === "/api/budget-resets") {
+          urls.push(url.pathname + url.search);
+          return Promise.resolve(apiResponse({ data: COUNTS }));
+        }
+        return inner(input, init);
+      }),
+    );
+    return urls;
+  }
+  const rowOf = (table: HTMLElement, alias: string) =>
+    within(table)
+      .getAllByRole("row")
+      .find((r) => within(r).queryByRole("link", { name: alias }) !== null);
+
+  it.each([
+    ["internal-admin", { canEdit: true, canCreateTeam: true }],
+    ["internal-org-admin", { canEdit: true, canCreateTeam: false }],
+    ["internal-auditor", { canEdit: false, canCreateTeam: false }],
+  ])(
+    "%s sees the Budget resets column: a linked team shows its app team's count, an unlinked team an em dash, and the read carries the URL range (MG-D10)",
+    async (_role, flags) => {
+      const urls = stubWithCounts();
+      renderWithProviders(<LiteLLMTeamLinksSection {...flags} />, {
+        searchParams: RANGE,
+      });
+      const table = await screen.findByRole("table", {
+        name: "LiteLLM teams",
+      });
+      expect(
+        within(table).getByRole("columnheader", { name: "Budget resets" }),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(rowOf(table, "Alpha")).toHaveTextContent("2 resets, $80.25"),
+      );
+      const gamma = rowOf(table, "Gamma");
+      expect(gamma).toHaveTextContent("—");
+      expect(gamma).not.toHaveTextContent(/resets?,|No budget resets/);
+      expect(urls).toContain(
+        "/api/budget-resets?dateFrom=2026-11-01&dateTo=2026-11-20",
+      );
+    },
+  );
+
+  it("MG-D10: the count is read per request, not cached in the browser: a new range issues a new read", async () => {
+    const urls = stubWithCounts();
+    const first = renderWithProviders(<LiteLLMTeamLinksSection canEdit />, {
+      searchParams: RANGE,
+    });
+    await screen.findByRole("columnheader", { name: "Budget resets" });
+    await waitFor(() => expect(urls.length).toBeGreaterThan(0));
+    first.unmount();
+    renderWithProviders(<LiteLLMTeamLinksSection canEdit />, {
+      searchParams: { dateFrom: "2026-10-01", dateTo: "2026-10-10" },
+    });
+    await waitFor(() =>
+      expect(urls).toContain(
+        "/api/budget-resets?dateFrom=2026-10-01&dateTo=2026-10-10",
+      ),
+    );
   });
 });

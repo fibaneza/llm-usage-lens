@@ -1,0 +1,212 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Sources: Design System - LiteLLM team page (unit LP1, D-R3-7, D-R3-9),
+// T-LP4: "/dashboard/manage/litellm/teams/[litellmTeamId], for internal-admin,
+// internal-org-admin and internal-auditor; anyone else, and an unknown id, gets
+// the missing page"; Access Control MI-D2 (hidden means absent; a lead and a
+// user get the 404), Rule 10.3 / 60.10 (authorized per request, never cached),
+// Rule 60.7 (a page is a Server Component), Rule 60.13 and
+// lib/api/id-param.ts parsePageIdParam (the page param arrives percent-encoded:
+// decode once, then the route's path-id rule); LiteLLM spec - API routes (the
+// id is PathLiteLLMId: 1-128 characters, a LiteLLM id: letters, digits and
+// @ . _ + : -); RS2 (Reset spend / Reset budget: internal-admin and
+// internal-org-admin yes, the auditor no, as the teams tab's canEdit).
+//
+// Contract (new file app/dashboard/manage/litellm/[tab]/[id]/page.tsx):
+//   default async Server Component, props
+//   { params: Promise<{ tab: string; id: string }> }.
+//   1. managementAccessFor(session).litellm false -> notFound().
+//   2. tab !== "teams" -> notFound().
+//   3. id: parsePageIdParam(id) null, or not a LiteLLM id (PathLiteLLMId:
+//      the route's schema) -> notFound().
+//   4. proxyTeamExists(litellmTeamId) false -> notFound(). `proxyTeamExists`
+//      is a new server-only function in lib/litellm/proxy-team-exists.ts
+//      ({ (litellmTeamId: string): Promise<boolean> }): true when the team
+//      exists (the existing getTeam read; no new gateway operation), false on
+//      a LiteLLM 404. Chosen by the test engineer: a page cannot learn an
+//      unknown id from a client panel (the panel's own boundary would swallow
+//      notFound()), so the server page asks.
+//   5. Renders <ProxyTeamPageContent litellmTeamId canReset /> with the
+//      decoded id and canReset true for internal-admin and internal-org-admin
+//      (litellmPanelCapabilities(roles).editTeamLinks), false for the auditor.
+const auth = vi.fn();
+vi.mock("@/auth", () => ({ auth: () => auth() }));
+const loadViewer = vi.fn();
+vi.mock("@/lib/auth/settings-access", () => ({
+  loadSettingsAccessViewer: (session: unknown) => loadViewer(session),
+}));
+vi.mock("next/navigation", () => ({
+  notFound: () => {
+    throw new Error("NEXT_NOT_FOUND");
+  },
+}));
+vi.mock("@/lib/manage-access", async () => {
+  const mod = await import("@/test/fakes/manage-access-fake");
+  return mod.fakeManageAccess;
+});
+const exists = vi.fn();
+vi.mock("@/lib/litellm/proxy-team-exists", () => ({
+  proxyTeamExists: (id: string) => exists(id),
+}));
+vi.mock("@/components/litellm/proxy-team/ProxyTeamPageContent", () => ({
+  ProxyTeamPageContent: (props: {
+    litellmTeamId: string;
+    canReset: boolean;
+  }) => (
+    <div
+      data-testid="team-page"
+      data-id={props.litellmTeamId}
+      data-reset={String(props.canReset)}
+    />
+  ),
+}));
+
+import {
+  resetManageAccess,
+  setManageAccess,
+} from "@/test/fakes/manage-access-fake";
+
+import LiteLLMTeamPage from "./page";
+
+afterEach(() => {
+  vi.clearAllMocks();
+  resetManageAccess();
+});
+
+function as(roles: string[]) {
+  auth.mockResolvedValue({ user: { oid: "oid-1", roles } });
+  loadViewer.mockResolvedValue({ roles, authMethod: "entra", adminScopes: [] });
+  exists.mockResolvedValue(true);
+}
+const open = (id: string, tab = "teams") =>
+  LiteLLMTeamPage({ params: Promise.resolve({ tab, id }) });
+
+describe("LiteLLM team page (/dashboard/manage/litellm/teams/[id]; T-LP4)", () => {
+  it("is a Server Component (Rule 60.7)", () => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, "page.tsx"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/^\s*["']use client["']/m);
+  });
+
+  // RS2 / LD24: Reset controls follow the teams tab's canEdit. The three
+  // reading roles open the page (security matrix, complete).
+  it.each([
+    ["internal-admin", "true"],
+    ["internal-org-admin", "true"],
+    ["internal-auditor", "false"],
+  ])("%s opens the page; canReset = %s", async (role, canReset) => {
+    as([role]);
+    render(await open("ll-team-1"));
+    const page = screen.getByTestId("team-page");
+    expect(page).toHaveAttribute("data-id", "ll-team-1");
+    expect(page).toHaveAttribute("data-reset", canReset);
+  });
+
+  it("T-LP4: a lead or a user (no litellm flag) gets the missing page, and no team lookup is made", async () => {
+    setManageAccess({ litellm: false });
+    as(["internal-viewer"]);
+    await expect(open("ll-team-1")).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(exists).not.toHaveBeenCalled();
+  });
+
+  it("an unauthenticated caller gets the missing page, and no team lookup is made", async () => {
+    setManageAccess({ litellm: false });
+    auth.mockResolvedValue(null);
+    loadViewer.mockResolvedValue(undefined);
+    await expect(open("ll-team-1")).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(exists).not.toHaveBeenCalled();
+  });
+
+  it.each(["organisation", "users", "nope", "Teams", ""])(
+    "the tab must be 'teams': %j is the missing page, even for an admin",
+    async (tab) => {
+      as(["internal-admin"]);
+      await expect(open("ll-team-1", tab)).rejects.toThrow("NEXT_NOT_FOUND");
+    },
+  );
+
+  // Rule 10.3 / Access Control MI-D2: an out-of-scope caller gets the same
+  // missing page for an existing and a missing id, and the existence check
+  // (a LiteLLM call) is never reached for them.
+  it.each([
+    ["team-scope lead", "internal-viewer"],
+    ["department-scope lead", "internal-viewer"],
+    ["member", "internal-viewer"],
+  ])(
+    "T-LP4: a %s gets notFound() for an existing and a missing id, with no existence check",
+    async (_name, role) => {
+      for (const found of [true, false]) {
+        setManageAccess({ litellm: false });
+        as([role]);
+        exists.mockResolvedValue(found);
+        await expect(open("ll-team-1")).rejects.toThrow("NEXT_NOT_FOUND");
+      }
+      expect(exists).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["internal-admin", "internal-org-admin", "internal-auditor"])(
+    "T-LP4 / LD19: %s still sees the page when the existence check reports an outage (true)",
+    async (role) => {
+      as([role]);
+      exists.mockResolvedValue(true);
+      render(await open("ll-team-1"));
+      expect(screen.getByTestId("team-page")).toHaveAttribute(
+        "data-id",
+        "ll-team-1",
+      );
+    },
+  );
+
+  it("T-LP4: an unknown team id is the missing page", async () => {
+    as(["internal-admin"]);
+    exists.mockResolvedValue(false);
+    await expect(open("ll-unknown")).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(exists).toHaveBeenCalledWith("ll-unknown");
+  });
+
+  // The id is percent-encoded in a page param (parsePageIdParam): decoded once.
+  it("decodes the id once before the lookup and the content", async () => {
+    as(["internal-admin"]);
+    render(await open("ll%3Ateam-1"));
+    expect(exists).toHaveBeenCalledWith("ll:team-1");
+    expect(screen.getByTestId("team-page")).toHaveAttribute(
+      "data-id",
+      "ll:team-1",
+    );
+  });
+
+  // Boundary matrix (path-id rule: 1-128 chars, no control characters; and a
+  // LiteLLM id): refused before any lookup. "a%2520b" decodes once to
+  // "a%20b", which is not a LiteLLM id; a second decode ("a b") never happens.
+  it.each([
+    ["empty", ""],
+    ["a control character", "ll%01x"],
+    ["a malformed escape", "%E0%A4%A"],
+    ["a path traversal", "..%2F..%2Fadmin"],
+    ["a slash", "a%2Fb"],
+    ["a space", "a%20b"],
+    ["a doubly-encoded id", "a%2520b"],
+    ["129 characters", "a".repeat(129)],
+  ])(
+    "an invalid id (%s) is the missing page, with no lookup",
+    async (_n, id) => {
+      as(["internal-admin"]);
+      await expect(open(id)).rejects.toThrow("NEXT_NOT_FOUND");
+      expect(exists).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts a 128-character id", async () => {
+    as(["internal-admin"]);
+    const id = "a".repeat(128);
+    render(await open(id));
+    expect(screen.getByTestId("team-page")).toHaveAttribute("data-id", id);
+  });
+});

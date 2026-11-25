@@ -968,7 +968,7 @@ Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
   (`lib/litellm/member-write.ts`, the two reset routes); `requestBudgetReset`
   registered as a route-less operation (MG-D11a); `GET /api/budget-resets`
   and the counts on *My usage*, the Team page's Budgets view and the
-  Organisation tab (MG-D10). ~~If it does not fit this run it becomes **M4b**
+  ~~Organisation tab~~ LiteLLM teams table's "Budget resets" column (MG-D10; *superseded 2026-11-25, LP1, Q-R3-1; user, 2026-11-26*). ~~If it does not fit this run it becomes **M4b**
   (`feature/budget-reset-counts`), recorded here and in the run report~~
   (superseded 2026-11-18: built in M4, no M4b)
 - [x] Verify (slice A): the full role × operation matrix for request,

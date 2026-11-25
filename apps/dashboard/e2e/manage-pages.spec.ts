@@ -162,17 +162,16 @@ test.describe("Management -> Organisation and Users", () => {
     const region = page.getByRole("region", { name: "Organisation" });
     await expect(region).toContainText("Payments");
     await expect(region).toContainText("LiteLLM-reported");
-    // App Teams spec - Organisation view: two tables, the second labelled.
+    // App Teams spec - Organisation view (amended 2026-11-25, LP1, T-LP2): the
+    // LiteLLM teams table only; the App teams table and its sentence are gone.
     await expect(
       region.getByRole("table", { name: "LiteLLM teams" }),
     ).toBeVisible();
-    await expect(
-      region.getByRole("table", { name: "App teams" }),
-    ).toBeVisible();
-    await expect(region).toContainText(
-      "Per app team. Rows overlap with each other and do not add up to the total.",
+    await expect(region.getByRole("table", { name: "App teams" })).toHaveCount(
+      0,
     );
-    // L4b review round 1: axe on the populated state, both tables rendered.
+    await expect(region).not.toContainText("Rows overlap");
+    // L4b review round 1: axe on the populated state.
     await expectNoBlockingViolations(page);
   });
 

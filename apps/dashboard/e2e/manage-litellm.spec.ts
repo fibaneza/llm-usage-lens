@@ -245,16 +245,17 @@ test.describe("Management -> LiteLLM area (M1)", () => {
     expect(hits).toEqual([]);
   });
 
-  // Review m2-r1 U-B1: Design System -- Management pages (Organisation view:
-  // an app team without a LiteLLM-reported spend links to its Team usage page).
+  // T-LP2 (Design System - LiteLLM team page, amended 2026-11-25; was review
+  // m2-r1 U-B1): the App teams table is gone, so an app team with no
+  // LiteLLM-reported spend has no "Open the team page" row on Organisation.
   for (const role of ["internal-admin", "internal-org-admin"]) {
-    test(`${role}: "Open the team page" on Organisation lands on Team usage for that team (U-B1)`, async ({
+    test(`${role}: Organisation shows no App teams table and no "Open the team page" link (T-LP2)`, async ({
       page,
       context,
     }) => {
       await signInAsTestUser(context, { roles: [role] });
       await mockApi(page);
-      // Registered after mockApi, so these win over its catch-all.
+      // Registered after mockApi, so this wins over its catch-all.
       await page.route(/\/api\/litellm\/org(\?|$)/, (route) =>
         route.fulfill({
           json: {
@@ -263,7 +264,16 @@ test.describe("Management -> LiteLLM area (M1)", () => {
               totals: { spend: 0 },
               enabledOperations: [],
               daily: [],
-              litellmTeams: [],
+              litellmTeams: [
+                {
+                  litellmTeamId: "ll-1",
+                  alias: "Payments LLM",
+                  spend: 0,
+                  maxBudget: null,
+                  memberCount: 1,
+                  linkedAppTeam: null,
+                },
+              ],
               appTeams: [
                 {
                   teamId: "team-payments",
@@ -276,41 +286,19 @@ test.describe("Management -> LiteLLM area (M1)", () => {
           },
         }),
       );
-      await page.route(/\/api\/litellm\/teams\/[^/?]+(\?|$)/, (route) =>
-        route.fulfill({
-          json: {
-            data: {
-              connected: false,
-              spendSource: "member-sum",
-              daily: [],
-              memberSum: {
-                total: 0,
-                daily: [],
-                coverage: { members: 0, matched: 0, unmatched: 0, pending: 0 },
-                members: [],
-              },
-            },
-          },
-        }),
-      );
       await page.goto(`${AREA}/organisation`);
       await waitForHydration(page);
 
-      const [response] = await Promise.all([
-        page.waitForResponse(
-          // A Link click is a client navigation: the page arrives as an RSC fetch.
-          (r) => new URL(r.url()).pathname === "/dashboard/team-usage",
-        ),
-        page.getByRole("link", { name: "Open the team page" }).click(),
-      ]);
-      expect(response.status()).toBe(200);
-      await expect(page).toHaveURL(
-        /\/dashboard\/team-usage\?.*team=team-payments/,
-      );
-      await waitForHydration(page);
       await expect(
-        page.getByRole("region", { name: "Team spend", exact: true }),
+        page.getByRole("table", { name: "LiteLLM teams" }),
       ).toBeVisible();
+      await expect(page.getByRole("table", { name: "App teams" })).toHaveCount(
+        0,
+      );
+      await expect(
+        page.getByRole("link", { name: "Open the team page" }),
+      ).toHaveCount(0);
+      await expect(page.getByText("Rows overlap")).toHaveCount(0);
     });
   }
 

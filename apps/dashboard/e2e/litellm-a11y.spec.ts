@@ -1103,8 +1103,8 @@ test.describe("responsive (L5 Responsive; Design System: Responsive Tables)", ()
         await expect(page.getByText("ops@example.test")).toBeVisible();
       },
     },
-    // L4b: the Organisation view has two tables (App Teams spec, AT5; LiteLLM
-    // spec L5b).
+    // L4b: the Organisation view's LiteLLM teams table (App Teams spec, AT5;
+    // LiteLLM spec L5b); the App teams table was removed in LP1 (T-LP2).
     {
       name: "Organisation LiteLLM teams",
       caption: "LiteLLM teams",
@@ -1113,16 +1113,6 @@ test.describe("responsive (L5 Responsive; Design System: Responsive Tables)", ()
       prepare: async (page) => {
         await open(page, "/dashboard/manage/litellm/organisation");
         await expect(page.getByText("Payments LLM").first()).toBeVisible();
-      },
-    },
-    {
-      name: "Organisation App teams",
-      caption: "App teams",
-      roles: ["internal-admin"],
-      rows: 1,
-      prepare: async (page) => {
-        await open(page, "/dashboard/manage/litellm/organisation");
-        await expect(page.getByText("Payments").first()).toBeVisible();
       },
     },
   ];

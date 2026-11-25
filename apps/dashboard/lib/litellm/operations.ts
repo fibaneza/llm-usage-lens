@@ -215,6 +215,7 @@ const TeamInfoResponse = z.object({
     soft_budget: z.number().nullish(),
     budget_duration: z.string().nullish(),
     spend: z.number().nullish(),
+    budget_reset_at: z.string().nullish(),
     models: z.array(z.string()).nullish(),
     rpm_limit: z.number().nullish(),
     tpm_limit: z.number().nullish(),

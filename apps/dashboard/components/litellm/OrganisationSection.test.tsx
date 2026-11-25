@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import { useQueryStates } from "nuqs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,6 +38,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Amended 2026-11-25 (Design System - LiteLLM teams tab, round 3, unit LP1,
+// T-LP2/T-LP5; App Teams spec - Organisation view): the App teams table and its
+// "Rows overlap" sentence are gone; GET /api/litellm/org still returns
+// appTeams[] (the fixture keeps it). A linked app team's name in the LiteLLM
+// teams table links to its team page; each LiteLLM team's name links to its page.
 const ORG = {
   configured: true,
   totals: { spend: 1234.5 },
@@ -84,8 +89,6 @@ const ORG = {
     },
   ],
 };
-const APP_TEAMS_LABEL =
-  "Per app team. Rows overlap with each other and do not add up to the total.";
 
 function stub(response: () => Response) {
   const calls: string[] = [];
@@ -136,20 +139,20 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     expect(within(shared).getByText(/unlinked/i)).toBeInTheDocument();
   });
 
-  it("the 'App teams' table lists every app team with its spend source, spend and coverage, under the 'rows overlap' label (Organisation view; ATT5)", async () => {
+  it("T-LP2: no App teams table or card list and no 'Rows overlap' sentence, though appTeams[] is in the answer (Design System - LiteLLM team page, T-LP2)", async () => {
     stub(() => apiResponse({ data: ORG }));
     renderSection();
-    const table = await screen.findByRole("table", { name: "App teams" });
-    expect(screen.getByText(APP_TEAMS_LABEL)).toBeInTheDocument();
-    const payments = within(table).getByRole("row", { name: /Payments/ });
-    expect(within(payments).getByText("LiteLLM team")).toBeInTheDocument();
-    expect(within(payments).getByText("$321.75")).toBeInTheDocument();
-    const risk = within(table).getByRole("row", { name: /Risk/ });
-    expect(within(risk).getByText("Sum of members")).toBeInTheDocument();
-    expect(within(risk).getByText("$4.00")).toBeInTheDocument();
-    expect(risk.textContent).toMatch(/2 matched/);
-    expect(risk.textContent).toMatch(/1 not in LiteLLM/);
-    expect(risk.textContent).toMatch(/1 pending/);
+    await screen.findByRole("table", { name: "LiteLLM teams" });
+    expect(screen.queryByRole("table", { name: "App teams" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "App teams" })).toBeNull();
+    expect(screen.queryByText(/rows overlap/i)).toBeNull();
+    expect(screen.queryByText(/per app team/i)).toBeNull();
+    // App-only teams (no LiteLLM team) have no row anywhere on the tab.
+    expect(screen.queryByText("Risk")).toBeNull();
+    expect(screen.queryByText("Ops")).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /open the team page/i }),
+    ).toBeNull();
   });
 
   it("the headline total is the LiteLLM teams' total from the response, never a sum of the app team rows (AT5)", async () => {
@@ -161,52 +164,56 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     expect(within(region).queryByText("$325.75")).toBeNull();
   });
 
-  it("an open-team row has no spend and links to that team's Team usage page (AT6, M2 Verify)", async () => {
-    stub(() => apiResponse({ data: ORG }));
-    renderSection();
-    const table = await screen.findByRole("table", { name: "App teams" });
-    const ops = within(table).getByRole("row", { name: /Ops/ });
-    expect(ops.textContent).not.toContain("$");
-    // B2b (G2): the name links too, so the row holds two links to the team.
-    const link = within(ops).getByRole("link", {
-      name: /open the team page/i,
-    });
-    expect(link.getAttribute("href")).toBe("/dashboard/team-usage?team=t3");
-    // Only an open-team row carries the Team usage link.
-    const payments = within(table).getByRole("row", { name: /Payments/ });
-    expect(
-      within(payments).queryByRole("link", { name: /open the team page/i }),
-    ).toBeNull();
-  });
-
-  // Slice B2b, G2 (Design System - Management pages, *Team page views and
-  // links*): "each App teams row links its name to
-  // /dashboard/manage/team/<id> (unit TM1: the team's own page, Design System - "List, then the team") for callers who may open the Team page
-  // (every Organisation reader may - admin, org-admin, auditor)". The section
-  // takes no role prop: every reader of this view gets the links.
-  it.each([
-    ["Payments", "t1"],
-    ["Risk", "t2"],
-    ["Ops", "t3"],
-  ])(
-    "G2: the App teams row '%s' links its name to the Team page for team %s",
-    async (name, teamId) => {
-      stub(() => apiResponse({ data: ORG }));
-      renderSection();
-      const table = await screen.findByRole("table", { name: "App teams" });
-      const row = within(table).getByRole("row", { name: new RegExp(name) });
-      expect(within(row).getByRole("link", { name })).toHaveAttribute(
-        "href",
-        `/dashboard/manage/team/${teamId}`,
-      );
-    },
-  );
-
-  it("G2: the LiteLLM teams table has no such link (only App teams rows name a team page)", async () => {
+  // T-LP2: "a linked app team's name links to its team page" (App Teams spec -
+  // Organisation view, amended 2026-11-25). An unlinked team names no team page.
+  it("T-LP2: the LiteLLM teams table links a linked app team's name to /dashboard/manage/team/<teamId>; an unlinked row has no such link", async () => {
     stub(() => apiResponse({ data: ORG }));
     renderSection();
     const table = await screen.findByRole("table", { name: "LiteLLM teams" });
-    expect(within(table).queryByRole("link")).toBeNull();
+    const linked = within(table).getByRole("row", { name: /Payments LLM/ });
+    expect(
+      within(linked).getByRole("link", { name: "Payments" }),
+    ).toHaveAttribute("href", "/dashboard/manage/team/t1");
+    const shared = within(table).getByRole("row", { name: /Shared platform/ });
+    expect(within(shared).getByText(/unlinked/i)).toBeInTheDocument();
+    expect(
+      within(shared)
+        .queryAllByRole("link")
+        .map((l) => l.getAttribute("href")),
+    ).not.toContain(expect.stringContaining("/dashboard/manage/team/"));
+  });
+
+  // T-LP5: the team names link to the LiteLLM team page.
+  it("T-LP5: each LiteLLM team's name links to /dashboard/manage/litellm/teams/<encoded id>", async () => {
+    stub(() =>
+      apiResponse({
+        data: {
+          ...ORG,
+          litellmTeams: [
+            ...ORG.litellmTeams,
+            {
+              litellmTeamId: "ll/odd id",
+              alias: "Odd team",
+              spend: 1,
+              maxBudget: null,
+              memberCount: 1,
+              linkedAppTeam: null,
+            },
+          ],
+        },
+      }),
+    );
+    renderSection();
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    expect(
+      within(table).getByRole("link", { name: "Payments LLM" }),
+    ).toHaveAttribute("href", "/dashboard/manage/litellm/teams/ll-1");
+    expect(
+      within(table).getByRole("link", { name: "Shared platform" }),
+    ).toHaveAttribute("href", "/dashboard/manage/litellm/teams/ll-2");
+    expect(
+      within(table).getByRole("link", { name: "Odd team" }),
+    ).toHaveAttribute("href", "/dashboard/manage/litellm/teams/ll%2Fodd%20id");
   });
 
   describe("in the card layout (below md)", () => {
@@ -224,20 +231,24 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
       });
     });
 
-    it("G2: each App teams card links its team name to the Team page", async () => {
+    it("T-LP2/T-LP5: each LiteLLM team card links its name to the team's page and its app team to the Team page", async () => {
       stub(() => apiResponse({ data: ORG }));
       renderSection();
-      const cards = await screen.findByRole("list", { name: "App teams" });
+      const cards = await screen.findByRole("list", { name: "LiteLLM teams" });
       const items = within(cards).getAllByRole("listitem");
-      expect(items).toHaveLength(3);
+      expect(items).toHaveLength(2);
+      expect(
+        within(items[0]!).getByRole("link", { name: "Payments LLM" }),
+      ).toHaveAttribute("href", "/dashboard/manage/litellm/teams/ll-1");
       expect(
         within(items[0]!).getByRole("link", { name: "Payments" }),
       ).toHaveAttribute("href", "/dashboard/manage/team/t1");
+      expect(screen.queryByRole("list", { name: "App teams" })).toBeNull();
     });
 
     // L5b review warning, LD37 in the card layout (docs/specs/2026-11-10-
     // litellm.md LD37; Design System - LiteLLM Page, States).
-    it("LD37: configured:false shows 'LiteLLM not configured' and the App teams cards with 'Not available', no figure", async () => {
+    it("LD37: configured:false shows 'LiteLLM not configured' and no card list at all (the App teams cards are gone, T-LP2)", async () => {
       stub(() =>
         apiResponse({
           data: {
@@ -252,12 +263,6 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
                 spendSource: "litellm-team",
                 spend: null,
               },
-              {
-                teamId: "t2",
-                teamName: "Risk",
-                spendSource: "member-sum",
-                spend: null,
-              },
             ],
             enabledOperations: [],
           },
@@ -267,14 +272,7 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
       expect(
         await screen.findByText(/LiteLLM not configured/i),
       ).toBeInTheDocument();
-      expect(screen.queryByRole("list", { name: "LiteLLM teams" })).toBeNull();
-      const cards = screen.getByRole("list", { name: "App teams" });
-      const items = within(cards).getAllByRole("listitem");
-      expect(items).toHaveLength(2);
-      for (const item of items) {
-        expect(within(item).getByText(/not available/i)).toBeInTheDocument();
-        expect(item.textContent).not.toContain("$");
-      }
+      expect(screen.queryByRole("list")).toBeNull();
     });
   });
 
@@ -293,6 +291,17 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     );
     renderSection();
     expect(await screen.findByText(/no teams/i)).toBeInTheDocument();
+  });
+
+  it("T-LP2: configured, no LiteLLM team but app teams in the answer still shows 'No teams' (the app teams are not shown)", async () => {
+    stub(() =>
+      apiResponse({
+        data: { ...ORG, litellmTeams: [], totals: { spend: 0 }, daily: [] },
+      }),
+    );
+    renderSection();
+    expect(await screen.findByText(/no teams/i)).toBeInTheDocument();
+    expect(screen.queryByText("Risk")).toBeNull();
   });
 
   // LD37 (docs/specs/2026-11-10-litellm.md); Design System - LiteLLM Page,
@@ -339,15 +348,13 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
       expect(errors).not.toHaveBeenCalled();
     });
 
-    it("still renders the App teams table with 'Not available' in the spend column", async () => {
+    it("T-LP2: no App teams table, no 'Not available' cell and no figure: the App teams table is gone", async () => {
       stub(() => apiResponse({ data: UNCONFIGURED }));
       renderSection();
-      const table = await screen.findByRole("table", { name: "App teams" });
-      for (const name of [/Payments/, /Risk/]) {
-        const row = within(table).getByRole("row", { name });
-        expect(within(row).getByText(/not available/i)).toBeInTheDocument();
-        expect(row.textContent).not.toContain("$");
-      }
+      await screen.findByText(/LiteLLM not configured/i);
+      expect(screen.queryByRole("table")).toBeNull();
+      expect(screen.queryByText(/not available/i)).toBeNull();
+      expect(screen.queryByText("Risk")).toBeNull();
     });
   });
 
@@ -357,84 +364,16 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     expect(await screen.findByText(/LiteLLM unavailable/i)).toBeInTheDocument();
   });
 
-  // M4 slice B (MG-D10: the Organisation tab has one reset-count column per
-  // team) adds exactly one more read, the scoped GET /api/budget-resets.
-  it("requests GET /api/litellm/org and the scoped GET /api/budget-resets only", async () => {
+  // T-LP2: the per-app-team "Budget resets" column (M4, MG-D10) lived in the
+  // removed App teams table, so its read (GET /api/budget-resets) goes with it.
+  it("T-LP2: requests GET /api/litellm/org only; no Budget resets column and no GET /api/budget-resets", async () => {
     const calls = stub(() => apiResponse({ data: ORG }));
     renderSection();
-    await screen.findByRole("table", { name: "LiteLLM teams" });
-    expect(new Set(calls)).toEqual(
-      new Set(["/api/litellm/org", "/api/budget-resets"]),
-    );
-  });
-
-  describe("Budget resets column (M4, MG-D9, MG-D10)", () => {
-    const RESETS = {
-      teams: [
-        { teamId: "t1", count: 3, amount: 120 },
-        { teamId: "t2", count: 1, amount: 40.5 },
-      ],
-      own: { count: 0, amount: 0 },
-    };
-    function stubOrgAndResets(resets: () => Response) {
-      const urls: URL[] = [];
-      vi.stubGlobal(
-        "fetch",
-        vi.fn((input: RequestInfo | URL) => {
-          const url = new URL(String(input), "http://localhost");
-          urls.push(url);
-          return Promise.resolve(
-            url.pathname === "/api/budget-resets"
-              ? resets()
-              : apiResponse({ data: ORG }),
-          );
-        }),
-      );
-      return urls;
-    }
-
-    it("the App teams table has a 'Budget resets' column with each team's count and amount; a team with no row shows no figure", async () => {
-      stubOrgAndResets(() => apiResponse({ data: RESETS }));
-      renderSection();
-      const table = await screen.findByRole("table", { name: "App teams" });
-      expect(
-        within(table).getByRole("columnheader", { name: "Budget resets" }),
-      ).toBeInTheDocument();
-      const payments = within(table).getByRole("row", { name: /Payments/ });
-      await waitFor(() => expect(payments.textContent).toMatch(/3 resets/));
-      expect(payments.textContent).toContain("$120.00");
-      const risk = within(table).getByRole("row", { name: /Risk/ });
-      expect(risk.textContent).toMatch(/1 reset\b/);
-      expect(risk.textContent).toContain("$40.50");
-      const ops = within(table).getByRole("row", { name: /Ops/ });
-      expect(ops.textContent).not.toMatch(/reset/i);
-    });
-
-    it("the count read carries the URL date range (90-day cap is the route's, Rule 20.8)", async () => {
-      const urls = stubOrgAndResets(() => apiResponse({ data: RESETS }));
-      renderSection();
-      await screen.findByRole("table", { name: "App teams" });
-      await waitFor(() =>
-        expect(urls.some((u) => u.pathname === "/api/budget-resets")).toBe(
-          true,
-        ),
-      );
-      const q = urls.find(
-        (u) => u.pathname === "/api/budget-resets",
-      )!.searchParams;
-      expect(q.get("dateFrom")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(q.get("dateTo")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    });
-
-    it("a failed count read leaves the table up, without figures (supplementary)", async () => {
-      stubOrgAndResets(() => apiError(500, "INTERNAL_ERROR", "boom"));
-      renderSection();
-      const table = await screen.findByRole("table", { name: "App teams" });
-      expect(
-        within(table).getByRole("row", { name: /Payments/ }),
-      ).toBeInTheDocument();
-      expect(within(table).queryByText(/\d resets?/)).toBeNull();
-    });
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    expect(new Set(calls)).toEqual(new Set(["/api/litellm/org"]));
+    expect(
+      within(table).queryByRole("columnheader", { name: "Budget resets" }),
+    ).toBeNull();
   });
 
   // Design System -- Management pages ("the global date range applies to every

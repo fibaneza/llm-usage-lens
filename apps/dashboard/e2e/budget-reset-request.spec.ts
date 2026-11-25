@@ -555,19 +555,61 @@ test.describe("Budget reset counts are visible text (review m4-r1 UI WARNs; MG-D
     ).toBeVisible();
   });
 
-  test("the Organisation tab shows the team's count in its Budget resets column", async ({
+  // Design System - LiteLLM teams tab, round 3 (unit LP1), Budget resets
+  // column (user, 2026-11-26); LiteLLM spec MG-D10: the every-team count is a
+  // column on the LiteLLM teams table for admin, org-admin and auditor, a
+  // linked team showing its app team's count, an unlinked team an em dash.
+  test("the LiteLLM teams table has a Budget resets column with a linked team's count and a dash for an unlinked team", async ({
     page,
     context,
   }) => {
-    await signInAsTestUser(context, { roles: ["internal-org-admin"] });
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
     await mockManagement(page);
     await mockCounts(page, COUNTS);
     await mockNotifications(page, { items: [], unreadCount: 0 });
-    await open(page, "/dashboard/manage/litellm/organisation");
+    await page.route(/\/api\/litellm\/toggles$/, (r) =>
+      r.fulfill(
+        fulfil({
+          version: 0,
+          edition: "oss",
+          ssoEnabled: false,
+          operations: {},
+        }),
+      ),
+    );
+    await page.route(/\/api\/litellm\/team-links(\?|$)/, (r) =>
+      r.fulfill(
+        fulfil({
+          items: [
+            {
+              teamId: "team-payments",
+              litellmTeamId: "ll-1",
+              version: 1,
+              updatedAt: "2026-11-01T00:00:00Z",
+            },
+          ],
+          appTeams: APP_TEAMS,
+          configured: true,
+          litellmTeams: [
+            { litellmTeamId: "ll-1", alias: "Alpha" },
+            { litellmTeamId: "ll-2", alias: "Beta" },
+          ],
+        }),
+      ),
+    );
+    await open(page, "/dashboard/manage/litellm/teams");
+    const table = page.getByRole("table", { name: "LiteLLM teams" });
     await expect(
-      page.getByRole("columnheader", { name: "Budget resets" }),
+      table.getByRole("columnheader", { name: "Budget resets" }),
     ).toBeVisible();
-    await expect(page.getByRole("cell", { name: COUNT_TEXT })).toBeVisible();
+    await expect(
+      table.getByRole("row", { name: /Alpha/ }).getByRole("cell", {
+        name: COUNT_TEXT,
+      }),
+    ).toBeVisible();
+    await expect(
+      table.getByRole("row", { name: /Beta/ }).getByRole("cell", { name: "—" }),
+    ).toBeVisible();
   });
 });
 

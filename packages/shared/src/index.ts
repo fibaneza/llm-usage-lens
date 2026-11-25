@@ -318,6 +318,7 @@ export {
   LiteLLMModelsResponseSchema,
   LiteLLMOrgResponseSchema,
   LiteLLMProxyTeamMembersResponseSchema,
+  LiteLLMProxyTeamResponseSchema,
   LiteLLMSpendLogsResponseSchema,
   LiteLLMTeamDetailResponseSchema,
   LiteLLMUserDetailResponseSchema,

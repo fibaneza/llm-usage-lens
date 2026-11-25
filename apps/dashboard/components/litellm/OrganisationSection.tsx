@@ -3,10 +3,8 @@
 import { CircleDollarSign } from "lucide-react";
 import Link from "next/link";
 
-import { OrgResetCell } from "@/components/budget-resets/BudgetResetCount";
 import { formatUsd } from "@/components/charts/chart-data";
 import { MetricCard } from "@/components/display/MetricCard";
-import { coverageText } from "@/components/manage/MemberSumDetail";
 import {
   Table,
   TableBody,
@@ -17,7 +15,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { TEAM_USAGE_HREF } from "@/lib/nav";
 import { LiteLLMOrgResponseSchema } from "@llm-usage-lens/shared";
 
 import { DailySpend } from "./DailySpend";
@@ -25,62 +22,50 @@ import { Empty, Unavailable } from "./LiteLLMSection";
 import { useLiteLLMQuery, useUrlRange } from "./use-litellm-query";
 
 const NUMERIC = "text-right font-mono tabular-nums";
-const SOURCE_LABEL = {
-  "litellm-team": "LiteLLM team",
-  "member-sum": "Sum of members",
-} as const;
 
 type OrgData = ReturnType<typeof LiteLLMOrgResponseSchema.parse>;
 
 const teamPageHref = (teamId: string) =>
   `/dashboard/manage/team/${encodeURIComponent(teamId)}`;
+const litellmTeamHref = (litellmTeamId: string) =>
+  `/dashboard/manage/litellm/teams/${encodeURIComponent(litellmTeamId)}`;
+const LINK = "text-link underline-offset-4 hover:underline";
 
-function AppTeamName({ team }: { team: OrgData["appTeams"][number] }) {
+type OrgTeam = OrgData["litellmTeams"][number];
+
+function TeamName({ team }: { team: OrgTeam }) {
   return (
-    <Link
-      className="text-link underline-offset-4 hover:underline"
-      href={teamPageHref(team.teamId)}
-    >
-      {team.teamName}
+    <Link className={LINK} href={litellmTeamHref(team.litellmTeamId)}>
+      {team.alias ?? team.litellmTeamId}
     </Link>
   );
 }
 
-function AppTeamSpend({
-  team,
-  configured,
-}: {
-  team: OrgData["appTeams"][number];
-  configured: boolean;
-}) {
-  if (team.spend !== null) return <>{formatUsd(team.spend)}</>;
-  if (!configured) return <>Not available</>;
-  return (
-    <Link
-      className="text-link underline-offset-4 hover:underline"
-      href={`${TEAM_USAGE_HREF}?team=${encodeURIComponent(team.teamId)}`}
-    >
-      Open the team page
+function AppTeam({ team }: { team: OrgTeam }) {
+  return team.linkedAppTeam ? (
+    <Link className={LINK} href={teamPageHref(team.linkedAppTeam.teamId)}>
+      {team.linkedAppTeam.teamName}
     </Link>
+  ) : (
+    <>unlinked</>
   );
 }
 
 // Organisation tab (LiteLLM spec -- Views by role; App Teams spec --
 // Organisation view): the headline total is the LiteLLM teams' total (AT5),
-// then two tables whose rows do not add up to each other. LiteLLM-reported
-// figures (LT8).
+// then the LiteLLM teams table (the App teams table was removed, 2026-11-25,
+// T-LP2). LiteLLM-reported figures (LT8).
 export function OrganisationSection() {
   const isMobile = useIsMobile();
   const { keyParts, query } = useUrlRange();
-  const range = { dateFrom: keyParts[0], dateTo: keyParts[1] };
   const result = useLiteLLMQuery(
     ["org", ...keyParts],
     `/api/litellm/org?${query}`,
     LiteLLMOrgResponseSchema,
   );
   if (result.status === "unavailable") return <Unavailable />;
-  const { configured, totals, daily, litellmTeams, appTeams } = result.data;
-  if (litellmTeams.length === 0 && appTeams.length === 0) {
+  const { configured, totals, daily, litellmTeams } = result.data;
+  if (configured && litellmTeams.length === 0) {
     return <Empty>No teams</Empty>;
   }
   return (
@@ -106,7 +91,7 @@ export function OrganisationSection() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 font-medium break-words">
-                  {team.alias ?? team.litellmTeamId}
+                  <TeamName team={team} />
                 </div>
                 <div className="shrink-0 text-base font-semibold">
                   <span className="sr-only">Spend</span>
@@ -131,9 +116,7 @@ export function OrganisationSection() {
                 <div className="col-span-2 min-w-0">
                   <dt className="text-muted-foreground text-xs">App team</dt>
                   <dd>
-                    {team.linkedAppTeam
-                      ? team.linkedAppTeam.teamName
-                      : "unlinked"}
+                    <AppTeam team={team} />
                   </dd>
                 </div>
               </dl>
@@ -157,7 +140,9 @@ export function OrganisationSection() {
           <TableBody>
             {litellmTeams.map((team) => (
               <TableRow key={team.litellmTeamId}>
-                <TableCell>{team.alias ?? team.litellmTeamId}</TableCell>
+                <TableCell>
+                  <TeamName team={team} />
+                </TableCell>
                 <TableCell className={NUMERIC}>
                   {formatUsd(team.spend)}
                 </TableCell>
@@ -168,97 +153,13 @@ export function OrganisationSection() {
                 </TableCell>
                 <TableCell className={NUMERIC}>{team.memberCount}</TableCell>
                 <TableCell>
-                  {team.linkedAppTeam
-                    ? team.linkedAppTeam.teamName
-                    : "unlinked"}
+                  <AppTeam team={team} />
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       )}
-      <div className="flex flex-col gap-1">
-        <p className="text-cell text-muted-foreground">
-          Per app team. Rows overlap with each other and do not add up to the
-          total.
-        </p>
-        {isMobile ? (
-          <ul role="list" aria-label="App teams" className="space-y-3">
-            {appTeams.map((team) => (
-              <li
-                key={team.teamId}
-                className="bg-card text-card-foreground rounded-card space-y-3 border p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 font-medium break-words">
-                    <AppTeamName team={team} />
-                  </div>
-                  <div className="shrink-0 text-base font-semibold">
-                    <span className="sr-only">Spend</span>
-                    <span className="font-mono tabular-nums">
-                      <AppTeamSpend team={team} configured={configured} />
-                    </span>
-                  </div>
-                </div>
-                <dl className="grid grid-cols-1 gap-y-2 text-sm">
-                  <div className="min-w-0">
-                    <dt className="text-muted-foreground text-xs">
-                      Spend source
-                    </dt>
-                    <dd>{SOURCE_LABEL[team.spendSource]}</dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="text-muted-foreground text-xs">Coverage</dt>
-                    <dd>{team.coverage ? coverageText(team.coverage) : "-"}</dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="text-muted-foreground text-xs">
-                      Budget resets
-                    </dt>
-                    <dd>
-                      <OrgResetCell teamId={team.teamId} range={range} />
-                    </dd>
-                  </div>
-                </dl>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <Table>
-            <TableCaption className="mt-0 mb-2 text-left">
-              App teams
-            </TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Team</TableHead>
-                <TableHead>Spend source</TableHead>
-                <TableHead className="text-right">Spend</TableHead>
-                <TableHead>Coverage</TableHead>
-                <TableHead>Budget resets</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {appTeams.map((team) => (
-                <TableRow key={team.teamId}>
-                  <TableCell>
-                    <AppTeamName team={team} />
-                  </TableCell>
-                  <TableCell>{SOURCE_LABEL[team.spendSource]}</TableCell>
-                  <TableCell className={NUMERIC}>
-                    <AppTeamSpend team={team} configured={configured} />
-                  </TableCell>
-                  <TableCell>
-                    {team.coverage ? coverageText(team.coverage) : "-"}
-                  </TableCell>
-                  <TableCell>
-                    <OrgResetCell teamId={team.teamId} range={range} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
     </div>
   );
 }

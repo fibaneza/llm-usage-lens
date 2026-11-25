@@ -101,3 +101,83 @@ describe("SearchInput", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+// Design System -- Component Inventory, `SearchInput` (unit LP1, D-R3-5,
+// 2026-11-25): it takes a `label` (visible unless `hideLabel`), a `maxLength`
+// and a `delayMs` (0 for no debounce); the magnifier is at the left of the
+// field. The cases above keep their placeholder-only contract.
+describe("SearchInput - label, maxLength, delayMs, magnifier (LP1, D-R3-5)", () => {
+  function renderLabelled(
+    props: Partial<Parameters<typeof SearchInput>[0]> = {},
+  ) {
+    const onChange = vi.fn<(value: string) => void>();
+    const view = render(
+      <SearchInput
+        value=""
+        onChange={onChange}
+        label="Search teams"
+        {...props}
+      />,
+    );
+    return { onChange, view, input: screen.getByRole("searchbox") };
+  }
+
+  it("shows the label as a visible <label> bound to the input", () => {
+    const { input } = renderLabelled();
+
+    const label = screen.getByText("Search teams");
+    expect(label.tagName).toBe("LABEL");
+    expect(label).toBeVisible();
+    expect(screen.getByLabelText("Search teams")).toBe(input);
+    expect(input).toHaveAccessibleName("Search teams");
+  });
+
+  it("hideLabel drops the visible label and names the input with aria-label", () => {
+    const { input, view } = renderLabelled({ hideLabel: true });
+
+    expect(view.container.querySelector("label")).toBeNull();
+    expect(input).toHaveAttribute("aria-label", "Search teams");
+    expect(input).toHaveAccessibleName("Search teams");
+  });
+
+  it("passes maxLength to the input", () => {
+    const { input } = renderLabelled({ maxLength: 100 });
+
+    expect(input).toHaveAttribute("maxlength", "100");
+  });
+
+  it("delayMs 0 fires onChange at once, with no timer to advance", () => {
+    const { onChange, input } = renderLabelled({ delayMs: 0 });
+
+    type(input, "abc");
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith("abc");
+  });
+
+  it("the default delay is still 300 ms when a label is given", () => {
+    const { onChange, input } = renderLabelled();
+
+    type(input, "abc");
+    advance(299);
+    expect(onChange).not.toHaveBeenCalled();
+    advance(1);
+
+    expect(onChange).toHaveBeenCalledWith("abc");
+  });
+
+  it.each([{ hideLabel: false }, { hideLabel: true }])(
+    "draws the magnifier at the left of the field, hidden from assistive technology (%o)",
+    (props) => {
+      const { input } = renderLabelled(props);
+
+      const icon = input.parentElement?.querySelector("svg");
+      expect(icon).not.toBeNull();
+      expect(icon).toHaveAttribute("aria-hidden", "true");
+      expect(
+        (icon?.compareDocumentPosition(input) ?? 0) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    },
+  );
+});
