@@ -561,6 +561,12 @@ export const IdentityDetailSchema = z.object({
   ),
   litellm: z.discriminatedUnion("state", [
     z.object({ state: z.literal("linked"), litellmUserId: IdSchema }),
+    // UP1 (D-R3-13): a suggestion, sent only to a caller who may link.
+    z.object({
+      state: z.literal("match"),
+      litellmUserId: IdSchema,
+      email: z.string().min(1),
+    }),
     z.object({ state: z.literal("none") }),
   ]),
   linkVersion: VersionSchema,

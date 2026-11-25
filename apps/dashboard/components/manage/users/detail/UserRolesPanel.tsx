@@ -6,6 +6,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { FieldHelp } from "@/components/display/FieldHelp";
 import { Panel } from "@/components/display/Panel";
 import { GrantRoleDialog } from "@/components/manage/users/detail/GrantRoleDialog";
 import {
@@ -97,6 +98,11 @@ export function UserRolesPanel({
     <Panel
       title="Global roles"
       boundaryTitle="the global roles"
+      badge={
+        <FieldHelp field="Global roles">
+          Roles that apply to the whole organisation, granted here by an admin.
+        </FieldHelp>
+      }
       actions={
         canEdit ? (
           <Button

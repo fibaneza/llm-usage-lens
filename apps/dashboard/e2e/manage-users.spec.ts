@@ -3,6 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
+import { withStoredLiteLLMConnection } from "../test/fixtures/e2e-litellm-connection";
 
 // Sources: Design System - "The users table (unit US1, 2026-11-24; D-US1 to
 // D-US5, D-US2a, D-US3a)": the People table opens the page, the search box is
@@ -129,7 +130,7 @@ const names = async (page: Page) => {
   }
   return out;
 };
-const header = (page: Page, name: string) =>
+const header = (page: Page, name: string | RegExp) =>
   people(page).getByRole("columnheader", { name });
 
 async function expectNoBlockingViolations(page: Page) {
@@ -260,6 +261,22 @@ test.describe("Management -> Users table (unit US1)", () => {
     await expect(page).toHaveURL(/\/dashboard\/manage\/users\/oid-ann$/);
   });
 
+  // Design System - Users, round 3, T-UP4: the keyboard path is the link.
+  test("T-UP4: the name link opens the person page from the keyboard (Enter)", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
+    await mockDirectory(page);
+    await open(page);
+
+    const link = people(page).getByRole("link", { name: "Ann Archer" });
+    await link.focus();
+    await expect(link).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/dashboard\/manage\/users\/oid-ann$/);
+  });
+
   for (const [role, shown] of [
     ["internal-admin", true],
     ["internal-org-admin", true],
@@ -359,4 +376,96 @@ test.describe("Management -> Users table (unit US1)", () => {
       ),
     ).toBe(true);
   });
+
+  // ---- UP1 (Design System - Users, round 3; T-UP3, T-UP4) ------------------
+
+  test("T-UP4: a click on the row (not on a control) opens the person's page", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
+    await mockDirectory(page);
+    await open(page);
+    await people(page)
+      .getByRole("row", { name: /Ann Archer/ })
+      .getByRole("cell", { name: "zed@example.test" })
+      .click();
+    await expect(page).toHaveURL(/\/dashboard\/manage\/users\/oid-ann$/);
+  });
+
+  for (const role of READERS) {
+    test(`T-UP4: ${role} sees FieldHelp on the Sign-in and LiteLLM headers`, async ({
+      context,
+      page,
+    }) => {
+      await signInAsTestUser(context, { roles: [role] });
+      await mockDirectory(page);
+      await open(page);
+      for (const field of ["Sign-in", "LiteLLM"]) {
+        await expect(
+          header(page, new RegExp(`^${field}`)).getByRole("button", {
+            name: `About ${field}`,
+          }),
+        ).toBeVisible();
+      }
+    });
+  }
+
+  for (const [role, shown] of [
+    ["internal-admin", true],
+    ["internal-org-admin", true],
+    ["internal-auditor", false],
+  ] as const) {
+    test(`T-UP4: ${role} ${shown ? "has" : "does not have"} 'About Sync from LiteLLM'`, async ({
+      browser,
+      context,
+      page,
+    }) => {
+      // The button renders only when LiteLLM is configured (the CI table has no
+      // connection), so the cases that expect it store the e2e connection under
+      // the shared state lock and restore it; the auditor never has it.
+      const check = async () => {
+        await signInAsTestUser(context, { roles: [role] });
+        await mockDirectory(page);
+        await open(page);
+        await expect(people(page).getByText("Ann Archer")).toBeVisible();
+        await expect(
+          people(page).getByRole("button", { name: "About Sync from LiteLLM" }),
+        ).toHaveCount(shown ? 1 : 0);
+      };
+      if (shown) await withStoredLiteLLMConnection(browser, check);
+      else await check();
+    });
+  }
+
+  for (const width of [375, 1440]) {
+    test(`T-UP3: at ${width}px a FieldHelp popover is open on the Users page with no serious axe violation, and Escape returns focus`, async ({
+      context,
+      page,
+    }) => {
+      await signInAsTestUser(context, { roles: ["internal-admin"] });
+      await mockDirectory(page);
+      await page.setViewportSize({ width, height: 900 });
+      await open(page);
+      const help = header(page, /^Sign-in/).getByRole("button", {
+        name: "About Sign-in",
+      });
+      await help.click();
+      await expect(
+        page.getByText(
+          "How this person signs in: Microsoft (SSO), a password managed here, or the local developer sign-in.",
+        ),
+      ).toBeVisible();
+      await expectNoBlockingViolations(page);
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <=
+            document.documentElement.clientWidth,
+        ),
+      ).toBe(true);
+      await page.keyboard.press("Escape");
+      await expect(help).toBeFocused();
+    });
+  }
 });

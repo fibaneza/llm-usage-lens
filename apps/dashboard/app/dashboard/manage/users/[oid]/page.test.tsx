@@ -34,6 +34,10 @@ vi.mock("@/lib/manage-access", async () => {
 });
 const loadIdentityDetail = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/manage/user-detail", () => ({ loadIdentityDetail }));
+const withLiteLLMSuggestion = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/manage/litellm-email-suggestion", () => ({
+  withLiteLLMSuggestion,
+}));
 const loadViewer = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth/settings-access", () => ({
   loadSettingsAccessViewer: (session: unknown) => loadViewer(session),
@@ -50,13 +54,14 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/manage/users/detail/UserDetailContent", () => ({
   UserDetailContent: (props: {
-    detail: { oid: string };
+    detail: { oid: string; suggestion?: string };
     canOpenPasswordUsers: boolean;
     authMethod: string;
   }) => (
     <div
       data-testid="user-detail"
       data-oid={props.detail.oid}
+      data-suggestion={props.detail.suggestion}
       data-can-open-password-users={String(props.canOpenPasswordUsers)}
       data-auth-method={props.authMethod}
     />
@@ -83,12 +88,14 @@ beforeEach(() => {
     user: { oid: "oid-me", roles: ["internal-admin"] },
   } as never);
   loadIdentityDetail.mockResolvedValue(DETAIL);
+  withLiteLLMSuggestion.mockImplementation(async (d: unknown) => d);
   loadViewer.mockResolvedValue(viewerOf(["internal-admin"]));
 });
 afterEach(() => {
   resetManageAccess();
   loadIdentityDetail.mockReset();
   loadViewer.mockReset();
+  withLiteLLMSuggestion.mockReset();
 });
 
 describe("the user page (/dashboard/manage/users/[oid])", () => {
@@ -165,5 +172,20 @@ describe("the user page (/dashboard/manage/users/[oid])", () => {
   it("a session that builds no viewer fails closed with the 404", async () => {
     loadViewer.mockResolvedValue(null);
     await expect(open()).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  // Access Control - /api/identities/[oid], D-UP1a: the page renders what the
+  // guarded suggestion helper returns, applied to the loaded detail.
+  it("renders the detail the suggestion helper returns, built from the loaded detail (D-UP1a)", async () => {
+    withLiteLLMSuggestion.mockImplementation(async (d: object) => ({
+      ...d,
+      suggestion: "from-helper",
+    }));
+    await open();
+    expect(withLiteLLMSuggestion).toHaveBeenCalledWith(DETAIL);
+    expect(screen.getByTestId("user-detail")).toHaveAttribute(
+      "data-suggestion",
+      "from-helper",
+    );
   });
 });

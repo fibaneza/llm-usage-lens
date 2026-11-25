@@ -42,6 +42,7 @@ import {
   useTeamSpendDetail,
 } from "@/components/litellm/use-team-detail";
 import { TeamSpendPanel } from "@/components/manage/TeamSpendPanel";
+import { UserLiteLLMUsagePanel } from "@/components/manage/users/detail/UserLiteLLMUsagePanel";
 import { LiteLLMLinkCell } from "@/components/manage/users/LiteLLMLinkCell";
 import { UsersPeoplePanel } from "@/components/manage/users/UsersPeoplePanel";
 import { LiteLLMConnectionSection } from "@/components/settings/litellm-panel/LiteLLMConnectionSection";
@@ -680,6 +681,11 @@ const CALLERS: Caller[] = [
     file: "components/manage/TeamSpendPanel.tsx",
     ui: <TeamSpendPanel teamId="t1" includeMemberSum />,
     expects: [at(/teams\/t1$/, "include=memberSum")],
+  },
+  {
+    file: "components/manage/users/detail/UserLiteLLMUsagePanel.tsx",
+    ui: <UserLiteLLMUsagePanel litellmUserId="ll-ada" />,
+    expects: [at(/users\/ll-ada$/)],
   },
   {
     file: "components/manage/users/LiteLLMLinkCell.tsx",

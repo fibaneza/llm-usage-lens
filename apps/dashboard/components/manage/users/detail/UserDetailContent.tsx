@@ -5,6 +5,7 @@ import type { IdentityDetail } from "@llm-usage-lens/shared";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { UserIdentitiesPanel } from "@/components/manage/users/detail/UserIdentitiesPanel";
 import { UserLinksPanel } from "@/components/manage/users/detail/UserLinksPanel";
+import { UserLiteLLMUsagePanel } from "@/components/manage/users/detail/UserLiteLLMUsagePanel";
 import { UserProfilePanel } from "@/components/manage/users/detail/UserProfilePanel";
 import { UserRolesPanel } from "@/components/manage/users/detail/UserRolesPanel";
 import { UserSignInPanel } from "@/components/manage/users/detail/UserSignInPanel";
@@ -45,6 +46,9 @@ export function UserDetailContent({
         canOpenPasswordUsers={canOpenPasswordUsers}
       />
       <UserLinksPanel detail={detail} name={name} />
+      {detail.litellm.state === "linked" ? (
+        <UserLiteLLMUsagePanel litellmUserId={detail.litellm.litellmUserId} />
+      ) : null}
       <UserTeamPanel detail={detail} name={name} />
       {detail.roleGrants ? (
         <UserRolesPanel

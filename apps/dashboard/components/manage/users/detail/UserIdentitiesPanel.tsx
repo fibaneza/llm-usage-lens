@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { FieldHelp } from "@/components/display/FieldHelp";
 import { Panel } from "@/components/display/Panel";
 import { UserKeyList } from "@/components/manage/users/detail/UserKeyList";
 import { accessErrorMessage } from "@/components/settings/access/access-error-message";
@@ -73,7 +74,16 @@ export function UserIdentitiesPanel({
   }
 
   return (
-    <Panel title="Usage identities" boundaryTitle="the usage identities">
+    <Panel
+      title="Usage identities"
+      boundaryTitle="the usage identities"
+      badge={
+        <FieldHelp field="Usage identities">
+          The names this person&apos;s Bedrock usage appears under in AWS. Their
+          cost is counted for them.
+        </FieldHelp>
+      }
+    >
       <div className="flex flex-col gap-4">
         <UserKeyList
           heading="Usage identities"
@@ -85,6 +95,11 @@ export function UserIdentitiesPanel({
         />
         <UserKeyList
           heading="Aliases"
+          help={
+            <FieldHelp field="Aliases">
+              Other email addresses that belong to this person.
+            </FieldHelp>
+          }
           kind="alias"
           keys={lists.aliases}
           canEdit={canEdit}

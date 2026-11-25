@@ -49,6 +49,7 @@ vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("NEXT_NOT_FOUND");
   },
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
 }));
 
 import UsersManagePage from "./page";
@@ -167,7 +168,7 @@ describe("Users management page (/dashboard/manage/users)", () => {
     stubFetch();
     renderWithProviders(await UsersManagePage());
     expect(
-      await screen.findByRole("button", { name: "Create and link" }),
+      await screen.findByRole("button", { name: "Create LiteLLM user" }),
     ).toBeInTheDocument();
   });
 
@@ -179,7 +180,7 @@ describe("Users management page (/dashboard/manage/users)", () => {
       await screen.findByText("Sign in to LiteLLM once, then retry."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Create and link" }),
+      screen.queryByRole("button", { name: "Create LiteLLM user" }),
     ).toBeNull();
   });
 
@@ -204,7 +205,7 @@ describe("Users management page (/dashboard/manage/users)", () => {
       false,
     );
     expect(
-      screen.queryByRole("button", { name: "Create and link" }),
+      screen.queryByRole("button", { name: "Create LiteLLM user" }),
     ).toBeNull();
     expect(enabledOperations).not.toHaveBeenCalled();
   });

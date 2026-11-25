@@ -6,6 +6,7 @@ import { accessCapabilities } from "@/components/settings/access/capabilities";
 import { loadSettingsAccessViewer } from "@/lib/auth/settings-access";
 import { parsePageIdParam } from "@/lib/api/id-param";
 import { managementAccessFor } from "@/lib/manage-access";
+import { withLiteLLMSuggestion } from "@/lib/manage/litellm-email-suggestion";
 import { loadIdentityDetail } from "@/lib/manage/user-detail";
 
 import {
@@ -27,8 +28,9 @@ export default async function UserDetailPage({
   const session = await auth();
   const access = await managementAccessFor(session);
   if (!access.users || !session) notFound();
-  const detail = await loadIdentityDetail(session, oid);
-  if (!detail) notFound();
+  const loaded = await loadIdentityDetail(session, oid);
+  if (!loaded) notFound();
+  const detail = await withLiteLLMSuggestion(loaded);
   const viewer = await loadSettingsAccessViewer(session);
   if (!viewer) notFound();
   return (

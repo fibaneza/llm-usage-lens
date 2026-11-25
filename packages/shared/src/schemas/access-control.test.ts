@@ -711,3 +711,50 @@ describe("IdentityDetailSchema (state and invites)", () => {
     ["a null invites (absent, not null)", { ...detail, invites: null }],
   ])("rejects %s", (_name, value) => rejects(IdentityDetailSchema)(value));
 });
+
+// Design System - "Users, round 3 (unit UP1)", T-UP5; Access Control - row
+// /api/identities/[oid]: litellm.state may be `match` with the matched LiteLLM
+// email and user id.
+describe("IdentityDetailSchema (litellm match, unit UP1)", () => {
+  const base = {
+    oid: OID,
+    displayName: "Bob",
+    email: "bob@company.com",
+    upn: null,
+    authMethod: "entra",
+    createdAt: AT,
+    lastSignInAt: AT,
+    memberTeamId: null,
+    memberVersion: 0,
+    leadScopes: [],
+    linkVersion: 0,
+    allowed: {
+      editDisplayName: false,
+      linkLiteLLM: true,
+      unlinkLiteLLM: true,
+      resetSpend: false,
+      changeMembership: false,
+      changeLead: false,
+      editRoles: false,
+      editUsageIdentities: false,
+    },
+  };
+  it("accepts a match with the LiteLLM user id and email", () => {
+    const value = {
+      ...base,
+      litellm: {
+        state: "match",
+        litellmUserId: "lu-bob",
+        email: "bob@company.com",
+      },
+    };
+    accepts(IdentityDetailSchema)(value);
+    expect(IdentityDetailSchema.parse(value).litellm).toEqual(value.litellm);
+  });
+  it.each([
+    ["a match without the email", { state: "match", litellmUserId: "lu-bob" }],
+    ["a match without the user id", { state: "match", email: "b@c.com" }],
+  ])("rejects %s", (_name, litellm) =>
+    rejects(IdentityDetailSchema)({ ...base, litellm }),
+  );
+});

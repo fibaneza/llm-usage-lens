@@ -8,13 +8,15 @@ import { renderWithProviders } from "@/test/support/render-providers";
 import { LiteLLMLinkCell, type LinkState } from "./LiteLLMLinkCell";
 
 // Source: Design System - Management improvements, "User link states" (D16,
-// user, 2026-11-17): Linked / Match found (a suggestion, linked only after
+// user, 2026-11-17): Linked / a match (a suggestion, linked only after
 // "Link" in an AlertDialog that names both sides, never automatic; Access
 // Control D27) / No LiteLLM user with that email, with two actions: Link to an
 // existing LiteLLM user (a required written reason) and, on OSS only, Create
 // and link; on Enterprise "Sign in to LiteLLM once, then retry." and no Create
 // and link. Controls render only when the caller may write (the parent passes
-// canWrite false for the auditor and the caller's own row). The route decides
+// canWrite false for the auditor and the caller's own row). Renamed and
+// changed 2026-11-25 (unit UP1, D-R3-11, D-R3-12): the action reads "Create
+// LiteLLM user" and the "Match found" badge is gone. The route decides
 // every write again; route logic is tested in the route's file (Rule 60.24a).
 const SUBJECT = {
   oid: "oid-ada",
@@ -81,7 +83,7 @@ describe("LiteLLMLinkCell states (D16)", () => {
     [
       "match",
       { state: "match", litellmUserId: "ll-ada", email: "ada@example.com" },
-      "Match found",
+      "ada@example.com",
     ],
     ["none", { state: "none" }, "No LiteLLM user with that email"],
   ])(
@@ -104,10 +106,9 @@ describe("LiteLLMLinkCell match (D16, D27: never automatic)", () => {
   it("Link opens a dialog naming both sides and writes nothing until confirmed", async () => {
     const calls = stubWrites();
     show(MATCH);
-    expect(screen.getByText("Match found")).toBeInTheDocument();
     await userEvent
       .setup()
-      .click(screen.getByRole("button", { name: /link/i }));
+      .click(screen.getByRole("button", { name: /^link /i }));
 
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog).toHaveTextContent("Ada Lovelace");
@@ -124,12 +125,12 @@ describe("LiteLLMLinkCell match (D16, D27: never automatic)", () => {
     );
     const onChanged = show(MATCH);
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /link/i }));
+    await user.click(screen.getByRole("button", { name: /^link /i }));
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(calls).toEqual([]);
 
-    await user.click(screen.getByRole("button", { name: /link/i }));
+    await user.click(screen.getByRole("button", { name: /^link /i }));
     await user.click(
       within(await screen.findByRole("alertdialog")).getByRole("button", {
         name: "Link",
@@ -154,7 +155,7 @@ describe("LiteLLMLinkCell match (D16, D27: never automatic)", () => {
     );
     const onChanged = show(MATCH);
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /link/i }));
+    await user.click(screen.getByRole("button", { name: /^link /i }));
     await user.click(
       within(await screen.findByRole("alertdialog")).getByRole("button", {
         name: "Link",
@@ -170,31 +171,31 @@ describe("LiteLLMLinkCell match (D16, D27: never automatic)", () => {
 describe("LiteLLMLinkCell no LiteLLM user (D16)", () => {
   const NONE: LinkState = { state: "none" };
 
-  it("OSS: offers Link to an existing LiteLLM user and Create and link", () => {
+  it("OSS: offers Link to an existing LiteLLM user and Create LiteLLM user", () => {
     show(NONE, { canCreate: true });
     expect(
       screen.getByRole("button", { name: "Link to an existing LiteLLM user" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Create and link" }),
+      screen.getByRole("button", { name: "Create LiteLLM user" }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/sign in to litellm once/i)).toBeNull();
   });
 
-  it("Enterprise: no Create and link, and the row says to sign in to LiteLLM once", () => {
+  it("Enterprise: no Create LiteLLM user, and the row says to sign in to LiteLLM once", () => {
     show(NONE, { canCreate: false });
     expect(
       screen.getByRole("button", { name: "Link to an existing LiteLLM user" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Create and link" }),
+      screen.queryByRole("button", { name: "Create LiteLLM user" }),
     ).toBeNull();
     expect(
       screen.getByText("Sign in to LiteLLM once, then retry."),
     ).toBeInTheDocument();
   });
 
-  it("Create and link confirms first, then POSTs only the oid", async () => {
+  it("Create LiteLLM user confirms first, then POSTs only the oid", async () => {
     const calls = stubWrites(
       apiResponse({
         data: {
@@ -207,11 +208,13 @@ describe("LiteLLMLinkCell no LiteLLM user (D16)", () => {
     );
     const onChanged = show(NONE);
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Create and link" }));
+    await user.click(
+      screen.getByRole("button", { name: "Create LiteLLM user" }),
+    );
     const dialog = await screen.findByRole("alertdialog");
     expect(calls).toEqual([]);
     await user.click(
-      within(dialog).getByRole("button", { name: "Create and link" }),
+      within(dialog).getByRole("button", { name: "Create LiteLLM user" }),
     );
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(calls).toEqual([
@@ -337,5 +340,79 @@ describe("LiteLLMLinkCell unlink (D16)", () => {
         body: { version: 4 },
       },
     ]);
+  });
+});
+
+// Design System - Users, round 3 (unit UP1; D-R3-10, D-R3-11, D-R3-12), the
+// FieldHelp text table.
+describe("LiteLLMLinkCell round 3 (T-UP1, T-UP2)", () => {
+  const help = (field: string) =>
+    screen.getByRole("button", { name: `About ${field}` });
+
+  it("T-UP1: the create action and its dialog read 'Create LiteLLM user', never 'Create and link', with its help text", async () => {
+    stubWrites();
+    show({ state: "none" }, { canCreate: true });
+    expect(
+      screen.getByRole("button", { name: "Create LiteLLM user" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/create and link/i)).toBeNull();
+    const user = userEvent.setup();
+    await user.click(help("Create LiteLLM user"));
+    expect(
+      await screen.findByText(
+        "Creates a user in LiteLLM with this person's email and links it to this person. It sets no team, key or budget.",
+      ),
+    ).toBeVisible();
+    await user.keyboard("{Escape}");
+    await user.click(
+      screen.getByRole("button", { name: "Create LiteLLM user" }),
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    expect(
+      within(dialog).getByRole("button", { name: "Create LiteLLM user" }),
+    ).toBeInTheDocument();
+    expect(dialog).not.toHaveTextContent(/create and link/i);
+  });
+
+  it("T-UP1 (LW1 gate): with createUser unavailable there is no create action and no create help", () => {
+    show({ state: "none" }, { canCreate: false });
+    expect(
+      screen.queryByRole("button", { name: "Create LiteLLM user" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "About Create LiteLLM user" }),
+    ).toBeNull();
+  });
+
+  it("T-UP1: 'Link to an existing LiteLLM user' carries its help text", async () => {
+    show({ state: "none" });
+    await userEvent.setup().click(help("Link to an existing LiteLLM user"));
+    expect(
+      await screen.findByText(
+        "Connects this person to a LiteLLM user that already exists, so their LiteLLM spend shows here. Nothing changes in LiteLLM.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("T-UP2: a match shows the LiteLLM email and Link, no 'Match found' badge, and 'Link (a match)' help", async () => {
+    show({
+      state: "match",
+      litellmUserId: "ll-ada",
+      email: "ada@lite.example.com",
+    });
+    expect(screen.queryByText(/match found/i)).toBeNull();
+    expect(screen.getByText("ada@lite.example.com")).toBeVisible();
+    expect(screen.getByRole("button", { name: /^link /i })).toBeVisible();
+    await userEvent.setup().click(help("Link (a match)"));
+    expect(
+      await screen.findByText(
+        "A LiteLLM user has the same email. Link connects the two after you confirm.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("T-UP1/T-UP2: no write right means no action and no help button (the auditor reads)", () => {
+    show({ state: "none" }, { canWrite: false });
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 });

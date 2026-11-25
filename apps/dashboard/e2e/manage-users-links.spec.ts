@@ -3,6 +3,7 @@ import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
+import { withStoredLiteLLMConnection } from "../test/fixtures/e2e-litellm-connection";
 import { withLiteLLMStateLock } from "../test/fixtures/e2e-litellm-state-lock";
 
 // Sources: Design System - Management improvements, Users (D15), LiteLLM users
@@ -177,6 +178,44 @@ test.describe("Management -> Users (D15, D16)", () => {
   });
 });
 
+// Design System - Users, round 3 (unit UP1; T-UP2): no "Match found" badge, a
+// match shows the LiteLLM email and Link. The page decides litellmConfigured on
+// the server, so the case stores the e2e connection for its run under the state
+// lock and restores it, so it runs on a fresh seed (CI) too.
+test.describe("Management -> Users: a match row (UP1, T-UP2)", () => {
+  for (const [role, linkable] of [
+    ["internal-admin", true],
+    ["internal-org-admin", true],
+    ["internal-auditor", false],
+  ] as const) {
+    test(`${role}: a match row shows the email, no 'Match found' badge, and ${linkable ? "a Link button that opens the confirm dialog" : "no Link button"}`, async ({
+      browser,
+      context,
+      page,
+    }) => {
+      await withStoredLiteLLMConnection(browser, async () => {
+        await signInAsTestUser(context, { roles: [role] });
+        await mockDirectory(page);
+        await page.goto("/dashboard/manage/users");
+        await waitForHydration(page);
+        const bob = page.getByRole("row", { name: /Bob Barker/ });
+        await expect(bob).toBeVisible();
+        await expect(bob.getByText(/match found/i)).toHaveCount(0);
+        await expect(bob.getByText("bob@example.test").last()).toBeVisible();
+        await expect(bob.getByRole("button", { name: /^link /i })).toHaveCount(
+          linkable ? 1 : 0,
+        );
+        if (linkable) {
+          await bob.getByRole("button", { name: /^link /i }).click();
+          await expect(page.getByRole("alertdialog")).toContainText(
+            "Bob Barker",
+          );
+        }
+      });
+    });
+  }
+});
+
 test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
   // Design System - LiteLLM users tab, D-LF4 and T-LF5: no linked-account
   // column; each row keeps Unlink or Link; the linked account and its state
@@ -255,7 +294,7 @@ test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
     const ada = page.getByRole("row", { name: /Ada Lovelace/ });
     await expect(ada).toContainText("$12.50");
     await expect(
-      bob.getByRole("button", { name: "Create and link" }),
+      bob.getByRole("button", { name: "Create LiteLLM user", exact: true }),
     ).toBeVisible();
 
     await expect(page.getByRole("columnheader", { name: /link/i })).toHaveCount(
@@ -280,7 +319,7 @@ test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
     expect(await noHorizontalScroll(page)).toBe(true);
   });
 
-  test("an auditor reads the list and gets no Link, Unlink or Create and link control (D-LF4, Access Control - LiteLLM user links)", async ({
+  test("an auditor reads the list and gets no Link, Unlink or Create LiteLLM user control (D-LF4, Access Control - LiteLLM user links)", async ({
     context,
     page,
   }) => {
@@ -325,7 +364,7 @@ test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
 // LiteLLM spec - the LW1 paragraph after `createUser` (~276-298: "The 'Create
 // and link' button is absent ... the list response's `enabledOperations`";
 // SSO enabled removes `createUser` from it) and tests T-LW1 / T-LW2; Design
-// System ~633 and ~652 (Create and link follows the gate; Link to an existing
+// System ~633 and ~652 (Create LiteLLM user follows the gate; Link to an existing
 // user stays). The list is fulfilled, so the result never depends on a stored
 // connection (Rule 60.24).
 function unlinkedUsersList(enabledOperations: string[]) {
@@ -369,8 +408,8 @@ function bobRow(page: Page, width: number) {
     : page.getByRole("row", { name: /Bob Barker/ });
 }
 
-test.describe("Management -> LiteLLM users: Create and link follows the gate (LW1, T-LW1, T-LW2)", () => {
-  test("SSO on (enabledOperations without createUser): no Create and link, Link to an existing user stays; axe and no scroll at 375 and 1440 (T-LW1)", async ({
+test.describe("Management -> LiteLLM users: Create LiteLLM user follows the gate (LW1, T-LW1, T-LW2)", () => {
+  test("SSO on (enabledOperations without createUser): no Create LiteLLM user, Link to an existing user stays; axe and no scroll at 375 and 1440 (T-LW1)", async ({
     context,
     page,
   }) => {
@@ -383,17 +422,20 @@ test.describe("Management -> LiteLLM users: Create and link follows the gate (LW
       const bob = bobRow(page, width);
       await expect(bob).toBeVisible();
       await expect(
-        bob.getByRole("button", { name: "Link to an existing LiteLLM user" }),
+        bob.getByRole("button", {
+          name: "Link to an existing LiteLLM user",
+          exact: true,
+        }),
       ).toBeVisible();
       await expect(
-        page.getByRole("button", { name: "Create and link" }),
+        page.getByRole("button", { name: "Create LiteLLM user", exact: true }),
       ).toHaveCount(0);
       await expectNoBlockingViolations(page);
       expect(await noHorizontalScroll(page)).toBe(true);
     }
   });
 
-  test("SSO off (createUser enabled): Create and link, confirmed, sends exactly one POST /api/litellm/users with the oid (T-LW2)", async ({
+  test("SSO off (createUser enabled): Create LiteLLM user, confirmed, sends exactly one POST /api/litellm/users with the oid (T-LW2)", async ({
     context,
     page,
   }) => {
@@ -420,13 +462,17 @@ test.describe("Management -> LiteLLM users: Create and link follows the gate (LW
     await waitForHydration(page);
 
     const bob = bobRow(page, 1440);
-    await bob.getByRole("button", { name: "Create and link" }).click();
+    await bob
+      .getByRole("button", { name: "Create LiteLLM user", exact: true })
+      .click();
     const confirm = page.getByRole("alertdialog", {
       name: "Create a LiteLLM user and link?",
     });
     await expect(confirm).toBeVisible();
     expect(posts).toEqual([]);
-    await confirm.getByRole("button", { name: "Create and link" }).click();
+    await confirm
+      .getByRole("button", { name: "Create LiteLLM user", exact: true })
+      .click();
     await expect(confirm).toHaveCount(0);
     expect(posts).toEqual([{ oid: "oid-bob" }]);
   });
@@ -517,7 +563,10 @@ test.describe("Management -> LiteLLM users: link to an existing user (D16, T-MI1
     await expectNoBlockingViolations(page);
 
     await bob
-      .getByRole("button", { name: "Link to an existing LiteLLM user" })
+      .getByRole("button", {
+        name: "Link to an existing LiteLLM user",
+        exact: true,
+      })
       .click();
     const dialog = page.getByRole("dialog", {
       name: "Link to an existing LiteLLM user",

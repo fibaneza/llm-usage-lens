@@ -1,9 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
-import { withLiteLLMStateLock } from "../test/fixtures/e2e-litellm-state-lock";
+import { withStoredLiteLLMConnection } from "../test/fixtures/e2e-litellm-connection";
 
 // Sources: Design System - "Sync from LiteLLM" (unit SYNC1: the button on
 // Management -> Users for admin and org-admin; the dialog with counts, rows by
@@ -112,16 +112,6 @@ const APPLIED = {
   remaining: 0,
 };
 
-// Same helper as manage-users-links.spec.ts: read the server's state.
-async function litellmIsConfigured(context: BrowserContext) {
-  await signInAsTestUser(context, { roles: ["internal-admin"] });
-  const res = await context.request.get("/api/litellm/connection");
-  expect(res.ok()).toBe(true);
-  const { baseUrl } = (await res.json()).data as { baseUrl: string | null };
-  await context.clearCookies();
-  return baseUrl !== null;
-}
-
 async function expectNoBlockingViolations(page: Page) {
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa"])
@@ -173,7 +163,9 @@ async function mockUsersPage(page: Page, mocks: Mocks = {}) {
 async function openDialog(page: Page) {
   await page.goto("/dashboard/manage/users");
   await waitForHydration(page);
-  await page.getByRole("button", { name: "Sync from LiteLLM" }).click();
+  await page
+    .getByRole("button", { name: "Sync from LiteLLM", exact: true })
+    .click();
   const dialog = page.getByRole("dialog", { name: "Sync from LiteLLM" });
   await expect(dialog.getByRole("button", { name: "Apply" })).toBeVisible();
   return dialog;
@@ -182,18 +174,39 @@ async function openDialog(page: Page) {
 test.describe("Management -> Users -> Sync from LiteLLM (SYNC1)", () => {
   test.describe.configure({ mode: "serial" });
 
+  // The Sync button needs a stored LiteLLM connection (LiteLLM spec LD37).
+  // The describe stores the e2e connection once, under the cross-worker state
+  // lock, and restores the table afterwards, so it runs on a fresh seed (CI).
+  let releaseConnection: (() => void) | undefined;
+  let connectionScope: Promise<void> | undefined;
+
+  test.beforeAll(async ({ browser }) => {
+    await new Promise<void>((stored, failed) => {
+      connectionScope = withStoredLiteLLMConnection(
+        browser,
+        () =>
+          new Promise<void>((release) => {
+            releaseConnection = release;
+            stored();
+          }),
+      );
+      connectionScope.catch(failed);
+    });
+  });
+
+  test.afterAll(async () => {
+    releaseConnection?.();
+    await connectionScope;
+  });
+
   test.beforeEach(async ({ context }) => {
-    test.skip(
-      !(await litellmIsConfigured(context)),
-      "the Sync button needs a stored LiteLLM connection; the CI table has none (testing guide - E2E without LiteLLM)",
-    );
     await signInAsTestUser(context, { roles: ["internal-admin"] });
   });
 
   test("an admin previews, applies and reads the result with the people not placed and a link to the Users list", async ({
     page,
   }) => {
-    await withLiteLLMStateLock(async () => {
+    {
       const posted = await mockUsersPage(page);
       const dialog = await openDialog(page);
 
@@ -217,7 +230,7 @@ test.describe("Management -> Users -> Sync from LiteLLM (SYNC1)", () => {
       await expect(
         unplaced.getByRole("link", { name: /users list/i }),
       ).toBeVisible();
-    });
+    }
   });
 
   test("the Not signed in yet panel sits under People with a Remove for an admin", async ({
@@ -303,7 +316,7 @@ test.describe("Sync from LiteLLM, a role without the action (T-SY9 UI)", () => {
       page.getByRole("region", { name: "People" }).getByText("Ada Lovelace"),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Sync from LiteLLM" }),
+      page.getByRole("button", { name: "Sync from LiteLLM", exact: true }),
     ).toHaveCount(0);
   });
 });

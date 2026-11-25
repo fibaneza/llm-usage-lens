@@ -1041,7 +1041,7 @@ Coordinator constraint (2026-11-17): `lib/litellm/**` is L6's until L6 is on
 
 - [x] Gate: `ssoOffOnly` flag on `createUser`; the gate refuses it with `OPERATION_UNAVAILABLE` before any request when SSO is enabled; `POST /api/litellm/users` answers `403 OPERATION_UNAVAILABLE` (the permission check first)
 - [x] One function in `lib/auth/` answers "SSO enabled" (`AUTH_MICROSOFT_ENTRA_ID_ID` set); no route or component reads the variable
-- [x] UI: the "Create and link" button is absent when the operation is unavailable (LiteLLM users tab, Management → Users people rows); Settings → LiteLLM shows "Not available with SSO" with the switch disabled
+- [x] UI: the "Create and link" button *(renamed "Create LiteLLM user", 2026-11-25, UP1, D-R3-11)* is absent when the operation is unavailable (LiteLLM users tab, Management → Users people rows); Settings → LiteLLM shows "Not available with SSO" with the switch disabled
 - [x] Spec rows: LiteLLM spec, Access Control D16 and matrix, threat row T-LW1, Rule 10.3, Rule 50.4, Design System
 - [ ] Verify: T-LW1 to T-LW4 each with a test (LiteLLM spec — *Tests (T-LW1–T-LW4)*)
 
@@ -1098,7 +1098,7 @@ Phase 5 (user, 2026-11-25; Rule 30).
 - [ ] **RF1** refresh button, PERF-R (`feature/phase-5-perf-r-refresh-button`)
   Verify: T-RF1–T-RF6 (Design System — *Caching Strategy*, Refresh); the
   full e2e once (a shared file); security-scope review of the bypass limit
-- [ ] **UP1** Users page (`feature/users-page-round3`)
+- [x] **UP1** Users page (`feature/users-page-round3`)
   Verify: T-UP1–T-UP7 (Design System — *Users, round 3*)
 - [ ] **LP1** LiteLLM teams and the LiteLLM team page (`feature/litellm-team-page`)
   Verify: T-LP1–T-LP5 (Design System — *LiteLLM team page*; LiteLLM spec —

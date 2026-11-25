@@ -3,7 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { apiResponse } from "@/test/fakes/api-stubs";
+import { apiError, apiResponse } from "@/test/fakes/api-stubs";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 import { UserDetailContent } from "./UserDetailContent";
@@ -123,12 +123,24 @@ function pamOf(over: Record<string, unknown> = {}): IdentityDetail {
   });
 }
 
+// GET /api/litellm/users/[litellmUserId] (LiteLLMUserDetailResponseSchema).
+const USAGE = {
+  userId: "lu-alice",
+  email: "alice@company.com",
+  spend: 12.5,
+  maxBudget: 100,
+  enabledOperations: [],
+};
+
 type Call = { method: string; path: string; body: unknown };
 let calls: Call[] = [];
+// The query string of each request, by index of `calls`.
+let searches: string[] = [];
 let overrides: Record<string, () => Response> = {};
 
 function stubFetch() {
   calls = [];
+  searches = [];
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -139,10 +151,16 @@ function stubFetch() {
         body: init?.body ? JSON.parse(String(init.body)) : undefined,
       };
       calls.push(call);
+      searches.push(url.search);
       const hit = overrides[`${call.method} ${call.path}`];
       if (hit) return Promise.resolve(hit());
       if (call.path === "/api/access/org-units") {
         return Promise.resolve(apiResponse({ data: ORG_UNITS }));
+      }
+      if (/^\/api\/litellm\/users\/[^/]+$/.test(call.path)) {
+        return Promise.resolve(
+          apiResponse({ data: { ...USAGE, userId: call.path.split("/")[4] } }),
+        );
       }
       if (call.path.endsWith("/memberships")) {
         return Promise.resolve(
@@ -156,7 +174,10 @@ function stubFetch() {
 
 function show(
   detail: IdentityDetail,
-  over: Partial<{ canOpenPasswordUsers: boolean }> = {},
+  over: Partial<{
+    canOpenPasswordUsers: boolean;
+    searchParams: Record<string, string>;
+  }> = {},
 ) {
   return renderWithProviders(
     <UserDetailContent
@@ -165,6 +186,7 @@ function show(
       authMethod="entra"
       stepUp={stepUp}
     />,
+    over.searchParams ? { searchParams: over.searchParams } : {},
   );
 }
 const region = (name: string) => screen.getByRole("region", { name });
@@ -329,7 +351,9 @@ describe("each action appears only when its allowed flag is true (D-US7)", () =>
   it("D-US9: no Create and link, and no control that creates a LiteLLM user, even when linking is allowed on an unlinked person", () => {
     show(detailOf({ litellm: { state: "none" }, allowed: ALL_ALLOWED }));
     expect(
-      screen.getByRole("button", { name: /link to an existing litellm user/i }),
+      screen.getByRole("button", {
+        name: /^link to an existing litellm user$/i,
+      }),
     ).toBeVisible();
     expect(screen.queryByRole("button", { name: /create/i })).toBeNull();
   });
@@ -539,12 +563,15 @@ describe("an org-admin reads roles and usage identities and edits neither (D-US1
     expect(
       within(region("Usage identities")).getByText("pam-key"),
     ).toBeVisible();
-    expect(
-      within(region("Global roles")).queryByRole("button"),
-    ).not.toBeInTheDocument();
-    expect(
-      within(region("Usage identities")).queryByRole("button"),
-    ).not.toBeInTheDocument();
+    // Only the FieldHelp help buttons ("About ...") may be present (spec FieldHelp table).
+    for (const label of ["Global roles", "Usage identities"]) {
+      expect(
+        within(region(label)).queryAllByRole("button", {
+          name: (n) => !n.startsWith("About "),
+        }),
+        label,
+      ).toHaveLength(0);
+    }
     expect(
       within(region("Usage identities")).queryByRole("textbox"),
     ).not.toBeInTheDocument();
@@ -905,6 +932,202 @@ describe("UserDetailContent placing a person by hand (INV2)", () => {
       within(teamRegion()).queryByRole("button", {
         name: /add .* to team|approve and add|invite/i,
       }),
+    ).toBeNull();
+  });
+});
+
+// Design System - Users, round 3 (unit UP1; D-R3-10 to D-R3-13) and Access
+// Control - API routes, `/api/identities/[oid]` (the 2026-11-25 UP1 sentence:
+// `litellm.state` "match" only to a caller who may link). The route's role
+// rule is proved in the route's file; here the flags and states are inputs.
+describe("the LiteLLM block equals the list (T-UP5)", () => {
+  const MATCH = {
+    state: "match",
+    litellmUserId: "ll-bob",
+    email: "bob@lite.example.com",
+  };
+
+  it("a match shows the LiteLLM email, Link and 'Link (a match)' help, no badge, and Link confirms with mode match", async () => {
+    overrides["PUT /api/identities/oid-alice/litellm-link"] = () =>
+      apiResponse({
+        data: { oid: OID, litellmUserId: "ll-bob", version: 5 },
+      });
+    show(detailOf({ litellm: MATCH, linkVersion: 4 }));
+    const block = region("LiteLLM");
+    expect(within(block).queryByText(/match found/i)).toBeNull();
+    expect(within(block).getByText("bob@lite.example.com")).toBeVisible();
+    expect(
+      within(block).getByRole("button", { name: "About Link (a match)" }),
+    ).toBeVisible();
+    const user = userEvent.setup();
+    await user.click(within(block).getByRole("button", { name: /^link /i }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Link",
+      }),
+    );
+    await waitFor(() =>
+      expect(writes()).toEqual([
+        {
+          method: "PUT",
+          path: "/api/identities/oid-alice/litellm-link",
+          body: { litellmUserId: "ll-bob", mode: "match", version: 4 },
+        },
+      ]),
+    );
+  });
+
+  it("no LiteLLM user with that email: the list's text and the manual link action, as on the list", () => {
+    show(detailOf({ litellm: { state: "none" } }));
+    const block = region("LiteLLM");
+    expect(
+      within(block).getByText("No LiteLLM user with that email"),
+    ).toBeVisible();
+    expect(
+      within(block).getByRole("button", {
+        name: "Link to an existing LiteLLM user",
+      }),
+    ).toBeVisible();
+  });
+
+  it("an auditor-shaped read (state none, linkLiteLLM false) shows 'Not linked' and no action", () => {
+    show(detailOf({ litellm: { state: "none" }, allowed: NONE_ALLOWED }));
+    const block = region("LiteLLM");
+    expect(within(block).getByText("Not linked")).toBeVisible();
+    expect(within(block).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("a match without linkLiteLLM fails closed: no Link, no help (the read never sends it to such a caller)", () => {
+    show(detailOf({ litellm: MATCH, allowed: NONE_ALLOWED }));
+    const block = region("LiteLLM");
+    expect(within(block).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("D-US9: no create action on the page, in any LiteLLM state, even with every flag on", () => {
+    for (const litellm of [{ state: "none" }, MATCH]) {
+      const view = show(detailOf({ litellm, allowed: ALL_ALLOWED }));
+      expect(
+        screen.queryByRole("button", { name: /create litellm user/i }),
+      ).toBeNull();
+      expect(screen.queryByText(/create and link/i)).toBeNull();
+      view.unmount();
+    }
+  });
+});
+
+describe("the LiteLLM usage block (T-UP6)", () => {
+  const RANGE = { dateFrom: "2026-11-01", dateTo: "2026-11-20" };
+  const usageCalls = () =>
+    calls
+      .map((call, i) => ({ ...call, search: searches[i] ?? "" }))
+      .filter((c) => c.path === "/api/litellm/users/lu-alice");
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => errorSpy.mockRestore());
+
+  it("a linked person shows spend and budget read for the URL date range", async () => {
+    show(detailOf(), { searchParams: RANGE });
+    const block = await screen.findByRole("region", { name: "LiteLLM usage" });
+    expect(await within(block).findByText(/\$12\.5/)).toBeVisible();
+    expect(within(block).getByText(/\$100/)).toBeVisible();
+    expect(usageCalls().length).toBeGreaterThan(0);
+    for (const call of usageCalls()) {
+      const query = new URLSearchParams(call.search);
+      expect(call.method).toBe("GET");
+      expect(query.get("dateFrom")).toBe(RANGE.dateFrom);
+      expect(query.get("dateTo")).toBe(RANGE.dateTo);
+    }
+  });
+
+  it("a person who is not linked has no usage block and no request for one", async () => {
+    show(detailOf({ litellm: { state: "none" } }), { searchParams: RANGE });
+    await screen.findByText(/Payments/);
+    expect(screen.queryByRole("region", { name: "LiteLLM usage" })).toBeNull();
+    expect(
+      calls.filter((c) => c.path.startsWith("/api/litellm/users/")),
+    ).toEqual([]);
+  });
+
+  it("the block is omitted when the response hides spend (LD23: no spend key)", async () => {
+    overrides["GET /api/litellm/users/lu-alice"] = () =>
+      apiResponse({
+        data: {
+          userId: "lu-alice",
+          email: "alice@company.com",
+          enabledOperations: [],
+        },
+      });
+    show(detailOf(), { searchParams: RANGE });
+    await waitFor(() => expect(usageCalls().length).toBeGreaterThan(0));
+    await screen.findByText(/Payments/);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: "LiteLLM usage" }),
+      ).toBeNull(),
+    );
+  });
+
+  it("an outage shows 'LiteLLM unavailable' in the block, and the rest of the page stays", async () => {
+    overrides["GET /api/litellm/users/lu-alice"] = () =>
+      apiError(503, "LITELLM_UNAVAILABLE", "LiteLLM is unavailable");
+    show(detailOf(), { searchParams: RANGE });
+    const block = await screen.findByRole("region", { name: "LiteLLM usage" });
+    expect(await within(block).findByText(/LiteLLM unavailable/)).toBeVisible();
+    expect(within(region("Profile")).getByText("Alice Anderson")).toBeVisible();
+  });
+
+  it("any other failure is held by the block's own boundary: the page's other panels stay (Rule 60.12)", async () => {
+    overrides["GET /api/litellm/users/lu-alice"] = () =>
+      apiError(500, "INTERNAL_ERROR", "boom");
+    show(detailOf(), { searchParams: RANGE });
+    expect(await screen.findByText(/Couldn't load/)).toBeVisible();
+    expect(within(region("Profile")).getByText("Alice Anderson")).toBeVisible();
+    expect(region("LiteLLM")).toBeVisible();
+    expect(region("Team")).toBeVisible();
+  });
+});
+
+describe("the profile's edit control (T-UP7)", () => {
+  it("is a button named exactly 'Edit name' where allowed.editDisplayName is true", () => {
+    show(pamOf({ allowed: { ...NONE_ALLOWED, editDisplayName: true } }));
+    expect(
+      within(region("Profile")).getByRole("button", { name: "Edit name" }),
+    ).toBeVisible();
+  });
+
+  it("is absent where the caller may not edit the name", () => {
+    show(pamOf({ allowed: NONE_ALLOWED }));
+    expect(screen.queryByRole("button", { name: /edit name/i })).toBeNull();
+  });
+});
+
+describe("FieldHelp on the user page (T-UP5, the FieldHelp text table)", () => {
+  it.each([
+    [
+      "Usage identities",
+      "The names this person's Bedrock usage appears under in AWS. Their cost is counted for them.",
+    ],
+    ["Aliases", "Other email addresses that belong to this person."],
+    [
+      "Global roles",
+      "Roles that apply to the whole organisation, granted here by an admin.",
+    ],
+  ])("%s carries its help text", async (field, text) => {
+    show(detailOf());
+    const user = userEvent.setup();
+    const buttons = await screen.findAllByRole("button", {
+      name: `About ${field}`,
+    });
+    await user.click(buttons[0] as HTMLElement);
+    expect(await screen.findByText(text)).toBeVisible();
+  });
+
+  it("an org-admin read (no role grants block) shows no help for a block that is absent", () => {
+    show(detailOf({ roleGrants: undefined }));
+    expect(
+      screen.queryByRole("button", { name: "About Global roles" }),
     ).toBeNull();
   });
 });

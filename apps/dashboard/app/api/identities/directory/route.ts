@@ -5,7 +5,6 @@ import {
   runBounded,
 } from "@llm-usage-lens/shared";
 import type { DirectoryRow } from "@llm-usage-lens/shared";
-import { z } from "zod";
 
 import { accessErrorResponse, cursorSecret } from "@/lib/api/access-route";
 import { loadManager } from "@/lib/api/matrix-route";
@@ -19,12 +18,12 @@ import { getIdentityLink } from "@/lib/data/access/identity-links";
 import { getIdentityRecord } from "@/lib/data/access/team-member-lookup";
 import { listTeamDirectory } from "@/lib/api/team-directory";
 import { isLiteLLMConfigured } from "@/lib/litellm/client";
-import { findUserByEmail } from "@/lib/litellm/operations";
 import {
   litellmReadRefusal,
   liteLLMErrorResponse,
   openModeRefusal,
 } from "@/lib/litellm/route-guard";
+import { suggestLiteLLMUserByEmail } from "@/lib/manage/litellm-email-suggestion";
 
 // Source: docs/specs/2026-11-10-access-control.md - "API routes (additions)"
 // (/api/identities/directory: internal-admin, internal-org-admin,
@@ -118,19 +117,8 @@ export const GET = withRoute(async (request, _ctx, session) => {
   if (withMatch) {
     try {
       await runBounded(items, LOOKUP_CONCURRENCY, async (row) => {
-        const email = row.email?.trim().toLowerCase();
         if (row.litellm.state !== "none") return;
-        if (!email) {
-          row.match = null;
-          return;
-        }
-        if (!z.email().safeParse(email).success) {
-          row.match = null;
-          return;
-        }
-        const { users } = await findUserByEmail({ email });
-        const found = users.find((u) => u.user_email?.toLowerCase() === email);
-        row.match = found ? { litellmUserId: found.user_id, email } : null;
+        row.match = await suggestLiteLLMUserByEmail(row.email);
       });
     } catch (error) {
       const response = liteLLMErrorResponse(error);

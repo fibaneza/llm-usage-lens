@@ -9,10 +9,12 @@ import {
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQueryStates } from "nuqs";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 
+import { FieldHelp } from "@/components/display/FieldHelp";
 import { Panel } from "@/components/display/Panel";
 import { ResetMemberSpendDialog } from "@/components/litellm/ResetMemberSpendDialog";
 import { LiteLLMSyncButton } from "@/components/manage/users/LiteLLMSyncButton";
@@ -160,6 +162,7 @@ function People({
     "name",
     DIRECTORY_SORTS,
   );
+  const router = useRouter();
   const queryClient = useQueryClient();
   const units = useOrgUnits();
   const directory = useInfiniteQuery({
@@ -216,7 +219,15 @@ function People({
             >
               Email
             </SortableHeader>
-            <TableHead>Sign-in</TableHead>
+            <TableHead>
+              <span className="inline-flex items-center gap-1">
+                Sign-in
+                <FieldHelp field="Sign-in">
+                  How this person signs in: Microsoft (SSO), a password managed
+                  here, or the local developer sign-in.
+                </FieldHelp>
+              </span>
+            </TableHead>
             <SortableHeader
               sortKey="createdAt"
               sortKeys={DIRECTORY_SORTS}
@@ -238,7 +249,15 @@ function People({
             >
               Team
             </SortableHeader>
-            <TableHead>LiteLLM</TableHead>
+            <TableHead>
+              <span className="inline-flex items-center gap-1">
+                LiteLLM
+                <FieldHelp field="LiteLLM">
+                  Whether this person is connected to a LiteLLM user. Their
+                  LiteLLM spend and budget show only when they are.
+                </FieldHelp>
+              </span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -246,7 +265,29 @@ function People({
             const name = row.displayName ?? row.email ?? row.oid;
             const state = linkStateOf(row);
             return (
-              <TableRow key={row.oid}>
+              <TableRow
+                key={row.oid}
+                className="cursor-pointer"
+                onClick={(event) => {
+                  const target = event.target;
+                  // Design System — Users, round 3, T-UP4: portaled dialogs bubble through the row.
+                  if (
+                    !(target instanceof Node) ||
+                    !event.currentTarget.contains(target)
+                  ) {
+                    return;
+                  }
+                  if (
+                    target instanceof Element &&
+                    target.closest("a,button,input,[role=menuitem]")
+                  ) {
+                    return;
+                  }
+                  router.push(
+                    `/dashboard/manage/users/${encodeURIComponent(row.oid)}`,
+                  );
+                }}
+              >
                 <TableCell className="font-medium">
                   <Link
                     href={`/dashboard/manage/users/${encodeURIComponent(row.oid)}`}
@@ -393,7 +434,15 @@ function PeoplePanel({
               className="pl-8"
             />
           </div>
-          {canSync ? <LiteLLMSyncButton /> : null}
+          {canSync ? (
+            <div className="flex items-center gap-1">
+              <LiteLLMSyncButton />
+              <FieldHelp field="Sync from LiteLLM">
+                Reads the users LiteLLM has and links or lists them here. It
+                writes nothing to LiteLLM.
+              </FieldHelp>
+            </div>
+          ) : null}
           {canAdd ? (
             <Button type="button" size="sm" onClick={() => setAdding(true)}>
               <Plus aria-hidden />

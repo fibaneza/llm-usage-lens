@@ -7,10 +7,23 @@ import { renderWithProviders } from "@/test/support/render-providers";
 
 import { UsersPeoplePanel } from "./UsersPeoplePanel";
 
+// Row click (T-UP4) navigates with the router; the rest of next/navigation
+// stays real.
+const push = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({
+    push,
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+}));
+
 // Source: Design System - Management improvements, Users (D15: the people
 // list with name, email, sign-in method, team and LiteLLM link state from
 // GET /api/identities/directory; one Add user action, shown only to a caller
-// who may do a step) and User link states (D16: Linked / Match found / No
+// who may do a step) and User link states (D16: Linked / a match / No
 // LiteLLM user with that email; controls only for admin and org-admin and
 // never on the caller's own row; Create and link on OSS only). The directory
 // route and the writes are tested in their own files (Rule 60.24a).
@@ -140,6 +153,7 @@ function show(
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  push.mockReset();
 });
 
 describe("UsersPeoplePanel people list (D15)", () => {
@@ -155,7 +169,13 @@ describe("UsersPeoplePanel people list (D15)", () => {
     expect(within(ada).getByText("Linked")).toBeInTheDocument();
     const bob = screen.getByText("Bob Barker").closest("tr") as HTMLElement;
     expect(within(bob).getByText("Password")).toBeInTheDocument();
-    expect(within(bob).getByText("Match found")).toBeInTheDocument();
+    expect(within(bob).queryByText(/match found/i)).toBeNull();
+    expect(
+      within(bob).getByText("bob@example.com", { selector: "span" }),
+    ).toBeInTheDocument();
+    expect(
+      within(bob).getByRole("button", { name: /^link /i }),
+    ).toBeInTheDocument();
   });
 
   it("a person with no LiteLLM user shows the none state", async () => {
@@ -209,9 +229,12 @@ describe("UsersPeoplePanel Add user and link controls (D15, D16)", () => {
     stub([LINKED, MATCH, NONE]);
     show(STEPS.auditor);
     await screen.findByText("Ada Lovelace");
-    expect(screen.getByText("Match found")).toBeInTheDocument();
+    expect(screen.queryByText(/match found/i)).toBeNull();
+    expect(screen.getAllByText("bob@example.com").length).toBeGreaterThan(0);
     expect(
-      screen.queryByRole("button", { name: /^(link|unlink|create and link)/i }),
+      screen.queryByRole("button", {
+        name: /^(link|unlink|create litellm user)/i,
+      }),
     ).toBeNull();
   });
 
@@ -228,26 +251,28 @@ describe("UsersPeoplePanel Add user and link controls (D15, D16)", () => {
     show(STEPS.admin);
     await screen.findByText("Me Myself");
     expect(
-      screen.queryByRole("button", { name: /^(link|unlink|create and link)/i }),
+      screen.queryByRole("button", {
+        name: /^(link|unlink|create litellm user)/i,
+      }),
     ).toBeNull();
   });
 
-  it("OSS: Create and link on a none row; Enterprise: absent with the sign-in-once note", async () => {
+  it("OSS: Create LiteLLM user on a none row; Enterprise: absent with the sign-in-once note", async () => {
     stub([NONE]);
     show(STEPS.admin, { canCreate: true });
     expect(
-      await screen.findByRole("button", { name: "Create and link" }),
+      await screen.findByRole("button", { name: "Create LiteLLM user" }),
     ).toBeInTheDocument();
   });
 
-  it("Enterprise edition: no Create and link, the row says to sign in to LiteLLM once", async () => {
+  it("Enterprise edition: no Create LiteLLM user, the row says to sign in to LiteLLM once", async () => {
     stub([NONE]);
     show(STEPS.admin, { canCreate: false });
     expect(
       await screen.findByText("Sign in to LiteLLM once, then retry."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Create and link" }),
+      screen.queryByRole("button", { name: "Create LiteLLM user" }),
     ).toBeNull();
   });
 });
@@ -259,9 +284,9 @@ describe("UsersPeoplePanel without LiteLLM configured (LiteLLM spec LD37)", () =
     await screen.findByText("Ada Lovelace");
     expect(screen.getAllByText("LiteLLM not configured")).toHaveLength(2);
     expect(screen.getByText("Linked")).toBeInTheDocument();
-    expect(screen.queryByText("Match found")).toBeNull();
+    expect(screen.queryByText(/match found/i)).toBeNull();
     expect(
-      screen.queryByRole("button", { name: /^(link|create and link)/i }),
+      screen.queryByRole("button", { name: /^(link|create litellm user)/i }),
     ).toBeNull();
   });
 });
@@ -456,7 +481,13 @@ describe("UsersPeoplePanel users table (unit US1)", () => {
       ).toBeInTheDocument();
     }
     for (const label of ["Sign-in", "LiteLLM"]) {
-      expect(within(header(label)).queryByRole("button")).toBeNull();
+      // The FieldHelp button (T-UP3) is not a sort control.
+      const head = screen.getByRole("columnheader", {
+        name: new RegExp(`^${label}`),
+      });
+      expect(
+        within(head).queryByRole("button", { name: new RegExp(`^${label}$`) }),
+      ).toBeNull();
     }
   });
 
@@ -793,5 +824,195 @@ describe("UsersPeoplePanel placing a person by hand (INV2)", () => {
     expect(paths).toContain(
       "/api/teams/team-b/members/pending/ivy@corp.example.com/candidates",
     );
+  });
+});
+
+// Design System - Users, round 3 (unit UP1; D-R3-10, D-R3-11, D-R3-12), T-UP1,
+// T-UP2, T-UP3, T-UP4. Whether the name link is visible and a row click opens the
+// person's page is a component behaviour; the route and page are not re-tested.
+describe("UsersPeoplePanel round 3 (T-UP1, T-UP2, T-UP3, T-UP4)", () => {
+  it("T-UP1: the create action reads 'Create LiteLLM user' with its help beside it, and never 'Create and link'", async () => {
+    stub([NONE]);
+    show(STEPS.admin, { canCreate: true });
+    expect(
+      await screen.findByRole("button", { name: "Create LiteLLM user" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "About Create LiteLLM user" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/create and link/i)).toBeNull();
+  });
+
+  it("T-UP2: a match row shows the LiteLLM email and Link with the 'Link (a match)' help, and no badge", async () => {
+    stub([MATCH]);
+    show(STEPS.admin);
+    const bob = (await screen.findByText("Bob Barker")).closest(
+      "tr",
+    ) as HTMLElement;
+    expect(within(bob).queryByText(/match found/i)).toBeNull();
+    expect(
+      within(bob).getByRole("button", { name: /^link /i }),
+    ).toBeInTheDocument();
+    expect(
+      within(bob).getByRole("button", { name: "About Link (a match)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("T-UP4: the name is a visible link to the person's page", async () => {
+    stub([LINKED]);
+    show();
+    expect(
+      await screen.findByRole("link", { name: "Ada Lovelace" }),
+    ).toHaveAttribute("href", "/dashboard/manage/users/oid-ada");
+  });
+
+  it("T-UP4: a click on a cell that is not a control opens the person's page", async () => {
+    stub([LINKED]);
+    show();
+    const ada = (await screen.findByText("Ada Lovelace")).closest(
+      "tr",
+    ) as HTMLElement;
+    await userEvent.setup().click(within(ada).getByText("ada@example.com"));
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith("/dashboard/manage/users/oid-ada");
+  });
+
+  it("T-UP4: a click on a button inside the row does not navigate", async () => {
+    stub([LINKED]);
+    show();
+    const ada = (await screen.findByText("Ada Lovelace")).closest(
+      "tr",
+    ) as HTMLElement;
+    await userEvent
+      .setup()
+      .click(within(ada).getByRole("button", { name: /unlink/i }));
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  // T-UP4: a click on a control in the row does not open the page. A portaled
+  // dialog opened from the row bubbles its events through the React tree, so a
+  // click on non-control content inside it must not navigate either.
+  describe("T-UP4: a click inside a dialog opened from the row does not navigate", () => {
+    it("Approve and add (AcceptInviteDialog): the candidate label and the dialog text", async () => {
+      stub([
+        row({
+          oid: "oid-ivy",
+          displayName: "Ivy Chen",
+          email: "ivy@example.com",
+          match: null,
+          state: "invited",
+          invites: [{ teamId: "team-a", key: "ivy@example.com" }],
+        }),
+      ]);
+      show();
+      const u = userEvent.setup();
+      await u.click(
+        await screen.findByRole("button", {
+          name: "Approve and add Ivy Chen (Team A)",
+        }),
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: /approve and add/i,
+      });
+      const radio = await within(dialog).findByRole("radio", {
+        name: /Ivy Chen/,
+      });
+      push.mockClear();
+      const label = radio.closest("label");
+      await u.click(label ?? within(dialog).getByText(/Ivy Chen/));
+      await u.click(within(dialog).getByRole("heading"));
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("the LiteLLM Link confirm dialog (LiteLLMLinkCell): its title and text", async () => {
+      stub([MATCH]);
+      show();
+      const u = userEvent.setup();
+      const bob = (await screen.findByText("Bob Barker")).closest(
+        "tr",
+      ) as HTMLElement;
+      await u.click(within(bob).getByRole("button", { name: /^link /i }));
+      const dialog = await screen.findByRole("alertdialog", {
+        name: "Link to this LiteLLM user?",
+      });
+      await u.click(within(dialog).getByText("Link to this LiteLLM user?"));
+      await u.click(
+        within(dialog).getByText(/^Link to this LiteLLM user\?$/)
+          .parentElement as HTMLElement,
+      );
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("the Reset spend dialog (ResetMemberSpendDialog): its title", async () => {
+      stub([LINKED]);
+      show(STEPS.orgAdmin, { canResetSpend: true });
+      const u = userEvent.setup();
+      await u.click(
+        await screen.findByRole("button", {
+          name: "Reset spend for Ada Lovelace",
+        }),
+      );
+      const dialog = await screen.findByRole("alertdialog", {
+        name: "Reset spend for Ada Lovelace?",
+      });
+      await u.click(within(dialog).getByText("Reset spend for Ada Lovelace?"));
+      expect(push).not.toHaveBeenCalled();
+    });
+  });
+
+  it.each([
+    [
+      "LiteLLM",
+      "Whether this person is connected to a LiteLLM user. Their LiteLLM spend and budget show only when they are.",
+    ],
+    [
+      "Sign-in",
+      "How this person signs in: Microsoft (SSO), a password managed here, or the local developer sign-in.",
+    ],
+  ])(
+    "T-UP3: the %s column header carries its FieldHelp text",
+    async (field, text) => {
+      stub([LINKED]);
+      show();
+      await screen.findByText("Ada Lovelace");
+      const head = screen.getByRole("columnheader", {
+        name: new RegExp(`^${field}`),
+      });
+      await userEvent
+        .setup()
+        .click(within(head).getByRole("button", { name: `About ${field}` }));
+      expect(await screen.findByText(text)).toBeVisible();
+    },
+  );
+
+  it("T-UP3: 'Sync from LiteLLM' carries its FieldHelp text where the button shows, and neither shows without canSync", async () => {
+    stub([LINKED]);
+    const view = renderWithProviders(
+      <UsersPeoplePanel
+        steps={STEPS.admin}
+        ownOid="oid-me"
+        canCreate
+        litellmConfigured
+        canSync
+        authMethod="entra"
+        stepUp={stepUp}
+      />,
+    );
+    await screen.findByText("Ada Lovelace");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "About Sync from LiteLLM" }));
+    expect(
+      await screen.findByText(
+        "Reads the users LiteLLM has and links or lists them here. It writes nothing to LiteLLM.",
+      ),
+    ).toBeVisible();
+    view.unmount();
+    stub([LINKED]);
+    show();
+    await screen.findByText("Ada Lovelace");
+    expect(
+      screen.queryByRole("button", { name: "About Sync from LiteLLM" }),
+    ).toBeNull();
   });
 });

@@ -2,7 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import { FormField } from "@/components/settings/access/form-controls";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ export type KeyKind = "usage identity" | "alias";
 
 export function UserKeyList({
   heading,
+  help,
   kind,
   keys,
   canEdit,
@@ -22,6 +23,7 @@ export function UserKeyList({
   onRemove,
 }: {
   heading: string;
+  help?: ReactNode;
   kind: KeyKind;
   keys: readonly string[];
   canEdit: boolean;
@@ -39,7 +41,10 @@ export function UserKeyList({
 
   return (
     <div className="flex max-w-[72ch] flex-col gap-2">
-      <h3 className="text-sm font-medium">{heading}</h3>
+      <div className="flex items-center gap-1">
+        <h3 className="text-sm font-medium">{heading}</h3>
+        {help}
+      </div>
       {keys.length === 0 ? (
         <p className="text-muted-foreground text-sm">None yet.</p>
       ) : (

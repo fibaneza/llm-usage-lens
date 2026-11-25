@@ -11,6 +11,7 @@ import { Link2, Link2Off, UserPlus } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import type { FormEvent } from "react";
 
+import { FieldHelp } from "@/components/display/FieldHelp";
 import { accessErrorMessage } from "@/components/settings/access/access-error-message";
 import {
   FormError,
@@ -56,6 +57,8 @@ export type LinkState =
   | { state: "linked"; litellmUserId: string }
   | { state: "match"; litellmUserId: string; email: string }
   | { state: "none" };
+
+export const CREATE_LITELLM_USER_LABEL = "Create LiteLLM user";
 
 const MIN_TERM = 2;
 const DEBOUNCE_MS = 400;
@@ -231,7 +234,7 @@ function ConfirmCreate({
             disabled={create.isPending}
             onClick={() => create.mutate()}
           >
-            Create and link
+            {CREATE_LITELLM_USER_LABEL}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -434,23 +437,26 @@ export function LiteLLMLinkCell({
       {link.state === "match" ? (
         <>
           {showState ? (
-            <>
-              <Badge variant="outline">Match found</Badge>
-              <span className="text-muted-foreground text-xs break-all">
-                {link.email}
-              </span>
-            </>
+            <span className="text-muted-foreground text-xs break-all">
+              {link.email}
+            </span>
           ) : null}
           {canWrite ? (
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setOpen("match")}
-              aria-label={`Link ${subject.name} to ${link.email}`}
-            >
-              <Link2 aria-hidden />
-              Link
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setOpen("match")}
+                aria-label={`Link ${subject.name} to ${link.email}`}
+              >
+                <Link2 aria-hidden />
+                Link
+              </Button>
+              <FieldHelp field="Link (a match)">
+                A LiteLLM user has the same email. Link connects the two after
+                you confirm.
+              </FieldHelp>
+            </div>
           ) : null}
         </>
       ) : null}
@@ -461,24 +467,36 @@ export function LiteLLMLinkCell({
           ) : null}
           {canWrite ? (
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setOpen("existing")}
-              >
-                <Link2 aria-hidden />
-                Link to an existing LiteLLM user
-              </Button>
-              {canCreate ? (
+              <div className="flex items-center gap-1">
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => setOpen("create")}
+                  variant="outline"
+                  onClick={() => setOpen("existing")}
                 >
-                  <UserPlus aria-hidden />
-                  Create and link
+                  <Link2 aria-hidden />
+                  Link to an existing LiteLLM user
                 </Button>
+                <FieldHelp field="Link to an existing LiteLLM user">
+                  Connects this person to a LiteLLM user that already exists, so
+                  their LiteLLM spend shows here. Nothing changes in LiteLLM.
+                </FieldHelp>
+              </div>
+              {canCreate ? (
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setOpen("create")}
+                  >
+                    <UserPlus aria-hidden />
+                    {CREATE_LITELLM_USER_LABEL}
+                  </Button>
+                  <FieldHelp field={CREATE_LITELLM_USER_LABEL}>
+                    Creates a user in LiteLLM with this person&apos;s email and
+                    links it to this person. It sets no team, key or budget.
+                  </FieldHelp>
+                </div>
               ) : null}
             </div>
           ) : null}

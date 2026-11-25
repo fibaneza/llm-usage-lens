@@ -364,7 +364,7 @@ describe("LiteLLMUsersList link controls (D16)", () => {
       screen.queryByRole("button", { name: /link to an existing/i }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: /create and link/i }),
+      screen.queryByRole("button", { name: /^create litellm user$/i }),
     ).toBeNull();
   });
 
@@ -400,22 +400,22 @@ describe("LiteLLMUsersList link controls (D16)", () => {
     expect(screen.queryByRole("button", { name: /link/i })).toBeNull();
   });
 
-  it("offers Create and link when the list's enabledOperations has createUser (OSS)", async () => {
+  it("offers Create LiteLLM user (was Create and link; T-UP1) when the list's enabledOperations has createUser (OSS)", async () => {
     stub({ users: [ROW_NONE], enabledOperations: ["createUser"] });
     renderWithProviders(<LiteLLMUsersList />);
     expect(
-      await screen.findByRole("button", { name: "Create and link" }),
+      await screen.findByRole("button", { name: "Create LiteLLM user" }),
     ).toBeInTheDocument();
   });
 
-  it("on Enterprise (no createUser) offers no Create and link and says to sign in once", async () => {
+  it("on Enterprise (no createUser) offers no Create LiteLLM user and says to sign in once", async () => {
     stub({ users: [ROW_NONE], enabledOperations: [] });
     renderWithProviders(<LiteLLMUsersList />);
     expect(
       await screen.findByText("Sign in to LiteLLM once, then retry."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Create and link" }),
+      screen.queryByRole("button", { name: "Create LiteLLM user" }),
     ).toBeNull();
   });
 });

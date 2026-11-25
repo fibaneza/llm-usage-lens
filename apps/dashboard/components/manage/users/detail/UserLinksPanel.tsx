@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Panel } from "@/components/display/Panel";
 import { ResetMemberSpendDialog } from "@/components/litellm/ResetMemberSpendDialog";
 import { LiteLLMLinkCell } from "@/components/manage/users/LiteLLMLinkCell";
+import type { LinkState } from "@/components/manage/users/LiteLLMLinkCell";
 import { Badge } from "@/components/ui/badge";
 
 // Design System - "The user page (unit US2)" D-US7, D-US9: the LiteLLM link
@@ -22,6 +23,8 @@ export function UserLinksPanel({
   const { litellm, allowed } = detail;
   const linked = litellm.state === "linked";
   const canWrite = linked ? allowed.unlinkLiteLLM : allowed.linkLiteLLM;
+  // UP1 (D-R3-13): the read sends a match only to a caller who may link.
+  const link: LinkState = litellm;
   return (
     <Panel title="LiteLLM" boundaryTitle="the LiteLLM link">
       <div className="flex flex-wrap items-start gap-3">
@@ -33,11 +36,7 @@ export function UserLinksPanel({
               email: detail.email,
               version: detail.linkVersion,
             }}
-            link={
-              litellm.state === "linked"
-                ? { state: "linked", litellmUserId: litellm.litellmUserId }
-                : { state: "none" }
-            }
+            link={link}
             canWrite={canWrite}
             canCreate={false}
             onChanged={() => router.refresh()}

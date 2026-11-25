@@ -455,7 +455,8 @@ async function stubResetDialog(
   return posts;
 }
 
-const region = (page: Page, name: string) => page.getByRole("region", { name });
+const region = (page: Page, name: string) =>
+  page.getByRole("region", { name, exact: true });
 
 test.describe("Management -> Users -> a person (unit US2)", () => {
   let person = personFor("w0");
@@ -551,7 +552,7 @@ test.describe("Management -> Users -> a person (unit US2)", () => {
     await expect(profile.getByText(passwordPerson.displayName)).toBeVisible();
     await page
       .getByRole("button", {
-        name: `Edit name of ${passwordPerson.displayName}`,
+        name: "Edit name",
       })
       .click();
     await profile.getByLabel("Display name").fill("  US2 Renamed  ");
@@ -587,7 +588,7 @@ test.describe("Management -> Users -> a person (unit US2)", () => {
     await waitForHydration(page);
     await page
       .getByRole("button", {
-        name: `Edit name of ${passwordPerson.displayName}`,
+        name: "Edit name",
       })
       .click();
     // Another admin renames first, so the page's version is stale.
@@ -1016,6 +1017,220 @@ test.describe("Management -> Users -> a person (unit US2)", () => {
         await expectNoHorizontalScroll(page, "with Reset spend open");
         await cleanupPerson(context, person.oid);
       });
+    });
+  }
+
+  // ---- UP1 (Design System - Users, round 3; T-UP3 to T-UP7). Cases are listed
+  // for the developer's targeted run; the red stage only checks they load.
+
+  test("T-UP6: a linked person's LiteLLM usage block shows spend and budget and asks for the URL date range", async ({
+    context,
+    page,
+  }) => {
+    await withLiteLLMReady(context, async () => {
+      await seedPerson(context, person, { link: true });
+      const asked: URL[] = [];
+      await page.route(
+        new RegExp(`/api/litellm/users/${person.litellmUserId}(\\?|$)`),
+        (route) => {
+          asked.push(new URL(route.request().url()));
+          return route.fulfill({
+            json: {
+              data: {
+                userId: person.litellmUserId,
+                email: person.email,
+                spend: 12.5,
+                maxBudget: 100,
+                enabledOperations: [],
+              },
+            },
+          });
+        },
+      );
+      await signInAdmin(context);
+      await page.goto(`${pageUrl}?dateFrom=2026-11-01&dateTo=2026-11-20`);
+      await waitForHydration(page);
+      const usage = region(page, "LiteLLM usage");
+      await expect(usage).toContainText("$12.50");
+      await expect(usage).toContainText("$100.00");
+      expect(asked.length).toBeGreaterThan(0);
+      expect(asked[0]?.searchParams.get("dateFrom")).toBe("2026-11-01");
+      expect(asked[0]?.searchParams.get("dateTo")).toBe("2026-11-20");
+      await cleanupPerson(context, person.oid);
+    });
+  });
+
+  test("T-UP6: a person who is not linked has no LiteLLM usage block", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await page.goto(pageUrl);
+    await waitForHydration(page);
+    await expect(region(page, "LiteLLM")).toBeVisible();
+    await expect(region(page, "LiteLLM usage")).toHaveCount(0);
+  });
+
+  test("T-UP7: a password user's profile has a button named 'Edit name' for an admin and none for an auditor", async ({
+    browser,
+    context,
+  }) => {
+    const url = await openPassword({ version: 1 });
+    await context.clearCookies();
+    await asRole(browser, { roles: ["internal-admin"] }, async (page) => {
+      await page.goto(url);
+      await waitForHydration(page);
+      await expect(
+        region(page, "Profile").getByRole("button", { name: "Edit name" }),
+      ).toBeVisible();
+    });
+    await asRole(browser, { roles: ["internal-auditor"] }, async (page) => {
+      await page.goto(url);
+      await waitForHydration(page);
+      await expect(region(page, "Profile")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /edit name/i }),
+      ).toHaveCount(0);
+    });
+  });
+
+  for (const [role, linkable] of [
+    ["internal-admin", true],
+    ["internal-org-admin", true],
+    ["internal-auditor", false],
+  ] as const) {
+    test(`T-UP5: ${role} sees a LiteLLM match on the page as ${linkable ? "the email and Link, and Link confirms" : "Not linked, with no action"}`, async ({
+      browser,
+      context,
+    }) => {
+      // The e2e fake LiteLLM knows one user, ada.lovelace@example.test; a
+      // person with that email is a match (Design System - Users, round 3).
+      const matched = {
+        ...personFor(`${testTag()}-m`),
+        email: "ada.lovelace@example.test",
+      };
+      await seedStoredIdentity(matched);
+      try {
+        await withLiteLLMReady(context, async () => {
+          await asRole(browser, { roles: [role] }, async (page) => {
+            await page.goto(`/dashboard/manage/users/${matched.oid}`);
+            await waitForHydration(page);
+            const block = region(page, "LiteLLM");
+            await expect(block.getByText(/match found/i)).toHaveCount(0);
+            await expect(
+              page.getByRole("button", { name: /create litellm user/i }),
+            ).toHaveCount(0);
+            if (!linkable) {
+              await expect(block.getByText("Not linked")).toBeVisible();
+              await expect(block.getByRole("button")).toHaveCount(0);
+              return;
+            }
+            await expect(
+              block.getByText("ada.lovelace@example.test"),
+            ).toBeVisible();
+            await block.getByRole("button", { name: /^link /i }).click();
+            const dialog = page.getByRole("alertdialog", {
+              name: "Link to this LiteLLM user?",
+            });
+            await expect(dialog).toContainText("ada.lovelace@example.test");
+            await dialog
+              .getByRole("button", { name: "Link", exact: true })
+              .click();
+            await expect(dialog).toBeHidden();
+            await expect(
+              block.getByRole("button", { name: /unlink/i }),
+            ).toBeVisible();
+          });
+          await cleanupPerson(context, matched.oid);
+        });
+      } finally {
+        await deleteStoredIdentity(matched.oid);
+      }
+    });
+  }
+
+  // Design System - Users, round 3, T-UP5 (the match block) and T-UP6 (the
+  // LiteLLM usage panel): both open on the user page, no serious axe
+  // violation, at the two ends of the responsive range.
+  for (const width of [375, 1440]) {
+    test(`T-UP5, T-UP6: at ${width}px the LiteLLM usage panel and the match block have no serious axe violation`, async ({
+      browser,
+      context,
+    }) => {
+      const matched = {
+        ...personFor(`${testTag()}-ax`),
+        email: "ada.lovelace@example.test",
+      };
+      await seedStoredIdentity(matched);
+      try {
+        await withLiteLLMReady(context, async () => {
+          await seedPerson(context, person, { link: true });
+          await asRole(browser, { roles: ["internal-admin"] }, async (page) => {
+            await page.setViewportSize({ width, height: 900 });
+            await page.route(
+              new RegExp(`/api/litellm/users/${person.litellmUserId}(\\?|$)`),
+              (route) =>
+                route.fulfill({
+                  json: {
+                    data: {
+                      userId: person.litellmUserId,
+                      email: person.email,
+                      spend: 12.5,
+                      maxBudget: 100,
+                      enabledOperations: [],
+                    },
+                  },
+                }),
+            );
+            await page.goto(pageUrl);
+            await waitForHydration(page);
+            await expect(region(page, "LiteLLM usage")).toContainText("$12.50");
+            await expectNoBlockingViolations(page);
+            await expectNoHorizontalScroll(page, "with the usage panel");
+
+            await page.goto(`/dashboard/manage/users/${matched.oid}`);
+            await waitForHydration(page);
+            await expect(
+              region(page, "LiteLLM").getByText("ada.lovelace@example.test"),
+            ).toBeVisible();
+            await expectNoBlockingViolations(page);
+            await expectNoHorizontalScroll(page, "with the match block");
+          });
+          await cleanupPerson(context, person.oid);
+        });
+      } finally {
+        await deleteStoredIdentity(matched.oid);
+      }
+    });
+  }
+
+  for (const width of [375, 1440]) {
+    test(`T-UP3: at ${width}px a FieldHelp popover is open on the user page with no serious axe violation, closes on Escape and returns focus`, async ({
+      context,
+      page,
+    }) => {
+      await signInAsTestUser(context, { roles: ["internal-admin"] });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(pageUrl);
+      await waitForHydration(page);
+      const help = region(page, "Global roles").getByRole("button", {
+        name: "About Global roles",
+      });
+      await help.click();
+      await expect(
+        page.getByText(
+          "Roles that apply to the whole organisation, granted here by an admin.",
+        ),
+      ).toBeVisible();
+      await expectNoBlockingViolations(page);
+      await expectNoHorizontalScroll(page, "with the help open");
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByText(
+          "Roles that apply to the whole organisation, granted here by an admin.",
+        ),
+      ).toHaveCount(0);
+      await expect(help).toBeFocused();
     });
   }
 });

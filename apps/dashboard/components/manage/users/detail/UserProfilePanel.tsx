@@ -134,7 +134,7 @@ export function UserProfilePanel({
             type="button"
             size="sm"
             variant="outline"
-            aria-label={`Edit name of ${shown}`}
+            aria-label="Edit name"
             onClick={() => setEditing(true)}
           >
             <Pencil aria-hidden />

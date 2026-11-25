@@ -18,6 +18,7 @@ import {
   call,
   expectError,
   signInWithRoles,
+  useEnv,
 } from "@/test/fakes/fake-litellm-views";
 import {
   PEOPLE,
@@ -25,6 +26,7 @@ import {
   seedCtx,
 } from "@/test/support/matrix-route-support";
 import {
+  installMemberWritesFake,
   setupMemberWritesSuite,
   stubLiteLLMEnv,
 } from "@/test/support/litellm-member-writes-support";
@@ -645,6 +647,127 @@ describe("GET /api/identities/[oid]", () => {
       expect(
         dataOf((await read(CALLERS.orgAdmin.oid)).body).allowed,
       ).toMatchObject({ linkLiteLLM: false, unlinkLiteLLM: false });
+    });
+  });
+
+  // Source: docs/specs/2026-11-10-access-control.md - row /api/identities/[oid],
+  // "From 2026-11-25 (unit UP1, D-R3-13)": litellm.state may be `match` (the
+  // matched LiteLLM email and user id) only for a caller who may link
+  // (internal-admin, internal-org-admin); an auditor's unlinked person is
+  // `none`; the match is the lookup the people list uses. Design System -
+  // "Users, round 3", T-UP5. LD37: LiteLLM not configured reads as none.
+  // Agent decision (2026-11-25, UP1): an outage answers 200 with `none`, as
+  // the list falls back to rows without a match.
+  describe("litellm match (unit UP1, T-UP5, D-R3-13)", () => {
+    const BOB_MATCH = {
+      state: "match",
+      litellmUserId: PEOPLE.bob.email,
+      email: PEOPLE.bob.email,
+    };
+    const bob = PEOPLE.bob;
+
+    async function readDirectoryMatch(oid: string) {
+      const { GET } = await import("../directory/route");
+      const { body } = await call(
+        GET,
+        "/api/identities/directory?include=litellmMatch",
+      );
+      const items = (body.data as { items: { oid: string; match?: unknown }[] })
+        .items;
+      return items.find((r) => r.oid === oid)?.match;
+    }
+
+    it.each(["admin", "orgAdmin"] as CallerName[])(
+      "%s reads state match for an unlinked person whose email matches, equal to the list's match for the same person (T-UP5)",
+      async (who) => {
+        signInAs(who);
+        const { res, body } = await read(bob.oid);
+        expect(res.status).toBe(200);
+        expect(dataOf(body).litellm).toEqual(BOB_MATCH);
+        expect(IdentityDetailSchema.safeParse(body.data).success).toBe(true);
+        const listed = (await readDirectoryMatch(bob.oid)) as {
+          litellmUserId: string;
+          email: string;
+        };
+        const { litellmUserId, email } = dataOf(body).litellm as {
+          litellmUserId: string;
+          email: string;
+        };
+        expect({ litellmUserId, email }).toEqual(listed);
+      },
+    );
+
+    it("the email comparison ignores case (T-UP5)", async () => {
+      await seedPerson(carol.oid, { email: "BOB@Company.com", name: "Carol" });
+      signInAs("admin");
+      expect(dataOf((await read(carol.oid)).body).litellm).toEqual(BOB_MATCH);
+    });
+
+    it("internal-auditor gets none for the same person, with no LiteLLM id or email in the body and no LiteLLM lookup (T-UP5, D-R3-13)", async () => {
+      signInAs("auditor");
+      state.fake.calls.length = 0;
+      const { res, body } = await read(bob.oid);
+      expect(res.status).toBe(200);
+      expect(dataOf(body).litellm).toEqual({ state: "none" });
+      const text = JSON.stringify(body);
+      expect(text).not.toContain("litellmUserId");
+      expect(text).not.toContain('"match"');
+      expect(state.fake.calls).toHaveLength(0);
+    });
+
+    it("a linked person stays linked and is not looked up (T-UP5)", async () => {
+      ok(
+        await putIdentityLink(
+          {
+            oid: bob.oid,
+            usageIdentities: [],
+            aliases: [],
+            litellmUserId: "lu-bob",
+            version: null,
+          },
+          seedCtx(),
+        ),
+      );
+      signInAs("admin");
+      const { body } = await read(bob.oid);
+      expect(dataOf(body).litellm).toEqual({
+        state: "linked",
+        litellmUserId: "lu-bob",
+      });
+    });
+
+    it("no LiteLLM user with that email gives none (T-UP5)", async () => {
+      signInAs("admin");
+      expect(dataOf((await read(alice.oid)).body).litellm).toEqual({
+        state: "none",
+      });
+    });
+
+    it("the caller's own identity gets no match: link writes are 403 on oneself (T-UP5, D16)", async () => {
+      await seedPerson(CALLERS.admin.oid, {
+        email: bob.email,
+        name: "Admin Self",
+      });
+      signInAs("admin");
+      const data = dataOf((await read(CALLERS.admin.oid)).body);
+      expect(data.litellm).toEqual({ state: "none" });
+      expect(data.allowed.linkLiteLLM).toBe(false);
+    });
+
+    it("LiteLLM not configured reads as none (LD37, T-UP5)", async () => {
+      useEnv({ LITELLM_SERVICE_KEY: "" });
+      signInAs("admin");
+      const { res, body } = await read(bob.oid);
+      expect(res.status).toBe(200);
+      expect(dataOf(body).litellm).toEqual({ state: "none" });
+    });
+
+    it("a LiteLLM outage keeps the page readable: 200 with none, not an error (Access Control — /api/identities/[oid], D-UP1a; T-UP5)", async () => {
+      installMemberWritesFake(state, { outage: true });
+      signInAs("admin");
+      const { res, body } = await read(bob.oid);
+      expect(res.status).toBe(200);
+      expect(dataOf(body).litellm).toEqual({ state: "none" });
     });
   });
 });
