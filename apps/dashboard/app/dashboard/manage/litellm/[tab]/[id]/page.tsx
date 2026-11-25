@@ -2,18 +2,21 @@ import { notFound } from "next/navigation";
 
 import { auth } from "@/auth";
 import { ProxyTeamPageContent } from "@/components/litellm/proxy-team/ProxyTeamPageContent";
+import { ProxyUserPageContent } from "@/components/litellm/proxy-user/ProxyUserPageContent";
 import { parsePageIdParam } from "@/lib/api/id-param";
 import { litellmPanelCapabilities } from "@/lib/auth/litellm-panel";
 import { loadSettingsAccessViewer } from "@/lib/auth/settings-access";
 import { PathLiteLLMId } from "@/lib/litellm/litellm-id-write";
 import { proxyTeamExists } from "@/lib/litellm/proxy-team-exists";
+import { proxyUserExists } from "@/lib/litellm/proxy-user-exists";
 import { managementAccessFor } from "@/lib/manage-access";
 
-// Design System - LiteLLM team page (unit LP1), T-LP4: only the teams tab has
-// a detail page, for the three LiteLLM-reading global roles; anyone else, a
-// bad id and an unknown team get the missing page. Authorized per request
+// Design System - LiteLLM team page (unit LP1, T-LP4) and user page (unit LP2,
+// T-LP8): the teams and users tabs have a detail page, for the three
+// LiteLLM-reading global roles; anyone else, a bad id and an unknown id get
+// the missing page. Authorized per request
 // (Rule 60.10); Reset controls follow the teams tab's edit flag (RS2).
-export default async function LiteLLMTeamPage({
+export default async function LiteLLMDetailPage({
   params,
 }: {
   params: Promise<{ tab: string; id: string }>;
@@ -21,17 +24,25 @@ export default async function LiteLLMTeamPage({
   const { tab, id } = await params;
   const session = await auth();
   if (!(await managementAccessFor(session)).litellm) notFound();
-  if (tab !== "teams") notFound();
+  if (tab !== "teams" && tab !== "users") notFound();
   const decoded = parsePageIdParam(id);
-  const litellmTeamId = PathLiteLLMId.safeParse(decoded);
-  if (decoded === null || !litellmTeamId.success) notFound();
+  const litellmId = PathLiteLLMId.safeParse(decoded);
+  if (decoded === null || !litellmId.success) notFound();
   const viewer = await loadSettingsAccessViewer(session);
   if (!viewer) notFound();
-  if (!(await proxyTeamExists(litellmTeamId.data))) notFound();
+  const canWrite = litellmPanelCapabilities(viewer.roles).editTeamLinks;
+  if (tab === "users") {
+    if (!(await proxyUserExists(litellmId.data))) notFound();
+    return (
+      <ProxyUserPageContent
+        litellmUserId={litellmId.data}
+        canWrite={canWrite}
+        ownOid={session?.user?.oid ?? null}
+      />
+    );
+  }
+  if (!(await proxyTeamExists(litellmId.data))) notFound();
   return (
-    <ProxyTeamPageContent
-      litellmTeamId={litellmTeamId.data}
-      canReset={litellmPanelCapabilities(viewer.roles).editTeamLinks}
-    />
+    <ProxyTeamPageContent litellmTeamId={litellmId.data} canReset={canWrite} />
   );
 }

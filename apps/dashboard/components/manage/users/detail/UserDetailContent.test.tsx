@@ -176,6 +176,7 @@ function show(
   detail: IdentityDetail,
   over: Partial<{
     canOpenPasswordUsers: boolean;
+    canOpenLiteLLM: boolean;
     searchParams: Record<string, string>;
   }> = {},
 ) {
@@ -183,6 +184,9 @@ function show(
     <UserDetailContent
       detail={detail}
       canOpenPasswordUsers={over.canOpenPasswordUsers ?? true}
+      {...(over.canOpenLiteLLM === undefined
+        ? {}
+        : { canOpenLiteLLM: over.canOpenLiteLLM })}
       authMethod="entra"
       stepUp={stepUp}
     />,
@@ -1129,5 +1133,53 @@ describe("FieldHelp on the user page (T-UP5, the FieldHelp text table)", () => {
     expect(
       screen.queryByRole("button", { name: "About Global roles" }),
     ).toBeNull();
+  });
+});
+
+// Sources: Design System - LiteLLM user page (unit LP2, user, 2026-11-25;
+// D-R3-8), T-LP10: "The user page's LiteLLM block ... link[s] to these pages
+// for the three roles only"; Access Control MI-D2 (hidden means absent: no
+// link to a page the caller gets as the missing page). Rule 60.24a.
+//
+// Contract: UserDetailContent takes an optional `canOpenLiteLLM: boolean`
+// (default false), true when managementAccessFor(session).litellm is true (the
+// three global LiteLLM-reading roles). It passes it to UserLinksPanel: with it,
+// a linked person's LiteLLM user id in the "LiteLLM" region is a link to
+// /dashboard/manage/litellm/users/<encoded litellmUserId>; without it the id
+// stays text.
+describe("the LiteLLM block links to the LiteLLM user page (T-LP10)", () => {
+  it("T-LP10: with canOpenLiteLLM the linked user's id is a link to the LiteLLM user page", () => {
+    show(detailOf(), { canOpenLiteLLM: true });
+    expect(
+      within(region("LiteLLM")).getByRole("link", { name: "lu-alice" }),
+    ).toHaveAttribute("href", "/dashboard/manage/litellm/users/lu-alice");
+  });
+
+  it("T-LP10 / LT3: the id is percent-encoded in the href", () => {
+    show(
+      detailOf({ litellm: { state: "linked", litellmUserId: "lu/odd id" } }),
+      { canOpenLiteLLM: true },
+    );
+    expect(
+      within(region("LiteLLM")).getByRole("link", { name: "lu/odd id" }),
+    ).toHaveAttribute("href", "/dashboard/manage/litellm/users/lu%2Fodd%20id");
+  });
+
+  it.each([
+    ["false", { canOpenLiteLLM: false }],
+    ["not given (fail closed)", {}],
+  ])(
+    "T-LP10: canOpenLiteLLM %s: the id is text and the block has no link",
+    (_name, over) => {
+      show(detailOf(), over);
+      const block = region("LiteLLM");
+      expect(within(block).getByText("lu-alice")).toBeVisible();
+      expect(within(block).queryAllByRole("link")).toHaveLength(0);
+    },
+  );
+
+  it("T-LP10: a person with no LiteLLM user has no link, even with canOpenLiteLLM", () => {
+    show(detailOf({ litellm: { state: "none" } }), { canOpenLiteLLM: true });
+    expect(within(region("LiteLLM")).queryAllByRole("link")).toHaveLength(0);
   });
 });

@@ -189,10 +189,12 @@ test.describe("Management -> Organisation and Users", () => {
       page.getByRole("heading", { level: 1, name: "LiteLLM" }),
     ).toBeVisible();
     await page.getByRole("searchbox", { name: /search users/i }).fill("ada");
-    await page.getByRole("button", { name: "ada@example.test" }).click();
-    await expect(
-      page.getByRole("region", { name: /user usage/i }),
-    ).toContainText("$77.10");
+    // LP2 (T-LP9): the user cell is a link to the user page, not an in-place detail.
+    await page.getByRole("link", { name: "ada@example.test" }).click();
+    await expect(page).toHaveURL(/\/dashboard\/manage\/litellm\/users\/u-ada/);
+    await expect(page.getByRole("region", { name: "Summary" })).toContainText(
+      "$77.10",
+    );
   });
 
   test("the LiteLLM users page has no serious or critical axe violations", async ({

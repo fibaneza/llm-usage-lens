@@ -134,6 +134,27 @@ describe("TeamResetCount and OrgResetCell (MG-D10: per team)", () => {
     await waitFor(() =>
       expect(screen.getByTestId("has")).toHaveTextContent("2 resets, $80.25"),
     );
-    expect(screen.getByTestId("none")).toHaveTextContent("-");
+    expect(screen.getByTestId("none")).toHaveTextContent("\u2014");
+  });
+
+  // Design System - LiteLLM teams tab, round 3 (unit LP1 review), Budget resets
+  // column: "a linked team shows its app team's count ... an unlinked team
+  // '\u2014'". A linked team the caller sees no counts row for is absent, never
+  // zero: an em dash, never a hyphen and never "No budget resets".
+  it("Budget resets column: a linked team with no counts row shows exactly an em dash, not a hyphen, not zero", async () => {
+    const urls = stub(() => counts());
+    renderWithProviders(
+      <p data-testid="cell">
+        <OrgResetCell teamId="linked-team-without-row" range={RANGE} />
+      </p>,
+    );
+    await waitFor(() => expect(urls.length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.getByTestId("cell").textContent).toBe("\u2014"),
+    );
+    expect(screen.getByTestId("cell")).not.toHaveTextContent("-");
+    expect(screen.getByTestId("cell")).not.toHaveTextContent(
+      /no budget resets/i,
+    );
   });
 });

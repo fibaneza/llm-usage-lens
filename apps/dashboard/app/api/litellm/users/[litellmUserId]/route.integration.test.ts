@@ -6,7 +6,9 @@ import { dailyRow } from "@/test/fakes/fake-litellm-combined";
 import {
   DATES,
   GHOST_USER_ID,
+  LTEAM,
   LUSER,
+  UNLINKED_LTEAM,
   enterProd,
   call,
   expectError,
@@ -204,8 +206,10 @@ describe("GET /api/litellm/users/[litellmUserId]", () => {
     expect(body.data.enabledOperations).toContain("getUser");
   });
 
-  it("returns no keys, no key values and no LiteLLM team ids (LT1, LT9; reduction)", async () => {
-    signInAs("admin");
+  // LT1, LT9: a Lead's answer carries no key and no LiteLLM team id; the three
+  // global roles get teams[] (LiteLLM spec - API routes, LP2), tested below.
+  it("returns no keys, no key values and no LiteLLM team ids to a Lead (LT1, LT9; reduction)", async () => {
+    signInAs("teamAdminA");
     const { body, text } = await get("a1@company.com");
     expectNoSentinels(body);
     expect(body.data).not.toHaveProperty("keys");
@@ -595,5 +599,282 @@ describe("GET /api/litellm/users/[litellmUserId] - a user whose /user/info omits
     const { res, body } = await get(ID);
     expect(res.status).toBe(200);
     expect(body.data).not.toHaveProperty("spend");
+  });
+});
+
+// Source: Design System - LiteLLM users tab, round 3 / LiteLLM user page, T-LP7
+// (the detail read returns teams[] and appUser to the three global roles and
+// neither to a lead; the role table and LD23 are unchanged); LiteLLM spec -
+// API routes row GET /api/litellm/users/[litellmUserId] (2026-11-25), LD23
+// (links are not cost), LD37, LT32; Rule 60.10 (link data is read per request).
+describe("GET /api/litellm/users/[litellmUserId] - teams[] and appUser (T-LP7, LD23)", () => {
+  const GLOBAL = ["admin", "orgAdmin", "auditor"] as const;
+  const A_APP_TEAM = { teamId: "team-a", name: "A" };
+  // a1 is in a linked LiteLLM team and in one no app team links (T-LP7).
+  const useA1Teams = () =>
+    installFake(state, {
+      userInfoBodies: {
+        "a1@company.com": {
+          user_id: "a1@company.com",
+          user_info: {
+            user_id: "a1@company.com",
+            user_email: "a1@company.com",
+            spend: 7.5,
+            max_budget: 20,
+          },
+          keys: [],
+          teams: [
+            { team_id: LTEAM["team-a"], team_alias: "Alpha" },
+            { team_id: UNLINKED_LTEAM, team_alias: "Hidden" },
+          ],
+        },
+      },
+    });
+
+  it.each(GLOBAL)(
+    "%s gets teams[] with the linked app team or null, and appUser with their app team (T-LP7)",
+    async (who) => {
+      useA1Teams();
+      signInAs(who);
+      const { res, body } = await get("a1@company.com");
+      expect(res.status).toBe(200);
+      expect(body.data.teams).toEqual(
+        expect.arrayContaining([
+          {
+            litellmTeamId: LTEAM["team-a"],
+            alias: "Alpha",
+            appTeam: A_APP_TEAM,
+          },
+          { litellmTeamId: UNLINKED_LTEAM, alias: "Hidden", appTeam: null },
+        ]),
+      );
+      expect(body.data.teams).toHaveLength(2);
+      expect(body.data.appUser).toEqual({
+        oid: CALLERS.memberA.oid,
+        name: expect.any(String),
+        email: CALLERS.memberA.email,
+        appTeam: A_APP_TEAM,
+      });
+      expect(body.data.spend).toBe(7.5);
+    },
+  );
+
+  it.each(GLOBAL)(
+    "%s: a user in no LiteLLM team and linked to no person gets teams [] and appUser null (T-LP7, T-LP8)",
+    async (who) => {
+      signInAs(who);
+      const { body } = await get("lone@company.com");
+      expect(body.data.teams).toEqual([]);
+      expect(body.data.appUser).toBeNull();
+    },
+  );
+
+  it("a team row with no alias answers alias null (T-LP7; openapi allows it)", async () => {
+    installFake(state, {
+      userInfoBodies: {
+        "lone@company.com": {
+          user_id: "lone@company.com",
+          user_info: { user_id: "lone@company.com", spend: 1 },
+          keys: [],
+          teams: [{ team_id: LTEAM["team-b"] }],
+        },
+      },
+    });
+    signInAs("admin");
+    const { body } = await get("lone@company.com");
+    expect(body.data.teams).toEqual([
+      {
+        litellmTeamId: LTEAM["team-b"],
+        alias: null,
+        appTeam: { teamId: "team-b", name: "B" },
+      },
+    ]);
+  });
+
+  it("a linked person with no app team answers appUser with appTeam null (T-LP7)", async () => {
+    ok(
+      await putIdentityLink(
+        {
+          oid: CALLERS.orgAdmin.oid,
+          usageIdentities: [CALLERS.orgAdmin.email],
+          aliases: [],
+          litellmUserId: "lone@company.com",
+          version: null,
+        },
+        ctxAt(undefined, "req-ident-noteam"),
+      ),
+    );
+    signInAs("auditor");
+    const { body } = await get("lone@company.com");
+    expect(body.data.appUser).toEqual({
+      oid: CALLERS.orgAdmin.oid,
+      name: expect.any(String),
+      email: CALLERS.orgAdmin.email,
+      appTeam: null,
+    });
+  });
+
+  it.each(GLOBAL)(
+    "%s under the Organisation cap still gets teams[] and appUser, with no spend, budget or daily and no daily call (LD23: links are not cost)",
+    async (who) => {
+      useA1Teams();
+      await enterProd();
+      signInAs(who);
+      const { res, body } = await get("a1@company.com");
+      expect(res.status).toBe(200);
+      expect(Object.keys(body.data).sort()).toEqual([
+        "appUser",
+        "email",
+        "enabledOperations",
+        "teams",
+        "userId",
+      ]);
+      expect(body.data.teams).toHaveLength(2);
+      expect(body.data.appUser).toMatchObject({
+        oid: CALLERS.memberA.oid,
+        appTeam: A_APP_TEAM,
+      });
+      expect(dailyCalls()).toHaveLength(0);
+    },
+  );
+
+  // LT1, LT9, T-LP7: the widened answer of the three global readers carries no
+  // key, no key value and no extra team field; teams[] rows have exactly three
+  // keys. The per-test body puts the sentinels in info.keys and info.teams.
+  describe.each([
+    ["the normal branch", false],
+    ["the Organisation-cap branch (LD23)", true],
+  ] as const)("%s", (_branch, capped) => {
+    it.each(GLOBAL)(
+      "%s: no keys, no key value, no sentinel, teams[] rows are exactly {litellmTeamId, alias, appTeam} (LT1, LT9, T-LP7)",
+      async (who) => {
+        installFake(state, {
+          userInfoBodies: {
+            "a1@company.com": {
+              user_id: "a1@company.com",
+              user_info: {
+                user_id: "a1@company.com",
+                user_email: "a1@company.com",
+                spend: 7.5,
+                max_budget: 20,
+                sso_user_id: "SECRET-HASH-SENTINEL",
+              },
+              keys: [
+                {
+                  token: "a".repeat(64),
+                  key: "sk-KEY-VALUE-SENTINEL",
+                  key_name: "sk-...SENTINEL",
+                  key_alias: "alias-a",
+                },
+              ],
+              teams: [
+                {
+                  team_id: LTEAM["team-a"],
+                  team_alias: "Alpha",
+                  metadata: { note: "USERTEAM-SENTINEL" },
+                  members_with_roles: [
+                    { user_id: "MEMBERSHIP-SENTINEL", role: "admin" },
+                  ],
+                },
+                {
+                  team_id: UNLINKED_LTEAM,
+                  team_alias: "Hidden",
+                  metadata: { note: "USERTEAM-SENTINEL" },
+                },
+              ],
+            },
+          },
+        });
+        if (capped) await enterProd();
+        signInAs(who);
+        const { res, body, text } = await get("a1@company.com");
+        expect(res.status).toBe(200);
+        expectNoSentinels(body);
+        expect(body.data).not.toHaveProperty("keys");
+        expect(text).not.toContain("sk-");
+        expect(body.data.teams).toHaveLength(2);
+        for (const row of body.data.teams) {
+          expect(Object.keys(row).sort()).toEqual([
+            "alias",
+            "appTeam",
+            "litellmTeamId",
+          ]);
+        }
+      },
+    );
+  });
+
+  it("reads the link per request: a link change between two requests changes the second appUser (Rule 60.10)", async () => {
+    signInAs("admin");
+    expect((await get("a1@company.com")).body.data.appUser.oid).toBe(
+      CALLERS.memberA.oid,
+    );
+    const current = await getIdentityLink(CALLERS.memberA.oid);
+    ok(
+      await putIdentityLink(
+        {
+          oid: CALLERS.memberA.oid,
+          usageIdentities: [CALLERS.memberA.email],
+          aliases: [],
+          litellmUserId: undefined,
+          version: current?.version ?? null,
+        },
+        ctxAt(undefined, "req-ident-unlink-lp2"),
+      ),
+    );
+    expect((await get("a1@company.com")).body.data.appUser).toBeNull();
+  });
+
+  // Guard: today's lead answer, key for key (LT1, LT9, LT32; LD23).
+  describe.each(["teamAdminA", "deptAdminEng"] as const)(
+    "a Lead (%s) in scope",
+    (who) => {
+      it("answers exactly today's key set and values: no teams, no appUser, no LiteLLM team id (T-LP7; LT1)", async () => {
+        signInAs(who);
+        const { res, body, text } = await get("ab@company.com");
+        expect(res.status).toBe(200);
+        expect(Object.keys(body.data).sort()).toEqual([
+          "daily",
+          "email",
+          "enabledOperations",
+          "maxBudget",
+          "spend",
+          "userId",
+        ]);
+        expect(body.data).toMatchObject({
+          userId: "ab@company.com",
+          email: "ab@company.com",
+          spend: 6,
+          maxBudget: 10,
+        });
+        expect(text).not.toContain('"teams"');
+        expect(text).not.toContain("appUser");
+        for (const id of [...Object.values(LTEAM), UNLINKED_LTEAM]) {
+          expect(text).not.toContain(id);
+        }
+      });
+
+      it("under the Organisation cap a Lead's answer is still identity only, no teams, no appUser (LD23, T-LP7)", async () => {
+        await enterProd();
+        signInAs(who);
+        const { body } = await get("ab@company.com");
+        expect(Object.keys(body.data).sort()).toEqual([
+          "email",
+          "enabledOperations",
+          "userId",
+        ]);
+      });
+    },
+  );
+
+  it("a Lead reads no identity link for the answer (T-LP7: neither key is computed for a Lead)", async () => {
+    signInAs("teamAdminA");
+    const watch = watchDynamo();
+    try {
+      await get("a1@company.com");
+      expect(watch.reads()).not.toContain("IDENTITY#");
+    } finally {
+      watch.stop();
+    }
   });
 });

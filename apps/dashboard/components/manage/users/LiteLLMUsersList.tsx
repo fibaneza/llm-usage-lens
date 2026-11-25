@@ -9,6 +9,7 @@ import {
   type UsersListRow,
 } from "@llm-usage-lens/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useQueryStates } from "nuqs";
 import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
@@ -19,7 +20,7 @@ import {
   useLiteLLMQueryState,
   useUrlRange,
 } from "@/components/litellm/use-litellm-query";
-import { UserDetail, budget, spend } from "@/components/litellm/UserSearch";
+import { budget, spend } from "@/components/litellm/proxy-user/user-figures";
 import { LiteLLMReportedBadge } from "@/components/litellm/LiteLLMReportedBadge";
 import { LiteLLMLinkCell } from "@/components/manage/users/LiteLLMLinkCell";
 import type { LinkState } from "@/components/manage/users/LiteLLMLinkCell";
@@ -29,9 +30,8 @@ import {
   readSort,
 } from "@/components/tables/SortableHeader";
 import { NativeSelect } from "@/components/settings/access/form-controls";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/table/SearchInput";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -52,7 +52,7 @@ import { ApiRequestError, fetchApi } from "@/lib/query/fetch-api";
 // no paging; Members of one team picks a LiteLLM team (linked: the app team's
 // members; unlinked: the LiteLLM team's own members). "Not in LiteLLM" is
 // never a $0 row, and per-user cost is absent under the Organisation cap (LD23).
-// The link state is shown in the selected user's detail, not in a column.
+// The user cell links to the LiteLLM user page (LP2, T-LP9); no detail opens here.
 // The link controls render when the list response says mayLink, never on the caller's own
 // row; the routes decide every write (Access Control - LiteLLM user links).
 const MIN_TERM = 2;
@@ -207,64 +207,26 @@ function nameOf(row: ViewRow): string {
   );
 }
 
-function RowName({
-  row,
-  onSelect,
-}: {
-  row: ViewRow;
-  onSelect: (row: ViewRow) => void;
-}) {
+function RowName({ row }: { row: ViewRow }) {
   const text = nameOf(row);
   return row.litellmUser ? (
-    <button
-      type="button"
+    <Link
+      href={`/dashboard/manage/litellm/users/${encodeURIComponent(row.litellmUser.userId)}`}
       className="focus-visible:ring-ring rounded-sm text-left font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
-      onClick={() => onSelect(row)}
     >
       {text}
-    </button>
+    </Link>
   ) : (
     <span className="font-medium">{text}</span>
-  );
-}
-
-// The linked account and its state, in the selected user's detail (D-LF4);
-// text with a badge, never colour alone.
-function AccountInfo({ row }: { row: ViewRow }) {
-  const person = row.appUser
-    ? (row.appUser.displayName ?? row.appUser.email ?? row.appUser.oid)
-    : null;
-  const label =
-    row.linkState === "linked"
-      ? "Linked"
-      : row.linkState === "match"
-        ? "Match found"
-        : row.linkState === "none"
-          ? "No LiteLLM user with that email"
-          : "Not linked to an app user";
-  return (
-    <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-      <dt className="text-muted-foreground">Linked account</dt>
-      <dd className="flex flex-wrap items-center gap-2">
-        {person ? <span className="font-medium">{person}</span> : null}
-        <Badge variant={row.linkState === "linked" ? "secondary" : "outline"}>
-          {label}
-        </Badge>
-      </dd>
-    </dl>
   );
 }
 
 function RowsView({
   state,
   ownOid,
-  selected,
-  onSelect,
 }: {
   state: RowsState;
   ownOid: string | null;
-  selected: string | null;
-  onSelect: (row: ViewRow) => void;
 }) {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
@@ -337,12 +299,9 @@ function RowsView({
             return (
               <li
                 key={row.key}
-                data-state={
-                  row.litellmUser?.userId === selected ? "selected" : undefined
-                }
-                className="bg-card text-card-foreground rounded-card data-[state=selected]:border-ring space-y-3 border p-4"
+                className="bg-card text-card-foreground rounded-card space-y-3 border p-4"
               >
-                <RowName row={row} onSelect={onSelect} />
+                <RowName row={row} />
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <div className="col-span-2 min-w-0">
                     <dt className="text-muted-foreground text-xs">Email</dt>
@@ -403,16 +362,9 @@ function RowsView({
             {rows.map((row) => {
               const c = cells(row);
               return (
-                <TableRow
-                  key={row.key}
-                  data-state={
-                    row.litellmUser?.userId === selected
-                      ? "selected"
-                      : undefined
-                  }
-                >
+                <TableRow key={row.key}>
                   <TableCell>
-                    <RowName row={row} onSelect={onSelect} />
+                    <RowName row={row} />
                   </TableCell>
                   <TableCell className="break-all">{c.email}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
@@ -485,8 +437,6 @@ type ViewProps = {
   term: string;
   page: number;
   onPage: (page: number) => void;
-  selected: string | null;
-  onSelect: (row: ViewRow) => void;
 };
 
 // All users (no search) or one linked team's members: the list shape.
@@ -496,8 +446,6 @@ function ListView({
   term,
   page,
   onPage,
-  selected,
-  onSelect,
 }: ViewProps & { team: string | null }) {
   const params = new URLSearchParams({
     page: String(page),
@@ -534,15 +482,13 @@ function ListView({
         pager: { page, hasMore, onPage },
       }}
       ownOid={ownOid}
-      selected={selected}
-      onSelect={onSelect}
     />
   );
 }
 
 // All users with a search term: the search shape, with no link data and no
 // paging (D-LF1).
-function SearchView({ ownOid, term, selected, onSelect }: ViewProps) {
+function SearchView({ ownOid, term }: ViewProps) {
   const params = new URLSearchParams({ q: term, page: "1" });
   params.set("pageSize", String(PAGE_SIZE));
   const sort = useUsersSort();
@@ -575,8 +521,6 @@ function SearchView({ ownOid, term, selected, onSelect }: ViewProps) {
         pager: null,
       }}
       ownOid={ownOid}
-      selected={selected}
-      onSelect={onSelect}
     />
   );
 }
@@ -586,8 +530,6 @@ function ProxyTeamView({
   litellmTeamId,
   ownOid,
   term,
-  selected,
-  onSelect,
   canReset,
 }: ViewProps & { litellmTeamId: string; canReset: boolean }) {
   const query = useLiteLLMQueryState(
@@ -634,8 +576,6 @@ function ProxyTeamView({
         pager: null,
       }}
       ownOid={ownOid}
-      selected={selected}
-      onSelect={onSelect}
     />
   );
 }
@@ -698,21 +638,13 @@ function TeamMode({
 
 export function LiteLLMUsersList({ canReset = false }: { canReset?: boolean }) {
   const modeName = useId();
-  const searchId = useId();
   const [mode, setMode] = useState<Mode>("all");
   const [input, setInput] = useState("");
-  const [term, setTerm] = useState("");
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<ViewRow | null>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const trimmed = input.trim();
-      setTerm(trimmed.length >= MIN_TERM ? trimmed : "");
-      setPage(1);
-    }, DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [input]);
+  const trimmed = input.trim();
+  // The search starts at two characters (LiteLLM spec - searchUsers); a shorter
+  // term shows the hint and sends nothing (Design System - T-LP6).
+  const term = trimmed.length >= MIN_TERM ? trimmed : "";
 
   const sorted = useUsersSort();
   const sortKey = `${sorted?.sort ?? ""}|${sorted?.dir ?? ""}`;
@@ -729,10 +661,7 @@ export function LiteLLMUsersList({ canReset = false }: { canReset?: boolean }) {
     term,
     page,
     onPage: setPage,
-    selected: selected?.litellmUser?.userId ?? null,
-    onSelect: setSelected,
   };
-  const selectedId = selected?.litellmUser?.userId ?? null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -761,18 +690,23 @@ export function LiteLLMUsersList({ canReset = false }: { canReset?: boolean }) {
             ))}
           </div>
         </fieldset>
-        <div className="flex max-w-[72ch] min-w-48 flex-1 flex-col gap-1">
-          <label htmlFor={searchId} className="text-sm font-medium">
-            Search users
-          </label>
-          <Input
-            id={searchId}
-            type="search"
-            maxLength={MAX_TERM}
+        <div className="flex min-w-48 flex-col gap-1">
+          <SearchInput
+            label="Search users"
             placeholder="Email or user id"
+            maxLength={MAX_TERM}
+            delayMs={DEBOUNCE_MS}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(value) => {
+              setInput(value);
+              setPage(1);
+            }}
           />
+          {trimmed.length === 1 ? (
+            <p className="text-muted-foreground text-sm">
+              Type at least 2 characters
+            </p>
+          ) : null}
         </div>
       </div>
       {mode === "team" ? (
@@ -786,14 +720,6 @@ export function LiteLLMUsersList({ canReset = false }: { canReset?: boolean }) {
       ) : (
         <ListView {...view} team={null} />
       )}
-      {selectedId !== null && selected ? (
-        <UserDetail
-          userId={selectedId}
-          account={
-            selected.linkKnown ? <AccountInfo row={selected} /> : undefined
-          }
-        />
-      ) : null}
     </div>
   );
 }

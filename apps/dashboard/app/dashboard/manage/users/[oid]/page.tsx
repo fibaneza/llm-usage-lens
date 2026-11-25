@@ -37,6 +37,7 @@ export default async function UserDetailPage({
     <UserDetailContent
       detail={detail}
       canOpenPasswordUsers={accessCapabilities(viewer).passwordUsers !== "none"}
+      canOpenLiteLLM={access.litellm}
       authMethod={viewer.authMethod}
       stepUp={{
         entra: stepUpWithEntra,

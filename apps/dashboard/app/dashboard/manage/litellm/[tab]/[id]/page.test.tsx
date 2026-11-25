@@ -52,6 +52,24 @@ const exists = vi.fn();
 vi.mock("@/lib/litellm/proxy-team-exists", () => ({
   proxyTeamExists: (id: string) => exists(id),
 }));
+const userExists = vi.fn();
+vi.mock("@/lib/litellm/proxy-user-exists", () => ({
+  proxyUserExists: (id: string) => userExists(id),
+}));
+vi.mock("@/components/litellm/proxy-user/ProxyUserPageContent", () => ({
+  ProxyUserPageContent: (props: {
+    litellmUserId: string;
+    canWrite: boolean;
+    ownOid: string | null;
+  }) => (
+    <div
+      data-testid="user-page"
+      data-id={props.litellmUserId}
+      data-write={String(props.canWrite)}
+      data-own={props.ownOid ?? ""}
+    />
+  ),
+}));
 vi.mock("@/components/litellm/proxy-team/ProxyTeamPageContent", () => ({
   ProxyTeamPageContent: (props: {
     litellmTeamId: string;
@@ -81,6 +99,7 @@ function as(roles: string[]) {
   auth.mockResolvedValue({ user: { oid: "oid-1", roles } });
   loadViewer.mockResolvedValue({ roles, authMethod: "entra", adminScopes: [] });
   exists.mockResolvedValue(true);
+  userExists.mockResolvedValue(true);
 }
 const open = (id: string, tab = "teams") =>
   LiteLLMTeamPage({ params: Promise.resolve({ tab, id }) });
@@ -123,8 +142,8 @@ describe("LiteLLM team page (/dashboard/manage/litellm/teams/[id]; T-LP4)", () =
     expect(exists).not.toHaveBeenCalled();
   });
 
-  it.each(["organisation", "users", "nope", "Teams", ""])(
-    "the tab must be 'teams': %j is the missing page, even for an admin",
+  it.each(["organisation", "nope", "Teams", "Users", ""])(
+    "the tab must be 'teams' or 'users': %j is the missing page, even for an admin",
     async (tab) => {
       as(["internal-admin"]);
       await expect(open("ll-team-1", tab)).rejects.toThrow("NEXT_NOT_FOUND");
@@ -208,5 +227,116 @@ describe("LiteLLM team page (/dashboard/manage/litellm/teams/[id]; T-LP4)", () =
     const id = "a".repeat(128);
     render(await open(id));
     expect(screen.getByTestId("team-page")).toHaveAttribute("data-id", id);
+  });
+});
+
+// Sources: Design System - LiteLLM user page (unit LP2, user, 2026-11-25;
+// D-R3-8, D-R3-9), T-LP8: "/dashboard/manage/litellm/users/[litellmUserId],
+// for the same three roles; an unknown id and a lead get the missing page";
+// Access Control MI-D2 / Rule 10.3 / 60.10 (hidden means absent, authorized
+// per request, the existence check never reached by an out-of-scope caller);
+// LiteLLM spec - API routes (path id is PathLiteLLMId); RS2 / LD24 (Reset and
+// Link / Unlink: internal-admin and internal-org-admin yes, the auditor no).
+//
+// Contract (extend app/dashboard/manage/litellm/[tab]/[id]/page.tsx): tab
+// "users" runs the same gates as "teams" (litellm flag, decoded
+// PathLiteLLMId, viewer), then proxyUserExists(litellmUserId) (new server-only
+// function in lib/litellm/proxy-user-exists.ts, the existing getUser read, the
+// same outcomes as proxyTeamExists: true where no call may be made or on an
+// outage, false only on a LiteLLM 404), then renders <ProxyUserPageContent
+// litellmUserId canWrite ownOid /> with canWrite = litellmPanelCapabilities(
+// roles).editTeamLinks and ownOid = session.user.oid. The teams branch is
+// unchanged; "users" never asks proxyTeamExists, "teams" never asks
+// proxyUserExists.
+describe("LiteLLM user page (/dashboard/manage/litellm/users/[id]; T-LP8)", () => {
+  const openUser = (id: string) => open(id, "users");
+
+  it.each([
+    ["internal-admin", "true"],
+    ["internal-org-admin", "true"],
+    ["internal-auditor", "false"],
+  ])("%s opens the page; canWrite = %s", async (role, canWrite) => {
+    as([role]);
+    render(await openUser("ll-ada"));
+    const page = screen.getByTestId("user-page");
+    expect(page).toHaveAttribute("data-id", "ll-ada");
+    expect(page).toHaveAttribute("data-write", canWrite);
+    expect(page).toHaveAttribute("data-own", "oid-1");
+    expect(exists).not.toHaveBeenCalled();
+  });
+
+  it("T-LP8: a lead or a user (no litellm flag) gets the missing page, and no user lookup is made", async () => {
+    setManageAccess({ litellm: false });
+    as(["internal-viewer"]);
+    await expect(openUser("ll-ada")).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(userExists).not.toHaveBeenCalled();
+  });
+
+  it("an unauthenticated caller gets the missing page, and no user lookup is made", async () => {
+    setManageAccess({ litellm: false });
+    auth.mockResolvedValue(null);
+    loadViewer.mockResolvedValue(undefined);
+    await expect(openUser("ll-ada")).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(userExists).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])(
+    "T-LP8 / MI-D2: an out-of-scope caller gets notFound() for an existing (%s) and a missing id alike, with no existence check",
+    async (found) => {
+      setManageAccess({ litellm: false });
+      as(["internal-viewer"]);
+      userExists.mockResolvedValue(found);
+      await expect(openUser("ll-ada")).rejects.toThrow("NEXT_NOT_FOUND");
+      expect(userExists).not.toHaveBeenCalled();
+    },
+  );
+
+  it("T-LP8: an unknown user id is the missing page", async () => {
+    as(["internal-admin"]);
+    userExists.mockResolvedValue(false);
+    await expect(openUser("ll-unknown")).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(userExists).toHaveBeenCalledWith("ll-unknown");
+  });
+
+  it("T-LP8 / LD19: the page still shows when the existence check reports an outage (true)", async () => {
+    as(["internal-auditor"]);
+    userExists.mockResolvedValue(true);
+    render(await openUser("ll-ada"));
+    expect(screen.getByTestId("user-page")).toBeInTheDocument();
+  });
+
+  it("decodes the id once before the lookup and the content (an email-shaped id with @ and +)", async () => {
+    as(["internal-admin"]);
+    render(await openUser("ada%2Bx%40example.test"));
+    expect(userExists).toHaveBeenCalledWith("ada+x@example.test");
+    expect(screen.getByTestId("user-page")).toHaveAttribute(
+      "data-id",
+      "ada+x@example.test",
+    );
+  });
+
+  it.each([
+    ["empty", ""],
+    ["a control character", "ll%01x"],
+    ["a malformed escape", "%E0%A4%A"],
+    ["a path traversal", "..%2F..%2Fadmin"],
+    ["a slash", "a%2Fb"],
+    ["a space", "a%20b"],
+    ["a doubly-encoded id", "a%2520b"],
+    ["129 characters", "a".repeat(129)],
+  ])(
+    "an invalid id (%s) is the missing page, with no lookup",
+    async (_n, id) => {
+      as(["internal-admin"]);
+      await expect(openUser(id)).rejects.toThrow("NEXT_NOT_FOUND");
+      expect(userExists).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts a 128-character id", async () => {
+    as(["internal-admin"]);
+    const id = "a".repeat(128);
+    render(await openUser(id));
+    expect(screen.getByTestId("user-page")).toHaveAttribute("data-id", id);
   });
 });

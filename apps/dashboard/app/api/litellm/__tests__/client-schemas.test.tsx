@@ -36,6 +36,7 @@ import { useCombinedOrganisation } from "@/components/litellm/combined/use-combi
 import { OrganisationSection } from "@/components/litellm/OrganisationSection";
 import { ResetMemberSpendDialog } from "@/components/litellm/ResetMemberSpendDialog";
 import { useProxyTeam } from "@/components/litellm/proxy-team/use-proxy-team";
+import { useProxyUser } from "@/components/litellm/proxy-user/use-proxy-user";
 import { MembersPanel } from "@/components/litellm/team/MembersPanel";
 import { ModelsPanel } from "@/components/litellm/team/ModelsPanel";
 import { useMeQuery } from "@/components/litellm/use-me-query";
@@ -57,7 +58,6 @@ import { TeamsLiteLLMPanel } from "@/components/teams/TeamsLiteLLMPanel";
 import { TeamSumOfMembers } from "@/components/teams/TeamSumOfMembers";
 import { UsersLiteLLMPanel } from "@/components/users/UsersLiteLLMPanel";
 import { IdParamSchema } from "@/lib/api/id-param";
-import { UserSearch } from "@/components/litellm/UserSearch";
 import { PendingLinksList } from "@/components/manage/users/PendingLinksList";
 import { LiteLLMUsersList } from "@/components/manage/users/LiteLLMUsersList";
 import {
@@ -214,15 +214,14 @@ afterEach(() => {
 });
 
 describe("LiteLLM clients parse each route's answer with the schema that route exports (D-LF1, T-LF2)", () => {
-  it("LiteLLMUsersList: the list, the search and the detail", async () => {
+  // LP2 (T-LP9): the in-place detail is removed; the detail read is made by the
+  // user page's hook (use-proxy-user.ts, in CALLERS below).
+  it("LiteLLMUsersList: the list and the search", async () => {
     stubFetch();
     const user = userEvent.setup();
     renderWithProviders(<LiteLLMUsersList />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Ada Lovelace" }),
-    );
-    await screen.findByRole("heading", { name: "User usage" });
+    await screen.findByText("Ada Lovelace");
     await user.type(
       screen.getByRole("searchbox", { name: /search users/i }),
       "ad",
@@ -243,9 +242,9 @@ describe("LiteLLM clients parse each route's answer with the schema that route e
     expect(schemaOf((u) => userList(u) && u.searchParams.has("q"))).toEqual(
       new Set([LiteLLMUserSearchResponseSchema]),
     );
-    expect(schemaOf((u) => u.pathname === "/api/litellm/users/ll-ada")).toEqual(
-      new Set([LiteLLMUserDetailResponseSchema]),
-    );
+    expect(
+      asked((u) => /^\/api\/litellm\/users\/[^/]+$/.test(u.pathname)),
+    ).toHaveLength(0);
   });
 
   it("LiteLLMUsersList team picker: the org team list, ?team= and the proxy-team members", async () => {
@@ -276,34 +275,6 @@ describe("LiteLLM clients parse each route's answer with the schema that route e
     expect(
       schemaOf((u) => u.pathname.startsWith("/api/litellm/proxy-teams/")),
     ).toEqual(new Set([LiteLLMProxyTeamMembersResponseSchema]));
-  });
-
-  it("UserSearch: the search and the detail", async () => {
-    stubFetch();
-    const user = userEvent.setup();
-    renderWithProviders(<UserSearch />);
-    await user.type(
-      screen.getByRole("searchbox", { name: /search users/i }),
-      "ad",
-    );
-    await user.click(
-      await screen.findByRole(
-        "button",
-        { name: "ada@example.com" },
-        { timeout: 3000 },
-      ),
-    );
-    await screen.findByRole("heading", { name: "User usage" });
-    expect(new Set(asked(userList).map((s) => s.schema))).toEqual(
-      new Set([LiteLLMUserSearchResponseSchema]),
-    );
-    expect(
-      new Set(
-        asked((u) => u.pathname === "/api/litellm/users/ll-ada").map(
-          (s) => s.schema,
-        ),
-      ),
-    ).toEqual(new Set([LiteLLMUserDetailResponseSchema]));
   });
 
   // Rule 10.4 / D-LF1: GET /api/identities/pending-links is parsed with the
@@ -661,6 +632,12 @@ const CALLERS: Caller[] = [
     ui: <Probe use={() => useProxyTeam("ll-team-shared")} />,
     expects: [at(/proxy-teams\/ll-team-shared$/)],
   },
+  // LP2 (T-LP8, T-FX2): the user page's one read carries the URL range.
+  {
+    file: "components/litellm/proxy-user/use-proxy-user.ts",
+    ui: <Probe use={() => useProxyUser("ll-ada")} />,
+    expects: [at(/users\/ll-ada$/, "dateFrom=2026-10-01")],
+  },
   {
     file: "components/litellm/use-me-query.ts",
     ui: <Probe use={useMeQuery} />,
@@ -675,24 +652,6 @@ const CALLERS: Caller[] = [
       </>
     ),
     expects: [at(/teams\/t1$/), at(/teams\/t1$/, "include=memberSum")],
-  },
-  {
-    file: "components/litellm/UserSearch.tsx",
-    ui: <UserSearch />,
-    expects: [at(/\/users$/, "q="), at(/users\/ll-ada$/)],
-    drive: async (user) => {
-      await user.type(
-        screen.getByRole("searchbox", { name: /search users/i }),
-        "ad",
-      );
-      await user.click(
-        await screen.findByRole(
-          "button",
-          { name: "ada@example.com" },
-          { timeout: 3000 },
-        ),
-      );
-    },
   },
   {
     file: "components/manage/TeamSpendPanel.tsx",
@@ -738,14 +697,10 @@ const CALLERS: Caller[] = [
       at(/\/users$/),
       at(/\/users$/, "q="),
       at(/\/org$/),
-      at(/users\/ll-ada$/),
       at(/proxy-teams\/ll-team-shared\/members$/),
     ],
     drive: async (user) => {
-      await user.click(
-        await screen.findByRole("button", { name: "Ada Lovelace" }),
-      );
-      await screen.findByRole("heading", { name: "User usage" });
+      await screen.findByText("Ada Lovelace");
       await user.type(
         screen.getByRole("searchbox", { name: /search users/i }),
         "ad",

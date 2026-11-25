@@ -50,7 +50,7 @@ export function TeamResetCount({
   );
 }
 
-// Organisation tab cell: the team's count, "-" when the caller sees no row.
+// LiteLLM teams table cell: the team's count, an em dash when the caller sees no row.
 export function OrgResetCell({
   teamId,
   range,
@@ -60,5 +60,5 @@ export function OrgResetCell({
 }) {
   const { data } = useBudgetResetCounts(range);
   const team = data?.teams.find((t) => t.teamId === teamId);
-  return <>{team ? resetCountText(team) : "-"}</>;
+  return <>{team ? resetCountText(team) : "\u2014"}</>;
 }

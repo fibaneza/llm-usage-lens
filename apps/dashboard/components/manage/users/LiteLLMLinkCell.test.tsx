@@ -416,3 +416,33 @@ describe("LiteLLMLinkCell round 3 (T-UP1, T-UP2)", () => {
     expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 });
+
+// Design System - Accessibility (a field's label and hint) and WCAG 3.3.2
+// (Labels or Instructions): the LiteLLM user search in the link dialog names
+// what it accepts as text, not only as a placeholder, and turns browser
+// autofill off (a LiteLLM user id is not the caller's own data).
+describe("LiteLLMLinkCell link dialog search (WCAG 3.3.2)", () => {
+  it("the search box has the hint 'Email or user id.' as visible text or via aria-describedby, and autoComplete off", async () => {
+    show({ state: "none" });
+    await userEvent.setup().click(
+      screen.getByRole("button", {
+        name: "Link to an existing LiteLLM user",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    const box = within(dialog).getByRole("searchbox", {
+      name: "Search LiteLLM users",
+    });
+    expect(box).toHaveAttribute("autocomplete", "off");
+    const ids = (box.getAttribute("aria-describedby") ?? "")
+      .split(/\s+/)
+      .filter(Boolean);
+    const described = ids
+      .map((id) => dialog.ownerDocument.getElementById(id)?.textContent ?? "")
+      .join(" ");
+    const hint = "Email or user id.";
+    expect(
+      described.includes(hint) || within(dialog).queryByText(hint) !== null,
+    ).toBe(true);
+  });
+});

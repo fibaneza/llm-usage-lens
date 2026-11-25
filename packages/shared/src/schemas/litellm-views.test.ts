@@ -929,6 +929,89 @@ describe("LiteLLMUserSearchResponseSchema (D-LF1, T-LF2)", () => {
   });
 });
 
+// Source: Design System - LiteLLM user page, T-LP7 (teams[] and appUser, both
+// optional: present for the three global roles only); LiteLLM spec - API routes.
+describe("LiteLLMUserDetailResponseSchema: teams[] and appUser (T-LP7)", () => {
+  const base = {
+    userId: "a1@company.com",
+    email: "a1@company.com",
+    enabledOperations: ["getUser"],
+  };
+  const team = {
+    litellmTeamId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    alias: "Alpha",
+    appTeam: { teamId: "team-a", name: "A" },
+  };
+  const person = {
+    oid: "00000000-0000-4000-8000-000000000002",
+    name: "Ann",
+    email: "a1@company.com",
+    appTeam: { teamId: "team-a", name: "A" },
+  };
+
+  it("both keys are optional: today's answer still parses and stays without them", () => {
+    const out = LiteLLMUserDetailResponseSchema.parse(base);
+    expect(out).not.toHaveProperty("teams");
+    expect(out).not.toHaveProperty("appUser");
+  });
+
+  it.each([
+    [
+      "teams with a linked and an unlinked, aliasless team",
+      {
+        teams: [team, { litellmTeamId: "t2", alias: null, appTeam: null }],
+      },
+    ],
+    ["an empty teams list", { teams: [] }],
+    ["appUser with an app team", { appUser: person }],
+    ["appUser with no app team", { appUser: { ...person, appTeam: null } }],
+    ["appUser null (unlinked)", { appUser: null }],
+  ])("accepts %s", (_name, extra) => {
+    const parsed = LiteLLMUserDetailResponseSchema.safeParse({
+      ...base,
+      ...extra,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      for (const key of Object.keys(extra))
+        expect(parsed.data).toHaveProperty(key);
+    }
+  });
+
+  it.each([
+    [
+      "a team without its LiteLLM team id",
+      { teams: [{ alias: "A", appTeam: null }] },
+    ],
+    [
+      "a team without appTeam (null is explicit)",
+      {
+        teams: [{ litellmTeamId: "t", alias: "A" }],
+      },
+    ],
+    [
+      "a team whose app team lacks a name",
+      {
+        teams: [{ ...team, appTeam: { teamId: "team-a" } }],
+      },
+    ],
+    ["teams that is not an array", { teams: "x" }],
+    ["appUser without an oid", { appUser: { ...person, oid: undefined } }],
+    ["appUser without an email", { appUser: { ...person, email: undefined } }],
+    ["appUser with a numeric name", { appUser: { ...person, name: 5 } }],
+    [
+      "appUser with an app team lacking its id",
+      {
+        appUser: { ...person, appTeam: { name: "A" } },
+      },
+    ],
+  ])("rejects %s", (_name, extra) => {
+    expect(
+      LiteLLMUserDetailResponseSchema.safeParse({ ...base, ...extra }).success,
+    ).toBe(false);
+  });
+});
+
 // Unit OC1 - Design System, "LiteLLM Organisation spend chart" (T-OC2): the
 // new fields are optional, so an answer in today's shape still parses.
 describe("LiteLLMOrgResponseSchema spend-over-time fields (OC1, T-OC2)", () => {

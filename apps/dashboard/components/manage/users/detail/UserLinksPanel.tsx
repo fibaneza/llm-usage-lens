@@ -15,9 +15,12 @@ import { Badge } from "@/components/ui/badge";
 export function UserLinksPanel({
   detail,
   name,
+  canOpenLiteLLM = false,
 }: {
   detail: IdentityDetail;
   name: string;
+  // T-LP10: the three LiteLLM-reading roles; anyone else gets the id as text.
+  canOpenLiteLLM?: boolean;
 }) {
   const router = useRouter();
   const { litellm, allowed } = detail;
@@ -39,6 +42,11 @@ export function UserLinksPanel({
             link={link}
             canWrite={canWrite}
             canCreate={false}
+            {...(canOpenLiteLLM && litellm.state === "linked"
+              ? {
+                  userHref: `/dashboard/manage/litellm/users/${encodeURIComponent(litellm.litellmUserId)}`,
+                }
+              : {})}
             onChanged={() => router.refresh()}
           />
         ) : (

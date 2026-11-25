@@ -32,6 +32,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { SearchInput } from "@/components/table/SearchInput";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -716,13 +717,13 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
       ) : null}
       {items.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Input
-            type="search"
-            aria-label="Search members"
+          <SearchInput
+            label="Search members"
+            hideLabel
             placeholder="Search members"
-            className="w-full sm:w-64"
+            delayMs={0}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
           />
           <Button
             variant="outline"

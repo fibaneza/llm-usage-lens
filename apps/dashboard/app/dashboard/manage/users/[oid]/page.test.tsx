@@ -56,6 +56,7 @@ vi.mock("@/components/manage/users/detail/UserDetailContent", () => ({
   UserDetailContent: (props: {
     detail: { oid: string; suggestion?: string };
     canOpenPasswordUsers: boolean;
+    canOpenLiteLLM?: boolean;
     authMethod: string;
   }) => (
     <div
@@ -64,6 +65,7 @@ vi.mock("@/components/manage/users/detail/UserDetailContent", () => ({
       data-suggestion={props.detail.suggestion}
       data-can-open-password-users={String(props.canOpenPasswordUsers)}
       data-auth-method={props.authMethod}
+      data-can-open-litellm={String(props.canOpenLiteLLM)}
     />
   ),
 }));
@@ -96,6 +98,26 @@ afterEach(() => {
   loadIdentityDetail.mockReset();
   loadViewer.mockReset();
   withLiteLLMSuggestion.mockReset();
+});
+
+// Design System - LiteLLM user page (unit LP2), T-LP10: the user page's LiteLLM
+// block links to the LiteLLM user page for the three roles only. The page passes
+// UserDetailContent `canOpenLiteLLM` = managementAccessFor(session).litellm.
+describe("the user page passes canOpenLiteLLM (T-LP10)", () => {
+  it.each([
+    [true, "true"],
+    [false, "false"],
+  ])(
+    "T-LP10: litellm flag %s is passed as canOpenLiteLLM=%s",
+    async (flag, expected) => {
+      setManageAccess({ litellm: flag });
+      await open();
+      expect(screen.getByTestId("user-detail")).toHaveAttribute(
+        "data-can-open-litellm",
+        expected,
+      );
+    },
+  );
 });
 
 describe("the user page (/dashboard/manage/users/[oid])", () => {

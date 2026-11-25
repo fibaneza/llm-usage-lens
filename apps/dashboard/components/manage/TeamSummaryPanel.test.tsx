@@ -161,3 +161,40 @@ describe("TeamSummaryPanel Edit team (T-TP7)", () => {
     expect(screen.queryByText(/Edited in Settings/)).toBeNull();
   });
 });
+
+// Sources: Design System - LiteLLM user page (unit LP2, user, 2026-11-25),
+// T-LP10: "the Team page summary link[s] to these pages for the three roles
+// only"; Team page, round 3, ruling Q-B1 (a caller who is not a global role
+// gets { linked } only: no alias and no id, so there is nothing to link);
+// LiteLLM team page (LP1): /dashboard/manage/litellm/teams/[litellmTeamId].
+describe("TeamSummaryPanel LiteLLM team link (T-LP10)", () => {
+  it("T-LP10: a global role's summary (alias and id given) links the LiteLLM team to its page, the id percent-encoded", () => {
+    show({
+      litellm: { linked: true, alias: "platform-guild", teamId: "ll/9 f" },
+    });
+    expect(
+      within(valueOf("LiteLLM team")).getByRole("link", {
+        name: /platform-guild/,
+      }),
+    ).toHaveAttribute("href", "/dashboard/manage/litellm/teams/ll%2F9%20f");
+  });
+
+  it("T-LP10: a team with the id but no alias links by its id", () => {
+    show({ litellm: { linked: true, teamId: "ll-team-9f3" } });
+    expect(
+      within(valueOf("LiteLLM team")).getByRole("link", {
+        name: "ll-team-9f3",
+      }),
+    ).toHaveAttribute("href", "/dashboard/manage/litellm/teams/ll-team-9f3");
+  });
+
+  it.each([
+    ["a lead's { linked } only", { linked: true }],
+    ["an unlinked team", { linked: false }],
+  ])("T-LP10: %s has no link to a LiteLLM page", (_name, litellm) => {
+    show({ litellm });
+    expect(within(valueOf("LiteLLM team")).queryAllByRole("link")).toHaveLength(
+      0,
+    );
+  });
+});

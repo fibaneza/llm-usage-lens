@@ -463,7 +463,7 @@ test.describe("axe per role and dialog state (L5 Accessibility floor)", () => {
     await open(page, "/dashboard/manage/litellm/users");
     await page.getByRole("searchbox", { name: /search users/i }).fill("ada");
     await expect(
-      page.getByRole("button", { name: "ada@example.test" }),
+      page.getByRole("link", { name: "ada@example.test" }),
     ).toBeVisible();
     await expectNoBlockingViolations(page);
   });
@@ -940,10 +940,12 @@ test.describe("states carry text (L5 Accessibility floor)", () => {
       "Hidden until per-user reporting is approved",
     );
 
-    await page.getByRole("button", { name: "ada@example.test" }).click();
-    await expect(
-      page.getByRole("region", { name: /user usage/i }),
-    ).toContainText("Hidden until per-user reporting is approved");
+    // LP2 (T-LP8, LD23): the detail is on the user page, and the cap still hides the figures.
+    await page.getByRole("link", { name: "ada@example.test" }).click();
+    await expect(page).toHaveURL(/\/dashboard\/manage\/litellm\/users\/u-ada/);
+    await expect(page.getByRole("region", { name: "Summary" })).toContainText(
+      "Hidden until per-user reporting is approved",
+    );
   });
 
   // Wording: coordinator ruling 2026-11-17 (the Users page wording).

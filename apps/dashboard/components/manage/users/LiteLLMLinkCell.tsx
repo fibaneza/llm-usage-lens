@@ -8,6 +8,7 @@ import {
 } from "@llm-usage-lens/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link2, Link2Off, UserPlus } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import type { FormEvent } from "react";
 
@@ -37,7 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/table/SearchInput";
 import { ApiRequestError, fetchApi, mutateApi } from "@/lib/query/fetch-api";
 
 // Source: Design System - Management improvements, "User link states" (D16);
@@ -252,6 +253,7 @@ function LinkExistingDialog({
   onChanged: () => void;
 }) {
   const groupId = useId();
+  const hintId = useId();
   const [input, setInput] = useState("");
   const [term, setTerm] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
@@ -311,21 +313,22 @@ function LinkExistingDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-          <FormField label="Search LiteLLM users" hint="Email or user id.">
-            {(props) => (
-              <Input
-                {...props}
-                type="search"
-                maxLength={100}
-                autoComplete="off"
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  setPicked(null);
-                }}
-              />
-            )}
-          </FormField>
+          <SearchInput
+            label="Search LiteLLM users"
+            placeholder="Email or user id"
+            maxLength={100}
+            delayMs={0}
+            autoComplete="off"
+            describedBy={hintId}
+            value={input}
+            onChange={(value) => {
+              setInput(value);
+              setPicked(null);
+            }}
+          />
+          <p id={hintId} className="text-muted-foreground -mt-3 text-xs">
+            Email or user id.
+          </p>
           {active ? (
             results.isPending ? (
               <p role="status" className="text-muted-foreground text-sm">
@@ -395,6 +398,7 @@ export function LiteLLMLinkCell({
   canCreate,
   onChanged,
   showState = true,
+  userHref,
 }: {
   subject: LinkSubject;
   link: LinkState;
@@ -405,6 +409,9 @@ export function LiteLLMLinkCell({
   // false: the actions only; the state is shown elsewhere (LiteLLM users tab
   // rows, Design System LF1 D-LF4).
   showState?: boolean;
+  // The linked LiteLLM user id links to its page (T-LP10), for the three
+  // LiteLLM-reading roles only.
+  userHref?: string;
 }) {
   const [open, setOpen] = useState<Open>(null);
   const close = () => setOpen(null);
@@ -416,9 +423,18 @@ export function LiteLLMLinkCell({
           {showState ? (
             <>
               <Badge variant="secondary">Linked</Badge>
-              <span className="text-muted-foreground text-xs break-all">
-                {link.litellmUserId}
-              </span>
+              {userHref ? (
+                <Link
+                  href={userHref}
+                  className="text-xs break-all underline-offset-4 hover:underline"
+                >
+                  {link.litellmUserId}
+                </Link>
+              ) : (
+                <span className="text-muted-foreground text-xs break-all">
+                  {link.litellmUserId}
+                </span>
+              )}
             </>
           ) : null}
           {canWrite ? (

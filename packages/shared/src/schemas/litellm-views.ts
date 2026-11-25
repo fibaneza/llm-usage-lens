@@ -341,4 +341,25 @@ export const LiteLLMUserDetailResponseSchema = z.object({
   // L6: the person's combined figure, absent while the cap hides per-user cost.
   combined: CombinedMeResponseSchema.optional(),
   enabledOperations: EnabledOperations,
+  // LP2 (Design System — LiteLLM user page, T-LP7; LiteLLM spec — API routes,
+  // LD23): link data, present only for internal-admin, internal-org-admin and
+  // internal-auditor; never in a lead's answer.
+  teams: z
+    .array(
+      z.object({
+        litellmTeamId: z.string(),
+        alias: z.string().nullable(),
+        appTeam: z.object({ teamId: z.string(), name: z.string() }).nullable(),
+      }),
+    )
+    .optional(),
+  appUser: z
+    .object({
+      oid: z.string(),
+      name: z.string(),
+      email: z.string(),
+      appTeam: z.object({ teamId: z.string(), name: z.string() }).nullable(),
+    })
+    .nullable()
+    .optional(),
 });

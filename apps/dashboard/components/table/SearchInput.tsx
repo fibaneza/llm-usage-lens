@@ -13,6 +13,8 @@ type SearchInputProps = {
   hideLabel?: boolean;
   maxLength?: number;
   delayMs?: number;
+  autoComplete?: string;
+  describedBy?: string;
 };
 
 // Design System -- Component Inventory, `SearchInput`: a debounced text filter.
@@ -25,6 +27,8 @@ export function SearchInput({
   hideLabel = false,
   maxLength,
   delayMs = 300,
+  autoComplete,
+  describedBy,
 }: SearchInputProps) {
   const inputId = useId();
   const showLabel = label !== undefined && !hideLabel;
@@ -61,6 +65,8 @@ export function SearchInput({
           }
           placeholder={placeholder}
           maxLength={maxLength}
+          autoComplete={autoComplete}
+          aria-describedby={describedBy}
           value={draft}
           className="pl-8"
           onChange={(event) => {

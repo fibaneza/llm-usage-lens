@@ -22,11 +22,13 @@ import type {
 export function UserDetailContent({
   detail,
   canOpenPasswordUsers,
+  canOpenLiteLLM = false,
   authMethod,
   stepUp,
 }: {
   detail: IdentityDetail;
   canOpenPasswordUsers: boolean;
+  canOpenLiteLLM?: boolean;
   authMethod: AccessViewer["authMethod"];
   stepUp: StepUpActions;
 }) {
@@ -45,7 +47,11 @@ export function UserDetailContent({
         detail={detail}
         canOpenPasswordUsers={canOpenPasswordUsers}
       />
-      <UserLinksPanel detail={detail} name={name} />
+      <UserLinksPanel
+        detail={detail}
+        name={name}
+        canOpenLiteLLM={canOpenLiteLLM}
+      />
       {detail.litellm.state === "linked" ? (
         <UserLiteLLMUsagePanel litellmUserId={detail.litellm.litellmUserId} />
       ) : null}

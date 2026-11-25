@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { Panel } from "@/components/display/Panel";
 import {
   TeamEditDialog,
@@ -31,13 +33,33 @@ function LiteLLMTeamValue({ litellm }: { litellm: TeamSummaryLiteLLM }) {
   if (litellm.alias === undefined && litellm.teamId === undefined) {
     return <>Linked</>;
   }
+  // T-LP10: the team's LiteLLM page, by alias, else by id.
+  const href =
+    litellm.teamId !== undefined
+      ? `/dashboard/manage/litellm/teams/${encodeURIComponent(litellm.teamId)}`
+      : null;
+  const linkClass = "underline-offset-4 hover:underline";
   return (
     <>
-      {litellm.alias !== undefined ? <span>{litellm.alias}</span> : null}
+      {litellm.alias !== undefined ? (
+        href ? (
+          <Link href={href} className={linkClass}>
+            {litellm.alias}
+          </Link>
+        ) : (
+          <span>{litellm.alias}</span>
+        )
+      ) : null}
       {litellm.teamId !== undefined ? (
-        <span className="text-muted-foreground ml-2 font-mono">
-          {litellm.teamId}
-        </span>
+        litellm.alias === undefined && href ? (
+          <Link href={href} className={`${linkClass} font-mono`}>
+            {litellm.teamId}
+          </Link>
+        ) : (
+          <span className="text-muted-foreground ml-2 font-mono">
+            {litellm.teamId}
+          </span>
+        )
       ) : null}
     </>
   );

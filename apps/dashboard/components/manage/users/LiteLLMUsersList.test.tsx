@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -645,7 +645,7 @@ describe("LiteLLMUsersList search (D-LF1, T-LF2)", () => {
     await search();
     const row = (
       await screen.findByRole(
-        "button",
+        "link",
         { name: "ada@example.com" },
         { timeout: 3000 },
       )
@@ -697,7 +697,7 @@ describe("LiteLLMUsersList search (D-LF1, T-LF2)", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "me@example.com" }),
+      screen.getByRole("link", { name: "me@example.com" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Reset spend for me@example.com" }),
@@ -711,7 +711,7 @@ describe("LiteLLMUsersList search (D-LF1, T-LF2)", () => {
     });
     await search();
     await screen.findByRole(
-      "button",
+      "link",
       { name: "ada@example.com" },
       { timeout: 3000 },
     );
@@ -725,7 +725,7 @@ describe("LiteLLMUsersList search (D-LF1, T-LF2)", () => {
     await search();
     const row = (
       await screen.findByRole(
-        "button",
+        "link",
         { name: "ada@example.com" },
         { timeout: 3000 },
       )
@@ -738,7 +738,7 @@ describe("LiteLLMUsersList search (D-LF1, T-LF2)", () => {
 // linked-account column; each row keeps its buttons (Link or Unlink for the
 // roles that may, never on one's own row; RS2's Reset spend on every row
 // with a LiteLLM user); the linked account and its state are in the selected
-// user's detail.
+// user's page (T-LP8; the in-place detail is removed, T-LP9).
 describe("LiteLLMUsersList without a linked-account column (D-LF4, T-LF5)", () => {
   const ROW_MATCH_SELECTABLE = {
     ...ROW_NONE,
@@ -830,33 +830,40 @@ describe("LiteLLMUsersList without a linked-account column (D-LF4, T-LF5)", () =
     }
   });
 
+  // T-LP9 (Design System - LiteLLM users tab, round 3): the in-place detail
+  // is removed, so a click opens the page and nothing renders under the table;
+  // the linked account and its state are on the page (T-LP8).
   it.each([
-    ["linked", ROW_LINKED, "Ada Lovelace", "Linked"],
-    ["a match", ROW_MATCH_SELECTABLE, "Cy Young", "Match found"],
-    [
-      "a LiteLLM user with no app user",
-      ROW_ONLY,
-      null,
-      "Not linked to an app user",
-    ],
+    ["linked", ROW_LINKED, "Ada Lovelace"],
+    ["a match", ROW_MATCH_SELECTABLE, "Cy Young"],
+    ["a LiteLLM user with no app user", ROW_ONLY, "zed@example.com"],
   ] as const)(
-    "selecting %s shows the linked account and its state in the detail, outside the table",
-    async (_name, row, person, state) => {
-      stub({ users: [row] });
+    "T-LP9: a click on %s leaves nothing under the table: no link state, no detail, no detail request",
+    async (_name, row, label) => {
+      const calls = stub({ users: [row] });
       const user = userEvent.setup();
-      renderWithProviders(<LiteLLMUsersList />);
-      const table = await screen.findByRole("table");
-      expect(within(table).queryByText(state)).toBeNull();
-      const opener = within(table).getByRole("button", {
-        name: person ?? row.litellmUser.email,
-      });
-      await user.click(opener);
-      const shown = await screen.findAllByText(state);
-      expect(shown.some((el) => !el.closest("table"))).toBe(true);
-      if (person !== null) {
+      const stopNavigation = (event: Event) => event.preventDefault();
+      document.addEventListener("click", stopNavigation);
+      try {
+        renderWithProviders(<LiteLLMUsersList />);
+        const table = await screen.findByRole("table");
+        await user.click(within(table).getByRole("link", { name: label }));
+        for (const text of STATES) {
+          expect(screen.queryByText(text)).toBeNull();
+        }
         expect(
-          screen.getAllByText(person).some((el) => !el.closest("table")),
-        ).toBe(true);
+          screen.queryByRole("heading", { name: "User usage" }),
+        ).toBeNull();
+        expect(
+          screen.queryByRole("region", { name: /user usage/i }),
+        ).toBeNull();
+        expect(
+          calls.urls.some((u) =>
+            /^\/api\/litellm\/users\/[^/]+$/.test(u.pathname),
+          ),
+        ).toBe(false);
+      } finally {
+        document.removeEventListener("click", stopNavigation);
       }
     },
   );
@@ -1008,7 +1015,8 @@ describe("LiteLLMUsersList Reset spend in a LiteLLM team with no app team (LF1 F
 
 // Design System - LiteLLM users tab, LF1 F2 (agent decision 2026-11-24, the
 // users-tab wording): an empty value reads "\u2014" in the list rows, the
-// cards and the detail (D-LF1 uses the same dash for absent spend); never "-".
+// and the cards (D-LF1 uses the same dash for absent spend); never "-". The
+// detail moved to the user page (T-LP8, ProxyUserSummaryPanel.test.tsx).
 describe("LiteLLMUsersList empty value is an em dash (LF1 F2, D-LF1)", () => {
   const ROW_BARE = {
     key: "ll-zed",
@@ -1051,29 +1059,6 @@ describe("LiteLLMUsersList empty value is an em dash (LF1 F2, D-LF1)", () => {
     } finally {
       mobile.on = false;
     }
-  });
-
-  it("a user whose spend LiteLLM does not report shows \u2014 in the detail, never a hyphen or $0", async () => {
-    stub({
-      users: [ROW_BARE],
-      detail: {
-        userId: "ll-zed",
-        email: "zed@example.com",
-        spend: null,
-        maxBudget: null,
-        enabledOperations: [],
-      },
-    });
-    const user = userEvent.setup();
-    renderWithProviders(<LiteLLMUsersList />);
-    await user.click(
-      await screen.findByRole("button", { name: "zed@example.com" }),
-    );
-    const heading = await screen.findByRole("heading", { name: "User usage" });
-    const detail = heading.closest("section") as HTMLElement;
-    expect(await within(detail).findByText("\u2014")).toBeInTheDocument();
-    expect(within(detail).queryByText("-")).toBeNull();
-    expect(within(detail).queryByText("$0.00")).toBeNull();
   });
 });
 
@@ -1264,5 +1249,277 @@ describe("LiteLLMUsersList team picker request (T-FX3)", () => {
     const org = urls.find((u) => u.pathname === "/api/litellm/org");
     expect(org?.searchParams.get("dateFrom")).toBe(RANGE.dateFrom);
     expect(org?.searchParams.get("dateTo")).toBe(RANGE.dateTo);
+  });
+});
+
+// Sources: Design System - LiteLLM users tab, round 3 (unit LP2, user,
+// 2026-11-25; D-R3-8, D-R3-9; unit UP1 D-R3-10, D-R3-11), T-LP6: "Search users"
+// is a `SearchInput` (visible label, the magnifier); a term of one character
+// shows "Type at least 2 characters"; a longer term narrows the list; a term
+// that matches nothing shows "No users found"; T-LP9: "The user cell of each
+// row links to /dashboard/manage/litellm/users/[litellmUserId] ... the detail
+// that opened under the table is removed"; "Create and link" is renamed
+// "Create LiteLLM user", and the "Match found" badge is removed. LiteLLM spec -
+// searchUsers takes 2-100 characters (allowlist); Rule 60.24a.
+describe("LiteLLMUsersList search box (T-LP6)", () => {
+  const box = () => screen.getByRole("searchbox", { name: "Search users" });
+
+  it("T-LP6: 'Search users' has a visible label and the magnifier (the SearchInput)", async () => {
+    stub();
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    expect(screen.getByText("Search users").tagName).toBe("LABEL");
+    expect(screen.getByLabelText("Search users")).toBe(box());
+    expect(
+      box().parentElement?.querySelector("svg[aria-hidden='true']"),
+    ).not.toBeNull();
+  });
+
+  it("T-LP6: one character shows 'Type at least 2 characters' and sends no search", async () => {
+    // Only timers are faked (Rule 60.24); fetch and promises stay real.
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout"],
+      shouldAdvanceTime: true,
+    });
+    try {
+      const calls = stub();
+      renderWithProviders(<LiteLLMUsersList />);
+      await screen.findByText("Ada Lovelace");
+      const user = userEvent.setup({
+        advanceTimers: (ms) => vi.advanceTimersByTime(ms),
+        delay: null,
+      });
+      await user.type(box(), "a");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(
+        await screen.findByText("Type at least 2 characters"),
+      ).toBeInTheDocument();
+      expect(calls.listUrls().some((u) => u.searchParams.has("q"))).toBe(false);
+      expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("T-LP6: the hint goes away at two characters and the search narrows the list", async () => {
+    const calls = stub({ search: [SEARCH_ROW] });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Bob Barker");
+    const user = userEvent.setup();
+    await user.type(box(), "a");
+    await screen.findByText("Type at least 2 characters");
+    await user.type(box(), "d");
+    await vi.waitFor(
+      () =>
+        expect(
+          calls.listUrls().some((u) => u.searchParams.get("q") === "ad"),
+        ).toBe(true),
+      { timeout: 3000 },
+    );
+    expect(screen.queryByText("Type at least 2 characters")).toBeNull();
+    await vi.waitFor(() => expect(screen.queryByText("Bob Barker")).toBeNull());
+    expect(
+      screen.getByRole("link", { name: "ada@example.com" }),
+    ).toBeInTheDocument();
+  });
+
+  it("T-LP6: a term that matches nothing shows 'No users found'", async () => {
+    stub({ search: [] });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    await userEvent.setup().type(box(), "zz");
+    expect(
+      await screen.findByText("No users found", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+  });
+});
+
+// Sources: Design System - LiteLLM users tab, round 3 (unit LP2), T-LP6 (the
+// search the tab took over from the removed UserSearch component); LiteLLM
+// spec - allowlist row `searchUsers` (2-100 characters), LT8 (LiteLLM-reported
+// spend and budget; a null budget is "No limit", never $0). The tab debounces
+// the box (DEBOUNCE_MS, 500 ms), so the case below keeps that delay.
+describe("LiteLLMUsersList search request rules (T-LP6, searchUsers 2-100)", () => {
+  const box = () => screen.getByRole("searchbox", { name: "Search users" });
+  const qs = (calls: { listUrls: () => URL[] }) =>
+    calls.listUrls().flatMap((u) => u.searchParams.get("q") ?? []);
+
+  it("T-LP6: typing 'ada' key by key sends one search with the final value (debounce)", async () => {
+    // Only timers are faked (Rule 60.24); fetch and promises stay real.
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout"],
+      shouldAdvanceTime: true,
+    });
+    try {
+      const calls = stub();
+      renderWithProviders(<LiteLLMUsersList />);
+      await screen.findByText("Ada Lovelace");
+      const user = userEvent.setup({
+        advanceTimers: (ms) => vi.advanceTimersByTime(ms),
+        delay: null,
+      });
+      await user.type(box(), "ada");
+      expect(qs(calls)).toEqual([]);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      await vi.waitFor(() => expect(qs(calls)).toEqual(["ada"]));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("T-LP6: a term of spaces only is not a query (trimmed)", async () => {
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout"],
+      shouldAdvanceTime: true,
+    });
+    try {
+      const calls = stub();
+      renderWithProviders(<LiteLLMUsersList />);
+      await screen.findByText("Ada Lovelace");
+      const user = userEvent.setup({
+        advanceTimers: (ms) => vi.advanceTimersByTime(ms),
+        delay: null,
+      });
+      await user.type(box(), "  ");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(qs(calls)).toEqual([]);
+      expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("LT8: search rows show email, spend and budget in USD, a null budget as No limit, LiteLLM-reported", async () => {
+    stub({
+      search: [
+        SEARCH_ROW,
+        {
+          userId: "ll-bob",
+          email: "bob@example.com",
+          spend: 5,
+          maxBudget: null,
+          teams: [],
+        },
+      ],
+    });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    await userEvent.setup().type(box(), "ex");
+    const ada = (
+      await screen.findByRole(
+        "link",
+        { name: "ada@example.com" },
+        { timeout: 3000 },
+      )
+    ).closest("tr");
+    expect(ada).not.toBeNull();
+    expect(ada).toHaveTextContent("$12.50");
+    expect(ada).toHaveTextContent("$100.00");
+    const bob = screen.getByRole("link", { name: "bob@example.com" });
+    expect(bob.closest("tr")).toHaveTextContent("$5.00");
+    expect(bob.closest("tr")).toHaveTextContent(/no limit/i);
+    expect(bob.closest("tr")).not.toHaveTextContent("$0");
+    expect(screen.getAllByText(/litellm-reported/i).length).toBeGreaterThan(0);
+  });
+
+  it("T-LP6: a 503 on the search says LiteLLM unavailable and keeps the box usable", async () => {
+    stub();
+    const base = vi.mocked(globalThis.fetch);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+        new URL(String(input), "http://localhost").searchParams.has("q")
+          ? Promise.resolve(apiError(503, "LITELLM_UNAVAILABLE"))
+          : base(input, init),
+      ),
+    );
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    await userEvent.setup().type(box(), "ad");
+    expect(
+      await screen.findByText("LiteLLM unavailable", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(box()).toBeEnabled();
+  });
+});
+
+describe("LiteLLMUsersList user cell links to the page (T-LP9)", () => {
+  const PAGE = "/dashboard/manage/litellm/users";
+
+  it("T-LP9: the user cell of a row with a LiteLLM user is a link to its page by LiteLLM id", async () => {
+    stub();
+    renderWithProviders(<LiteLLMUsersList />);
+    expect(
+      await screen.findByRole("link", { name: "Ada Lovelace" }),
+    ).toHaveAttribute("href", `${PAGE}/ll-ada`);
+  });
+
+  it("T-LP9 / LT3: the LiteLLM id is percent-encoded in the href", async () => {
+    stub({
+      users: [
+        {
+          ...ROW_LINKED,
+          litellmUser: { ...ROW_LINKED.litellmUser, userId: "ll/odd id" },
+        },
+      ],
+    });
+    renderWithProviders(<LiteLLMUsersList />);
+    expect(
+      await screen.findByRole("link", { name: "Ada Lovelace" }),
+    ).toHaveAttribute("href", `${PAGE}/ll%2Fodd%20id`);
+  });
+
+  it("T-LP9: a search row links to its page too", async () => {
+    stub();
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    await userEvent
+      .setup()
+      .type(screen.getByRole("searchbox", { name: "Search users" }), "ad");
+    expect(
+      await screen.findByRole(
+        "link",
+        { name: "ada@example.com" },
+        { timeout: 3000 },
+      ),
+    ).toHaveAttribute("href", `${PAGE}/ll-ada`);
+  });
+
+  it("T-LP9: a person not in LiteLLM has no page to open: no link", async () => {
+    stub({ users: [ROW_NONE] });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Bob Barker");
+    expect(screen.queryByRole("link", { name: "Bob Barker" })).toBeNull();
+  });
+
+  it("T-LP9: the stacked card layout below md links too", async () => {
+    mobile.on = true;
+    try {
+      stub();
+      renderWithProviders(<LiteLLMUsersList />);
+      const list = await screen.findByRole("list", { name: "LiteLLM users" });
+      expect(
+        within(list).getByRole("link", { name: "Ada Lovelace" }),
+      ).toHaveAttribute("href", `${PAGE}/ll-ada`);
+    } finally {
+      mobile.on = false;
+    }
+  });
+
+  it("UP1 (D-R3-10, D-R3-11): no 'Create and link' and no 'Match found' text anywhere on the tab", async () => {
+    stub({ users: [ROW_NONE, ROW_LINKED], enabledOperations: ["createUser"] });
+    renderWithProviders(<LiteLLMUsersList />);
+    await screen.findByText("Ada Lovelace");
+    expect(screen.queryByText(/create and link/i)).toBeNull();
+    expect(screen.queryByText(/match found/i)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Create LiteLLM user" }),
+    ).toBeInTheDocument();
   });
 });

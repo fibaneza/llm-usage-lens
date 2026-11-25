@@ -9,6 +9,7 @@ import {
 } from "@playwright/test";
 
 import { E2E_BASE_URL, E2E_LITELLM_BASE_URL } from "./support/constants";
+import { waitForAnimations } from "./support/animations";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 import { deleteStoredLiteLLMConnection } from "../test/fixtures/e2e-litellm-connection-seed";
@@ -748,5 +749,144 @@ test.describe("Team page reset dialog, both scopes (RS2 U-B1)", () => {
     await dialog.getByRole("button", { name: "Confirm" }).click();
     await expect.poll(() => posts.length).toBe(3);
     expect(posts[2]?.path).toBe(PROXY_ROUTE);
+  });
+});
+
+// Sources: Design System - LiteLLM user page (unit LP2, user, 2026-11-25),
+// T-LP9: "Reset spend and Link / Unlink work from the page for the roles that
+// have them" (the in-place detail under the users table is removed; the row
+// action on the tab stays); RS1 / RS2 (the dialog, the existing reset-spend
+// routes, D-RS4 user-level reset by LiteLLM id); Design System - Responsive
+// (axe at 375 with the dialog open). The LiteLLM and directory APIs are
+// fulfilled from fixtures (Rule 60.24).
+test.describe("Reset spend from the LiteLLM user page (LP2, T-LP9)", () => {
+  const USER_PAGE = "/dashboard/manage/litellm/users/ll-ada";
+  const USER_RESET = "/api/litellm/users/ll-ada/reset-spend";
+
+  async function mockUserPage(page: Page): Promise<Sent[]> {
+    await mockTab(page);
+    const posts = await mockReset(page);
+    await page.route(/\/api\/litellm\/users\/ll-ada(\?.*)?$/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            userId: "ll-ada",
+            email: "ada@example.test",
+            spend: 8.5,
+            maxBudget: 150,
+            daily: [{ date: "2026-11-02", spend: 1.5 }],
+            enabledOperations: ["resetMemberSpend", "resetUserSpend"],
+            teams: [],
+            appUser: {
+              oid: "oid-ada",
+              name: "Ada Lovelace",
+              email: "ada@example.test",
+              appTeam: null,
+            },
+          },
+        },
+      }),
+    );
+    await page.route(/\/api\/identities\/oid-ada$/, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            oid: "oid-ada",
+            displayName: "Ada Lovelace",
+            email: "ada@example.test",
+            upn: null,
+            authMethod: "entra",
+            createdAt: null,
+            lastSignInAt: null,
+            memberTeamId: null,
+            memberVersion: 0,
+            leadScopes: [],
+            litellm: { state: "linked", litellmUserId: "ll-ada" },
+            linkVersion: 1,
+            allowed: {
+              editDisplayName: false,
+              linkLiteLLM: true,
+              unlinkLiteLLM: true,
+              resetSpend: true,
+              changeMembership: false,
+              changeLead: false,
+              editRoles: false,
+              editUsageIdentities: false,
+            },
+          },
+        },
+      }),
+    );
+    await page.route(/\/api\/litellm\/users\/[^/]+\/reset-spend$/, (route) => {
+      const request = route.request();
+      posts.push({
+        method: request.method(),
+        path: new URL(request.url()).pathname,
+        body: request.postData(),
+      });
+      return route.fulfill({ json: { data: { litellmUserId: "ll-ada" } } });
+    });
+    return posts;
+  }
+
+  test("an admin resets the user's spend from the page: the user-level route is called and the page has Unlink", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    const posts = await mockUserPage(page);
+    await page.goto(USER_PAGE);
+    await waitForHydration(page);
+    await expect(page.getByRole("button", { name: /^unlink$/i })).toBeVisible();
+    await page
+      .getByRole("button", { name: "Reset spend for Ada Lovelace" })
+      .click();
+    const option = page.getByRole("group", {
+      name: "User spend (all of LiteLLM)",
+    });
+    await expect(option).toBeVisible();
+    await option
+      .getByRole("button", { name: "Reset user spend in all of LiteLLM" })
+      .click();
+    await expect(option).toContainText("Spend reset to $0.00");
+    expect(posts.map((p) => p.path)).toEqual([USER_RESET]);
+    expect(posts[0]?.body).toBeNull();
+  });
+
+  test("the dialog is axe-clean at 375 with no horizontal scroll", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-admin"] });
+    await page.setViewportSize({ width: 375, height: 800 });
+    await mockUserPage(page);
+    await page.goto(USER_PAGE);
+    await waitForHydration(page);
+    await page
+      .getByRole("button", { name: "Reset spend for Ada Lovelace" })
+      .click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Reset spend for Ada Lovelace?",
+    });
+    await expect(dialog).toBeVisible();
+    await waitForAnimations(page);
+    await expectNoBlockingViolations(page);
+    await expectNoHorizontalScroll(page, dialog);
+  });
+
+  test("an auditor sees the page and no Reset spend and no Unlink", async ({
+    context,
+    page,
+  }) => {
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
+    await mockUserPage(page);
+    await page.goto(USER_PAGE);
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("region", { name: "Linked dashboard user" }),
+    ).toContainText("Ada Lovelace");
+    await expect(
+      page.getByRole("button", { name: /reset spend|unlink/i }),
+    ).toHaveCount(0);
   });
 });

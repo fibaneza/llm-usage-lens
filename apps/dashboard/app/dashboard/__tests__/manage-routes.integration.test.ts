@@ -73,7 +73,6 @@ vi.mock("@/components/manage/AuditPageContent", () => ({
 vi.mock("@/components/litellm/OrganisationSection", () => ({
   OrganisationSection: () => null,
 }));
-vi.mock("@/components/litellm/UserSearch", () => ({ UserSearch: () => null }));
 vi.mock("@/components/litellm/LiteLLMSection", () => ({
   LiteLLMSection: () => null,
 }));

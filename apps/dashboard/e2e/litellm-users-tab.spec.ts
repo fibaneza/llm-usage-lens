@@ -4,8 +4,10 @@ import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 
 // Source: Design System - LiteLLM client requests (unit FX1; D-R3-16,
-// D-R3-18), T-FX5: on the LiteLLM users tab, clicking a user shows the detail
-// and choosing "Members of one team" lists the teams, with no alert. The user
+// D-R3-18), T-FX5: on the LiteLLM users tab, clicking a user opens the user
+// page (LP2, T-LP9: the in-place detail is removed) and choosing "Members of
+// one team" lists the teams, with no alert. T-LP6: the search hint and the
+// empty state. The user
 // detail and org routes require dateFrom and dateTo (DateRangeQuerySchema), so
 // their stubs answer 400 in the standard error shape without them (Rule 60.24:
 // fulfilled from fixtures, no real LiteLLM).
@@ -33,6 +35,15 @@ async function mockApi(page: Page) {
     const url = new URL(route.request().url());
     const path = url.pathname;
     const data = (body: unknown) => route.fulfill({ json: { data: body } });
+    if (path === "/api/litellm/users" && url.searchParams.has("q")) {
+      return data({
+        page: 1,
+        pageSize: 25,
+        enabledOperations: [],
+        callerLitellmUserId: null,
+        users: [],
+      });
+    }
     if (path === "/api/litellm/users") {
       return data({
         page: 1,
@@ -69,6 +80,8 @@ async function mockApi(page: Page) {
         maxBudget: 150,
         daily: [{ date: "2026-10-02", spend: 4.5 }],
         enabledOperations: [],
+        teams: [],
+        appUser: null,
       });
     }
     if (path === "/api/litellm/org") {
@@ -114,11 +127,26 @@ test.describe("LiteLLM users tab requests (FX1, T-FX5)", () => {
     await waitForHydration(page);
   });
 
-  test("clicking a user shows the detail with no alert", async ({ page }) => {
-    await page.getByRole("button", { name: "Ada Lovelace" }).click();
-    const detail = page.getByRole("region", { name: /user usage/i });
-    await expect(detail).toContainText("$77.10");
+  test("T-FX5 / T-LP9: clicking a user opens the user page with the detail and no alert", async ({
+    page,
+  }) => {
+    await page.getByRole("link", { name: "Ada Lovelace" }).click();
+    await expect(page).toHaveURL(/\/dashboard\/manage\/litellm\/users\/u-ada/);
+    await expect(page.getByRole("region", { name: "Summary" })).toContainText(
+      "$77.10",
+    );
     await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+  });
+
+  test("T-LP6: one character shows 'Type at least 2 characters'; a term that matches nothing shows 'No users found'", async ({
+    page,
+  }) => {
+    const search = page.getByRole("searchbox", { name: "Search users" });
+    await search.fill("a");
+    await expect(page.getByText("Type at least 2 characters")).toBeVisible();
+    await search.fill("zzzz");
+    await expect(page.getByText("No users found")).toBeVisible();
+    await expect(page.getByText("Type at least 2 characters")).toHaveCount(0);
   });
 
   test('"Members of one team" lists the teams with no alert', async ({

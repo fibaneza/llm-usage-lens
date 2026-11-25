@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 
+import { waitForAnimations } from "./support/animations";
 import { waitForHydration } from "./support/hydration";
 import { signInAsTestUser } from "./support/session";
 import { withStoredLiteLLMConnection } from "../test/fixtures/e2e-litellm-connection";
@@ -218,9 +219,9 @@ test.describe("Management -> Users: a match row (UP1, T-UP2)", () => {
 
 test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
   // Design System - LiteLLM users tab, D-LF4 and T-LF5: no linked-account
-  // column; each row keeps Unlink or Link; the linked account and its state
-  // are in the selected user's detail.
-  test("lists users without a linked-account column; a person not in LiteLLM reads 'Not in LiteLLM', never $0; the detail shows the link", async ({
+  // column; each row keeps Unlink or Link; the linked account is on the
+  // LiteLLM user page the user cell links to (LiteLLM user page, T-LP8, T-LP9).
+  test("lists users without a linked-account column; a person not in LiteLLM reads 'Not in LiteLLM', never $0; the user page shows the link", async ({
     context,
     page,
   }) => {
@@ -281,6 +282,13 @@ test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
             maxBudget: 100,
             daily: [],
             enabledOperations: ["createUser"],
+            teams: [],
+            appUser: {
+              oid: "oid-ada",
+              name: "Ada Lovelace",
+              email: "ada@example.test",
+              appTeam: null,
+            },
           },
         },
       }),
@@ -303,18 +311,22 @@ test.describe("Management -> LiteLLM -> LiteLLM users list (D16a)", () => {
     await expect(page.getByRole("table")).not.toContainText("Linked");
     await expect(ada.getByRole("button", { name: /unlink/i })).toBeVisible();
 
-    await ada.getByRole("button", { name: "Ada Lovelace" }).click();
-    // The linked account is in the detail's description list (D-LF4).
-    const account = page
-      .locator("dl")
-      .filter({ has: page.getByText("Linked account") });
-    await expect(account.getByText("Linked", { exact: true })).toBeVisible();
-    await expect(page.getByRole("table")).not.toContainText("Linked");
+    await ada.getByRole("link", { name: "Ada Lovelace" }).click();
+    await expect(page).toHaveURL(
+      /\/dashboard\/manage\/litellm\/users\/ll-ada(\?.*)?$/,
+    );
+    // The linked account is in the page's linked dashboard user region (T-LP8).
+    const account = page.getByRole("region", { name: "Linked dashboard user" });
+    await expect(
+      account.getByRole("link", { name: "Ada Lovelace" }),
+    ).toBeVisible();
+    await expect(account).toContainText("ada@example.test");
 
-    // LF1 UI review WARN 2 (Design System - Layout, Rule 40.6): the detail
+    // LF1 UI review WARN 2 (Design System - Layout, Rule 40.6): the page
     // open at 375 has no serious axe violation and no horizontal scroll.
     await page.setViewportSize({ width: 375, height: 800 });
     await expect(account).toBeVisible();
+    await waitForAnimations(page);
     await expectNoBlockingViolations(page);
     expect(await noHorizontalScroll(page)).toBe(true);
   });
