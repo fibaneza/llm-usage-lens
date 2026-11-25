@@ -34,6 +34,7 @@ Run plans, named `<YYYYMMDD>_<slug>.md` by the date each was first written (user
 | `20261124_test_suite_cleanup.md` | Second test clean-up, the smaller pass (user, 2026-11-23/24): TC0 rules, TC1 route duplicates; the removal list approved before deletion; survivor and coverage proof | Queued; can run beside round 2 |
 | `20261124_test_speed.md` | Test speed: TS1 the password seed hash once per file, TS2 integration files in parallel with a table per worker | Queued; can run beside round 2 |
 | `20261125_management_round3.md` | Management round 3 (user, 2026-11-25): three LiteLLM client defects, a page per LiteLLM team and user, field help, Edit team, the refresh button, the sign-in form (units MR0, FX1, RF1, UP1, LP1, SI1, TP1, LP2) | Queued |
+| `20261126_litellm_spend_charts.md` | LiteLLM Organisation spend as a timeline chart (user, 2026-11-26): unit OC1, `improvements_worker` | Queued |
 
 Removed on 2026-11-18, all units on `main`: the POC plan (`poc/` is built),
 the app config file plan (unit CFG, `5484f12`), the base path plan (unit BP,
@@ -85,6 +86,7 @@ Spec units come before code.
 | 24 | **Round 2, wave 3:** SYNC2, SRT1, INV2 | the same two plans | after wave 2 | The scheduled sync; sorting in the other tables; invite, add to team, approve and add |
 | 24a | **Test clean-up and speed:** TC0, TC1, TS1, TS2 | `20261124_test_suite_cleanup.md`, `20261124_test_speed.md` | beside round 2 (TC0 first) | Fewer duplicate route cases, growth rules (K1-K3), a faster integration project |
 | 24b | **Round 3:** MR0, FX1, RF1, UP1, LP1, SI1, TP1, LP2 | `20261125_management_round3.md` | queued | Three LiteLLM client defects, a page per LiteLLM team and user, field help, Edit team, the refresh button, the sign-in form |
+| 24c | **OC1:** Organisation spend timeline chart | `20261126_litellm_spend_charts.md` | queued | The daily spend table on LiteLLM → Organisation becomes a timeline chart |
 | 25 | **Phase 5** polish and accessibility | `20261103_master.md` | fluid workspace done (`85609ea`); compact workspace slices A, B1, B2, B2b on `main`; **the rest is open** | Full accessibility audit (includes the focus-ring token), responsive checks, e2e journeys, and the periodic read-only **security and best-practices review** (HIGH findings block the next unit) |
 
 **Parallel allowances** (user direction, recorded in Rule 30 and
@@ -121,6 +123,7 @@ and gets the Settings → Sync **Refresh now** button (user, 2026-11-18).
 | `20261124_test_suite_cleanup.md` | `docs/plans/20261124_test_suite_cleanup.md §11 completion criteria met for unit TC1, reported ready to merge, and the report written — or the run stopped at "tc-list ready" waiting for the approval, or ended by a usage freeze or a missing dependency, with the report written.` |
 | `20261124_test_speed.md` | `docs/plans/20261124_test_speed.md §10 completion criteria met for unit <TS1\|TS2>, reported ready to merge, and the report written — or the run ended by a usage freeze or a missing dependency, with the report written.` |
 | `20261125_management_round3.md` | `/goal FX1, then LP1, then LP2 of docs/plans/20261125_management_round3.md are ready: each at a green branch gate with its handover sent, in that order` (`litellm_worker`); `/goal RF1, then SI1 of docs/plans/20261125_management_round3.md are ready: each at a green branch gate with its handover sent, in that order` (`improvements_worker`); `/goal UP1, then TP1 of docs/plans/20261125_management_round3.md are ready: each at a green branch gate with its handover sent, in that order` (`bedrock_worker`) |
+| `20261126_litellm_spend_charts.md` | `/goal OC1 of docs/plans/20261126_litellm_spend_charts.md is ready: at a green branch gate with its handover sent` (`improvements_worker`) |
 
 Send the instruction first (for example "Run docs/plans/20261109_rbac.md for unit
 R3 in this worktree…", mentioning the plan with `@docs/plans/20261109_rbac.md`),
