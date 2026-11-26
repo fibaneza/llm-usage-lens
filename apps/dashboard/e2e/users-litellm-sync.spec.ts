@@ -177,26 +177,48 @@ test.describe("Management -> Users -> Sync from LiteLLM (SYNC1)", () => {
   // The Sync button needs a stored LiteLLM connection (LiteLLM spec LD37).
   // The describe stores the e2e connection once, under the cross-worker state
   // lock, and restores the table afterwards, so it runs on a fresh seed (CI).
+  // Rule 60.24: the release must not depend on how beforeAll ended. If a hook
+  // timeout fires while the lock is still awaited, the scope would later take
+  // the lock and hold it forever; `cancelled` makes a late scope release at
+  // once, and afterAll waits for the restore (try/finally, failures surfaced).
   let releaseConnection: (() => void) | undefined;
   let connectionScope: Promise<void> | undefined;
+  let cancelled = false;
+  let setupFailed = false;
 
   test.beforeAll(async ({ browser }) => {
+    cancelled = false;
+    setupFailed = false;
     await new Promise<void>((stored, failed) => {
       connectionScope = withStoredLiteLLMConnection(
         browser,
         () =>
           new Promise<void>((release) => {
+            if (cancelled) {
+              release();
+              return;
+            }
             releaseConnection = release;
             stored();
           }),
       );
-      connectionScope.catch(failed);
+      connectionScope.catch((error) => {
+        setupFailed = true;
+        failed(error);
+      });
     });
   });
 
   test.afterAll(async () => {
-    releaseConnection?.();
-    await connectionScope;
+    cancelled = true;
+    try {
+      releaseConnection?.();
+    } finally {
+      // A setup failure was already reported by beforeAll; a restore failure
+      // after a successful setup must fail here.
+      if (setupFailed) await connectionScope?.catch(() => undefined);
+      else await connectionScope;
+    }
   });
 
   test.beforeEach(async ({ context }) => {

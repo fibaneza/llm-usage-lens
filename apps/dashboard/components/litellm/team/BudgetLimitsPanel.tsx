@@ -2,6 +2,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 
+import { ClientOnly } from "@/components/litellm/ClientOnly";
 import { TeamResetCount } from "@/components/budget-resets/BudgetResetCount";
 import { OpenResetRequests } from "@/components/budget-resets/OpenResetRequests";
 import { KeyValueList } from "@/components/display/KeyValueList";
@@ -210,7 +211,7 @@ function BudgetAndLimits({
   );
 }
 
-export function BudgetLimitsPanel({
+function BudgetLimitsPanelContent({
   teamId,
   capabilities: { canRaiseLimits },
 }: TeamPanelProps) {
@@ -231,5 +232,13 @@ export function BudgetLimitsPanel({
       canRaiseLimits={canRaiseLimits}
       canApprove={enabledOperations.includes("resetMemberSpend")}
     />
+  );
+}
+
+export function BudgetLimitsPanel(props: TeamPanelProps) {
+  return (
+    <ClientOnly>
+      <BudgetLimitsPanelContent {...props} />
+    </ClientOnly>
   );
 }

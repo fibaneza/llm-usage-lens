@@ -2,7 +2,9 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
 import { waitForHydration } from "./support/hydration";
+import { E2E_BASE_URL } from "./support/constants";
 import { signInAsTestUser } from "./support/session";
+import { withLiteLLMStateLock } from "../test/fixtures/e2e-litellm-state-lock";
 
 // Sources: Design System - LiteLLM team page (unit LP1, D-R3-7, D-R3-9), T-LP4
 // and T-LP5: "/dashboard/manage/litellm/teams/[litellmTeamId], for
@@ -105,6 +107,67 @@ async function expectNoSeriousAxe(page: Page) {
 }
 
 test.describe("LiteLLM team page (LP1, T-LP4, T-LP5)", () => {
+  // Rule 60.24 (no flaky tests), Design System - LiteLLM team page (T-LP4):
+  // the team page asks LiteLLM on the server (proxyTeamExists) whenever a
+  // connection is STORED, and the fake LiteLLM has no team ll-111, so a
+  // connection stored by another worker (users-litellm-sync) turns the page
+  // into a 404. Each case therefore holds the shared LiteLLM-state lock (not
+  // nested: the hold is one lock call, released in afterEach even when the
+  // case fails or times out) and first asserts that nothing is stored.
+  let releaseLock: (() => void) | undefined;
+  let lockScope: Promise<void> | undefined;
+  let cancelled = false;
+
+  test.beforeEach(async ({ browser }) => {
+    test.setTimeout(150_000);
+    cancelled = false;
+    releaseLock = undefined;
+    await new Promise<void>((held, failed) => {
+      lockScope = withLiteLLMStateLock(
+        async () => {
+          if (cancelled) return;
+          const context = await browser.newContext({ baseURL: E2E_BASE_URL });
+          try {
+            await signInAsTestUser(context, {
+              roles: ["internal-admin"],
+              authTime: Math.floor(Date.now() / 1000),
+            });
+            const res = await context.request.get("/api/litellm/connection");
+            expect(res.ok(), "reading the stored LiteLLM connection").toBe(
+              true,
+            );
+            const { data } = (await res.json()) as {
+              data: { baseUrl: string | null };
+            };
+            if (data.baseUrl !== null) {
+              throw new Error(
+                `Precondition failed: a LiteLLM connection is stored (${data.baseUrl}); the team page would ask the fake LiteLLM for ll-111 and 404. Another spec left it behind or runs outside the shared LiteLLM-state lock.`,
+              );
+            }
+          } finally {
+            await context.close();
+          }
+          await new Promise<void>((release) => {
+            if (cancelled) {
+              release();
+              return;
+            }
+            releaseLock = release;
+            held();
+          });
+        },
+        { timeoutMs: 120_000 },
+      );
+      lockScope.catch(failed);
+    });
+  });
+
+  test.afterEach(async () => {
+    cancelled = true;
+    releaseLock?.();
+    await lockScope?.catch(() => undefined);
+  });
+
   for (const role of [
     "internal-admin",
     "internal-org-admin",

@@ -1,6 +1,7 @@
 "use client";
 
 import { Panel } from "@/components/display/Panel";
+import { ClientOnly } from "@/components/litellm/ClientOnly";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { LiteLLMTeamMembersPanel } from "@/components/settings/litellm-panel/LiteLLMTeamMembersPanel";
 
@@ -46,11 +47,13 @@ export function ProxyTeamPageContent({
           { label: litellmTeamId },
         ]}
       />
-      <ProxyTeamSummaryPanel litellmTeamId={litellmTeamId} />
-      <Panel title="Members" boundaryTitle="Members">
-        <MembersBody litellmTeamId={litellmTeamId} canReset={canReset} />
-      </Panel>
-      <ProxyTeamLinkPanel litellmTeamId={litellmTeamId} />
+      <ClientOnly>
+        <ProxyTeamSummaryPanel litellmTeamId={litellmTeamId} />
+        <Panel title="Members" boundaryTitle="Members">
+          <MembersBody litellmTeamId={litellmTeamId} canReset={canReset} />
+        </Panel>
+        <ProxyTeamLinkPanel litellmTeamId={litellmTeamId} />
+      </ClientOnly>
     </div>
   );
 }

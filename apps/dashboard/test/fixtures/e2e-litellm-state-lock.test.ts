@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { withLiteLLMStateLock } from "./e2e-litellm-state-lock";
 
@@ -59,5 +59,41 @@ describe("withLiteLLMStateLock", () => {
         pollMs: 5,
       }),
     ).rejects.toThrow(/state lock/);
+  });
+
+  // Rule 60.24: fake timers, no wall-clock sleep. The e2e run that failed held
+  // the lock past the 5 minute stale age and a second worker took it over.
+  describe("heartbeat", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("does not let a waiter take a lock held by a live owner for longer than the stale age", async () => {
+      vi.useFakeTimers();
+      const dir = lockDir();
+      let releaseA!: () => void;
+      const events: string[] = [];
+      const a = withLiteLLMStateLock(
+        () =>
+          new Promise<void>((resolve) => {
+            events.push("a:start");
+            releaseA = resolve;
+          }),
+        { dir },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      const b = withLiteLLMStateLock(
+        async () => {
+          events.push("b:start");
+        },
+        { dir, timeoutMs: 20 * 60_000, pollMs: 1_000 },
+      );
+
+      await vi.advanceTimersByTimeAsync(7 * 60_000);
+      expect(events).toEqual(["a:start"]);
+
+      releaseA();
+      await vi.advanceTimersByTimeAsync(2_000);
+      await Promise.all([a, b]);
+      expect(events).toEqual(["a:start", "b:start"]);
+    });
   });
 });

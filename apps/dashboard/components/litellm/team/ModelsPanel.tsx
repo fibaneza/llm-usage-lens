@@ -3,6 +3,7 @@
 import { LiteLLMModelsResponseSchema } from "@llm-usage-lens/shared";
 import { useState } from "react";
 
+import { ClientOnly } from "@/components/litellm/ClientOnly";
 import { FieldHelp } from "@/components/display/FieldHelp";
 import { Button } from "@/components/ui/button";
 
@@ -75,7 +76,7 @@ function ModelChoices({
   );
 }
 
-export function ModelsPanel({ teamId }: TeamPanelProps) {
+function ModelsPanelContent({ teamId }: TeamPanelProps) {
   const detail = useTeamDetail(teamId);
   const proxy = useLiteLLMQuery(
     ["models"],
@@ -98,5 +99,13 @@ export function ModelsPanel({ teamId }: TeamPanelProps) {
       proxyModels={proxy.data.items}
       teamModels={models}
     />
+  );
+}
+
+export function ModelsPanel(props: TeamPanelProps) {
+  return (
+    <ClientOnly>
+      <ModelsPanelContent {...props} />
+    </ClientOnly>
   );
 }

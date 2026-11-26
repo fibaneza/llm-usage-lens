@@ -7,6 +7,7 @@ import {
 import { useId, useState } from "react";
 import { z } from "zod";
 
+import { ClientOnly } from "@/components/litellm/ClientOnly";
 import { formatUsd } from "@/components/charts/chart-data";
 import { BudgetBar, budgetPercent } from "@/components/manage/BudgetBar";
 import {
@@ -633,7 +634,7 @@ function MemberActions({
   );
 }
 
-export function MembersPanel({ teamId }: TeamPanelProps) {
+function MembersPanelContent({ teamId }: TeamPanelProps) {
   const detail = useTeamDetail(teamId);
   const members = useLiteLLMQuery(
     ["team", teamId, "members"],
@@ -842,5 +843,13 @@ export function MembersPanel({ teamId }: TeamPanelProps) {
         </Table>
       )}
     </div>
+  );
+}
+
+export function MembersPanel(props: TeamPanelProps) {
+  return (
+    <ClientOnly>
+      <MembersPanelContent {...props} />
+    </ClientOnly>
   );
 }

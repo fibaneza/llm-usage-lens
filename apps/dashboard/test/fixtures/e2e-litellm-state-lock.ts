@@ -3,6 +3,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,8 +18,11 @@ import { join } from "node:path";
 // spec running at the same time (RS1 review U-W1). The lock is a directory
 // created with `mkdir` (atomic) under the OS temp dir; one run's workers share
 // it. A lock whose owner process is gone, or that is older than STALE_MS, is
-// taken over. Lives under test/ (not e2e/support) so it adds no shared e2e file.
+// taken over; a live holder refreshes the directory mtime every HEARTBEAT_MS
+// so a long hold (users-litellm-sync keeps it across ~10 serial tests) is never
+// mistaken for a stale one. Lives under test/ (not e2e/support) so it adds no shared e2e file.
 const STALE_MS = 5 * 60_000;
+const HEARTBEAT_MS = 30_000;
 const DEFAULT_DIR = join(tmpdir(), "llm-usage-lens-e2e-litellm-state.lock");
 
 type Options = { dir?: string; timeoutMs?: number; pollMs?: number };
@@ -61,7 +65,19 @@ async function acquire(opts: Required<Options>): Promise<() => void> {
         join(opts.dir, "owner.json"),
         JSON.stringify({ pid: process.pid }),
       );
-      return () => rmSync(opts.dir, { recursive: true, force: true });
+      const beat = setInterval(() => {
+        try {
+          const now = new Date();
+          utimesSync(opts.dir, now, now);
+        } catch {
+          // The lock directory was removed under us; release() is a no-op then.
+        }
+      }, HEARTBEAT_MS);
+      beat.unref();
+      return () => {
+        clearInterval(beat);
+        rmSync(opts.dir, { recursive: true, force: true });
+      };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }

@@ -1,5 +1,6 @@
 "use client";
 
+import { ClientOnly } from "@/components/litellm/ClientOnly";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 import { ProxyUserDailyPanel } from "./ProxyUserDailyPanel";
@@ -26,14 +27,16 @@ export function ProxyUserPageContent({
           { label: litellmUserId },
         ]}
       />
-      <ProxyUserSummaryPanel litellmUserId={litellmUserId} />
-      <ProxyUserDailyPanel litellmUserId={litellmUserId} />
-      <ProxyUserTeamsPanel litellmUserId={litellmUserId} />
-      <ProxyUserLinkPanel
-        litellmUserId={litellmUserId}
-        canWrite={canWrite}
-        ownOid={ownOid}
-      />
+      <ClientOnly>
+        <ProxyUserSummaryPanel litellmUserId={litellmUserId} />
+        <ProxyUserDailyPanel litellmUserId={litellmUserId} />
+        <ProxyUserTeamsPanel litellmUserId={litellmUserId} />
+        <ProxyUserLinkPanel
+          litellmUserId={litellmUserId}
+          canWrite={canWrite}
+          ownOid={ownOid}
+        />
+      </ClientOnly>
     </div>
   );
 }

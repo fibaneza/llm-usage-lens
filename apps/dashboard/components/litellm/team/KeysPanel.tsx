@@ -6,6 +6,7 @@ import {
 } from "@llm-usage-lens/shared";
 import { useRef, useState, type RefObject } from "react";
 
+import { ClientOnly } from "@/components/litellm/ClientOnly";
 import { formatUsd } from "@/components/charts/chart-data";
 import { Badge } from "@/components/ui/badge";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -243,7 +244,7 @@ function KeyActions({
   );
 }
 
-export function KeysPanel({ teamId }: TeamPanelProps) {
+function KeysPanelContent({ teamId }: TeamPanelProps) {
   const detail = useTeamDetail(teamId);
   const keys = useLiteLLMQuery(
     ["team", teamId, "keys"],
@@ -388,5 +389,13 @@ export function KeysPanel({ teamId }: TeamPanelProps) {
         </Table>
       )}
     </div>
+  );
+}
+
+export function KeysPanel(props: TeamPanelProps) {
+  return (
+    <ClientOnly>
+      <KeysPanelContent {...props} />
+    </ClientOnly>
   );
 }

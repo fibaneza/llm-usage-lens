@@ -1,15 +1,12 @@
-import { type BrowserContext, expect, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import {
   DEV_LOGIN_ONLY_REASON,
-  E2E_BASE_URL,
-  E2E_LITELLM_BASE_URL,
   E2E_LITELLM_USER,
   E2E_PRODUCTION_SERVERS,
 } from "./support/constants";
 import { deleteStoredIdentity, seedStoredIdentity } from "./support/identity";
-import { signInAsTestUser } from "./support/session";
-import { withLiteLLMStateLock } from "../test/fixtures/e2e-litellm-state-lock";
+import { withStoredLiteLLMConnection } from "../test/fixtures/e2e-litellm-connection";
 
 // Runs against the E2E dev server, which sets AUTH_DEV_LOGIN=true and no Entra
 // vars (playwright.config.ts). Auth guide — Dev-only local login.
@@ -45,41 +42,17 @@ test.describe("dev-only local login", () => {
 // role ("Own usage without a stored link": findUserByEmail on the session's
 // email, read server-side). The lookup runs in the dev server, so it talks to
 // the standalone fake in support/fake-litellm-server.mjs (started and
-// allow-listed by playwright.config.ts); the connection is saved through the
-// real PUT /api/litellm/connection as a forged admin.
-async function ensureFakeLiteLLMConnection(context: BrowserContext) {
-  await signInAsTestUser(context, {
-    roles: ["internal-admin"],
-    authTime: Math.floor(Date.now() / 1000),
-  });
-  const current = await context.request.get("/api/litellm/connection");
-  expect(current.ok()).toBe(true);
-  const status = (await current.json()).data as {
-    baseUrl: string | null;
-    version: number;
-  };
-  if (status.baseUrl !== E2E_LITELLM_BASE_URL) {
-    const saved = await context.request.put("/api/litellm/connection", {
-      headers: { origin: E2E_BASE_URL },
-      data: {
-        baseUrl: E2E_LITELLM_BASE_URL,
-        version: status.version === 0 ? null : status.version,
-      },
-    });
-    expect(saved.status(), await saved.text()).toBe(200);
-  }
-  await context.clearCookies();
-}
-
+// allow-listed by playwright.config.ts); withStoredLiteLLMConnection saves the
+// connection through the real PUT as a forged admin and restores the previous
+// state when the case ends (Rule 60.24).
 // Amended L3c2: the dev login only signs in as a stored identity, so each case
 // seeds its Identity row in DynamoDB Local first (support/identity.ts). The Role
 // select is disabled while an identity is typed, so no case picks a role.
 test.describe("dev login identity option (L3c, L3c2)", () => {
   test.skip(E2E_PRODUCTION_SERVERS, DEV_LOGIN_ONLY_REASON);
-  // Both LiteLLM tests save the one shared connection; run them in order. They
-  // also take the cross-worker LiteLLM state lock, so reset-spend-users (which
-  // stores and then removes the connection) cannot pull it away mid-test (RS1
-  // review U-W1).
+  // Both LiteLLM tests store the one shared connection; run them in order.
+  // withStoredLiteLLMConnection takes the cross-worker LiteLLM state lock and
+  // restores the previous state afterwards (Rule 60.24).
   test.describe.configure({ mode: "serial" });
 
   const SEEDED_OIDS = [
@@ -107,11 +80,10 @@ test.describe("dev login identity option (L3c, L3c2)", () => {
   });
 
   test("signing in as a LiteLLM user's email shows that user's spend in My usage (Views by role)", async ({
-    context,
+    browser,
     page,
   }) => {
-    await withLiteLLMStateLock(async () => {
-      await ensureFakeLiteLLMConnection(context);
+    await withStoredLiteLLMConnection(browser, async () => {
       await page.goto("/sign-in");
       await page
         .getByLabel("Sign in as (email or user id)")
@@ -134,11 +106,10 @@ test.describe("dev login identity option (L3c, L3c2)", () => {
   });
 
   test("an email unknown to LiteLLM shows the not-linked state (Views by role)", async ({
-    context,
+    browser,
     page,
   }) => {
-    await withLiteLLMStateLock(async () => {
-      await ensureFakeLiteLLMConnection(context);
+    await withStoredLiteLLMConnection(browser, async () => {
       await page.goto("/sign-in");
       await page
         .getByLabel("Sign in as (email or user id)")
