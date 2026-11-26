@@ -86,28 +86,29 @@ const NAV_TITLES = [
   "Settings",
 ];
 
-// System Architecture - "Configuration file" (Moved environment values: the
-// server resolves display.orgName > deprecated NEXT_PUBLIC_ORG_NAME > default
-// and passes it to the top bar as a prop), A10.
-describe("AppSidebar organisation name (unit CFG)", () => {
-  it("shows the orgName prop", () => {
-    mockUsePathname.mockReturnValue("/dashboard");
-    mockUseSearchParams.mockReturnValue(new URLSearchParams());
-    render(
-      <SidebarProvider>
-        <AppSidebar orgName="Acme Corp" />
-      </SidebarProvider>,
-    );
-    expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+// Design System - Navigation (Sidebar), Brand bullet, T-FX11 (2026-11-26): the
+// brand link shows the product name only; no organisation line. The config
+// key display.orgName is still accepted and ignored (System Architecture,
+// D-F-13), so the sidebar takes no orgName prop.
+describe("AppSidebar brand (T-FX11)", () => {
+  function brand() {
+    return screen.getByRole("link", { name: /LLM Usage Lens/ });
+  }
+
+  it("shows the product name and no organisation text", () => {
+    renderBareSidebar("/dashboard");
+    expect(brand()).toHaveTextContent(/^\s*LLM Usage Lens\s*$/);
+    expect(screen.queryByText(/organi[sz]ation/i)).toBeNull();
   });
 
-  it("the pre-hydration fallback shows the same name", () => {
+  it("the pre-hydration fallback shows the product name only", () => {
     render(
       <SidebarProvider>
-        <AppSidebarFallback orgName="Acme Corp" />
+        <AppSidebarFallback />
       </SidebarProvider>,
     );
-    expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+    expect(brand()).toHaveTextContent(/^\s*LLM Usage Lens\s*$/);
+    expect(screen.queryByText(/organi[sz]ation/i)).toBeNull();
   });
 });
 

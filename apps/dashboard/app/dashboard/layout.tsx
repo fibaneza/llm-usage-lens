@@ -6,13 +6,9 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { AppSidebar, AppSidebarFallback } from "@/components/layout/AppSidebar";
 import { DefaultPresetProvider } from "@/components/providers/DefaultPresetProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { env } from "@/env";
 import { scopeFor } from "@/lib/api/scoped-rollups";
 import { getAppConfig } from "@/lib/config/app-config";
-import {
-  resolveDefaultDateRange,
-  resolveOrgName,
-} from "@/lib/config/resolvers";
+import { resolveDefaultDateRange } from "@/lib/config/resolvers";
 import { managementAccessFor } from "@/lib/manage-access";
 import type { NavScope } from "@/lib/nav";
 
@@ -83,7 +79,6 @@ export default async function DashboardLayout({
   // Resolved from config.yaml on the server and passed down (System
   // Architecture — Configuration file, A10, A11).
   const config = getAppConfig();
-  const orgName = resolveOrgName(config, env.NEXT_PUBLIC_ORG_NAME).value;
   const defaultPreset = resolveDefaultDateRange(config).value;
   return (
     <DefaultPresetProvider preset={defaultPreset}>
@@ -91,10 +86,8 @@ export default async function DashboardLayout({
         {/* AppSidebar reads the URL via useSearchParams (issue #75 — carries the
           date range onto nav links), so it sits under Suspense for static
           prerender (Rule 60.12); the fallback is the same rail with bare hrefs. */}
-        <Suspense
-          fallback={<AppSidebarFallback scope={scope} orgName={orgName} />}
-        >
-          <AppSidebar scope={scope} orgName={orgName} />
+        <Suspense fallback={<AppSidebarFallback scope={scope} />}>
+          <AppSidebar scope={scope} />
         </Suspense>
         <SidebarInset className="min-w-0">
           <AppHeader scope={scope} />

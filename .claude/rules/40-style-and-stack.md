@@ -60,7 +60,8 @@ Source: `docs/specs/2026-05-15-design-system.md`.
    `Tabs` component (Design System — *Layout*, *Settings Page*). A field or
    a column whose meaning is not plain from its label carries a `FieldHelp`
    (Design System — *Component Inventory*; 2026-11-25). Every form field has
-   a visible label.
+   a visible label. A native `<select>` is always the `NativeSelect` of
+   `components/ui/` (Design System — *Component Inventory*; 2026-11-26).
 10. **Sidebar order (2026-11-17; management improvements D1 and D7, user;
     D2 and D3, agent decisions).** Usage: Overview, My usage, Team usage, Ranking, Cost by
     department, Cost by team, Cost by service, Cost by user. Management:

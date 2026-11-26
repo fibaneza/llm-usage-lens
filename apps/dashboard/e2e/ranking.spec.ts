@@ -761,6 +761,20 @@ test.describe("ranking page - responsive", () => {
       main(page).getByRole("combobox", { name: /sort/i }),
     ).toBeVisible();
 
+    // T-FX8 (Design System - NativeSelect): the card sort control's chevron
+    // stays inside its select, 8px or more from the right edge.
+    const sort = main(page).getByRole("combobox", { name: /sort/i });
+    const chevron = sort.locator("xpath=..").locator("svg");
+    await expect(chevron).toHaveCount(1);
+    const sb = await sort.boundingBox();
+    const cb = await chevron.boundingBox();
+    expect(sb).not.toBeNull();
+    expect(cb).not.toBeNull();
+    if (sb !== null && cb !== null) {
+      expect(cb.x).toBeGreaterThanOrEqual(sb.x);
+      expect(sb.x + sb.width - (cb.x + cb.width)).toBeGreaterThanOrEqual(8);
+    }
+
     await chooseSort(page, "Invocations");
     const byInvocations = ["Marketing", "Legal", "Engineering", "Data Science"];
     await expect

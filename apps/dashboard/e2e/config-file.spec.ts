@@ -59,15 +59,15 @@ test.describe("Settings -> LiteLLM -> Guardrails with a config.yaml (unit CFG)",
     ).not.toHaveText(/config\.yaml/i);
   });
 
-  // Review W2 (review-blockers.md): the loader-to-UI wiring. display.orgName in
-  // e2e.yaml beats NEXT_PUBLIC_ORG_NAME (pinned to "Organization" by
-  // playwright.config.ts) and shows under the brand in the sidebar (A10;
-  // AppSidebar.tsx), not in the top bar.
-  test("display.orgName from the file reaches the sidebar", async ({
+  // Design System - Navigation (Sidebar), Brand bullet, T-FX11: e2e.yaml still
+  // sets display.orgName (accepted and ignored, D-F-13), the file loads, and
+  // the sidebar brand shows the product name only.
+  test("display.orgName in the file is ignored: the brand shows the product name only (T-FX11)", async ({
     page,
   }) => {
-    await expect(
-      page.locator('[data-slot="sidebar"]').getByText("E2E Config Org"),
-    ).toBeVisible();
+    const sidebar = page.locator('[data-slot="sidebar"]');
+    await expect(sidebar.getByText("LLM Usage Lens").first()).toBeVisible();
+    await expect(sidebar.getByText("E2E Config Org")).toHaveCount(0);
+    await expect(sidebar.getByText(/organi[sz]ation/i)).toHaveCount(0);
   });
 });

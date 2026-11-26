@@ -83,7 +83,8 @@ Decisions on technologies evaluated and excluded, with rationale:
     while password sign-in is off (Access Control — D24): the page reads
     the switch on the server per request, never from a cache, and when
     that read fails the form is absent and the other methods still show
-    (fail closed).
+    (fail closed). The developer sign-in's Role field is a `NativeSelect`
+    (unit FX2, 2026-11-26).
 
   *Tests (unit SI1).*
 
@@ -365,9 +366,13 @@ From the compact refresh, avatars in tables are neutral (20px, `--color-muted` f
 ```
 (agent decision, 2026-11-16: compact workspace; groups and items amended the same day by the mock-up review, decided 2026-11-16, user — *Navigation (Sidebar)*. The diagram shows an `internal-admin`; other roles see fewer items.)
 
-- Brand (logo + product + org name) sits at the top of the sidebar, not in a
+- Brand (logo + product name) sits at the top of the sidebar. There is no organisation line (user, 2026-11-26: 'no need that text'; unit FX2; superseded: logo + product + org name). It is not in a
   full-width header; it collapses to the mark when the rail collapses. The
   product name shown is **LLM Usage Lens**.
+
+  | Test | Proves |
+  |---|---|
+  | T-FX11 | The sidebar brand shows the product name only, expanded and in the mobile sheet; a config file that sets `display.orgName` still loads |
 - Top bar lives **inside** the content area, to the right of the sidebar. The
   active page title and its sync-status badge read as one unit on the left; the
   global `DateRangePicker`, command menu, sync countdown, and user menu sit on
@@ -1103,9 +1108,18 @@ Legends are a custom swatch + foreground-text legend (series colour never used a
 | `ModelFilter` | shadcn/ui Select | Dropdown to filter by specific Bedrock model |
 | `SearchInput` | shadcn/ui Input | Debounced text filter for tables. From unit LP1 (D-R3-5, 2026-11-25) it takes a `label` (visible unless `hideLabel`), a `maxLength` and a `delayMs` (0 for no debounce), and every search box on a Management page uses it: the magnifier is at the left of the field |
 | `FieldHelp` | Custom (shadcn Button and Popover, Lucide `Info`) | An icon-only button beside a field label or a column header, `aria-label="About <field>"`. A click or Enter opens a popover with one or two sentences; Escape or a click outside closes it and focus returns to the button. Never a hover-only tooltip, never a blocking dialog (D-R3-10, 2026-11-25; the user's "modal with a short text"). The text of each field is in this spec (*Team page, round 3*; *Users, round 3*) |
+| `NativeSelect` | shadcn (`native-select`), `components/ui/native-select.tsx` | The one native `<select>` of the app (user, 2026-11-26: the arrow on the sign-in Role field 'looks off'; D-F-9). The browser's arrow is off (`appearance-none`); a Lucide `ChevronDown` sits inside the field, 12px from the right edge, and the text has right padding so it never runs under it. Height and radius come from the density tokens (32px, 44px below `md`). Its accessible name, value, options and keyboard behaviour are the native ones. No bare `<select>` elsewhere under `components/**`. The Radix `Select` stays for menus that need rich options |
 | `ColumnToggle` | shadcn/ui DropdownMenu | Show/hide table columns |
 | `Pagination` | shadcn/ui | Page through table results (default 20 rows) |
 | `ExportButton` | Custom | Export table data to CSV |
+
+  | Test | Proves |
+  |---|---|
+  | T-FX6 | `NativeSelect`: `appearance-none`, one chevron inside the field, right padding for the text, the accessible name and keyboard behaviour unchanged, disabled and invalid states |
+  | T-FX7 | The sign-in Role field, the card sort control and both existing `NativeSelect` exports render it; no bare `<select>` is left under `components/**` |
+  | T-FX8 | E2E: the sign-in page at 375px and desktop, axe clean; the chevron's box lies inside the select's box with at least 8px to its right edge |
+
+  *Decisions (unit FX2, 2026-11-26):* **D-F-10** (plan decision, recorded here): `components/settings/access/form-controls.tsx` and `components/litellm/team/native-select.tsx` keep their `NativeSelect` exports as thin wrappers that render this component, so the forms that import them are not edited — reason: the fewest files changed for one visual fix. *Agent decision (W3, FX2 review r1):* those selects take the density tokens and the focus ring of `ui/input` (Rule 40.2), so the access forms' selects go from `h-9` to `h-8` (32px; 44px below `md`) and from the 3px ring to the input's ring, like every other control.
 
 ### Status & Feedback
 

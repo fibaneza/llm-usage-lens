@@ -127,7 +127,7 @@ Phase 1 (Foundation).
   - Tablet: sidebar overlay
   - Desktop: persistent sidebar + content
 - [x] Build top bar
-  - User menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`; from unit CFG `display.orgName` in `config.yaml`, the variable a deprecated fallback — System Architecture — *Configuration file*, 2026-11-17)
+  - User menu (avatar, name, sign out, Auth.js session) + ~~organization name~~ *(no longer shown: unit FX2, 2026-11-26)* (`NEXT_PUBLIC_ORG_NAME`; from unit CFG `display.orgName` in `config.yaml`, the variable a deprecated fallback — System Architecture — *Configuration file*, 2026-11-17)
   - `SyncStatusBadge` placeholder (no real data yet — neutral "no sync" state, never an error)
   - `SyncCountdown` placeholder
   - Compact forms per breakpoint (badge/countdown icon-only below `lg`, search icon-only `md`–1439) per Design System *Layout* (follow-up, 2026-10-29)
@@ -815,7 +815,7 @@ the `auth.signin.error` record; `withRoute` treats a session without
 - [x] `AppConfigSchema` and its inferred type in `packages/shared` (strict; `litellm.operations` is the former `LiteLLMGatewayConfigSchema`; `display.defaultDateRange`, `display.orgName`, `data.retention.dailyRollupDays`; secret-shaped and authorization keys rejected)
 - [x] `apps/dashboard/lib/config/app-config.ts` (`server-only`): reads `config/config.yaml` or `APP_CONFIG_FILE` once, `yaml` with safe options and a 64 KiB cap, validates, freezes; typed accessors and `isFileSet(keyPath)`; startup emits file-set key paths (names only) through OpenTelemetry
 - [x] `config/litellm-gateway.json` converted into `config/config.yaml`: its two `litellm.operations` entries kept as commented examples, not set (A16), every other key documented as a comment; the JSON file and its import deleted; `loadGatewayConfig()` unchanged for callers
-- [x] One resolver per v1 setting (operation toggles; default date range; organisation name with the deprecated `NEXT_PUBLIC_ORG_NAME` fallback; rollup retention shown on Settings → *Sync and data*)
+- [x] One resolver per v1 setting (operation toggles; default date range; organisation name with the deprecated `NEXT_PUBLIC_ORG_NAME` fallback (the organisation name is no longer shown: unit FX2, 2026-11-26); rollup retention shown on Settings → *Sync and data*)
 - [x] `PUT /api/litellm/toggles`: `409 CONFIG_FILE_LOCKED` for a file-set operation after `401`/`403`/`400`, before any write, one `denied` audit; `reset` keeps the saved values of file-set operations; registered in the shared route-contract suite (Rule 60.23)
 - [x] Settings → LiteLLM *Guardrails*: "Set in config.yaml" badge and disabled toggle for file-set operations (source `file`)
 - [x] `apps/dashboard/Dockerfile` copies the file into the runner stage at the loader's path, owned by `root:root`, mode `0444` (the runtime `app` user can read it but not change or chmod it); `outputFileTracingIncludes` added if the `standalone` output needs it; `infra/` changes only if the task definition must set `APP_CONFIG_FILE` *(Built 2026-11-17: the COPY is required, since the standalone trace does not include the file; `outputFileTracingIncludes` is not needed and `infra/` is unchanged. `docker build` not run, because Docker is not installed on the build machine.)*
@@ -1123,6 +1123,11 @@ Phase 5 (user, 2026-11-25; Rule 30).
   Verify: T-OC8–T-OC13 (Design System — *LiteLLM Organisation spend
   chart*, the 2026-11-26 comparison); no LiteLLM call added; the route's
   role table unchanged
+- [x] **FX2** Three small UI fixes: the select arrow, the connection test, the sidebar brand line (`fix/round3-ui-fixes`; user, 2026-11-26)
+  Verify: T-FX6–T-FX8 (Design System — *Component Inventory*,
+  `NativeSelect`); T-FX9, T-FX10 (LiteLLM — *Security architecture*
+  item 7); T-FX11 (Design System — *Navigation (Sidebar)*); no route
+  edited; the full e2e once (e2e shared files)
 - [ ] Verify (the round): `pnpm check` and the full `pnpm test:e2e` green in
   CI on the push of each unit
 

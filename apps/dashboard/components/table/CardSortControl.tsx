@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { columnLabel } from "@/components/table/column-label";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 
 type CardSortControlProps<T> = {
   table: Table<T>;
@@ -19,7 +20,7 @@ export function CardSortControl<T>({ table }: CardSortControlProps<T>) {
 
   return (
     <div className="flex items-center gap-1">
-      <select
+      <NativeSelect
         aria-label="Sort by"
         value={active?.id ?? ""}
         onChange={(event) => {
@@ -30,7 +31,7 @@ export function CardSortControl<T>({ table }: CardSortControlProps<T>) {
               : [],
           );
         }}
-        className="border-input text-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-8 max-w-40 rounded-md border bg-transparent px-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+        className="max-w-40"
       >
         <option value="">Default order</option>
         {sortable.map((column) => (
@@ -38,7 +39,7 @@ export function CardSortControl<T>({ table }: CardSortControlProps<T>) {
             {columnLabel(column)}
           </option>
         ))}
-      </select>
+      </NativeSelect>
       {active ? (
         <Button
           type="button"

@@ -1,6 +1,7 @@
 import { useId } from "react";
 import type { ComponentProps, ReactElement, ReactNode, RefObject } from "react";
 
+import { NativeSelect } from "@/components/ui/native-select";
 import { cn } from "@/lib/utils";
 
 // Shared form chrome for the Settings access sections (Design System -
@@ -63,23 +64,10 @@ export function FormField({
   );
 }
 
-export function NativeSelect({
-  className,
-  ...props
-}: ComponentProps<"select">) {
-  return (
-    <select
-      data-slot="native-select"
-      className={cn(
-        "border-input bg-background h-9 w-full min-w-0 rounded-md border px-3 py-1 text-sm shadow-xs outline-none",
-        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-        "aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50",
-        className,
-      )}
-      {...props}
-    />
-  );
+function Select(props: ComponentProps<"select">) {
+  return <NativeSelect {...props} />;
 }
+export { Select as NativeSelect };
 
 export function NativeTextarea({
   className,

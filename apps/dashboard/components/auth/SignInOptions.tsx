@@ -3,6 +3,7 @@
 import { Eye, EyeOff } from "lucide-react";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
 
+import { NativeSelect } from "@/components/ui/native-select";
 import { TEAM_LEAD_OID } from "@/lib/auth/team-lead-identity";
 import { GLOBAL_ROLES, INTERNAL_ADMIN_ROLE } from "@/lib/auth/roles";
 
@@ -287,13 +288,12 @@ export function SignInOptions({
           <form action={devAction} className="flex flex-col gap-3">
             <label className="text-foreground flex flex-col gap-1 text-left text-sm">
               Role
-              <select
+              <NativeSelect
                 name={asLead ? undefined : "role"}
                 disabled={identity.trim() !== ""}
                 aria-describedby={identity.trim() ? "dev-role-hint" : undefined}
                 value={choice}
                 onChange={(event) => setChoice(event.target.value)}
-                className={FIELD_CLASS}
               >
                 {GLOBAL_ROLES.map((role) => (
                   <option key={role} value={role}>
@@ -301,7 +301,7 @@ export function SignInOptions({
                   </option>
                 ))}
                 <option value={TEAM_LEAD_OPTION}>Team lead</option>
-              </select>
+              </NativeSelect>
             </label>
             {asLead ? (
               <input type="hidden" name="identity" value={TEAM_LEAD_OID} />

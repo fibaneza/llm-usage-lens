@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
 import { expectNoBlockingViolations } from "./support/axe";
-import { E2E_BASE_URL, E2E_PRODUCTION_SERVERS } from "./support/constants";
+import {
+  DEV_LOGIN_ONLY_REASON,
+  E2E_BASE_URL,
+  E2E_PRODUCTION_SERVERS,
+} from "./support/constants";
 import { signInAsTestUser } from "./support/session";
 
 // Source: docs/specs/2026-05-15-design-system.md - Authentication, Sign-in page,
@@ -179,4 +183,32 @@ test.describe("sign-in forms (T-SI7)", () => {
     await expect(page.getByLabel("Username")).toBeFocused();
     await expect(page).toHaveURL(/\/sign-in$/);
   });
+});
+
+// Design System - Component Inventory, NativeSelect, T-FX8: the dev sign-in
+// Role field keeps its chevron inside the field with room on the right.
+test.describe("dev sign-in Role field chevron (T-FX8)", () => {
+  test.skip(E2E_PRODUCTION_SERVERS, DEV_LOGIN_ONLY_REASON);
+  for (const width of [375, 1440] as const) {
+    test(`the chevron sits inside the Role select, 8px or more from its right edge, and the page is axe clean at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/sign-in");
+      const select = page.getByLabel(/^role/i);
+      await expect(select).toBeVisible();
+      const chevron = select.locator("xpath=..").locator("svg");
+      await expect(chevron).toHaveCount(1);
+      const s = await select.boundingBox();
+      const c = await chevron.boundingBox();
+      expect(s).not.toBeNull();
+      expect(c).not.toBeNull();
+      if (s === null || c === null) return;
+      expect(c.x).toBeGreaterThanOrEqual(s.x);
+      expect(c.y).toBeGreaterThanOrEqual(s.y);
+      expect(c.y + c.height).toBeLessThanOrEqual(s.y + s.height);
+      expect(s.x + s.width - (c.x + c.width)).toBeGreaterThanOrEqual(8);
+      await expectNoBlockingViolations(page);
+    });
+  }
 });

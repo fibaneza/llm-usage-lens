@@ -212,6 +212,33 @@ test.describe("Team usage (unit M2, MI-D7)", () => {
     await expect(page.getByText(/this page could not be found/i)).toBeVisible();
   });
 
+  // Design System - Component Inventory, NativeSelect, T-FX8: a caller's width
+  // class bounds the chevron too (review FX2 r1, B1).
+  for (const width of [375, 1440] as const) {
+    test(`the Team picker's chevron sits inside the select, 8px or more from its right edge, at ${width}px (T-FX8)`, async ({
+      page,
+      context,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await signInAsTestUser(context, { roles: ["internal-admin"] });
+      await stubTeamDetail(page);
+      await open(page, `${TEAM_USAGE}?team=${PAYMENTS}`);
+      const select = picker(page);
+      await expect(select).toBeVisible();
+      const chevron = select.locator("xpath=..").locator("svg");
+      await expect(chevron).toHaveCount(1);
+      const s = await select.boundingBox();
+      const c = await chevron.boundingBox();
+      expect(s).not.toBeNull();
+      expect(c).not.toBeNull();
+      if (s === null || c === null) return;
+      expect(c.x).toBeGreaterThanOrEqual(s.x);
+      expect(c.y).toBeGreaterThanOrEqual(s.y);
+      expect(c.y + c.height).toBeLessThanOrEqual(s.y + s.height);
+      expect(s.x + s.width - (c.x + c.width)).toBeGreaterThanOrEqual(8);
+    });
+  }
+
   for (const width of [375, 1440] as const) {
     test(`has no serious or critical axe violations and no horizontal scroll at ${width}px (Rule 40.6; accessibility.spec.ts)`, async ({
       page,

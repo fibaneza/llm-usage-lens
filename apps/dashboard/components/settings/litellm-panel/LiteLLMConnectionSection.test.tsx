@@ -430,3 +430,116 @@ describe("LiteLLMConnectionSection test result (T-ST4, D-ST4)", () => {
     );
   });
 });
+
+// Source: docs/specs/2026-11-10-litellm.md - Security architecture item 7, the
+// 2026-11-26 addition, tests T-FX9 (the test button posts the typed URL, saves
+// nothing) and T-FX10 (the "not saved yet" note and result).
+describe("LiteLLMConnectionSection test of the typed URL (T-FX9, T-FX10)", () => {
+  const UNSAVED = {
+    baseUrl: null,
+    version: 0,
+    edition: "oss" as const,
+    serviceKeyConfigured: true,
+    defaultBaseUrl: "http://localhost:4000",
+  };
+  const NOTE = "Not saved yet. Save tests this URL and stores it.";
+
+  type Call = { url: string; method: string; body: unknown };
+  function stubCalls(status: Status, testResponse: Response) {
+    const calls: Call[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? "GET").toUpperCase();
+        calls.push({
+          url,
+          method,
+          body: typeof init?.body === "string" ? JSON.parse(init.body) : null,
+        });
+        if (url.includes("/api/litellm/connection/test")) {
+          return Promise.resolve(testResponse);
+        }
+        return Promise.resolve(apiResponse({ data: status }));
+      }),
+    );
+    return calls;
+  }
+  const OK = () =>
+    apiResponse({ data: { result: "ok", message: "Connected", warnings: [] } });
+  const testPosts = (calls: Call[]) =>
+    calls.filter((c) => c.url.includes("/connection/test"));
+
+  it("T-FX9: posts the trimmed typed URL and saves nothing", async () => {
+    const calls = stubCalls(UNSAVED as Status, OK());
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMConnectionSection canEdit />);
+    const field = await screen.findByLabelText(/base url/i);
+    await user.clear(field);
+    await user.type(field, "  http://litellm.test:4000  ");
+    await user.click(screen.getByRole("button", { name: /test connection/i }));
+    await screen.findByText("LiteLLM connection is ok");
+    expect(testPosts(calls)).toEqual([
+      expect.objectContaining({
+        method: "POST",
+        body: { baseUrl: "http://litellm.test:4000" },
+      }),
+    ]);
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+  });
+
+  it("T-FX9: an empty field posts an empty object", async () => {
+    const calls = stubCalls(UNSAVED as Status, OK());
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMConnectionSection canEdit />);
+    await user.clear(await screen.findByLabelText(/base url/i));
+    await user.click(screen.getByRole("button", { name: /test connection/i }));
+    await screen.findByText("LiteLLM connection is ok");
+    expect(testPosts(calls)[0]?.body).toEqual({});
+  });
+
+  it("T-FX9: a 400 refusal shows the route's message in the alert", async () => {
+    const message = "That URL is not allowed.";
+    const calls = stubCalls(
+      UNSAVED as Status,
+      apiResponse({ error: { code: "VALIDATION_ERROR", message } }, 400),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMConnectionSection canEdit />);
+    await screen.findByLabelText(/base url/i);
+    await user.click(screen.getByRole("button", { name: /test connection/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+  });
+
+  it("T-FX10: the note shows when nothing is saved", async () => {
+    stubCalls(UNSAVED as Status, OK());
+    renderWithProviders(<LiteLLMConnectionSection canEdit />);
+    await screen.findByLabelText(/base url/i);
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+  });
+
+  it("T-FX10: the note shows when the field differs from the saved URL, not when equal", async () => {
+    stubCalls(CONFIGURED, OK());
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMConnectionSection canEdit />);
+    const field = await screen.findByLabelText(/base url/i);
+    expect(field).toHaveValue("https://litellm.example.internal");
+    expect(screen.queryByText(NOTE)).toBeNull();
+    await user.type(field, "/v2");
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    await user.type(field, "{Backspace}{Backspace}{Backspace}");
+    expect(screen.queryByText(NOTE)).toBeNull();
+  });
+
+  it("T-FX10: an ok test of an unsaved URL says 'not saved yet'", async () => {
+    stubCalls(UNSAVED as Status, OK());
+    const user = userEvent.setup();
+    renderWithProviders(<LiteLLMConnectionSection canEdit />);
+    await screen.findByLabelText(/base url/i);
+    await user.click(screen.getByRole("button", { name: /test connection/i }));
+    const ok = await screen.findByText("LiteLLM connection is ok");
+    const live = ok.closest("[aria-live], [role='status'], [role='alert']");
+    expect(live).toHaveTextContent(/not saved yet/i);
+  });
+});

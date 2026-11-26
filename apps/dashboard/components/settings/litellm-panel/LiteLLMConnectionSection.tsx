@@ -24,15 +24,16 @@ const STATUS_KEY = ["litellm", "connection"] as const;
 
 function BaseUrlForm({
   stored,
-  offered,
+  value,
+  onValueChange,
   version,
 }: {
   stored: string | null;
-  offered: string;
+  value: string;
+  onValueChange: (next: string) => void;
   version: number;
 }) {
   const queryClient = useQueryClient();
-  const [value, setValue] = useState(stored ?? offered);
   const save = useMutation({
     mutationFn: () =>
       mutateApi(
@@ -60,12 +61,17 @@ function BaseUrlForm({
           type="url"
           className="min-w-64 flex-1"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => onValueChange(e.target.value)}
         />
         <Button type="submit" disabled={save.isPending}>
           Save
         </Button>
       </div>
+      {stored === null || value.trim() !== stored ? (
+        <p className="text-muted-foreground text-sm">
+          Not saved yet. Save tests this URL and stores it.
+        </p>
+      ) : null}
       {save.isError ? (
         <p role="alert" className="text-destructive text-sm">
           {save.error.message}
@@ -80,12 +86,17 @@ export function LiteLLMConnectionSection({ canEdit }: { canEdit: boolean }) {
     queryKey: STATUS_KEY,
     queryFn: () => fetchApi("/api/litellm/connection", StatusSchema),
   });
+  // The field value lives here so the test button reads it; a draft belongs to
+  // one saved state and resets when the saved URL or version changes.
+  const [draft, setDraft] = useState<{ key: string; value: string } | null>(
+    null,
+  );
   const test = useMutation({
-    mutationFn: () =>
+    mutationFn: ({ baseUrl }: { baseUrl: string; unsaved: boolean }) =>
       mutateApi(
         "/api/litellm/connection/test",
         "POST",
-        {},
+        baseUrl === "" ? {} : { baseUrl },
         ConnectionTestResultSchema,
       ),
   });
@@ -100,6 +111,11 @@ export function LiteLLMConnectionSection({ canEdit }: { canEdit: boolean }) {
   if (status.data === undefined) return <PanelSkeleton />;
 
   const s = status.data;
+  const formKey = `${s.version}:${s.baseUrl ?? ""}`;
+  const fieldValue =
+    draft?.key === formKey
+      ? draft.value
+      : (s.baseUrl ?? s.defaultBaseUrl ?? "");
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1 text-sm">
@@ -124,9 +140,10 @@ export function LiteLLMConnectionSection({ canEdit }: { canEdit: boolean }) {
       {canEdit ? (
         <>
           <BaseUrlForm
-            key={`${s.version}:${s.baseUrl ?? ""}`}
+            key={formKey}
             stored={s.baseUrl}
-            offered={s.defaultBaseUrl ?? ""}
+            value={fieldValue}
+            onValueChange={(next) => setDraft({ key: formKey, value: next })}
             version={s.version}
           />
           <div className="flex flex-wrap items-center gap-3">
@@ -134,7 +151,13 @@ export function LiteLLMConnectionSection({ canEdit }: { canEdit: boolean }) {
               type="button"
               variant="outline"
               disabled={test.isPending}
-              onClick={() => test.mutate()}
+              onClick={() => {
+                const baseUrl = fieldValue.trim();
+                test.mutate({
+                  baseUrl,
+                  unsaved: baseUrl !== "" && baseUrl !== s.baseUrl,
+                });
+              }}
             >
               Test connection
             </Button>
@@ -155,6 +178,11 @@ export function LiteLLMConnectionSection({ canEdit }: { canEdit: boolean }) {
                   {test.data.result === "ok" ? (
                     <>
                       <span>LiteLLM connection is ok</span>
+                      {test.variables?.unsaved ? (
+                        <span className="text-muted-foreground">
+                          not saved yet
+                        </span>
+                      ) : null}
                       <span className="text-muted-foreground">
                         {test.data.message}
                       </span>

@@ -229,7 +229,7 @@ split into three sub-phases, each its own branch and PR — build them in order.
 - [ ] Create bare placeholder pages for all 9 routes (title only) so navigation has targets
 - [ ] Build the `Sidebar` — 7 top-level nav links with Lucide icons, active state, collapsible (desktop) / overlay (mobile); the two `[id]` detail routes are drill-down only
 - [ ] Build the responsive layout structure (breakpoints 375/768/1024/1440, content max-width 1280px centered; the Phase 5 UI refresh makes it fluid)
-- [ ] Build the top bar — user menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`) — from unit CFG, `display.orgName` in `apps/dashboard/config/config.yaml`, the variable a deprecated fallback
+- [ ] Build the top bar — user menu (avatar, name, sign out, Auth.js session) + organization name (`NEXT_PUBLIC_ORG_NAME`; no longer shown since unit FX2, 2026-11-26) — from unit CFG, `display.orgName` in `apps/dashboard/config/config.yaml`, the variable a deprecated fallback
 - [ ] Add `SyncStatusBadge` and `SyncCountdown` placeholders to the top bar
 
 **Build tasks — 2.2 Command Menu.**

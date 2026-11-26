@@ -18,7 +18,6 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { DEFAULT_ORG_NAME } from "@/lib/config/resolvers";
 import { withDateRange } from "@/lib/date-range-search-params";
 import { isNavItemActive, navGroupsFor, type NavScope } from "@/lib/nav";
 
@@ -45,19 +44,12 @@ type ToHref = (href: string) => string;
 // filter survives navigation between menus (issue #75). `useSearchParams` opts
 // the subtree into client rendering, so the dashboard layout renders this inside
 // a Suspense boundary with `AppSidebarFallback` (Rule 60.12).
-export function AppSidebar({
-  scope,
-  orgName,
-}: {
-  scope?: NavScope;
-  orgName?: string;
-}) {
+export function AppSidebar({ scope }: { scope?: NavScope }) {
   const searchParams = useSearchParams();
   return (
     <SidebarNav
       toHref={(href) => withDateRange(href, searchParams)}
       scope={scope}
-      orgName={orgName}
     />
   );
 }
@@ -65,28 +57,11 @@ export function AppSidebar({
 // Suspense fallback: the same rail with bare hrefs, shown only until the search
 // params resolve on the client. Carries no params (none are known yet), so there
 // is no layout shift versus the resolved sidebar.
-export function AppSidebarFallback({
-  scope,
-  orgName,
-}: {
-  scope?: NavScope;
-  orgName?: string;
-}) {
-  return <SidebarNav toHref={(href) => href} scope={scope} orgName={orgName} />;
+export function AppSidebarFallback({ scope }: { scope?: NavScope }) {
+  return <SidebarNav toHref={(href) => href} scope={scope} />;
 }
 
-// `orgName` is resolved on the server (config.yaml display.orgName > the
-// deprecated NEXT_PUBLIC_ORG_NAME > "Organization"; System Architecture —
-// Configuration file, A10) and passed down, never read from the client env.
-function SidebarNav({
-  toHref,
-  scope,
-  orgName = DEFAULT_ORG_NAME,
-}: {
-  toHref: ToHref;
-  scope?: NavScope;
-  orgName?: string;
-}) {
+function SidebarNav({ toHref, scope }: { toHref: ToHref; scope?: NavScope }) {
   const pathname = usePathname();
   const navGroups = navGroupsFor(scope ?? NON_GLOBAL_SCOPE);
   const { state, isMobile, toggleSidebar, setOpenMobile } = useSidebar();
@@ -118,12 +93,9 @@ function SidebarNav({
           <div className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
             <Gauge className="size-5" />
           </div>
-          <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
-            <span className="font-semibold">LLM Usage Lens</span>
-            <span className="text-primary text-xs font-medium tracking-wide uppercase">
-              {orgName}
-            </span>
-          </div>
+          <span className="leading-none font-semibold group-data-[collapsible=icon]:hidden">
+            LLM Usage Lens
+          </span>
         </Link>
       </SidebarHeader>
 
