@@ -1119,6 +1119,10 @@ Phase 5 (user, 2026-11-25; Rule 30).
   LiteLLM spec — *API routes*, `/api/litellm/org`); no LiteLLM call added;
   the route's role table unchanged; axe at 375px and desktop in the chart
   and the table view
+- [ ] **OC2** Organisation: weekly buckets, ok / failed, share and usage per team (`feature/litellm-org-usage-parity`; user, 2026-11-26; plan `docs/plans/20261126_round3_followups.md`)
+  Verify: T-OC8–T-OC13 (Design System — *LiteLLM Organisation spend
+  chart*, the 2026-11-26 comparison); no LiteLLM call added; the route's
+  role table unchanged
 - [ ] Verify (the round): `pnpm check` and the full `pnpm test:e2e` green in
   CI on the push of each unit
 

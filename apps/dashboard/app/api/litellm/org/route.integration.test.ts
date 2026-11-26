@@ -650,6 +650,8 @@ describe("GET /api/litellm/org", () => {
         requests: 0,
         tokens: 0,
         failedRequests: 0,
+        // OC2 (T-OC8): the ok count is 0 too, never absent.
+        successfulRequests: 0,
       });
       expect(data.daily).toEqual([]);
       expect(data.dailyByTeam).toEqual([]);
@@ -752,6 +754,8 @@ describe("GET /api/litellm/org", () => {
         requests: TEAMS,
         tokens: 15 * TEAMS,
         failedRequests: 0,
+        // OC2 (T-OC8): the fake's successful_requests is 1 per team day.
+        successfulRequests: TEAMS,
       });
     });
 
@@ -837,6 +841,54 @@ describe("GET /api/litellm/org", () => {
       signInAs("orgAdmin");
       await get();
       expect(state.fake.calls).toHaveLength(11);
+    });
+  });
+
+  // Unit OC2 - Design System, "LiteLLM Organisation spend chart", the
+  // 2026-11-26 comparison (T-OC8); LiteLLM spec - API routes, /api/litellm/org
+  // (OC2 note). The views fake answers each proxy team's range read with one
+  // day carrying api_requests 1, successful_requests 1, failed_requests 0 and
+  // total_tokens 15. The role table is proven by the table above and the
+  // route-contract registry; the 11-call guard by the OC1 describe above
+  // (T-OC1, LD34) - neither is repeated here.
+  describe("usage per team and ok requests (OC2; Design System - LiteLLM Organisation spend chart, T-OC8)", () => {
+    type TeamRow = {
+      litellmTeamId: string;
+      requests?: number;
+      tokens?: number;
+    };
+    type TeamSeries = {
+      litellmTeamId: string;
+      daily: Array<{ requests?: number; tokens?: number }>;
+    };
+
+    it("totals.successfulRequests is the sum of the fake's successful_requests over the range (T-OC8)", async () => {
+      withRangeSpend();
+      signInAs("orgAdmin");
+      const { body } = await get();
+      const byTeam = body.data.dailyByTeam as unknown[];
+      // one successful request per proxy team and day in the fake
+      expect(body.data.totals.successfulRequests).toBe(byTeam.length);
+      expect(body.data.totals.successfulRequests).toBeGreaterThan(0);
+    });
+
+    it("each litellmTeams entry's requests and tokens equal the sums of that team's dailyByTeam days (T-OC8; LD36)", async () => {
+      withRangeSpend();
+      signInAs("auditor");
+      const { body } = await get();
+      const rows = body.data.litellmTeams as TeamRow[];
+      const byTeam = body.data.dailyByTeam as TeamSeries[];
+      expect(rows.length).toBeGreaterThan(0);
+      for (const r of rows) {
+        const days = byTeam.find(
+          (t) => t.litellmTeamId === r.litellmTeamId,
+        )?.daily;
+        const sum = (f: "requests" | "tokens") =>
+          (days ?? []).reduce((a, d) => a + (d[f] ?? 0), 0);
+        expect(r.requests, `${r.litellmTeamId} requests`).toBe(sum("requests"));
+        expect(r.tokens, `${r.litellmTeamId} tokens`).toBe(sum("tokens"));
+        expect(r.requests).toBeGreaterThan(0);
+      }
     });
   });
 

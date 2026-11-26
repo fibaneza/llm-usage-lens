@@ -13,10 +13,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 import { LiteLLMOrgResponseSchema } from "@llm-usage-lens/shared";
 
 import { Empty, Unavailable } from "./LiteLLMSection";
 import { OrgSpendPanel } from "./organisation/OrgSpendPanel";
+import { formatCount } from "./organisation/format";
 import { OrgUsageTiles } from "./organisation/OrgUsageTiles";
 import { useLiteLLMQuery, useUrlRange } from "./use-litellm-query";
 
@@ -37,6 +39,36 @@ function TeamName({ team }: { team: OrgTeam }) {
     <Link className={LINK} href={litellmTeamHref(team.litellmTeamId)}>
       {team.alias ?? team.litellmTeamId}
     </Link>
+  );
+}
+
+const ABSENT = "—";
+const HIDE_BELOW_LG = "hidden lg:table-cell";
+
+// Team spend / total spend, one decimal; "—" when nothing was spent (T-OC12).
+const shareOf = (spend: number, total: number): number | null =>
+  total > 0 ? (spend / total) * 100 : null;
+
+const countOf = (value: number | undefined) =>
+  value === undefined ? ABSENT : formatCount(value);
+
+function ShareValue({ share, bar }: { share: number | null; bar: boolean }) {
+  if (share === null) return <>{ABSENT}</>;
+  return (
+    <span className="inline-flex items-center justify-end gap-2">
+      {bar ? (
+        <span
+          aria-hidden="true"
+          className="bg-muted inline-block h-1.5 w-16 overflow-hidden rounded-full"
+        >
+          <span
+            className="bg-primary block h-full"
+            style={{ width: `${Math.min(share, 100)}%` }}
+          />
+        </span>
+      ) : null}
+      <span>{`${share.toFixed(1)}%`}</span>
+    </span>
   );
 }
 
@@ -110,6 +142,27 @@ export function OrganisationSection() {
                   </dd>
                 </div>
                 <div className="min-w-0">
+                  <dt className="text-muted-foreground text-xs">Share</dt>
+                  <dd className="font-mono tabular-nums">
+                    <ShareValue
+                      share={shareOf(team.spend, totals.spend)}
+                      bar={false}
+                    />
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-muted-foreground text-xs">Requests</dt>
+                  <dd className="font-mono tabular-nums">
+                    {countOf(team.requests)}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-muted-foreground text-xs">Tokens</dt>
+                  <dd className="font-mono tabular-nums">
+                    {countOf(team.tokens)}
+                  </dd>
+                </div>
+                <div className="min-w-0">
                   <dt className="text-muted-foreground text-xs">Members</dt>
                   <dd className="font-mono tabular-nums">{team.memberCount}</dd>
                 </div>
@@ -132,6 +185,13 @@ export function OrganisationSection() {
             <TableRow>
               <TableHead>Alias</TableHead>
               <TableHead className="text-right">Spend</TableHead>
+              <TableHead className="text-right">Share</TableHead>
+              <TableHead className={cn("text-right", HIDE_BELOW_LG)}>
+                Requests
+              </TableHead>
+              <TableHead className={cn("text-right", HIDE_BELOW_LG)}>
+                Tokens
+              </TableHead>
               <TableHead className="text-right">Budget</TableHead>
               <TableHead className="text-right">Members</TableHead>
               <TableHead>App team</TableHead>
@@ -145,6 +205,15 @@ export function OrganisationSection() {
                 </TableCell>
                 <TableCell className={NUMERIC}>
                   {formatUsd(team.spend)}
+                </TableCell>
+                <TableCell className={NUMERIC}>
+                  <ShareValue share={shareOf(team.spend, totals.spend)} bar />
+                </TableCell>
+                <TableCell className={cn(NUMERIC, HIDE_BELOW_LG)}>
+                  {countOf(team.requests)}
+                </TableCell>
+                <TableCell className={cn(NUMERIC, HIDE_BELOW_LG)}>
+                  {countOf(team.tokens)}
                 </TableCell>
                 <TableCell className={NUMERIC}>
                   {team.maxBudget === null

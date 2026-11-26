@@ -1080,3 +1080,61 @@ describe("LiteLLMOrgResponseSchema spend-over-time fields (OC1, T-OC2)", () => {
     ).toBe(false);
   });
 });
+
+// Unit OC2 - Design System, "LiteLLM Organisation spend chart", the
+// 2026-11-26 comparison (T-OC8); LiteLLM spec - API routes, /api/litellm/org
+// (OC2 note): the new fields are optional and non-negative.
+describe("LiteLLMOrgResponseSchema usage-parity fields (OC2, T-OC8)", () => {
+  const team = {
+    litellmTeamId: "ll-1",
+    alias: "Alpha",
+    spend: 12.5,
+    maxBudget: 100,
+    memberCount: 3,
+    linkedAppTeam: null,
+  };
+  const base = {
+    configured: true,
+    totals: { spend: 1.5 },
+    daily,
+    litellmTeams: [team],
+    appTeams: [],
+    enabledOperations,
+  };
+  const withNew = {
+    ...base,
+    totals: { spend: 1.5, successfulRequests: 3 },
+    litellmTeams: [{ ...team, requests: 3, tokens: 45 }],
+  };
+
+  it("an answer with totals.successfulRequests and per-team requests and tokens parses and keeps them", () => {
+    const parsed = LiteLLMOrgResponseSchema.parse(withNew);
+    expect(parsed.totals.successfulRequests).toBe(3);
+    expect(parsed.litellmTeams[0]?.requests).toBe(3);
+    expect(parsed.litellmTeams[0]?.tokens).toBe(45);
+  });
+
+  it("an answer without the new fields (OC1's shape) parses, and they stay absent", () => {
+    const parsed = LiteLLMOrgResponseSchema.parse(base);
+    expect(parsed.totals.successfulRequests).toBeUndefined();
+    expect(parsed.litellmTeams[0]?.requests).toBeUndefined();
+    expect(parsed.litellmTeams[0]?.tokens).toBeUndefined();
+  });
+
+  it.each([
+    [
+      "negative totals.successfulRequests",
+      { ...withNew, totals: { spend: 1.5, successfulRequests: -1 } },
+    ],
+    [
+      "negative team requests",
+      { ...withNew, litellmTeams: [{ ...team, requests: -1, tokens: 45 }] },
+    ],
+    [
+      "negative team tokens",
+      { ...withNew, litellmTeams: [{ ...team, requests: 3, tokens: -1 }] },
+    ],
+  ])("rejects %s", (_name, value) => {
+    expect(LiteLLMOrgResponseSchema.safeParse(value).success).toBe(false);
+  });
+});

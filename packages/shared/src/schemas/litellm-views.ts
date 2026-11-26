@@ -268,6 +268,7 @@ export const LiteLLMOrgResponseSchema = z
       requests: z.number().nonnegative().optional(),
       tokens: z.number().nonnegative().optional(),
       failedRequests: z.number().nonnegative().optional(),
+      successfulRequests: z.number().nonnegative().optional(),
     }),
     daily: z.array(LiteLLMOrgDailyRowSchema),
     dailyByTeam: z
@@ -289,6 +290,8 @@ export const LiteLLMOrgResponseSchema = z
         linkedAppTeam: z
           .object({ teamId: z.string(), teamName: z.string() })
           .nullable(),
+        requests: z.number().nonnegative().optional(),
+        tokens: z.number().nonnegative().optional(),
       }),
     ),
     appTeams: z.array(

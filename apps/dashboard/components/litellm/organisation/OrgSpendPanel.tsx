@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { LiteLLMOrgDailyRowSchema } from "@llm-usage-lens/shared";
 
-import { formatCount } from "./format";
+import { formatCount, weeklyBuckets, type WeekBucket } from "./format";
 
 type LiteLLMOrgDailyRow = z.infer<typeof LiteLLMOrgDailyRowSchema>;
 
@@ -38,7 +38,8 @@ type OrgSpendPanelProps = {
   dateTo: string;
 };
 
-const METRICS = ["spend", "requests", "tokens"] as const;
+const METRICS = ["spend", "tokens", "requests"] as const;
+const BUCKETS = ["daily", "weekly"] as const;
 const BREAKDOWNS = ["total", "team"] as const;
 const VIEWS = ["chart", "table"] as const;
 
@@ -46,14 +47,15 @@ const PARAMS = {
   metric: parseAsStringLiteral(METRICS).withDefault("spend"),
   by: parseAsStringLiteral(BREAKDOWNS).withDefault("total"),
   view: parseAsStringLiteral(VIEWS).withDefault("chart"),
+  bucket: parseAsStringLiteral(BUCKETS).withDefault("daily"),
 };
 
 type Metric = (typeof METRICS)[number];
 
 const METRIC_LABEL: Record<Metric, string> = {
   spend: "Spend",
-  requests: "Requests",
   tokens: "Tokens",
+  requests: "Requests",
 };
 
 const TOP_TEAMS = 7;
@@ -91,6 +93,21 @@ function valuesOf(
 
 const sumOf = (values: Record<string, number>) =>
   Object.values(values).reduce((a, b) => a + b, 0);
+
+// Sums each series' days into its week bucket (Design System -- OC2).
+function bucketed(
+  values: Record<string, number>,
+  buckets: readonly WeekBucket[],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const bucket of buckets) {
+    for (const day of bucket.days) {
+      const value = values[day];
+      if (value !== undefined) out[bucket.key] = (out[bucket.key] ?? 0) + value;
+    }
+  }
+  return out;
+}
 
 function teamSeries(teams: readonly DailyByTeam[], metric: Metric): Series[] {
   const ranked = teams
@@ -203,6 +220,7 @@ export function OrgSpendPanel({
     [hasTeams],
   );
   const noViews = useMemo(() => new Set<(typeof VIEWS)[number]>(), []);
+  const noBuckets = useMemo(() => new Set<(typeof BUCKETS)[number]>(), []);
 
   const metric = unavailableMetrics.has(params.metric)
     ? "spend"
@@ -210,9 +228,25 @@ export function OrgSpendPanel({
   const by = unavailableBreakdowns.has(params.by) ? "total" : params.by;
   const { view } = params;
 
-  const days = useMemo(() => daysOf(dateFrom, dateTo), [dateFrom, dateTo]);
-  const series = useMemo<Series[]>(
+  const weekly = params.bucket === "weekly";
+  const dayList = useMemo(() => daysOf(dateFrom, dateTo), [dateFrom, dateTo]);
+  const buckets = useMemo(() => weeklyBuckets(dayList), [dayList]);
+  const days = useMemo(
+    () => (weekly ? buckets.map((b) => b.key) : dayList),
+    [weekly, buckets, dayList],
+  );
+  const labels = useMemo(
     () =>
+      new Map(
+        buckets.map((b) => [
+          b.key,
+          b.part ? `${b.label} (part week)` : b.label,
+        ]),
+      ),
+    [buckets],
+  );
+  const series = useMemo<Series[]>(() => {
+    const daySeries =
       by === "team"
         ? teamSeries(dailyByTeam ?? [], metric)
         : [
@@ -222,13 +256,16 @@ export function OrgSpendPanel({
               colorVar: "--color-primary",
               values: valuesOf(daily, metric),
             },
-          ],
-    [by, dailyByTeam, daily, metric],
-  );
+          ];
+    return weekly
+      ? daySeries.map((s) => ({ ...s, values: bucketed(s.values, buckets) }))
+      : daySeries;
+  }, [by, dailyByTeam, daily, metric, weekly, buckets]);
 
   const format = metric === "spend" ? formatUsd : formatCount;
   const total = series.reduce((sum, s) => sum + sumOf(s.values), 0);
   const label = `${METRIC_LABEL[metric]}${by === "team" ? " by team" : ""}, ${dateFrom} to ${dateTo} UTC, total ${format(total)}`;
+  const subtitle = `${weekly ? "Weekly" : "Daily"} ${METRIC_LABEL[metric].toLowerCase()}${by === "team" ? ` by team, ${TOP_TEAMS} largest stacked` : ""}`;
   const tableDays = days.filter((day) =>
     series.some((s) => s.values[day] !== undefined),
   );
@@ -240,6 +277,7 @@ export function OrgSpendPanel({
       description="LiteLLM-reported, per UTC day."
     >
       <div className="flex flex-col gap-4">
+        <p className="text-muted-foreground text-sm">{subtitle}</p>
         <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
           <OptionGroup
             label="Metric"
@@ -268,6 +306,18 @@ export function OrgSpendPanel({
             disabled={noViews}
             onChange={(next) => void setParams({ view: next })}
           />
+          <OptionGroup
+            label="Bucket size"
+            options={[
+              { value: "daily", label: "Daily" },
+              { value: "weekly", label: "Weekly" },
+            ]}
+            value={params.bucket}
+            disabled={noBuckets}
+            onChange={(next) =>
+              void setParams({ bucket: next === "daily" ? null : next })
+            }
+          />
         </div>
         {view === "chart" ? (
           <div>
@@ -276,17 +326,18 @@ export function OrgSpendPanel({
               series={series}
               format={format}
               label={label}
+              labelFor={weekly ? (key) => labels.get(key) ?? key : undefined}
             />
             {by === "team" ? <ChartLegend items={series} /> : null}
           </div>
         ) : (
           <Table>
             <TableCaption className="mt-0 mb-2 text-left">
-              {`${METRIC_LABEL[metric]} per day`}
+              {`${METRIC_LABEL[metric]} per ${weekly ? "week" : "day"}`}
             </TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead>Date (UTC)</TableHead>
+                <TableHead>{weekly ? "Week (UTC)" : "Date (UTC)"}</TableHead>
                 {series.map((s) => (
                   <TableHead key={s.key} className="text-right">
                     {s.label}
@@ -299,7 +350,7 @@ export function OrgSpendPanel({
               {tableDays.map((day) => (
                 <TableRow key={day}>
                   <TableCell className="font-mono tabular-nums">
-                    {day}
+                    {weekly ? (labels.get(day) ?? day) : day}
                   </TableCell>
                   {series.map((s) => (
                     <TableCell key={s.key} className={NUMERIC}>

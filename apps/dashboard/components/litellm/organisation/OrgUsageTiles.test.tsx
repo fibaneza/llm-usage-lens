@@ -36,4 +36,35 @@ describe("OrgUsageTiles (T-OC5)", () => {
     expect(tile("Tokens")).toHaveTextContent("—");
     expect(tile("Total spend")).toHaveTextContent("$5.00");
   });
+
+  // Sources: Design System -- LiteLLM Organisation spend chart, the
+  // 2026-11-26 comparison (T-OC11): under the Requests figure "n ok · n failed"
+  // when LiteLLM reports the split; nothing without it.
+  it("T-OC11: the Requests tile shows 'n ok · n failed' with grouped integers", () => {
+    render(
+      <OrgUsageTiles
+        totals={{
+          spend: 100,
+          requests: 1235,
+          tokens: 10,
+          successfulRequests: 1234,
+          failedRequests: 1,
+        }}
+      />,
+    );
+    expect(tile("Requests")).toHaveTextContent("1,234 ok · 1 failed");
+  });
+
+  it("T-OC11: without the split (either half missing) the tile shows no 'ok' or 'failed' line", () => {
+    const { rerender } = render(
+      <OrgUsageTiles totals={{ spend: 100, requests: 8, failedRequests: 1 }} />,
+    );
+    expect(tile("Requests")).not.toHaveTextContent(/ok|failed/);
+    rerender(
+      <OrgUsageTiles
+        totals={{ spend: 100, requests: 8, successfulRequests: 7 }}
+      />,
+    );
+    expect(tile("Requests")).not.toHaveTextContent(/ok|failed/);
+  });
 });

@@ -84,7 +84,13 @@ export const GET = withRoute(async (request, _ctx, session) => {
       return jsonData(
         LiteLLMOrgResponseSchema.parse({
           configured: false,
-          totals: { spend: 0, requests: 0, tokens: 0, failedRequests: 0 },
+          totals: {
+            spend: 0,
+            requests: 0,
+            tokens: 0,
+            failedRequests: 0,
+            successfulRequests: 0,
+          },
           daily: [],
           dailyByTeam: [],
           litellmTeams: [],
@@ -127,11 +133,13 @@ export const GET = withRoute(async (request, _ctx, session) => {
     >();
     const rangeSpend = new Map<string, number>();
     let failedRequests = 0;
+    let successfulRequests = 0;
     for (const [litellmTeamId, days] of rangeOf) {
       let spend = 0;
       for (const d of days) {
         spend += d.spend;
         failedRequests += d.failedRequests;
+        successfulRequests += d.successfulRequests;
         const day = byDate.get(d.date) ?? { spend: 0, requests: 0, tokens: 0 };
         day.spend += d.spend;
         day.requests += d.apiRequests;
@@ -164,6 +172,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
     );
     const litellmTeams = proxyTeams.map((t) => {
       const info = infos.get(t.team_id);
+      const days = rangeOf.get(t.team_id) ?? [];
       return {
         litellmTeamId: t.team_id,
         alias: t.team_alias ?? null,
@@ -171,6 +180,8 @@ export const GET = withRoute(async (request, _ctx, session) => {
         maxBudget: info?.team_info.max_budget ?? null,
         memberCount: info?.team_memberships.length ?? 0,
         linkedAppTeam: appOfLiteLLM.get(t.team_id) ?? null,
+        requests: days.reduce((sum, d) => sum + d.apiRequests, 0),
+        tokens: days.reduce((sum, d) => sum + d.totalTokens, 0),
       };
     });
     const spendOfLiteLLM = new Map(
@@ -267,6 +278,7 @@ export const GET = withRoute(async (request, _ctx, session) => {
           requests: rows.reduce((sum, r) => sum + r.requests, 0),
           tokens: rows.reduce((sum, r) => sum + r.tokens, 0),
           failedRequests,
+          successfulRequests,
         },
         daily: rows,
         dailyByTeam,

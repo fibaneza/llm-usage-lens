@@ -44,6 +44,8 @@ const ORG = {
     spend: TEAMS.flatMap((t) => t.daily).reduce((a, r) => a + r.spend, 0),
     requests: TEAMS.flatMap((t) => t.daily).reduce((a, r) => a + r.requests, 0),
     tokens: TEAMS.flatMap((t) => t.daily).reduce((a, r) => a + r.tokens, 0),
+    successfulRequests:
+      TEAMS.flatMap((t) => t.daily).reduce((a, r) => a + r.requests, 0) - 3,
     failedRequests: 3,
   },
   daily: DAYS.map((date, d) => ({
@@ -58,6 +60,8 @@ const ORG = {
     litellmTeamId: t.litellmTeamId,
     alias: t.alias,
     spend: t.daily.reduce((a, r) => a + r.spend, 0),
+    requests: t.daily.reduce((a, r) => a + r.requests, 0),
+    tokens: t.daily.reduce((a, r) => a + r.tokens, 0),
     maxBudget: null,
     memberCount: 2,
     linkedAppTeam: null,
@@ -107,12 +111,15 @@ async function choose(page: Page, name: string) {
 }
 
 async function expectNoSidewaysScroll(page: Page) {
-  const fits = await page.evaluate(
-    () =>
-      document.documentElement.scrollWidth <=
-      document.documentElement.clientWidth,
-  );
-  expect(fits).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    )
+    .toBe(true);
 }
 
 async function expectAxeClean(page: Page) {
@@ -199,6 +206,43 @@ test.describe("LiteLLM Organisation spend chart (OC1, T-OC7)", () => {
       await expect(
         page.getByRole("img", { name: /spend/i }).first(),
       ).toBeVisible();
+      await expectNoSidewaysScroll(page);
+      await expectAxeClean(page);
+    });
+  }
+
+  // Design System -- LiteLLM Organisation spend chart, the 2026-11-26
+  // comparison (T-OC13): Weekly by click for the three reading roles; axe at
+  // 375px and desktop. The range 1-30 Oct 2026 starts on a Thursday, so its
+  // first and last weeks are part weeks.
+  for (const role of ROLES) {
+    test(`${role}: Weekly by click shows week labels; axe clean at desktop and 375px (T-OC13)`, async ({
+      page,
+      context,
+    }) => {
+      await openOrganisation(page, context, role);
+
+      await choose(page, "Weekly");
+      await expect(page).toHaveURL(/bucket=weekly/);
+      await expect(
+        page
+          .locator(".recharts-xAxis-tick-labels")
+          .getByText(/^Week of /)
+          .first(),
+      ).toBeVisible();
+      await expect(
+        page.getByText("Weekly spend", { exact: true }),
+      ).toBeVisible();
+      await expectAxeClean(page);
+
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await expect(
+        page.getByRole("columnheader", { name: "Share" }),
+      ).toBeVisible();
+      await expectNoSidewaysScroll(page);
+      await expectAxeClean(page);
+
+      await page.setViewportSize({ width: 375, height: 812 });
       await expectNoSidewaysScroll(page);
       await expectAxeClean(page);
     });

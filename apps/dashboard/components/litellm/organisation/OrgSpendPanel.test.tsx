@@ -31,9 +31,15 @@ vi.mock("@/components/charts/LazyCharts", () => ({
     days: string[];
     series: Series[];
     label: string;
+    labelFor?: (key: string) => string;
   }) => (
     <div role="img" aria-label={props.label}>
       <span data-testid="days">{props.days.join(",")}</span>
+      <span data-testid="ticks">
+        {props.labelFor
+          ? props.days.map((d) => props.labelFor?.(d)).join("|")
+          : ""}
+      </span>
       <ul aria-label="probe series">
         {props.series.map((s) => (
           <li
@@ -314,5 +320,157 @@ describe("OrgSpendPanel (T-OC4)", () => {
       expect(option(g, o)).toBeEnabled();
     }
     expect(screen.queryByText("Not reported by LiteLLM")).toBeNull();
+  });
+});
+
+// Sources: Design System -- LiteLLM Organisation spend chart, the 2026-11-26
+// comparison (T-OC9, T-OC10): Metric in the order Spend, Tokens, Requests; a
+// fourth switch "Bucket size" Daily (default) | Weekly kept in the URL as
+// `bucket=weekly` (the default not written); a week is Monday to Sunday UTC,
+// labelled "Week of 9 Nov", a part week marked "part week" in the table and the
+// tooltip; the chart gets the bucket keys as `days` and a `labelFor`; the
+// subtitle says what is drawn ("Daily spend by team, 7 largest stacked").
+const WEEK_RANGE = { dateFrom: "2026-11-14", dateTo: "2026-11-25" };
+// 2026-11-14 is a Saturday: weeks of 9 Nov (part), 16 Nov, 23 Nov (part).
+const WEEK_DAILY = [
+  { date: "2026-11-14", spend: 10, tokens: 1000 },
+  { date: "2026-11-15", spend: 20, tokens: 2000 },
+  { date: "2026-11-16", spend: 1, tokens: 100 },
+  { date: "2026-11-17", spend: 2, tokens: 200 },
+  { date: "2026-11-20", spend: 3, tokens: 300 },
+  { date: "2026-11-23", spend: 4, tokens: 400 },
+  { date: "2026-11-25", spend: 5, tokens: 500 },
+];
+
+describe("OrgSpendPanel -- OC2 comparison (T-OC9, T-OC10)", () => {
+  it("T-OC10: the Metric options come in LiteLLM's order Spend, Tokens, Requests", () => {
+    panel();
+    const names = within(group("Metric"))
+      .getAllByRole("button")
+      .map((b) => b.textContent);
+    expect(names).toEqual(["Spend", "Tokens", "Requests"]);
+  });
+
+  it("T-OC9: a fourth group 'Bucket size' opens on Daily; the chart gets every UTC day", () => {
+    panel();
+    expect(selected(option("Bucket size", "Daily"))).toBe(true);
+    expect(selected(option("Bucket size", "Weekly"))).toBe(false);
+    expect(screen.getByTestId("days")).toHaveTextContent(
+      "2026-11-14,2026-11-15,2026-11-16",
+    );
+  });
+
+  it("T-OC9: Weekly by click sums each Monday-to-Sunday UTC week, passes the Monday keys as the chart's days and writes bucket=weekly; Daily removes it", async () => {
+    const user = userEvent.setup();
+    const onUrlUpdate = vi.fn();
+    panel({ daily: WEEK_DAILY, ...WEEK_RANGE }, {}, onUrlUpdate);
+    const last = () =>
+      onUrlUpdate.mock.lastCall?.[0].searchParams as URLSearchParams;
+
+    await user.click(option("Bucket size", "Weekly"));
+    expect(last().get("bucket")).toBe("weekly");
+    expect(selected(option("Bucket size", "Weekly"))).toBe(true);
+    expect(screen.getByTestId("days")).toHaveTextContent(
+      "2026-11-09,2026-11-16,2026-11-23",
+    );
+    expect(probeSeries()[0]?.values).toEqual({
+      "2026-11-09": 30,
+      "2026-11-16": 6,
+      "2026-11-23": 9,
+    });
+
+    await user.click(option("Bucket size", "Daily"));
+    expect(last().get("bucket")).toBeNull();
+    expect(screen.getByTestId("days")).toHaveTextContent("2026-11-14,");
+  });
+
+  it("T-OC9: a URL carrying bucket=weekly restores the switch and the weekly series", () => {
+    panel({ daily: WEEK_DAILY, ...WEEK_RANGE }, { bucket: "weekly" });
+    expect(selected(option("Bucket size", "Weekly"))).toBe(true);
+    expect(probeSeries()[0]?.values).toEqual({
+      "2026-11-09": 30,
+      "2026-11-16": 6,
+      "2026-11-23": 9,
+    });
+  });
+
+  it("T-OC9: the chart's labelFor gives 'Week of 16 Nov' for a whole week and marks a part week", () => {
+    panel({ daily: WEEK_DAILY, ...WEEK_RANGE }, { bucket: "weekly" });
+    const ticks = screen.getByTestId("ticks").textContent?.split("|") ?? [];
+    expect(ticks).toHaveLength(3);
+    expect(ticks[1]).toBe("Week of 16 Nov");
+    expect(ticks[0]).toContain("Week of 9 Nov");
+    expect(ticks[0]).toContain("part week");
+    expect(ticks[2]).toContain("Week of 23 Nov");
+    expect(ticks[2]).toContain("part week");
+  });
+
+  it("T-OC9: By team, Weekly sums each team's days per week and ranks by the week-range total", () => {
+    panel({ daily, dailyByTeam: teams }, { bucket: "weekly", by: "team" });
+    const series = probeSeries();
+    // D1 = 14 Nov, D2 = 15 Nov, both in the week of 9 Nov: Team 9 = 90 + 9.
+    expect(series[0]).toMatchObject({
+      label: "Team 9",
+      values: { "2026-11-09": 99 },
+    });
+    expect(series.at(-1)).toMatchObject({
+      label: "Other teams",
+      values: { "2026-11-09": 33 },
+    });
+  });
+
+  it("T-OC9: the Table view in Weekly has one row per week under 'Week (UTC)', marks the part weeks, and its Total equals the daily total", async () => {
+    const user = userEvent.setup();
+    panel({ daily: WEEK_DAILY, ...WEEK_RANGE }, { view: "table" });
+    const dailyTotal = WEEK_DAILY.reduce((a, r) => a + r.spend, 0);
+    await user.click(option("Bucket size", "Weekly"));
+
+    expect(
+      screen.getByRole("columnheader", { name: "Week (UTC)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Date (UTC)" }),
+    ).toBeNull();
+    expect(screen.getAllByRole("row")).toHaveLength(1 + 3);
+    expect(cell("Week of 9 Nov", "Week (UTC)")).toMatch(/part week/);
+    expect(cell("Week of 16 Nov", "Week (UTC)")).not.toMatch(/part week/);
+    expect(cell("Week of 23 Nov", "Week (UTC)")).toMatch(/part week/);
+    expect(cell("Week of 9 Nov", "Total")).toBe("$30.00");
+    expect(cell("Week of 16 Nov", "Total")).toBe("$6.00");
+    expect(cell("Week of 23 Nov", "Total")).toBe("$9.00");
+    const sum = ["Week of 9 Nov", "Week of 16 Nov", "Week of 23 Nov"].reduce(
+      (a, w) => a + Number(cell(w, "Total")?.replace(/[$,]/g, "")),
+      0,
+    );
+    expect(sum).toBe(dailyTotal);
+  });
+
+  it("T-OC9: Weekly keeps the metric (tokens are summed per week too)", () => {
+    panel(
+      { daily: WEEK_DAILY, ...WEEK_RANGE },
+      { bucket: "weekly", metric: "tokens" },
+    );
+    expect(probeSeries()[0]?.values).toEqual({
+      "2026-11-09": 3000,
+      "2026-11-16": 600,
+      "2026-11-23": 900,
+    });
+  });
+
+  // T-OC10: one row per class of subtitle -- (metric, breakdown, bucket).
+  it.each([
+    [{}, "Daily spend"],
+    [{ metric: "tokens", bucket: "weekly" }, "Weekly tokens"],
+    [
+      { metric: "requests", by: "team" },
+      "Daily requests by team, 7 largest stacked",
+    ],
+    [
+      { bucket: "weekly", by: "team" },
+      "Weekly spend by team, 7 largest stacked",
+    ],
+  ] as const)("T-OC10: the subtitle for %j reads '%s'", (params, subtitle) => {
+    panel({}, { ...params });
+    expect(screen.getByText(subtitle)).toBeInTheDocument();
   });
 });

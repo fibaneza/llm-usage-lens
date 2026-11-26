@@ -30,6 +30,9 @@ type SpendTimelineChartProps = {
   format: (value: number) => string;
   // Names the chart for assistive technology.
   label: string;
+  // Names a slot key for the x-axis tick and the tooltip heading; the date
+  // format when absent (OC2 weekly buckets).
+  labelFor?: (key: string) => string;
 };
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -64,8 +67,9 @@ function SpendTooltip({
   label: day,
   series,
   format,
+  labelFor = formatDate,
 }: Pick<TooltipContentProps, "active" | "label"> &
-  Pick<SpendTimelineChartProps, "series" | "format">) {
+  Pick<SpendTimelineChartProps, "series" | "format" | "labelFor">) {
   if (!active || typeof day !== "string") return null;
   const present = series.filter((s) => s.values[day] !== undefined);
   if (present.length === 0) return null;
@@ -79,7 +83,7 @@ function SpendTooltip({
         borderColor: "var(--color-border)",
       }}
     >
-      <p className="font-medium">{formatDate(day)}</p>
+      <p className="font-medium">{labelFor(day)}</p>
       <ul className="mt-1 space-y-0.5">
         {present.map((s) => (
           <li key={s.key} className="flex items-center gap-1.5">
@@ -112,6 +116,7 @@ export function SpendTimelineChart({
   series,
   format,
   label,
+  labelFor = formatDate,
 }: SpendTimelineChartProps) {
   const reducedMotion = usePrefersReducedMotion();
   const hasValue = series.some((s) => Object.keys(s.values).length > 0);
@@ -142,7 +147,7 @@ export function SpendTimelineChart({
           />
           <XAxis
             dataKey="date"
-            tickFormatter={formatDate}
+            tickFormatter={labelFor}
             tick={axisTick}
             tickLine={false}
             axisLine={false}
@@ -162,6 +167,7 @@ export function SpendTimelineChart({
                 label={props.label}
                 series={series}
                 format={format}
+                labelFor={labelFor}
               />
             )}
           />

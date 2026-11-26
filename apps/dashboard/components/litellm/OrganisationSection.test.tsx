@@ -536,3 +536,152 @@ describe("OrganisationSection (L3b Organisation tab)", () => {
     });
   });
 });
+
+// Sources: Design System -- LiteLLM Organisation spend chart, the 2026-11-26
+// comparison (T-OC12): the LiteLLM teams table gains Share (team spend / total
+// spend, one decimal and "%", a thin aria-hidden bar; "—" with no spend),
+// Requests and Tokens (grouped integers, "—" when absent); Requests and Tokens
+// carry `hidden lg:table-cell`; the cards below md show all three.
+const team = (
+  n: number,
+  spend: number,
+  extra: { requests?: number; tokens?: number } = {},
+) => ({
+  litellmTeamId: `ll-${n}`,
+  alias: `Team ${n}`,
+  spend,
+  maxBudget: null,
+  memberCount: 1,
+  linkedAppTeam: null,
+  ...extra,
+});
+const orgWith = (
+  spend: number,
+  litellmTeams: ReturnType<typeof team>[],
+): typeof ORG_OC1 => ({
+  ...ORG_OC1,
+  totals: { ...ORG_OC1.totals, spend },
+  litellmTeams,
+});
+
+function cellOf(table: HTMLElement, row: string, header: string) {
+  const heads = within(table).getAllByRole("columnheader");
+  const index = heads.findIndex((h) => h.textContent?.trim() === header);
+  const tr = within(table).getByRole("row", { name: new RegExp(row) });
+  return Array.from(tr.querySelectorAll("th,td"))[index] as HTMLElement;
+}
+
+describe("OrganisationSection -- OC2 teams table (T-OC12)", () => {
+  it("T-OC12: Share is the team's part of the total spend with one decimal and a percent sign; Requests and Tokens are grouped integers", async () => {
+    stub(() =>
+      apiResponse({
+        data: orgWith(100, [
+          team(1, 50, { requests: 1234, tokens: 5_000_000 }),
+          team(2, 30, { requests: 10, tokens: 20 }),
+          team(3, 20),
+        ]),
+      }),
+    );
+    renderSection();
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    expect(cellOf(table, "Team 1", "Share")).toHaveTextContent("50.0%");
+    expect(cellOf(table, "Team 2", "Share")).toHaveTextContent("30.0%");
+    expect(cellOf(table, "Team 1", "Requests")).toHaveTextContent("1,234");
+    expect(cellOf(table, "Team 1", "Tokens")).toHaveTextContent("5,000,000");
+    // Absent figures read "—", never 0.
+    expect(cellOf(table, "Team 3", "Requests")).toHaveTextContent("—");
+    expect(cellOf(table, "Team 3", "Tokens")).toHaveTextContent("—");
+  });
+
+  it("T-OC12: the Share column sums to 100 % within rounding (thirds)", async () => {
+    stub(() =>
+      apiResponse({ data: orgWith(3, [team(1, 1), team(2, 1), team(3, 1)]) }),
+    );
+    renderSection();
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    const shares = [1, 2, 3].map((n) =>
+      Number(cellOf(table, `Team ${n}`, "Share").textContent?.replace("%", "")),
+    );
+    expect(shares.every((s) => s === 33.3)).toBe(true);
+    expect(
+      Math.abs(shares.reduce((a, b) => a + b, 0) - 100),
+    ).toBeLessThanOrEqual(0.05 * shares.length);
+  });
+
+  it("T-OC12: Share is '—' for every team when the total spend is 0, with no NaN or Infinity", async () => {
+    stub(() => apiResponse({ data: orgWith(0, [team(1, 0), team(2, 0)]) }));
+    renderSection();
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    for (const n of [1, 2]) {
+      const share = cellOf(table, `Team ${n}`, "Share");
+      expect(share).toHaveTextContent("—");
+      expect(share).not.toHaveTextContent(/NaN|Infinity|%/);
+    }
+  });
+
+  it("T-OC12: the Share bar is decorative (aria-hidden)", async () => {
+    stub(() => apiResponse({ data: orgWith(100, [team(1, 50)]) }));
+    renderSection();
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    const bar = cellOf(table, "Team 1", "Share").querySelector(
+      '[aria-hidden="true"]',
+    );
+    expect(bar).not.toBeNull();
+  });
+
+  it("T-OC12: the Requests and Tokens header and cells carry hidden lg:table-cell; Share does not", async () => {
+    stub(() =>
+      apiResponse({
+        data: orgWith(100, [team(1, 50, { requests: 1, tokens: 2 })]),
+      }),
+    );
+    renderSection();
+    const table = await screen.findByRole("table", { name: "LiteLLM teams" });
+    for (const header of ["Requests", "Tokens"]) {
+      const head = within(table).getByRole("columnheader", { name: header });
+      expect(head).toHaveClass("hidden", "lg:table-cell");
+      expect(cellOf(table, "Team 1", header)).toHaveClass(
+        "hidden",
+        "lg:table-cell",
+      );
+    }
+    expect(
+      within(table).getByRole("columnheader", { name: "Share" }),
+    ).not.toHaveClass("hidden");
+  });
+
+  describe("in the card layout (below md)", () => {
+    const originalWidth = window.innerWidth;
+    beforeEach(() => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: 375,
+      });
+    });
+    afterEach(() => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: originalWidth,
+      });
+    });
+
+    it("T-OC12: each card shows Share, Requests and Tokens", async () => {
+      stub(() =>
+        apiResponse({
+          data: orgWith(100, [
+            team(1, 50, { requests: 1234, tokens: 5_000_000 }),
+          ]),
+        }),
+      );
+      renderSection();
+      const cards = await screen.findByRole("list", { name: "LiteLLM teams" });
+      const card = within(cards).getAllByRole("listitem")[0]!;
+      for (const term of ["Share", "Requests", "Tokens"]) {
+        expect(within(card).getByText(term)).toBeInTheDocument();
+      }
+      expect(card).toHaveTextContent("50.0%");
+      expect(card).toHaveTextContent("1,234");
+      expect(card).toHaveTextContent("5,000,000");
+    });
+  });
+});

@@ -819,10 +819,10 @@ The top-bar `h1` reads "Account"; the page renders the sign-in facts as a key–
   are LiteLLM-reported, for the range in the top bar, by UTC day (LD20).
   - **The chart** is a `SpendTimelineChart`: one bar per UTC day; the axis
     covers every day of the range, and a day LiteLLM reports nothing for
-    has no bar.
+    has no bar. *(Partly superseded 2026-11-26, unit OC2: with Bucket size Weekly, one bar per UTC week — see* Compared with LiteLLM's own Usage page *below.)*
   - **Three switches**, kept in the URL (`metric`, `by`, `view`; a default
-    is not written):
-    - *Metric*: Spend (default), Requests, Tokens.
+    is not written): *(partly superseded 2026-11-26, unit OC2: a fourth switch, Bucket size, `bucket` in the URL — see below)*
+    - *Metric*: ~~Spend (default), Requests, Tokens~~ *(superseded 2026-11-26, unit OC2: LiteLLM's order)* Spend (default), Tokens, Requests.
     - *Breakdown*: Total (default), By team. By team stacks the LiteLLM
       teams: the seven largest of the range by the chosen metric, then
       "Other teams"; a legend names them.
@@ -853,6 +853,42 @@ The top-bar `h1` reads "Account"; the page renders the sign-in facts as a key–
   - ~~**A team whose range read fails is left out of `dailyByTeam`** and, as today, out of `daily` and the totals (the route tolerates a failed read, LD34); the sums therefore stay equal (T-OC1).~~ *(superseded 2026-11-26, OC1 review Q-B1: the route does not tolerate a failed range read.)* **A failed range read fails the request** (App Teams AT7, LD34), so `dailyByTeam` always holds every proxy team and its sums equal `daily` (T-OC1).
   - **The new counts stay strict.** `requests`, `tokens` and `failedRequests` are `.nonnegative()` in the schema: a negative count from LiteLLM is contract drift and fails the answer visibly, as for the other LiteLLM views (coordinator ruling, 2026-11-26, OC1 review Q-W1; FX1).
   - **The Table view lists only the days that have a value;** the chart keeps every day of the range on its axis (D-OC-6).
+
+  **Compared with LiteLLM's own Usage page (unit OC2, 2026-11-26; LiteLLM
+  1.109.1, read in the browser by the planner; D-F-1 to D-F-8).**
+  - *Metric* is in LiteLLM's order: Spend, Tokens, Requests (superseded:
+    Spend, Requests, Tokens).
+  - A fourth switch, *Bucket size*: Daily (default), Weekly (`bucket` in
+    the URL). A week is Monday to Sunday in UTC and is labelled by its
+    first day; a first or last bar that covers fewer than seven days is
+    marked "part week" in the tooltip and the table view.
+  - The panel has a one-line subtitle that says what is drawn, for example
+    "Daily spend by team, 7 largest stacked".
+  - The Requests tile shows "n ok · n failed" under the figure when
+    LiteLLM reports the split. The split shows when the totals carry `successfulRequests` and `failedRequests`; a field LiteLLM leaves out of a day counts as 0, as LiteLLM reports it (its spend metrics default each count to 0; coordinator ruling, 2026-11-26, OC2 review).
+  - The LiteLLM teams table gains **Share** (the team's part of the total
+    spend, a percentage with a thin bar; "—" with no spend), **Requests**
+    and **Tokens**; Requests and Tokens are hidden below `lg`.
+  - Not copied, with the reason: a log scale (stacked bars on a log axis
+    misstate the parts, and a day without spend cannot be drawn); panels
+    by provider, key, agent, endpoint and user, and an export (keys and
+    per-user figures have their own pages and visibility rules); a
+    breakdown by model (the shared normaliser does not know LiteLLM's
+    model names yet; open).
+
+  | Test | Proves |
+  |---|---|
+  | T-OC8 | `GET /api/litellm/org`: `totals.successfulRequests`, and per team `requests` and `tokens` that equal the sums of that team's days; no LiteLLM call added; the role table unchanged |
+  | T-OC9 | Weekly: bars are Monday-to-Sunday UTC weeks whose values are the sums of their days; a part week is marked; the total equals the daily total; `bucket` in the URL restores it |
+  | T-OC10 | The metric order; the subtitle for each metric, breakdown and bucket |
+  | T-OC11 | The Requests tile's "n ok · n failed"; absent without the split |
+  | T-OC12 | The teams table: Share sums to 100 % within rounding and is "—" with no spend; Requests and Tokens per team; hidden below `lg`; the cards at 375px |
+  | T-OC13 | E2E: Weekly by click for the three reading roles; axe at 375px and desktop |
+
+  *How OC2 builds it (agent decisions, 2026-11-26, unit OC2).*
+  - **Weeks are computed with plain UTC date arithmetic** (`weeklyBuckets` in `components/litellm/organisation/format.ts`: each day parsed as `YYYY-MM-DDT00:00:00Z`, the week's Monday from `getUTCDay`), not with `date-fns`. Reason: it never touches the local time zone (Rule 20.1) and needs no extra import; the tests run it under two non-UTC zones.
+  - **The week label uses the `en-GB` short month** ("Week of 16 Nov"); the runtime's ICU writes September as "Sept".
+  - **The subtitle is its own line** under the panel's description "LiteLLM-reported, per UTC day.", which stays (the LiteLLM-reported label, LT8).
 
 - **Users, round 3 (unit UP1, user, 2026-11-25; D-R3-10 to D-R3-13).**
   - "Create and link" is renamed **"Create LiteLLM user"** (superseded:

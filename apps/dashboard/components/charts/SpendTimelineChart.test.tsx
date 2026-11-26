@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { render, screen } from "@testing-library/react";
+import type { ComponentProps, ReactElement } from "react";
+import type { Tooltip, XAxis } from "recharts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -19,6 +21,39 @@ import { SpendTimelineChart } from "./SpendTimelineChart";
 // colours from tokens (Rule 40.2), role="img" label, ChartEmptyState with no
 // data, no animation under reduced motion. Rule 40.3 / 60.11 (Recharts in
 // ResponsiveContainer).
+// Records the props the chart gives Recharts' XAxis and Tooltip, then renders
+// the real components (jsdom draws no tick text and cannot hover).
+const captured = vi.hoisted(() => ({
+  xAxis: [] as ComponentProps<typeof XAxis>[],
+  tooltip: [] as ComponentProps<typeof Tooltip>[],
+}));
+vi.mock("recharts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("recharts")>();
+  return {
+    ...actual,
+    XAxis: (props: ComponentProps<typeof actual.XAxis>) => {
+      captured.xAxis.push(props);
+      return <actual.XAxis {...props} />;
+    },
+    Tooltip: (props: ComponentProps<typeof actual.Tooltip>) => {
+      captured.tooltip.push(props);
+      return <actual.Tooltip {...props} />;
+    },
+  };
+});
+
+function tooltipHeading(day: string): string | null | undefined {
+  const content = captured.tooltip.at(-1)?.content;
+  if (typeof content !== "function") return undefined;
+  const element = content({
+    active: true,
+    label: day,
+    payload: [],
+  } as unknown as Parameters<typeof content>[0]) as ReactElement;
+  const { container } = render(element);
+  return container.querySelector("p")?.textContent;
+}
+
 const DAYS = ["2026-11-14", "2026-11-15", "2026-11-16", "2026-11-17"];
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
@@ -193,5 +228,45 @@ describe("SpendTimelineChart (T-OC3)", () => {
     const [bar] = rects(container);
     expect(bar).toBeDefined();
     expect(num(bar!, "height")).toBeGreaterThan(0);
+  });
+
+  // Design System -- LiteLLM Organisation spend chart, the 2026-11-26
+  // comparison (T-OC9): the optional `labelFor(key)` replaces the date format on
+  // the x-axis ticks and the tooltip heading. jsdom draws no tick text and
+  // cannot hover, so these read what the chart hands to Recharts' XAxis and
+  // Tooltip.
+  it("T-OC9: without labelFor the ticks and the tooltip heading are dates", async () => {
+    captured.xAxis.length = 0;
+    captured.tooltip.length = 0;
+    await renderChart(
+      <SpendTimelineChart
+        days={DAYS}
+        series={one({ "2026-11-14": 10 })}
+        format={usd}
+        label="Spend"
+      />,
+    );
+    expect(captured.xAxis.at(-1)?.tickFormatter?.("2026-11-14", 0)).toBe(
+      "Nov 14",
+    );
+    expect(tooltipHeading("2026-11-14")).toBe("Nov 14");
+  });
+
+  it("T-OC9: labelFor names the x-axis ticks and the tooltip heading", async () => {
+    captured.xAxis.length = 0;
+    captured.tooltip.length = 0;
+    await renderChart(
+      <SpendTimelineChart
+        days={DAYS}
+        series={one({ "2026-11-14": 10 })}
+        format={usd}
+        label="Spend"
+        labelFor={(key) => `Week of ${key}`}
+      />,
+    );
+    expect(captured.xAxis.at(-1)?.tickFormatter?.("2026-11-14", 0)).toBe(
+      "Week of 2026-11-14",
+    );
+    expect(tooltipHeading("2026-11-14")).toBe("Week of 2026-11-14");
   });
 });

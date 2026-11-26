@@ -11,6 +11,7 @@ type OrgUsageTilesProps = {
     requests?: number | undefined;
     tokens?: number | undefined;
     failedRequests?: number | undefined;
+    successfulRequests?: number | undefined;
   };
 };
 
@@ -19,7 +20,8 @@ const ABSENT = "—";
 // Design System -- LiteLLM Organisation spend chart (unit OC1, T-OC5):
 // LiteLLM-reported range totals; the average is spend / requests.
 export function OrgUsageTiles({ totals }: OrgUsageTilesProps) {
-  const { spend, requests, tokens } = totals;
+  const { spend, requests, tokens, failedRequests, successfulRequests } =
+    totals;
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <MetricCard
@@ -31,6 +33,11 @@ export function OrgUsageTiles({ totals }: OrgUsageTilesProps) {
         title="Requests"
         value={requests === undefined ? ABSENT : formatCount(requests)}
         icon={Hash}
+        description={
+          successfulRequests !== undefined && failedRequests !== undefined
+            ? `${formatCount(successfulRequests)} ok · ${formatCount(failedRequests)} failed`
+            : undefined
+        }
       />
       <MetricCard
         title="Tokens"
