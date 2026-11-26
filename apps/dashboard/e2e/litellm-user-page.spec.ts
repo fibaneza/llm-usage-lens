@@ -29,7 +29,12 @@ const USER = {
   email: "ada@example.test",
   spend: 77.1,
   maxBudget: 150,
-  daily: [{ date: "2026-10-02", spend: 4.5 }],
+  daily: Array.from({ length: 31 }, (_, i) => ({
+    date: `2026-10-${String(i + 1).padStart(2, "0")}`,
+    spend: 1 + (i % 4),
+    requests: 10 * (1 + (i % 4)),
+    tokens: 1000 * (1 + (i % 4)),
+  })),
   enabledOperations: ["resetMemberSpend", "resetUserSpend"],
   teams: [
     {
@@ -49,7 +54,11 @@ const USER = {
 const noRange = (url: URL) =>
   !(url.searchParams.has("dateFrom") && url.searchParams.has("dateTo"));
 
-async function mockApi(page: Page, user: unknown = USER) {
+async function mockApi(
+  page: Page,
+  user: unknown = USER,
+  userId: string = USER.userId,
+) {
   await page.route(/\/api\/sync-status(\?|$)/, (route) =>
     route.fulfill({ json: { data: { state: "never-synced" } } }),
   );
@@ -124,21 +133,24 @@ async function mockApi(page: Page, user: unknown = USER) {
       },
     }),
   );
-  await page.route(/\/api\/litellm\/users\/u-ada(\?.*)?$/, (route) => {
-    const url = new URL(route.request().url());
-    if (noRange(url)) {
-      return route.fulfill({
-        status: 400,
-        json: {
-          error: {
-            code: "BAD_REQUEST",
-            message: "dateFrom and dateTo are required",
+  await page.route(
+    new RegExp(`/api/litellm/users/${userId}(\\?.*)?$`),
+    (route) => {
+      const url = new URL(route.request().url());
+      if (noRange(url)) {
+        return route.fulfill({
+          status: 400,
+          json: {
+            error: {
+              code: "BAD_REQUEST",
+              message: "dateFrom and dateTo are required",
+            },
           },
-        },
-      });
-    }
-    return route.fulfill({ json: { data: user } });
-  });
+        });
+      }
+      return route.fulfill({ json: { data: user } });
+    },
+  );
 }
 
 async function expectNoSeriousAxe(page: Page) {
@@ -184,7 +196,7 @@ test.describe("LiteLLM user page (LP2, T-LP8, T-LP9)", () => {
       await expect(summary).toContainText("$77.10");
       await expect(summary).toContainText("$150.00");
       await expect(
-        page.getByRole("region", { name: "Daily spend" }),
+        page.getByRole("region", { name: "Spend over time" }),
       ).toBeVisible();
       await expect(
         page
@@ -211,6 +223,83 @@ test.describe("LiteLLM user page (LP2, T-LP8, T-LP9)", () => {
       await expect(page).toHaveURL(new RegExp(`${USERS_TAB}(\\?.*)?$`));
     });
   }
+
+  // T-LP17 (Design System - LiteLLM user page, name and spend over time): for
+  // the three reading roles, the breadcrumb name, the chart, Weekly by click.
+  // The name is the id here (no connection is stored, so the page's check makes
+  // no call; the alias and email cases are the page test's, T-LP13); the full
+  // value is in `title`.
+  for (const role of [
+    "internal-admin",
+    "internal-org-admin",
+    "internal-auditor",
+  ]) {
+    test(`T-LP17 ${role}: the breadcrumb names the user, the chart shows, Weekly by click`, async ({
+      page,
+      context,
+    }) => {
+      await signInAsTestUser(context, { roles: [role] });
+      await mockApi(page);
+      await page.goto(`${USER_PAGE}?${RANGE}`);
+      await waitForHydration(page);
+
+      const crumb = page
+        .getByRole("navigation", { name: "breadcrumb" })
+        .locator('[aria-current="page"]');
+      await expect(crumb).toBeVisible();
+      await expect(crumb).not.toHaveText("");
+      const title = await crumb.evaluate((el) => el.getAttribute("title"));
+      expect(title).toBe(await crumb.innerText());
+
+      const region = page.getByRole("region", { name: "Spend over time" });
+      await expect(
+        region.getByRole("img", {
+          name: /Spend, 2026-10-01 to 2026-10-31 UTC/,
+        }),
+      ).toBeVisible();
+      await expect(
+        region.getByText("Daily spend", { exact: true }),
+      ).toBeVisible();
+      await region.getByRole("button", { name: "Weekly" }).click();
+      await expect(
+        region.getByRole("button", { name: "Weekly" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await expect(page).toHaveURL(/bucket=weekly/);
+      await expect(
+        region.getByText("Weekly spend", { exact: true }),
+      ).toBeVisible();
+    });
+  }
+
+  // T-LP13 / Rule 40.6 (Design System - LiteLLM user page): a long id (no
+  // alias, so the crumb shows the id) truncates inside the crumb at 375px;
+  // the page does not scroll sideways and the full value is in `title`.
+  test("T-LP13: a long user id truncates in the last crumb at 375px without a sideways scroll", async ({
+    page,
+    context,
+  }) => {
+    const longId = `u-${"x".repeat(118)}`;
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
+    await mockApi(page, { ...USER, userId: longId }, longId);
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto(`${USERS_TAB}/${longId}?${RANGE}`);
+    await waitForHydration(page);
+
+    const crumb = page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .locator('[aria-current="page"]');
+    await expect(crumb).toHaveAttribute("title", longId);
+    expect(await crumb.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
+      true,
+    );
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  });
 
   // T-LP9: the user cell is a real link, so the keyboard opens the page
   // (WCAG 2.1.1).
@@ -282,6 +371,11 @@ test.describe("LiteLLM user page (LP2, T-LP8, T-LP9)", () => {
       await expect(page.getByRole("region", { name: "Summary" })).toContainText(
         "$77.10",
       );
+      await expect(
+        page
+          .getByRole("region", { name: "Spend over time" })
+          .getByRole("img", { name: /^Spend, / }),
+      ).toBeVisible();
       await expectNoSeriousAxe(page);
       expect(
         await page.evaluate(

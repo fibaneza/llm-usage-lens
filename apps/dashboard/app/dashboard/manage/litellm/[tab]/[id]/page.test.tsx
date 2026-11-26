@@ -61,9 +61,11 @@ vi.mock("@/components/litellm/proxy-user/ProxyUserPageContent", () => ({
     litellmUserId: string;
     canWrite: boolean;
     ownOid: string | null;
+    name?: string | null;
   }) => (
     <div
       data-testid="user-page"
+      data-name={props.name ?? undefined}
       data-id={props.litellmUserId}
       data-write={String(props.canWrite)}
       data-own={props.ownOid ?? ""}
@@ -74,9 +76,11 @@ vi.mock("@/components/litellm/proxy-team/ProxyTeamPageContent", () => ({
   ProxyTeamPageContent: (props: {
     litellmTeamId: string;
     canReset: boolean;
+    name?: string | null;
   }) => (
     <div
       data-testid="team-page"
+      data-name={props.name ?? undefined}
       data-id={props.litellmTeamId}
       data-reset={String(props.canReset)}
     />
@@ -98,8 +102,8 @@ afterEach(() => {
 function as(roles: string[]) {
   auth.mockResolvedValue({ user: { oid: "oid-1", roles } });
   loadViewer.mockResolvedValue({ roles, authMethod: "entra", adminScopes: [] });
-  exists.mockResolvedValue(true);
-  userExists.mockResolvedValue(true);
+  exists.mockResolvedValue({ exists: true, name: null });
+  userExists.mockResolvedValue({ exists: true, name: null });
 }
 const open = (id: string, tab = "teams") =>
   LiteLLMTeamPage({ params: Promise.resolve({ tab, id }) });
@@ -163,7 +167,7 @@ describe("LiteLLM team page (/dashboard/manage/litellm/teams/[id]; T-LP4)", () =
       for (const found of [true, false]) {
         setManageAccess({ litellm: false });
         as([role]);
-        exists.mockResolvedValue(found);
+        exists.mockResolvedValue({ exists: found, name: null });
         await expect(open("ll-team-1")).rejects.toThrow("NEXT_NOT_FOUND");
       }
       expect(exists).not.toHaveBeenCalled();
@@ -174,7 +178,7 @@ describe("LiteLLM team page (/dashboard/manage/litellm/teams/[id]; T-LP4)", () =
     "T-LP4 / LD19: %s still sees the page when the existence check reports an outage (true)",
     async (role) => {
       as([role]);
-      exists.mockResolvedValue(true);
+      exists.mockResolvedValue({ exists: true, name: null });
       render(await open("ll-team-1"));
       expect(screen.getByTestId("team-page")).toHaveAttribute(
         "data-id",
@@ -185,7 +189,7 @@ describe("LiteLLM team page (/dashboard/manage/litellm/teams/[id]; T-LP4)", () =
 
   it("T-LP4: an unknown team id is the missing page", async () => {
     as(["internal-admin"]);
-    exists.mockResolvedValue(false);
+    exists.mockResolvedValue({ exists: false, name: null });
     await expect(open("ll-unknown")).rejects.toThrow("NEXT_NOT_FOUND");
     expect(exists).toHaveBeenCalledWith("ll-unknown");
   });
@@ -285,7 +289,7 @@ describe("LiteLLM user page (/dashboard/manage/litellm/users/[id]; T-LP8)", () =
     async (found) => {
       setManageAccess({ litellm: false });
       as(["internal-viewer"]);
-      userExists.mockResolvedValue(found);
+      userExists.mockResolvedValue({ exists: found, name: null });
       await expect(openUser("ll-ada")).rejects.toThrow("NEXT_NOT_FOUND");
       expect(userExists).not.toHaveBeenCalled();
     },
@@ -293,14 +297,14 @@ describe("LiteLLM user page (/dashboard/manage/litellm/users/[id]; T-LP8)", () =
 
   it("T-LP8: an unknown user id is the missing page", async () => {
     as(["internal-admin"]);
-    userExists.mockResolvedValue(false);
+    userExists.mockResolvedValue({ exists: false, name: null });
     await expect(openUser("ll-unknown")).rejects.toThrow("NEXT_NOT_FOUND");
     expect(userExists).toHaveBeenCalledWith("ll-unknown");
   });
 
   it("T-LP8 / LD19: the page still shows when the existence check reports an outage (true)", async () => {
     as(["internal-auditor"]);
-    userExists.mockResolvedValue(true);
+    userExists.mockResolvedValue({ exists: true, name: null });
     render(await openUser("ll-ada"));
     expect(screen.getByTestId("user-page")).toBeInTheDocument();
   });
@@ -338,5 +342,75 @@ describe("LiteLLM user page (/dashboard/manage/litellm/users/[id]; T-LP8)", () =
     const id = "a".repeat(128);
     render(await openUser(id));
     expect(screen.getByTestId("user-page")).toHaveAttribute("data-id", id);
+  });
+});
+
+// Source: Design System - LiteLLM team page and LiteLLM user page, "Name and
+// spend over time (unit LP3)", T-LP13, T-LP14: the page passes the name its
+// existence check resolved to the page content (the breadcrumb's label is
+// `name ?? id`, decided in the content); the name is absent where the check
+// had none; the authorization lines and their order are unchanged (the
+// existence check is still never reached by a caller without access).
+describe("LiteLLM detail page passes the resolved name (T-LP13, T-LP14)", () => {
+  it.each(["internal-admin", "internal-org-admin", "internal-auditor"])(
+    "T-LP14: %s - the team page content gets the alias the check returned",
+    async (role) => {
+      as([role]);
+      exists.mockResolvedValue({ exists: true, name: "Alpha" });
+      render(await open("ll-team-1"));
+      expect(screen.getByTestId("team-page")).toHaveAttribute(
+        "data-name",
+        "Alpha",
+      );
+    },
+  );
+
+  it.each(["internal-admin", "internal-org-admin", "internal-auditor"])(
+    "T-LP13: %s - the user page content gets the name the check returned",
+    async (role) => {
+      as([role]);
+      userExists.mockResolvedValue({ exists: true, name: "Ada L." });
+      render(await open("ll-ada", "users"));
+      expect(screen.getByTestId("user-page")).toHaveAttribute(
+        "data-name",
+        "Ada L.",
+      );
+    },
+  );
+
+  it("T-LP13, T-LP14: no name from the check means no name for the content (the id is shown)", async () => {
+    as(["internal-admin"]);
+    render(await open("ll-team-1"));
+    expect(screen.getByTestId("team-page")).not.toHaveAttribute("data-name");
+    render(await open("ll-ada", "users"));
+    expect(screen.getByTestId("user-page")).not.toHaveAttribute("data-name");
+  });
+
+  it("T-LP13: a name that looks like markup reaches the content as the same string", async () => {
+    as(["internal-admin"]);
+    userExists.mockResolvedValue({ exists: true, name: "<b>x</b>" });
+    render(await open("ll-ada", "users"));
+    expect(screen.getByTestId("user-page")).toHaveAttribute(
+      "data-name",
+      "<b>x</b>",
+    );
+  });
+
+  it("T-LP13: an unknown id is still the missing page, whatever name came back", async () => {
+    as(["internal-admin"]);
+    userExists.mockResolvedValue({ exists: false, name: "Ghost" });
+    await expect(open("ll-ghost", "users")).rejects.toThrow("NEXT_NOT_FOUND");
+    exists.mockResolvedValue({ exists: false, name: "Ghost" });
+    await expect(open("ll-ghost")).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("the check for each tab is made once, with the decoded id, and only for that tab", async () => {
+    as(["internal-admin"]);
+    await open("ll-team-1");
+    expect(exists).toHaveBeenCalledTimes(1);
+    expect(userExists).not.toHaveBeenCalled();
+    await open("ll-ada", "users");
+    expect(userExists).toHaveBeenCalledTimes(1);
+    expect(exists).toHaveBeenCalledTimes(1);
   });
 });

@@ -40,7 +40,7 @@ function SummaryBody({ litellmTeamId }: { litellmTeamId: string }) {
     <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
       <Field label="Alias">{team.alias}</Field>
       <Field label="Team id">
-        <span className="font-mono">{team.litellmTeamId}</span>
+        <span className="font-mono break-all">{team.litellmTeamId}</span>
       </Field>
       <Field label="Members">
         <span className="font-mono tabular-nums">{team.memberCount}</span>

@@ -259,6 +259,14 @@ export const LiteLLMOrgDailyRowSchema = z.object({
 });
 export type LiteLLMOrgDailyRow = z.infer<typeof LiteLLMOrgDailyRowSchema>;
 
+// LP3 (LiteLLM spec — API routes, T-LP12): the team daily spend answer; no
+// key, member or per-user figure.
+export const LiteLLMProxyTeamDailyResponseSchema = z.object({
+  litellmTeamId: z.string(),
+  daily: z.array(LiteLLMOrgDailyRowSchema).optional(),
+  enabledOperations: EnabledOperations,
+});
+
 // L3b: Views by role (Organisation, Users tabs).
 export const LiteLLMOrgResponseSchema = z
   .object({
@@ -340,7 +348,7 @@ export const LiteLLMUserDetailResponseSchema = z.object({
   // LiteLLM reports no spend for the user (LF1 D-LF1).
   spend: z.number().nullable().optional(),
   maxBudget: z.number().nullable().optional(),
-  daily: DailySchema.optional(),
+  daily: z.array(LiteLLMOrgDailyRowSchema).optional(),
   // L6: the person's combined figure, absent while the cap hides per-user cost.
   combined: CombinedMeResponseSchema.optional(),
   enabledOperations: EnabledOperations,

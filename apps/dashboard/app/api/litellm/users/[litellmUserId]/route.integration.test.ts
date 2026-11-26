@@ -878,3 +878,59 @@ describe("GET /api/litellm/users/[litellmUserId] - teams[] and appUser (T-LP7, L
     }
   });
 });
+
+// Source: docs/specs/2026-11-10-litellm.md - "API routes" (/api/litellm/users/
+// [litellmUserId] GET, unit LP3: `requests` and `tokens` on each `daily` row,
+// from the same daily read; omitted with `daily` while the cap hides per-user
+// cost, LD23), T-LP11. The fake's daily row (test/fakes/fake-litellm-views.ts)
+// reports api_requests 3 and total_tokens 15. The role table is the MATRIX above,
+// unchanged.
+describe("GET /api/litellm/users/[litellmUserId] - daily requests and tokens (T-LP11)", () => {
+  it.each(["admin", "orgAdmin", "auditor", "teamAdminA"] as const)(
+    "%s: each daily row carries requests (apiRequests) and tokens (totalTokens) beside date and spend",
+    async (who) => {
+      signInAs(who);
+      const { res, body } = await get("ab@company.com");
+      expect(res.status).toBe(200);
+      expect(body.data.daily[0]).toEqual({
+        date: "2026-11-02",
+        spend: 1.5,
+        requests: 3,
+        tokens: 15,
+      });
+    },
+  );
+
+  it("the daily rows carry no key, key alias or secret from the upstream breakdown (LT1)", async () => {
+    signInAs("admin");
+    const { text } = await get("ab@company.com");
+    expect(text).not.toContain("DAILY-SENTINEL");
+    expect(text).not.toContain("raw_secret");
+  });
+
+  it.each(["admin", "teamAdminA"] as const)(
+    "%s: exactly the LiteLLM calls as before - one user read and one daily read, both GET, nothing else",
+    async (who) => {
+      signInAs(who);
+      const { res } = await get("ab@company.com");
+      expect(res.status).toBe(200);
+      expect(
+        state.fake.calls.map((c) => `${c.method} ${c.path}`).sort(),
+      ).toEqual(["GET /user/daily/activity", "GET /user/info"]);
+    },
+  );
+
+  it.each(["admin", "orgAdmin", "auditor", "teamAdminA"] as const)(
+    "%s under the Organisation cap: daily is absent and no requests or tokens leak (LD23)",
+    async (who) => {
+      await enterProd();
+      signInAs(who);
+      const { res, body, text } = await get("ab@company.com");
+      expect(res.status).toBe(200);
+      expect(body.data).not.toHaveProperty("daily");
+      expect(text).not.toMatch(/"(requests|tokens)"/);
+      expect(dailyCalls()).toHaveLength(0);
+      expect(state.fake.calls.map((c) => c.path)).toEqual(["/user/info"]);
+    },
+  );
+});

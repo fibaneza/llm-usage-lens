@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
+import { waitForAnimations } from "./support/animations";
 import { waitForHydration } from "./support/hydration";
 import { E2E_BASE_URL } from "./support/constants";
 import { signInAsTestUser } from "./support/session";
@@ -37,6 +38,17 @@ const TEAM = {
     leads: [{ name: "Grace Hopper" }],
   },
 };
+const DAILY = {
+  litellmTeamId: "ll-111",
+  daily: Array.from({ length: 31 }, (_, i) => ({
+    date: `2026-10-${String(i + 1).padStart(2, "0")}`,
+    spend: 2 + (i % 5),
+    requests: 20 * (1 + (i % 5)),
+    tokens: 2000 * (1 + (i % 5)),
+  })),
+  enabledOperations: ["getTeamDailySpend"],
+};
+const RANGE = "dateFrom=2026-10-01&dateTo=2026-10-31";
 const MEMBERS = {
   litellmTeamId: "ll-111",
   enabledOperations: ["resetMemberSpend", "resetMemberBudget"],
@@ -58,7 +70,11 @@ const MEMBERS = {
   ],
 };
 
-async function mockApi(page: Page, team: unknown = TEAM) {
+async function mockApi(
+  page: Page,
+  team: unknown = TEAM,
+  teamId: string = TEAM.litellmTeamId,
+) {
   await page.route(/\/api\/sync-status(\?|$)/, (route) =>
     route.fulfill({ json: { data: { state: "never-synced" } } }),
   );
@@ -87,15 +103,21 @@ async function mockApi(page: Page, team: unknown = TEAM) {
       },
     }),
   );
-  await page.route(/\/api\/litellm\/proxy-teams\/ll-111$/, (route) =>
+  await page.route(new RegExp(`/api/litellm/proxy-teams/${teamId}$`), (route) =>
     route.fulfill({ json: { data: team } }),
   );
-  await page.route(/\/api\/litellm\/proxy-teams\/ll-111\/members$/, (route) =>
-    route.fulfill({ json: { data: MEMBERS } }),
+  await page.route(
+    new RegExp(`/api/litellm/proxy-teams/${teamId}/daily(\\?.*)?$`),
+    (route) => route.fulfill({ json: { data: DAILY } }),
+  );
+  await page.route(
+    new RegExp(`/api/litellm/proxy-teams/${teamId}/members$`),
+    (route) => route.fulfill({ json: { data: MEMBERS } }),
   );
 }
 
 async function expectNoSeriousAxe(page: Page) {
+  await waitForAnimations(page);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa"])
     .analyze();
@@ -216,6 +238,84 @@ test.describe("LiteLLM team page (LP1, T-LP4, T-LP5)", () => {
     });
   }
 
+  // T-LP17 (Design System - LiteLLM team page, name and spend over time): for
+  // the three reading roles, the breadcrumb name, the chart, Weekly by click.
+  // The lock above guarantees no stored connection, so the page's check makes
+  // no call and the breadcrumb's last item is the id with the full value in
+  // `title` (the alias case is the page test's, T-LP14).
+  for (const role of [
+    "internal-admin",
+    "internal-org-admin",
+    "internal-auditor",
+  ]) {
+    test(`T-LP17 ${role}: the breadcrumb names the team, the chart shows after Summary, Weekly by click`, async ({
+      page,
+      context,
+    }) => {
+      await signInAsTestUser(context, { roles: [role] });
+      await mockApi(page);
+      await page.goto(`${TEAM_PAGE}?${RANGE}`);
+      await waitForHydration(page);
+
+      const crumb = page
+        .getByRole("navigation", { name: "breadcrumb" })
+        .locator('[aria-current="page"]');
+      await expect(crumb).toHaveText("ll-111");
+      expect(await crumb.evaluate((el) => el.getAttribute("title"))).toBe(
+        "ll-111",
+      );
+
+      const region = page.getByRole("region", { name: "Spend over time" });
+      await expect(
+        region.getByRole("img", {
+          name: /Spend, 2026-10-01 to 2026-10-31 UTC/,
+        }),
+      ).toBeVisible();
+      await region.getByRole("button", { name: "Weekly" }).click();
+      await expect(
+        region.getByRole("button", { name: "Weekly" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await expect(page).toHaveURL(/bucket=weekly/);
+      await expect(
+        region.getByText("Weekly spend", { exact: true }),
+      ).toBeVisible();
+      const y = async (name: string) =>
+        (await page.getByRole("region", { name }).boundingBox())?.y ?? 0;
+      expect(await y("Summary")).toBeLessThan(await y("Spend over time"));
+      expect(await y("Spend over time")).toBeLessThan(await y("Members"));
+    });
+  }
+
+  // T-LP14 / Rule 40.6 (Design System - LiteLLM team page): a long team id (no
+  // alias, so the crumb shows the id) truncates inside the crumb at 375px;
+  // the page does not scroll sideways and the full value is in `title`.
+  test("T-LP14: a long team id truncates in the last crumb at 375px without a sideways scroll", async ({
+    page,
+    context,
+  }) => {
+    const longId = `ll-${"x".repeat(117)}`;
+    await signInAsTestUser(context, { roles: ["internal-auditor"] });
+    await mockApi(page, { ...TEAM, litellmTeamId: longId }, longId);
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto(`${TEAMS_TAB}/${longId}?${RANGE}`);
+    await waitForHydration(page);
+
+    const crumb = page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .locator('[aria-current="page"]');
+    await expect(crumb).toHaveAttribute("title", longId);
+    expect(await crumb.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
+      true,
+    );
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  });
+
   // T-LP5 (Design System - LiteLLM team page): the name is a real link, so
   // the keyboard opens the page (WCAG 2.1.1).
   test("the keyboard opens a team: focus the name link on the teams tab and press Enter", async ({
@@ -296,6 +396,11 @@ test.describe("LiteLLM team page (LP1, T-LP4, T-LP5)", () => {
         page.getByRole("region", { name: "Linked dashboard team" }),
       ).toContainText("Grace Hopper");
       await expect(page.getByText("ada@example.test")).toBeVisible();
+      await expect(
+        page
+          .getByRole("region", { name: "Spend over time" })
+          .getByRole("img", { name: /^Spend, / }),
+      ).toBeVisible();
       await expectNoSeriousAxe(page);
       expect(
         await page.evaluate(

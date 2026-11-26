@@ -1,14 +1,13 @@
 "use client";
 
 import { parseAsStringLiteral, useQueryStates } from "nuqs";
-import { useId, useMemo } from "react";
+import { useMemo } from "react";
 import type { z } from "zod";
 
 import { formatUsd } from "@/components/charts/chart-data";
 import { ChartLegend } from "@/components/charts/ChartLegend";
 import { LazySpendTimelineChart } from "@/components/charts/LazyCharts";
 import { Panel } from "@/components/display/Panel";
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -18,10 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
 import type { LiteLLMOrgDailyRowSchema } from "@llm-usage-lens/shared";
 
-import { formatCount, weeklyBuckets, type WeekBucket } from "./format";
+import { formatCount, weeklyBuckets } from "./format";
+import { OptionGroup } from "./OptionGroup";
+import { bucketed, daysOf, valuesOf } from "./timeline";
 
 type LiteLLMOrgDailyRow = z.infer<typeof LiteLLMOrgDailyRowSchema>;
 
@@ -59,7 +59,6 @@ const METRIC_LABEL: Record<Metric, string> = {
 };
 
 const TOP_TEAMS = 7;
-const NOT_REPORTED = "Not reported by LiteLLM";
 const NUMERIC = "text-right font-mono tabular-nums";
 
 type Series = {
@@ -69,45 +68,8 @@ type Series = {
   values: Record<string, number>;
 };
 
-// Every UTC day from dateFrom to dateTo inclusive (LD20; Rule 20.1).
-function daysOf(dateFrom: string, dateTo: string): string[] {
-  const days: string[] = [];
-  const end = Date.parse(`${dateTo}T00:00:00Z`);
-  for (let t = Date.parse(`${dateFrom}T00:00:00Z`); t <= end; t += 86_400_000) {
-    days.push(new Date(t).toISOString().slice(0, 10));
-  }
-  return days;
-}
-
-function valuesOf(
-  rows: readonly LiteLLMOrgDailyRow[],
-  metric: Metric,
-): Record<string, number> {
-  const values: Record<string, number> = {};
-  for (const row of rows) {
-    const value = row[metric];
-    if (value !== undefined) values[row.date] = value;
-  }
-  return values;
-}
-
 const sumOf = (values: Record<string, number>) =>
   Object.values(values).reduce((a, b) => a + b, 0);
-
-// Sums each series' days into its week bucket (Design System -- OC2).
-function bucketed(
-  values: Record<string, number>,
-  buckets: readonly WeekBucket[],
-): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const bucket of buckets) {
-    for (const day of bucket.days) {
-      const value = values[day];
-      if (value !== undefined) out[bucket.key] = (out[bucket.key] ?? 0) + value;
-    }
-  }
-  return out;
-}
 
 function teamSeries(teams: readonly DailyByTeam[], metric: Metric): Series[] {
   const ranked = teams
@@ -137,62 +99,6 @@ function teamSeries(teams: readonly DailyByTeam[], metric: Metric): Series[] {
     });
   }
   return series;
-}
-
-function OptionGroup<T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  options: readonly { value: T; label: string }[];
-  value: T;
-  onChange: (value: T) => void;
-  disabled: ReadonlySet<T>;
-}) {
-  const labelId = useId();
-  const reasonId = useId();
-  const anyDisabled = disabled.size > 0;
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <span id={labelId} className="text-muted-foreground text-xs font-medium">
-        {label}
-      </span>
-      <div
-        role="group"
-        aria-labelledby={labelId}
-        className="flex flex-wrap gap-1"
-      >
-        {options.map((option) => {
-          const selected = option.value === value;
-          return (
-            <Button
-              key={option.value}
-              type="button"
-              aria-pressed={selected}
-              aria-describedby={
-                disabled.has(option.value) ? reasonId : undefined
-              }
-              disabled={disabled.has(option.value)}
-              variant={selected ? "secondary" : "outline"}
-              size="sm"
-              className={cn(selected && "border-border border font-semibold")}
-              onClick={() => onChange(option.value)}
-            >
-              {option.label}
-            </Button>
-          );
-        })}
-      </div>
-      {anyDisabled ? (
-        <span id={reasonId} className="text-muted-foreground text-xs">
-          {NOT_REPORTED}
-        </span>
-      ) : null}
-    </div>
-  );
 }
 
 // Design System -- LiteLLM Organisation spend chart (unit OC1, T-OC4): the

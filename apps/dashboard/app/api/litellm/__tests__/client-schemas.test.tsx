@@ -11,6 +11,7 @@ import {
   LiteLLMMembersResponseSchema,
   LiteLLMModelsResponseSchema,
   LiteLLMOrgResponseSchema,
+  LiteLLMProxyTeamDailyResponseSchema,
   LiteLLMProxyTeamResponseSchema,
   LiteLLMTeamDetailResponseSchema,
   LiteLLMUserMembershipsResponseSchema,
@@ -36,6 +37,7 @@ import { useCombinedOrganisation } from "@/components/litellm/combined/use-combi
 import { OrganisationSection } from "@/components/litellm/OrganisationSection";
 import { ResetMemberSpendDialog } from "@/components/litellm/ResetMemberSpendDialog";
 import { useProxyTeam } from "@/components/litellm/proxy-team/use-proxy-team";
+import { useProxyTeamDaily } from "@/components/litellm/proxy-team/use-proxy-team-daily";
 import { useProxyUser } from "@/components/litellm/proxy-user/use-proxy-user";
 import { MembersPanel } from "@/components/litellm/team/MembersPanel";
 import { ModelsPanel } from "@/components/litellm/team/ModelsPanel";
@@ -68,7 +70,7 @@ import {
   DEFAULT_ORG_UNITS_BODY,
   defaultLiteLLMUsersBody,
 } from "@/test/fakes/api-stubs";
-import { PROXY_TEAM } from "@/test/fixtures/proxy-team";
+import { PROXY_TEAM, PROXY_TEAM_DAILY } from "@/test/fixtures/proxy-team";
 import { renderWithProviders } from "@/test/support/render-providers";
 
 // Source: Design System - Management pages, LiteLLM users tab, D-LF1 (one
@@ -157,6 +159,9 @@ function stubFetch() {
       }
       if (/^\/api\/litellm\/proxy-teams\/[^/]+$/.test(path)) {
         return Promise.resolve(apiResponse({ data: PROXY_TEAM }));
+      }
+      if (/^\/api\/litellm\/proxy-teams\/[^/]+\/daily$/.test(path)) {
+        return Promise.resolve(apiResponse({ data: PROXY_TEAM_DAILY }));
       }
       if (path.startsWith("/api/litellm/proxy-teams/")) {
         return Promise.resolve(
@@ -441,6 +446,12 @@ const ROUTES: RouteContract[] = [
     query: () => [NoQuery],
     answer: () => LiteLLMProxyTeamResponseSchema,
   },
+  // LP3, T-LP12/T-LP16: the team page's spend-over-time read carries the range.
+  {
+    pattern: /^\/api\/litellm\/proxy-teams\/[^/]+\/daily$/,
+    query: () => [DateRangeQuerySchema],
+    answer: () => LiteLLMProxyTeamDailyResponseSchema,
+  },
   {
     pattern: /^\/api\/litellm\/proxy-teams\/[^/]+\/members$/,
     query: () => [NoQuery],
@@ -631,6 +642,12 @@ const CALLERS: Caller[] = [
     file: "components/litellm/proxy-team/use-proxy-team.ts",
     ui: <Probe use={() => useProxyTeam("ll-team-shared")} />,
     expects: [at(/proxy-teams\/ll-team-shared$/)],
+  },
+  // LP3 (T-LP16, T-FX2): the team page's daily read carries the URL range.
+  {
+    file: "components/litellm/proxy-team/use-proxy-team-daily.ts",
+    ui: <Probe use={() => useProxyTeamDaily("ll-team-shared")} />,
+    expects: [at(/proxy-teams\/ll-team-shared\/daily$/, "dateFrom=2026-10-01")],
   },
   // LP2 (T-LP8, T-FX2): the user page's one read carries the URL range.
   {

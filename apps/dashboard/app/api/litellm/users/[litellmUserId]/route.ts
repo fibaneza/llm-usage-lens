@@ -188,7 +188,14 @@ export const GET = withRoute(async (request, { params }, session) => {
         // Absent spend is null, shown as a dash; never an invented $0 (LF1).
         spend: info.user_info?.spend ?? null,
         maxBudget: info.user_info?.max_budget ?? null,
-        daily: reduceDaily(daily.results),
+        // LP3 (LiteLLM spec - API routes, T-LP11): requests and tokens ride
+        // the same read; no new call.
+        daily: reduceDaily(daily.results).map((d) => ({
+          date: d.date,
+          spend: d.spend,
+          requests: d.apiRequests,
+          tokens: d.totalTokens,
+        })),
         enabledOperations: enabled,
         ...(access.orgWide ? await linkData(litellmUserId, info.teams) : {}),
       }),

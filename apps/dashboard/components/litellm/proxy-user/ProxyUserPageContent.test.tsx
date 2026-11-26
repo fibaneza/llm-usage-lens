@@ -27,7 +27,7 @@ import { ProxyUserPageContent } from "./ProxyUserPageContent";
 //   string; canWrite: boolean; ownOid: string | null }) renders a PageHeader
 //   whose breadcrumb has a link "LiteLLM users" to
 //   /dashboard/manage/litellm/users, then Panels "Summary"
-//   (ProxyUserSummaryPanel), "Daily spend" (ProxyUserDailyPanel), "LiteLLM
+//   (ProxyUserSummaryPanel), "Spend over time" (ProxyUserDailyPanel, LP3), "LiteLLM
 //   teams" (ProxyUserTeamsPanel) and "Linked dashboard user"
 //   (ProxyUserLinkPanel, canWrite and ownOid passed through). The page makes one
 //   GET to /api/litellm/users/[id] for all four.
@@ -39,10 +39,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const render = (canWrite = true) =>
+const render = (canWrite = true, name: string | null = null) =>
   renderWithProviders(
     <ProxyUserPageContent
       litellmUserId={PROXY_USER_ID}
+      name={name}
       canWrite={canWrite}
       ownOid="oid-admin"
     />,
@@ -58,12 +59,12 @@ describe("ProxyUserPageContent (T-LP8)", () => {
     ).toHaveAttribute("href", "/dashboard/manage/litellm/users");
   });
 
-  it("T-LP8 / Rule 40.9: Summary, Daily spend, LiteLLM teams and Linked dashboard user are four regions, each with a heading", async () => {
+  it("T-LP8 / T-LP16 / Rule 40.9: Summary, Spend over time, LiteLLM teams and Linked dashboard user are four regions, each with a heading", async () => {
     stubProxyUser();
     render();
     for (const name of [
       "Summary",
-      "Daily spend",
+      "Spend over time",
       "LiteLLM teams",
       "Linked dashboard user",
     ]) {
@@ -124,6 +125,49 @@ describe("ProxyUserPageContent (T-LP8)", () => {
       await screen.findByText("Couldn't load Summary."),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "LiteLLM users" })).toBeVisible();
+  });
+
+  // T-LP13 (Design System - LiteLLM user page, name and spend over time): the
+  // breadcrumb's last item is the name the page resolved on the server (alias,
+  // else email), else the id; one line, truncated, the full value in `title`;
+  // never rendered as HTML.
+  const crumb = (text: string) => {
+    const nav = screen.getByRole("navigation", { name: /breadcrumb/i });
+    return within(nav).getByText(text);
+  };
+
+  it("T-LP13: with a name the breadcrumb's last item is the name, not the id", async () => {
+    stubProxyUser();
+    render(true, "ada-alias");
+    const last = crumb("ada-alias");
+    expect(last).toHaveAttribute("aria-current", "page");
+    expect(
+      within(
+        screen.getByRole("navigation", { name: /breadcrumb/i }),
+      ).queryByText(PROXY_USER_ID),
+    ).toBeNull();
+    await screen.findByRole("region", { name: "Summary" });
+  });
+
+  it("T-LP13: without a name (no call, or the call failed) the last item is the id", async () => {
+    stubProxyUser();
+    render(true, null);
+    expect(crumb(PROXY_USER_ID)).toHaveAttribute("aria-current", "page");
+    await screen.findByRole("region", { name: "Summary" });
+  });
+
+  it("T-LP13: a long name keeps its full value in `title` (the breadcrumb truncates it), and a name is text, never HTML", async () => {
+    stubProxyUser();
+    const long = `${"very-long-alias-".repeat(10)}<b>x</b>`;
+    const { container } = render(true, long);
+    const last = crumb(long);
+    expect(last).toHaveAttribute("title", long);
+    expect(last).toHaveClass("truncate");
+    expect(
+      container.querySelectorAll(`[title="${CSS.escape(long)}"]`),
+    ).toHaveLength(1);
+    expect(container.querySelector("nav b")).toBeNull();
+    await screen.findByRole("region", { name: "Summary" });
   });
 
   // Rule 40.3: the chart is lazy (components/charts/LazyCharts.tsx); a direct

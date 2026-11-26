@@ -32,17 +32,24 @@ export default async function LiteLLMDetailPage({
   if (!viewer) notFound();
   const canWrite = litellmPanelCapabilities(viewer.roles).editTeamLinks;
   if (tab === "users") {
-    if (!(await proxyUserExists(litellmId.data))) notFound();
+    const user = await proxyUserExists(litellmId.data);
+    if (!user.exists) notFound();
     return (
       <ProxyUserPageContent
+        name={user.name}
         litellmUserId={litellmId.data}
         canWrite={canWrite}
         ownOid={session?.user?.oid ?? null}
       />
     );
   }
-  if (!(await proxyTeamExists(litellmId.data))) notFound();
+  const team = await proxyTeamExists(litellmId.data);
+  if (!team.exists) notFound();
   return (
-    <ProxyTeamPageContent litellmTeamId={litellmId.data} canReset={canWrite} />
+    <ProxyTeamPageContent
+      name={team.name}
+      litellmTeamId={litellmId.data}
+      canReset={canWrite}
+    />
   );
 }

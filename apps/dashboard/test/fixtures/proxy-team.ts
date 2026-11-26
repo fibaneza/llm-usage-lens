@@ -57,14 +57,32 @@ export const PROXY_TEAM_MEMBERS = {
   ],
 };
 
+// GET /api/litellm/proxy-teams/[litellmTeamId]/daily (LiteLLM spec - API
+// routes, unit LP3, T-LP12): date, spend, requests, tokens; no key, user or
+// member field. The Organisation cap (LD23) omits `daily`.
+export const PROXY_TEAM_DAILY = {
+  litellmTeamId: PROXY_TEAM_ID,
+  daily: [
+    { date: "2026-11-14", spend: 4.5, requests: 30, tokens: 9000 },
+    { date: "2026-11-15", spend: 2, requests: 12, tokens: 4000 },
+  ],
+  enabledOperations: ["getTeamDailySpend"],
+};
+
+export const PROXY_TEAM_DAILY_CAPPED = {
+  litellmTeamId: PROXY_TEAM_ID,
+  enabledOperations: ["getTeamDailySpend"],
+};
+
 type StubOptions = {
   team?: unknown | (() => Response);
   members?: unknown | (() => Response);
+  daily?: unknown | (() => Response);
 };
 
-// Stubs the two reads of the page and records every request path.
+// Stubs the three reads of the page and records every request path.
 export function stubProxyTeam(options: StubOptions = {}) {
-  const calls: Array<{ path: string; method: string }> = [];
+  const calls: Array<{ path: string; method: string; search: string }> = [];
   const answer = (given: unknown, fallback: unknown): Response =>
     typeof given === "function"
       ? (given as () => Response)()
@@ -72,8 +90,16 @@ export function stubProxyTeam(options: StubOptions = {}) {
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const path = new URL(String(input), "http://localhost").pathname;
-      calls.push({ path, method: (init?.method ?? "GET").toUpperCase() });
+      const url = new URL(String(input), "http://localhost");
+      const path = url.pathname;
+      calls.push({
+        path,
+        method: (init?.method ?? "GET").toUpperCase(),
+        search: url.search,
+      });
+      if (/^\/api\/litellm\/proxy-teams\/[^/]+\/daily$/.test(path)) {
+        return Promise.resolve(answer(options.daily, PROXY_TEAM_DAILY));
+      }
       if (/^\/api\/litellm\/proxy-teams\/[^/]+\/members$/.test(path)) {
         return Promise.resolve(answer(options.members, PROXY_TEAM_MEMBERS));
       }

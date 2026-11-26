@@ -5,6 +5,7 @@ import { ClientOnly } from "@/components/litellm/ClientOnly";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { LiteLLMTeamMembersPanel } from "@/components/settings/litellm-panel/LiteLLMTeamMembersPanel";
 
+import { ProxyTeamDailyPanel } from "./ProxyTeamDailyPanel";
 import { ProxyTeamLinkPanel } from "./ProxyTeamLinkPanel";
 import { ProxyTeamSummaryPanel } from "./ProxyTeamSummaryPanel";
 import { useProxyTeamState } from "./use-proxy-team";
@@ -34,9 +35,11 @@ function MembersBody({
 
 export function ProxyTeamPageContent({
   litellmTeamId,
+  name,
   canReset,
 }: {
   litellmTeamId: string;
+  name?: string | null;
   canReset: boolean;
 }) {
   return (
@@ -44,11 +47,12 @@ export function ProxyTeamPageContent({
       <PageHeader
         breadcrumb={[
           { label: "LiteLLM teams", href: "/dashboard/manage/litellm/teams" },
-          { label: litellmTeamId },
+          { label: name ?? litellmTeamId },
         ]}
       />
       <ClientOnly>
         <ProxyTeamSummaryPanel litellmTeamId={litellmTeamId} />
+        <ProxyTeamDailyPanel litellmTeamId={litellmTeamId} />
         <Panel title="Members" boundaryTitle="Members">
           <MembersBody litellmTeamId={litellmTeamId} canReset={canReset} />
         </Panel>

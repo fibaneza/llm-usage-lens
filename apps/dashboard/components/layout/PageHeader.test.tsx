@@ -142,4 +142,39 @@ describe("PageHeader", () => {
     expect(follows(description, tabs)).toBe(true);
     expect(follows(tabs, toolbar)).toBe(true);
   });
+
+  // Design System - LiteLLM user page, name and spend over time (LP3 agent
+  // decision, T-LP13/T-LP14): the last crumb is one truncated line with the
+  // full value in `title`; earlier crumbs and a header with no breadcrumb are
+  // unchanged.
+  it("T-LP13: the last crumb truncates and carries its full text in title", () => {
+    const long = "very-long-alias-".repeat(10);
+    render(
+      <PageHeader
+        breadcrumb={[
+          { label: "LiteLLM users", href: "/dashboard/litellm/users" },
+          { label: long },
+        ]}
+      />,
+    );
+    const nav = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const last = within(nav).getByText(long);
+    expect(last).toHaveAttribute("title", long);
+    expect(last).toHaveClass("truncate");
+  });
+
+  it("T-LP13: earlier crumbs carry no title and no truncate class", () => {
+    render(
+      <PageHeader
+        breadcrumb={[
+          { label: "Teams", href: "/dashboard/teams" },
+          { label: "Core" },
+        ]}
+      />,
+    );
+    const link = screen.getByRole("link", { name: "Teams" });
+    expect(link).not.toHaveAttribute("title");
+    expect(link).not.toHaveClass("truncate");
+    expect(link.closest("[title]")).toBeNull();
+  });
 });

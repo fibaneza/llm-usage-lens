@@ -490,6 +490,15 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
     family: "litellm",
     validParams: { litellmTeamId: "lt-team-a" },
   }),
+  // Unit LP3 (LiteLLM spec - API routes, T-LP12): the team's daily spend over
+  // a 90-day-capped range; admin, org-admin and auditor read, a Lead is refused
+  // by the route itself before the range is parsed.
+  read("litellm/proxy-teams/[litellmTeamId]/daily/route.ts", {
+    family: "litellm",
+    validParams: { litellmTeamId: "lt-team-a" },
+    query: RANGE,
+    badQuery: BAD_RANGE,
+  }),
   read("litellm/models/route.ts", { family: "litellm" }),
   read("litellm/orphans/route.ts", { family: "litellm" }),
   read("litellm/team-links/route.ts", { family: "litellm" }),

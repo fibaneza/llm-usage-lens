@@ -99,7 +99,7 @@ Paths under `apps/dashboard/` unless they start with `packages/`.
 
 | Unit | Owns |
 |---|---|
-| LP3 | `components/litellm/SpendTimelinePanel.tsx` and its test (new); `components/litellm/proxy-user/**`; `components/litellm/proxy-team/**`; `app/api/litellm/users/[litellmUserId]/route.ts` and its test (the `daily` lines only); `app/api/litellm/proxy-teams/[litellmTeamId]/daily/**` (new); `lib/litellm/operations.ts` (the `user_alias` field only); `lib/litellm/proxy-user-exists.ts`, `lib/litellm/proxy-team-exists.ts` and their tests; `app/dashboard/manage/litellm/[tab]/[id]/page.tsx` and its test; `e2e/litellm-user-page.spec.ts`; `e2e/litellm-team-page.spec.ts` |
+| LP3 | `components/litellm/SpendTimelinePanel.tsx` and its test (new); `components/litellm/proxy-user/**`; `components/litellm/proxy-team/**`; `app/api/litellm/users/[litellmUserId]/route.ts` and its test (the `daily` lines only); `app/api/litellm/proxy-teams/[litellmTeamId]/daily/**` (new); `lib/litellm/operations.ts` (the `user_alias` field only); `lib/litellm/proxy-user-exists.ts`, `lib/litellm/proxy-team-exists.ts` and their tests; `app/dashboard/manage/litellm/[tab]/[id]/page.tsx` and its test; `e2e/litellm-user-page.spec.ts`; `e2e/litellm-team-page.spec.ts`; `components/litellm/organisation/timeline.ts` (new: `daysOf`, `valuesOf`, `bucketed` moved out of `OrgSpendPanel.tsx`), the shared switch component if extracted, and the matching import lines in `OrgSpendPanel.tsx` (coordinator ruling 2026-11-26, kind C, no behaviour change; OC3 builds on it) |
 
 | Declared overlap | Units | Rule |
 |---|---|---|

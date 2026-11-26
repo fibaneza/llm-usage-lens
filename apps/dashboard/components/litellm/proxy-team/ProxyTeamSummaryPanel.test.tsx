@@ -102,8 +102,13 @@ describe("ProxyTeamSummaryPanel (T-LP4)", () => {
     renderWithProviders(<ProxyTeamSummaryPanel litellmTeamId="ll/odd id" />);
     await summary();
     await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0));
+    // Design System - LiteLLM team page, T-LP4: exactly one GET, no query.
     expect(calls).toEqual([
-      { path: "/api/litellm/proxy-teams/ll%2Fodd%20id", method: "GET" },
+      {
+        path: "/api/litellm/proxy-teams/ll%2Fodd%20id",
+        method: "GET",
+        search: "",
+      },
     ]);
   });
 

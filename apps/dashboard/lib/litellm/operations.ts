@@ -253,6 +253,7 @@ const UserInfoResponse = z.object({
     .object({
       user_id: z.string().nullish(),
       user_email: z.string().nullish(),
+      user_alias: z.string().nullish(),
       user_role: z.string().nullish(),
       spend: z.number().nullish(),
       max_budget: z.number().nullish(),

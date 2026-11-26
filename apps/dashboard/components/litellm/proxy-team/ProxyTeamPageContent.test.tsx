@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiError } from "@/test/fakes/api-stubs";
 import {
   PROXY_TEAM_CAPPED,
+  PROXY_TEAM_DAILY_CAPPED,
   PROXY_TEAM_ID,
   stubProxyTeam,
 } from "@/test/fixtures/proxy-team";
@@ -32,9 +33,22 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const render = (canReset = true) =>
+// The chart itself is covered by SpendTimelineChart.test.tsx; here it is a probe.
+vi.mock("@/components/charts/LazyCharts", () => ({
+  LazySpendTimelineChart: (props: { label: string }) => (
+    <div role="img" aria-label={props.label} />
+  ),
+}));
+
+const RANGE = { dateFrom: "2026-11-01", dateTo: "2026-11-30" };
+const render = (canReset = true, name: string | null = null) =>
   renderWithProviders(
-    <ProxyTeamPageContent litellmTeamId={PROXY_TEAM_ID} canReset={canReset} />,
+    <ProxyTeamPageContent
+      litellmTeamId={PROXY_TEAM_ID}
+      name={name}
+      canReset={canReset}
+    />,
+    { searchParams: RANGE },
   );
 
 describe("ProxyTeamPageContent (T-LP4, T-LP5)", () => {
@@ -98,8 +112,10 @@ describe("ProxyTeamPageContent (T-LP4, T-LP5)", () => {
     expect(
       calls.filter((c) => c.path === "/api/litellm/proxy-teams/ll-team-1"),
     ).toHaveLength(1);
+    // LP3 (T-LP16): the daily panel adds its own read, /daily.
     expect(calls.map((c) => c.path).sort()).toEqual([
       "/api/litellm/proxy-teams/ll-team-1",
+      "/api/litellm/proxy-teams/ll-team-1/daily",
       "/api/litellm/proxy-teams/ll-team-1/members",
     ]);
   });
@@ -133,5 +149,96 @@ describe("ProxyTeamPageContent (T-LP4, T-LP5)", () => {
         await screen.findByRole("region", { name: "Linked dashboard team" }),
       ).findByText("Ada Lovelace"),
     ).toBeInTheDocument();
+  });
+
+  // T-LP16 (Design System - LiteLLM team page, name and spend over time): a
+  // Spend over time panel stands after Summary, has its own Suspense and
+  // ErrorBoundary, and is absent while the cap hides cost.
+  it("T-LP16: a 'Spend over time' region stands directly after Summary and before Members", async () => {
+    stubProxyTeam();
+    render();
+    const summary = await screen.findByRole("region", { name: "Summary" });
+    const spend = await screen.findByRole("region", {
+      name: "Spend over time",
+    });
+    const members = await screen.findByRole("region", { name: "Members" });
+    const after = (a: HTMLElement, b: HTMLElement) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(after(summary, spend)).toBe(true);
+    expect(after(spend, members)).toBe(true);
+  });
+
+  it("T-LP16: a failed daily read leaves Summary, Members and the link panel up", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    stubProxyTeam({ daily: () => apiError(500, "INTERNAL_ERROR", "boom") });
+    render();
+    expect(
+      await screen.findByText(/Couldn't load spend over time\./i),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Payments LLM")).toBeInTheDocument();
+    expect(await screen.findByText("ada@example.test")).toBeInTheDocument();
+    expect(
+      await within(
+        await screen.findByRole("region", { name: "Linked dashboard team" }),
+      ).findByText("Ada Lovelace"),
+    ).toBeInTheDocument();
+  });
+
+  it("T-LP16 / LD23: under the cap (no `daily`) the Spend over time region is absent and the rest stays", async () => {
+    const calls = stubProxyTeam({ daily: PROXY_TEAM_DAILY_CAPPED });
+    render();
+    await screen.findByRole("region", { name: "Summary" });
+    await vi.waitFor(() =>
+      expect(calls.some((c) => c.path.endsWith("/daily"))).toBe(true),
+    );
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: "Spend over time" }),
+      ).toBeNull(),
+    );
+    expect(
+      await screen.findByRole("region", { name: "Members" }),
+    ).toBeVisible();
+  });
+
+  // T-LP14 (Design System - LiteLLM team page, name and spend over time): the
+  // breadcrumb's last item is the alias the page resolved on the server, else
+  // the id; one line, truncated, the full value in `title`; never HTML.
+  const crumb = (text: string) =>
+    within(screen.getByRole("navigation", { name: /breadcrumb/i })).getByText(
+      text,
+    );
+
+  it("T-LP14: with an alias the breadcrumb's last item is the alias, not the id", async () => {
+    stubProxyTeam();
+    render(true, "Payments alias");
+    expect(crumb("Payments alias")).toHaveAttribute("aria-current", "page");
+    expect(
+      within(
+        screen.getByRole("navigation", { name: /breadcrumb/i }),
+      ).queryByText(PROXY_TEAM_ID),
+    ).toBeNull();
+    await screen.findByRole("region", { name: "Summary" });
+  });
+
+  it("T-LP14: without a name (no call, or the call failed) the last item is the id", async () => {
+    stubProxyTeam();
+    render(true, null);
+    expect(crumb(PROXY_TEAM_ID)).toHaveAttribute("aria-current", "page");
+    await screen.findByRole("region", { name: "Summary" });
+  });
+
+  it("T-LP14: a long alias keeps its full value in `title`, and an alias is text, never HTML", async () => {
+    stubProxyTeam();
+    const long = `${"very-long-alias-".repeat(10)}<b>x</b>`;
+    const { container } = render(true, long);
+    const last = crumb(long);
+    expect(last).toHaveAttribute("title", long);
+    expect(last).toHaveClass("truncate");
+    expect(
+      container.querySelectorAll(`[title="${CSS.escape(long)}"]`),
+    ).toHaveLength(1);
+    expect(container.querySelector("nav b")).toBeNull();
+    await screen.findByRole("region", { name: "Summary" });
   });
 });

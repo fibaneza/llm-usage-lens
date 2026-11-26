@@ -13,20 +13,41 @@ import { enabledOperations } from "./read-views";
 // LiteLLM 404 means "unknown". Where no call may be made (open access mode,
 // LT11; LiteLLM not configured, LD37; getUser off, LD19) or LiteLLM fails
 // otherwise, the page stays up so its panels show their own states.
-export async function proxyUserExists(litellmUserId: string): Promise<boolean> {
-  if (env.AUTH_ACCESS_MODE === "open") return true;
-  if (!(await isLiteLLMConfigured())) return true;
-  if (!(await enabledOperations()).includes("getUser")) return true;
+//
+// Unit LP3, T-LP13: also answers the display name for the breadcrumb - the
+// trimmed user_alias, else the trimmed user_email, else null (null on every
+// path that makes no call or fails).
+export type ProxyUserLookup = { exists: boolean; name: string | null };
+
+const trimmed = (value: string | null | undefined): string | null => {
+  const text = value?.trim();
+  return text ? text : null;
+};
+
+export async function proxyUserExists(
+  litellmUserId: string,
+): Promise<ProxyUserLookup> {
+  const unknown = { exists: true, name: null };
+  if (env.AUTH_ACCESS_MODE === "open") return unknown;
+  if (!(await isLiteLLMConfigured())) return unknown;
+  if (!(await enabledOperations()).includes("getUser")) return unknown;
   try {
-    await getUser({ litellmUserId });
-    return true;
+    const info = await getUser({ litellmUserId });
+    return {
+      exists: true,
+      name:
+        trimmed(info.user_info?.user_alias) ??
+        trimmed(info.user_info?.user_email),
+    };
   } catch (error) {
-    if (error instanceof LiteLLMError && error.status === 404) return false;
+    if (error instanceof LiteLLMError && error.status === 404) {
+      return { exists: false, name: null };
+    }
     // Span event without the raw error: it may carry upstream text (Rule 50.6).
     trace.getActiveSpan()?.addEvent("litellm.proxy_user_exists.failed", {
       "litellm.error.kind":
         error instanceof LiteLLMError ? error.detail : "unexpected",
     });
-    return true;
+    return unknown;
   }
 }

@@ -1123,6 +1123,11 @@ Phase 5 (user, 2026-11-25; Rule 30).
   Verify: T-OC8–T-OC13 (Design System — *LiteLLM Organisation spend
   chart*, the 2026-11-26 comparison); no LiteLLM call added; the route's
   role table unchanged
+- [ ] **LP3** LiteLLM user and team pages: names in the breadcrumb, spend over time (`feature/litellm-pages-names-charts`; user, 2026-11-26; plan `docs/plans/20261126_litellm_pages_names_charts.md`)
+  Verify: T-LP11, T-LP12 (LiteLLM — *API routes*); T-LP13–T-LP17 (Design
+  System — *LiteLLM team page*, *LiteLLM user page*); one new read route,
+  registered in the route registry; the cap (LD23) unchanged
+- [ ] Clean-up after OC3 and LP3: `OrgSpendPanel` on the shared `SpendTimelinePanel` (no behaviour change)
 - [x] **FX2** Three small UI fixes: the select arrow, the connection test, the sidebar brand line (`fix/round3-ui-fixes`; user, 2026-11-26)
   Verify: T-FX6–T-FX8 (Design System — *Component Inventory*,
   `NativeSelect`); T-FX9, T-FX10 (LiteLLM — *Security architecture*

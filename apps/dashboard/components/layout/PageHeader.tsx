@@ -36,6 +36,7 @@ export function PageHeader({
   tabs,
   children,
 }: PageHeaderProps) {
+  const last = (breadcrumb?.length ?? 0) - 1;
   return (
     <div className="flex flex-col gap-1">
       {breadcrumb && breadcrumb.length > 0 ? (
@@ -44,13 +45,20 @@ export function PageHeader({
             {breadcrumb.map((crumb, index) => (
               <Fragment key={crumb.label}>
                 {index > 0 ? <BreadcrumbSeparator /> : null}
-                <BreadcrumbItem>
+                <BreadcrumbItem
+                  className={index === last ? "max-w-full min-w-0" : undefined}
+                >
                   {crumb.href ? (
                     <BreadcrumbLink asChild>
                       <Link href={crumb.href}>{crumb.label}</Link>
                     </BreadcrumbLink>
                   ) : (
-                    <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                    <BreadcrumbPage
+                      className="inline-block max-w-[min(72ch,100%)] truncate align-bottom"
+                      title={crumb.label}
+                    >
+                      {crumb.label}
+                    </BreadcrumbPage>
                   )}
                 </BreadcrumbItem>
               </Fragment>

@@ -7,6 +7,7 @@ import {
   LiteLLMMembersResponseSchema,
   LiteLLMModelsResponseSchema,
   LiteLLMOrgResponseSchema,
+  LiteLLMProxyTeamDailyResponseSchema,
   LiteLLMProxyTeamMembersResponseSchema,
   LiteLLMProxyTeamResponseSchema,
   LiteLLMSpendLogsResponseSchema,
@@ -1136,5 +1137,107 @@ describe("LiteLLMOrgResponseSchema usage-parity fields (OC2, T-OC8)", () => {
     ],
   ])("rejects %s", (_name, value) => {
     expect(LiteLLMOrgResponseSchema.safeParse(value).success).toBe(false);
+  });
+});
+
+// Sources: LiteLLM spec - API routes (/api/litellm/users/[litellmUserId], unit
+// LP3: `requests` and `tokens` on each `daily` row; the team daily route's
+// answer), T-LP11, T-LP12, LT1 (no key, key alias, member or per-user figure).
+describe("LiteLLMUserDetailResponseSchema daily rows (LP3, T-LP11)", () => {
+  const base = {
+    userId: "u-1",
+    email: "u1@example.test",
+    enabledOperations: ["getUser"],
+  };
+  const row = { date: "2026-11-02", spend: 1.5, requests: 3, tokens: 15 };
+
+  it("a daily row with requests and tokens parses and keeps both", () => {
+    const parsed = LiteLLMUserDetailResponseSchema.parse({
+      ...base,
+      daily: [row],
+    });
+    expect(parsed.daily).toEqual([row]);
+  });
+
+  it("a row without requests and tokens (today's shape) still parses", () => {
+    expect(
+      LiteLLMUserDetailResponseSchema.safeParse({ ...base, daily }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ["a negative count", { ...row, requests: -1 }],
+    ["a non-numeric tokens", { ...row, tokens: "15" }],
+    ["no spend", { date: "2026-11-02", requests: 3 }],
+  ])("rejects a daily row with %s", (_n, bad) => {
+    expect(
+      LiteLLMUserDetailResponseSchema.safeParse({ ...base, daily: [bad] })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("LiteLLMProxyTeamDailyResponseSchema (LP3, T-LP12, LT1)", () => {
+  const row = { date: "2026-11-02", spend: 1.5, requests: 3, tokens: 15 };
+  const base = {
+    litellmTeamId: "ll-t1",
+    daily: [row],
+    enabledOperations: ["getTeamDailySpend"],
+  };
+  const parse = (v: unknown) =>
+    LiteLLMProxyTeamDailyResponseSchema.safeParse(v).success;
+
+  it("accepts rows with requests and tokens, rows without them, an empty list, and no daily (the cap, LD23)", () => {
+    expect(parse(base)).toBe(true);
+    expect(parse({ ...base, daily: [{ date: "2026-11-02", spend: 1 }] })).toBe(
+      true,
+    );
+    expect(parse({ ...base, daily: [] })).toBe(true);
+    const capped: Record<string, unknown> = { ...base };
+    delete capped.daily;
+    expect(parse(capped)).toBe(true);
+  });
+
+  it.each([
+    ["no litellmTeamId", { ...base, litellmTeamId: undefined }],
+    ["no enabledOperations", { ...base, enabledOperations: undefined }],
+    ["a row without a date", { ...base, daily: [{ spend: 1 }] }],
+    ["a row without spend", { ...base, daily: [{ date: "2026-11-02" }] }],
+    ["a negative count", { ...base, daily: [{ ...row, requests: -1 }] }],
+    ["daily that is not a list", { ...base, daily: row }],
+  ])("rejects %s", (_n, value) => {
+    expect(parse(value)).toBe(false);
+  });
+
+  it("the parsed answer drops key, key alias, user and member fields (LT1; T-LP12)", () => {
+    const out = LiteLLMProxyTeamDailyResponseSchema.parse({
+      ...base,
+      daily: [
+        {
+          ...row,
+          keyAlias: "KEYALIAS",
+          token: "tok",
+          userId: "u-1",
+          members: [{ id: "m" }],
+        },
+      ],
+      keys: [{ token: "t" }],
+      members: [{ id: "m" }],
+    });
+    const allKeys = (v: unknown): string[] =>
+      Array.isArray(v)
+        ? v.flatMap(allKeys)
+        : v && typeof v === "object"
+          ? Object.entries(v).flatMap(([k, x]) => [k, ...allKeys(x)])
+          : [];
+    const top = new Set(["litellmTeamId", "daily", "enabledOperations"]);
+    const rowKeys = new Set(["date", "spend", "requests", "tokens"]);
+    expect(Object.keys(out).every((k) => top.has(k))).toBe(true);
+    for (const r of out.daily ?? []) {
+      expect(Object.keys(r).every((k) => rowKeys.has(k))).toBe(true);
+    }
+    for (const banned of ["keyAlias", "token", "userId", "members", "keys"]) {
+      expect(allKeys(out)).not.toContain(banned);
+    }
   });
 });

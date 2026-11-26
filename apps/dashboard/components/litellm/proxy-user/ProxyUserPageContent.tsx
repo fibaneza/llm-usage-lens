@@ -12,10 +12,12 @@ import { ProxyUserTeamsPanel } from "./ProxyUserTeamsPanel";
 // stays in the top bar; every section is a Panel with its own boundary.
 export function ProxyUserPageContent({
   litellmUserId,
+  name,
   canWrite,
   ownOid,
 }: {
   litellmUserId: string;
+  name?: string | null;
   canWrite: boolean;
   ownOid: string | null;
 }) {
@@ -24,7 +26,7 @@ export function ProxyUserPageContent({
       <PageHeader
         breadcrumb={[
           { label: "LiteLLM users", href: "/dashboard/manage/litellm/users" },
-          { label: litellmUserId },
+          { label: name ?? litellmUserId },
         ]}
       />
       <ClientOnly>

@@ -773,6 +773,26 @@ The top-bar `h1` reads "Account"; the page renders the sign-in facts as a key–
   | T-LP4 | The page: summary, `BudgetBar`, members, linked app team and lead names; an unlinked team says so; an unknown id and a lead get the missing page |
   | T-LP5 | The team names in the teams tab and the Organisation table link to the page; E2E per reading role; axe at 375px and desktop |
 
+  **Name and spend over time (unit LP3, 2026-11-26; user).**
+  - The breadcrumb's last item is the team's **alias**, else the id (a
+    LiteLLM team has no email). The name is resolved on the server by the
+    page's existence check (`proxyTeamExists`, the one `getTeam` call it
+    already makes), so it is right on first paint; where that check makes
+    no call (open access mode, not configured, the operation off) or the
+    call fails, the item is the id. One line, truncated, the full value in
+    `title`. The id stays in Summary. Superseded: the id as the
+    breadcrumb's last item.
+  - A **Spend over time** panel stands between Summary and Members: the
+    shared `SpendTimelinePanel` (*Component Inventory*), fed by
+    `GET /api/litellm/proxy-teams/[litellmTeamId]/daily` for the URL
+    range. It has its own Suspense and ErrorBoundary: a failed daily read
+    leaves the other panels up. It is absent while the cap hides cost.
+
+  | Test | Proves |
+  |---|---|
+  | T-LP14 | The breadcrumb: the alias, else the id; the id where the check makes no call or the call fails; truncated with `title` |
+  | T-LP16 | The panel stands after Summary, is absent under the cap, and a failed daily read leaves Summary, Members and the link panel up (and, on the user page, the panel stands where the "Daily spend" table stood and is absent under the cap) |
+
 - **LiteLLM users tab, round 3, and the LiteLLM user page (unit LP2, user,
   2026-11-25: "in a new page, no under the user table, also if is linked to
   any app user and team"; D-R3-8, D-R3-9).** "Search users" is a
@@ -806,7 +826,7 @@ The top-bar `h1` reads "Account"; the page renders the sign-in facts as a key–
   them. **(e)** "Search users" waits 500 ms after typing before it asks
   [one request per term, as the tab did]. **(f)** Daily spend is the
   table of UTC days the tab showed (`DailySpend`), not a chart [the spec
-  asks for daily spend for the range; a table needs no lazy-loaded chart].
+  asks for daily spend for the range; a table needs no lazy-loaded chart]. *Superseded 2026-11-26 (LP3, user: "Daily spend should be a timeline chart"): the `SpendTimelinePanel` chart, with the table as its Table view.*
 
   | Test | Proves |
   |---|---|
@@ -815,6 +835,30 @@ The top-bar `h1` reads "Account"; the page renders the sign-in facts as a key–
   | T-LP8 | The page: identity, spend, budget, daily spend, teams, the linked person and their team, or "Not linked to a dashboard user"; an unknown id and a lead get the missing page |
   | T-LP9 | The user cell links to the page; nothing renders under the table; Reset spend and Link / Unlink work from the page for the roles that have them |
   | T-LP10 | The user page and the Team page summary link to the LiteLLM pages only for the three global roles |
+
+  **Name and spend over time (unit LP3, 2026-11-26; user).**
+  - The breadcrumb's last item is the user's **alias** (LiteLLM's
+    `user_alias`), else the **email**, else the id; resolved on the server
+    by `proxyUserExists` (its one `getUser` call), with the no-call and
+    failure cases and the truncation of the LiteLLM team page. Superseded:
+    the id as the breadcrumb's last item.
+  - "Daily spend" becomes **Spend over time**: the shared
+    `SpendTimelinePanel`, from the page's one read. The table that stood
+    here is its Table view (superseded 2026-11-26: the table as the only
+    view). Absent under the cap, as before.
+  - *LP3 agent decision (2026-11-26, coordinator ruling):* `PageHeader`'s
+    last breadcrumb item truncates on one line (Tailwind `truncate`, capped
+    at the 72ch measure and the available width; Design System — *Layout*;
+    Rule 40.6) and carries `title` with the full
+    value; the change is optional and backwards compatible, so no other
+    caller changes visibly [the spec asks for truncation with the full
+    value in `title`, and only the breadcrumb element itself can carry it;
+    a wrapper around the header would put the tooltip on the whole header].
+
+  | Test | Proves |
+  |---|---|
+  | T-LP13 | The breadcrumb: the alias, else the email, else the id; the id where the check makes no call or the call fails; one call as before; an unknown id is still the missing page; truncated with `title` |
+  | T-LP17 | E2E: both pages for the three reading roles: the breadcrumb name, the chart, Weekly by click; axe at 375px and desktop |
 
 - **LiteLLM Organisation spend chart (unit OC1, user, 2026-11-26: "i
   prefer to display as a chart, timeline for example"; D-OC-1 to
@@ -1079,8 +1123,8 @@ Conventions for interactive controls, established with the global
 | `UsageTable` | Custom (TanStack Table + shadcn Table) | Sortable, filterable data table with pagination; renders as a card list below the `md` breakpoint (see Responsive Tables) |
 | `Tabs` | shadcn (Radix Tabs) | Tabbed views with Arrow/Home/End keyboard navigation and a visible focus ring on triggers and panels (L3b; from 2026-11-16 the Team page, Ranking and the Settings tab rows — the only tabs component) |
 | ~~`UserSearch`~~ *superseded 2026-11-26 (LP2): deleted (no importer); the search is `SearchInput` on the LiteLLM users tab and the selected user's usage is the LiteLLM user page (`ProxyUser*` below)* | Custom | Debounced LiteLLM user search with a results table and the selected user's usage; shared by ~~Management → Users (formerly the LiteLLM *Users* tab) and~~ Management → LiteLLM → *LiteLLM users* (Management → Users no longer mounts it: superseded 2026-11-24, unit US1, D-US1) (formerly Settings → LiteLLM *Users*, L3b; moved 2026-11-17, MI-D3) |
-| `ProxyUserPageContent`, `ProxyUserSummaryPanel`, `ProxyUserDailyPanel`, `ProxyUserTeamsPanel`, `ProxyUserLinkPanel` | Custom (`Panel` each, own Suspense + ErrorBoundary) | The LiteLLM user page (unit LP2, 2026-11-26): identity, spend and budget, daily spend (table), the combined figure, the user's LiteLLM teams (links to the team page), the linked dashboard person; one read through `use-proxy-user` (`components/litellm/proxy-user/**`) |
-| `ProxyTeamPageContent`, `ProxyTeamSummaryPanel`, `ProxyTeamLinkPanel` | Custom (`Panel` each, own Suspense + ErrorBoundary) | The LiteLLM team page (unit LP1, 2026-11-25): summary with `BudgetBar` and reset time, models, members (`LiteLLMTeamMembersPanel`), the linked app team and its leads; one read through `use-proxy-team` (`components/litellm/proxy-team/**`) |
+| `ProxyUserPageContent`, `ProxyUserSummaryPanel`, `ProxyUserDailyPanel`, `ProxyUserTeamsPanel`, `ProxyUserLinkPanel` | Custom (`Panel` each, own Suspense + ErrorBoundary) | The LiteLLM user page (unit LP2, 2026-11-26): identity, spend and budget, ~~daily spend (table)~~ spend over time (`SpendTimelinePanel`, LP3; the table is its Table view), the combined figure, the user's LiteLLM teams (links to the team page), the linked dashboard person; one read through `use-proxy-user` (`components/litellm/proxy-user/**`) |
+| `ProxyTeamPageContent`, `ProxyTeamSummaryPanel`, `ProxyTeamDailyPanel` (LP3), `ProxyTeamLinkPanel` | Custom (`Panel` each, own Suspense + ErrorBoundary) | The LiteLLM team page (unit LP1, 2026-11-25): summary with `BudgetBar` and reset time, models, members (`LiteLLMTeamMembersPanel`), the linked app team and its leads; one read through `use-proxy-team` (`components/litellm/proxy-team/**`) |
 | `BudgetBar` | Custom (shadcn Progress) | Thin budget bar: neutral < 80%, warning from 80%, destructive ≥ 100%, percentage as text (decided 2026-11-16, user) |
 | `RankingList` | Custom | Ranked list; the rank is rendered by `RankCell` (medal icons for the top three). The % of total bar is `PercentOfTotalBar`, composed in where a page shows shares (the Ranking table, Phase 4.2) — not part of `RankingList` itself (decided 2026-11-06) |
 | `SparklineCell` | Custom | Inline trend sparkline for table cells |
@@ -1106,12 +1150,17 @@ Legends are a custom swatch + foreground-text legend (series colour never used a
 |-----------|--------|---------|
 | `DateRangePicker` | shadcn/ui Calendar + Popover | Date range filter (7d, 30d, 90d, custom) |
 | `ModelFilter` | shadcn/ui Select | Dropdown to filter by specific Bedrock model |
+| `SpendTimelinePanel` | Custom (`Panel`, `SpendTimelineChart`), `components/litellm/SpendTimelinePanel.tsx` | Spend over time for one LiteLLM entity (unit LP3, 2026-11-26; the LiteLLM user page and the LiteLLM team page). The Organisation chart's rules (*LiteLLM Organisation spend chart*) without a breakdown: *Metric* (Spend, Tokens, Requests), *Bucket size* (Daily, Weekly; Monday-to-Sunday UTC weeks, a part week marked), *View* (Chart, Table), in the URL (`metric`, `bucket`, `view`; a default is not written); one series in the primary token; every UTC day of the range has a slot; an option the rows carry no data for is disabled: 'Not reported by LiteLLM'; below `md` the switches wrap and targets are 44px. It reuses `weeklyBuckets`, the timeline helpers (`organisation/timeline.ts`, moved out of `OrgSpendPanel` by coordinator ruling, 2026-11-26) and the formatters of the Organisation chart; nothing is copied |
 | `SearchInput` | shadcn/ui Input | Debounced text filter for tables. From unit LP1 (D-R3-5, 2026-11-25) it takes a `label` (visible unless `hideLabel`), a `maxLength` and a `delayMs` (0 for no debounce), and every search box on a Management page uses it: the magnifier is at the left of the field |
 | `FieldHelp` | Custom (shadcn Button and Popover, Lucide `Info`) | An icon-only button beside a field label or a column header, `aria-label="About <field>"`. A click or Enter opens a popover with one or two sentences; Escape or a click outside closes it and focus returns to the button. Never a hover-only tooltip, never a blocking dialog (D-R3-10, 2026-11-25; the user's "modal with a short text"). The text of each field is in this spec (*Team page, round 3*; *Users, round 3*) |
 | `NativeSelect` | shadcn (`native-select`), `components/ui/native-select.tsx` | The one native `<select>` of the app (user, 2026-11-26: the arrow on the sign-in Role field 'looks off'; D-F-9). The browser's arrow is off (`appearance-none`); a Lucide `ChevronDown` sits inside the field, 12px from the right edge, and the text has right padding so it never runs under it. Height and radius come from the density tokens (32px, 44px below `md`). Its accessible name, value, options and keyboard behaviour are the native ones. No bare `<select>` elsewhere under `components/**`. The Radix `Select` stays for menus that need rich options |
 | `ColumnToggle` | shadcn/ui DropdownMenu | Show/hide table columns |
 | `Pagination` | shadcn/ui | Page through table results (default 20 rows) |
 | `ExportButton` | Custom | Export table data to CSV |
+
+| Test | Proves |
+|---|---|
+| T-LP15 | `SpendTimelinePanel`: the three switches and their URL parameters; Weekly bars are the sums of their days and the total equals the daily total; an option without data is disabled with "Not reported by LiteLLM"; the Table view shows the same numbers; every UTC day of the range has a slot; the empty state |
 
   | Test | Proves |
   |---|---|
