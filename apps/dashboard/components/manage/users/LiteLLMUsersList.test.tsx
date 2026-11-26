@@ -1319,10 +1319,17 @@ describe("LiteLLMUsersList search box (T-LP6)", () => {
       { timeout: 3000 },
     );
     expect(screen.queryByText("Type at least 2 characters")).toBeNull();
-    await vi.waitFor(() => expect(screen.queryByText("Bob Barker")).toBeNull());
+    // Design System - T-LP6 (a longer term narrows the list). The all-users rows
+    // leave as soon as SearchView mounts its skeleton, before the search answer
+    // renders, so wait for the answer's link, then assert the list narrowed.
     expect(
-      screen.getByRole("link", { name: "ada@example.com" }),
+      await screen.findByRole(
+        "link",
+        { name: "ada@example.com" },
+        { timeout: 3000 },
+      ),
     ).toBeInTheDocument();
+    expect(screen.queryByText("Bob Barker")).toBeNull();
   });
 
   it("T-LP6: a term that matches nothing shows 'No users found'", async () => {
