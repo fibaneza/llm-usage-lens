@@ -93,7 +93,7 @@ Each goes into the spec with its reason (`spec-changes.md`).
 | D-R4-8 | The step-up returns to where it started. A new step-up section `users` returns to `/dashboard/manage/users?add=user`, which opens the Add user dialog (the flag is removed from the URL once read). When the password step is offered and the session is not recent, the step-up comes **before** the form. A step-up at submit returns to the empty dialog with "Confirmed. Enter the details again." (the draft is never kept, T32). Add user never ends silently: the result view or a visible error | Item 7. Recent authentication itself is unchanged |
 | D-R4-9 | **user (item 9).** "Not signed in yet" gets a search box (2–100 characters, server-side, substring over the email and the LiteLLM user id) and reads through TanStack Query. A row whose email already has a password user shows "User added — setup pending" and no Add user button | The user's words; item 10 |
 | D-R4-10 | **user (item 8).** The sync dialog pages each group (25 a page, Previous and Next, "1–25 of n") instead of growing. A skipped row states its reason; "LiteLLM admin user" carries a help text with the rule. The rule itself stays (Q-R4-3) | The user's words |
-| D-R4-11 | **user (items 11, 12), 2026-11-27; scope per Q-R4-1.** Authenticator codes are removed for password users: setup, sign-in, step-up, password change, the "Authenticator" column and the TOTP reset (button and route). A stored secret is ignored and deleted at the person's next successful sign-in or password change. Supersedes D23 and the TOTP part of D31; the lockout, the rate limit and the password rules stay. The master user follows the answer to Q-R4-1 | The user's instruction. It removes a control the user set on 2026-11-14, so it is recorded as the user's decision, with the residual risk |
+| D-R4-11 | **user (items 11, 12), 2026-11-27; Q-R4-1 answered (b).** Authenticator codes are removed for everyone: password users **and the master user, in `prod` too**: setup, sign-in, step-up, password change, the "Authenticator" column and the TOTP reset (button and route). A stored secret is ignored and deleted at the person's next successful sign-in or password change. `AUTH_MASTER_TOTP_SECRET` and `TOTP_KMS_KEY_ID` are accepted and ignored. Supersedes D23, the TOTP part of D31, "TOTP in `prod`" in D16 and "(with TOTP)" in D19; the lockouts, the rate limit, the password rules, the master user's audit record and alarm, and the rule that `prod` without Entra needs the master user stay | The user's instruction. It removes a control the user set on 2026-11-14, so it is recorded as the user's decision, with the residual risk |
 | D-R4-12 | **user (item 13).** The App audit follows the page's date range (the range control the Gateway source already uses; `DateRangeQuerySchema`, 90 days) and shows newest first by default. One request reads at most 31 day-partitions | A search across days is the point; oldest-first over a month would open on old records (supersedes D-SR1 for this table only) |
 | D-R4-13 | **user (item 13).** Both audit sources page 50 rows with Previous and Next and "Rows a–b" ("of n" where LiteLLM gives a total). "Load more" is retired. The page is not in the URL | The user's words |
 | D-R4-14 | **user (item 13).** One search box (2–100 characters, 500 ms debounce, URL `q`). App: server-side, case-insensitive substring over action, result, code, target type and id, and actor id, plus the people whose name or email contains the text (as actor or as identity target); one request scans at most 2,000 records and says how far it searched ("Searched to <day>", Continue). Gateway: LiteLLM's own `search` parameter. The search text is not stored in the `audit.view` record | The user's words; bounded reads |
@@ -104,8 +104,8 @@ Each goes into the spec with its reason (`spec-changes.md`).
 
 | Id | Question | Options | Gates |
 |---|---|---|---|
-| Q-R4-1 | Authenticator codes: remove them for whom? | **(a)** password users, the step-up and the setup page; the break-glass master user keeps its code in `prod` (recommended: it is the one account that can grant `internal-admin`). **(b)** everyone, the master user in `prod` too (changes D16 and D19 and the production configuration) | AU1 |
-| Q-R4-2 | Delete a team: who, and what about members? | **(a)** `internal-admin` and `internal-org-admin` (as create and edit); only an empty team (recommended). **(b)** the same roles; deleting also removes the team's members, invites, admins and link | TD1 |
+| Q-R4-1 | Authenticator codes: remove them for whom? | **(a)** password users, the step-up and the setup page; the break-glass master user keeps its code in `prod` (recommended: it is the one account that can grant `internal-admin`). **(b)** everyone, the master user in `prod` too (changes D16 and D19 and the production configuration). **Answered (b), the user, 2026-11-27:** "No authentication code for everyone … So REMOVE all authentication code input" | AU1 |
+| Q-R4-2 | Delete a team: who, and what about members? | **(a)** `internal-admin` and `internal-org-admin` (as create and edit); only an empty team (recommended). **(b)** the same roles; deleting also removes the team's members, invites, admins and link. **Answered (a), the user, 2026-11-27** | TD1 |
 
 **With a default in force (the unit runs; say so to change it).**
 
@@ -193,11 +193,13 @@ change form asks for no code; Settings → Password users loses the
 "Authenticator" column and the TOTP reset; `POST
 /api/password-users/[email]/totp-reset` is removed with its registry
 entry. A stored secret is ignored at sign-in and deleted at the next
-successful sign-in or password change. `TOTP_KMS_KEY_ID` stays an accepted
-variable and is no longer required in `prod` when no code remains that
-uses it; removing the key from the CDK stacks is a follow-up for the user
-(a deploy). Under option (a) the master user's code and `AUTH_MASTER_TOTP_SECRET`
-are untouched.
+successful sign-in or password change. The master user signs in with its
+user name and password alone, in `prod` too. `AUTH_MASTER_TOTP_SECRET` and
+`TOTP_KMS_KEY_ID` stay accepted variables, unused and no longer required;
+`prod` without Entra still requires the master user. Nothing under `infra/`
+changes in this unit: the stacks keep passing the two values and the
+application ignores them. Removing them from the stacks and from SSM is a
+follow-up at the user's next deploy.
 
 ### AD1 — Audit (item 13)
 
@@ -219,7 +221,7 @@ or `.claude/`.
 | TM2 | `components/settings/access/{MembersSection,TeamAdminsSection,VisibilitySection,PendingAccessSection,AcceptInviteDialog,AccessSections}.tsx` and their tests; `components/manage/{TeamPageContent,TeamEditDialog,TeamSummaryPanel,TeamSummarySection,TeamCreateTrigger}.tsx` and tests; a new `components/manage/team-edit/**`; `app/dashboard/manage/team/[teamId]/**` (the page and a new `edit/`); `app/api/teams/[id]/members/route.ts`, `app/api/teams/[id]/members/pending/**`; `lib/data/access/pending.ts`; `components/manage/users/PersonPlacement.tsx`; `components/litellm/team/MembersPanel.tsx` (the label only); `lib/settings-tabs.ts` (the slug); `e2e/{manage-team,manage-team-views,team-invite-approve,accept-invite,team-edit,team-edit-role-landing,settings-access}.spec.ts` |
 | TD1 | `app/api/teams/[id]/route.ts` (the `DELETE`) and its test; `lib/data/access/` — the team delete function and the guard on the writes that add to a team; a new `components/manage/team-edit/DeleteTeamPanel.tsx`; a new `e2e/team-delete.spec.ts`; `.claude/rules/10-server-only-boundary.md`, `.claude/rules/50-security-and-secrets.md`, `docs/future-improvements.md`, the specs (Part B) |
 | UP2 | `components/manage/users/{AddUserDialog,UsersPeoplePanel,PendingLinksList,LiteLLMSyncDialog,LiteLLMSyncButton}.tsx` and tests; `app/dashboard/manage/users/page.tsx`; `app/api/password-users/route.ts`; `app/api/identities/pending-links/route.ts`; `lib/data/access/password-users.ts` and the pending-links read; `lib/auth/step-up.ts` (one entry), `lib/auth/add-user-steps.ts`; `e2e/{manage-users,users,users-litellm-sync}.spec.ts` |
-| AU1 | `auth.ts`, `env.ts`, `lib/auth/{totp,totp-user,password-setup,password-credentials,password-change,password-providers,master-user,step-up,auth-config,secret-envelope}.ts`, `lib/data/access/{password-credentials-store,password-users,sso-binding}.ts`; `components/auth/{PasswordSetupForm,SignInOptions}.tsx`, `components/account/ChangePasswordForm.tsx`, `components/settings/access/{PasswordUsersSection,StepUpDialog}.tsx`; `app/account/setup/page.tsx`, `app/dashboard/account/page.tsx`, `app/api/account/password/route.ts`, `app/api/password-users/[email]/totp-reset/**` (removed); `e2e/{account-setup,account,sign-in-form,base-path-sign-in,settings-access}.spec.ts`; the specs (Part C), `docs/guides/auth-setup.md`, `docs/guides/operations.md` |
+| AU1 | `auth.ts`, `env.ts`, `lib/auth/{totp,totp-user,password-setup,password-credentials,password-change,password-providers,master-user,step-up,auth-config,secret-envelope}.ts`, `lib/data/access/{password-credentials-store,password-users,sso-binding}.ts`; `components/auth/{PasswordSetupForm,SignInOptions}.tsx`, `components/account/ChangePasswordForm.tsx`, `components/settings/access/{PasswordUsersSection,StepUpDialog}.tsx`; `app/account/setup/page.tsx`, `app/dashboard/account/page.tsx`, `app/api/account/password/route.ts`, `app/api/password-users/[email]/totp-reset/**` (removed); `e2e/{account-setup,account,sign-in-form,base-path-sign-in,settings-access}.spec.ts`; the specs (Part C, including the Platform and System Architecture specs, C3), `docs/guides/auth-setup.md`, `docs/guides/operations.md`, `docs/guides/dashboard-deployment.md`; not `infra/**` |
 | AD1 | `components/settings/access/AuditLogSection.tsx`, `components/litellm/AuditSection.tsx`, `components/manage/AuditPageContent.tsx` and tests; a new `components/manage/audit/**`; `app/api/audit/route.ts`, `app/api/litellm/audit/route.ts`; `lib/data/access/audit-view.ts`; the audit query schema in `lib/litellm/read-views.ts` and the `listProxyAuditLog` parameters in `lib/litellm/operations.ts`; `e2e/manage-pages.spec.ts` (the audit cases) and a new `e2e/manage-audit.spec.ts` |
 
 ### Declared overlaps
@@ -263,8 +265,8 @@ and id, never this plan. Security cases are marked **S**.
 | T-UP17 | E2E (password mode): Add user from People and from a "Not signed in yet" row — the person is in People and in the chosen team, the row is gone; axe | e2e |
 | T-AU1 **S** | Sign-in with a password alone succeeds for a password user of any role; a stored secret is ignored and removed; the lockout and the rate limit still hold; the generic failure message is unchanged | integration |
 | T-AU2 **S** | Setup needs no code; `TOTP_REQUIRED` and `TOTP_INVALID` are gone; the reset link sets a password only | integration |
-| T-AU3 **S** | The step-up accepts the password alone; the TOTP reset route is gone (`404`) and out of the registry | integration |
-| T-AU4 **S** | The master user: as answered in Q-R4-1 (option (a): the code is still required in `prod` and the misconfiguration check T21 still fails closed) | unit + integration |
+| T-AU3 **S** | The step-up accepts the password alone, for a password user and for the master user; the TOTP reset route is gone (`404`) and out of the registry | integration |
+| T-AU4 **S** | The master user signs in with user name and password alone, in `prod` too; its lockout, its 1-hour session and the audit record of every attempt are unchanged; `prod` without Entra and without the master user still fails validation; a set `AUTH_MASTER_TOTP_SECRET` or `TOTP_KMS_KEY_ID` is accepted and ignored, and neither is required | unit + integration |
 | T-AU5 | No authenticator field or column in the setup page, the sign-in form, the step-up dialog, the password change form and Settings → Password users | component + e2e |
 | T-AD1 **S** | `GET /api/audit`: the role table unchanged; `dateFrom`/`dateTo` over 90 days `400`; newest first by default; at most 31 day-partitions per request; one `audit.view` record per request, target the range, without the search text; a bad cursor audits nothing | integration |
 | T-AD2 **S** | The App search: matches by action, result, code, target, actor id and by a person's name or email; at most 2,000 records scanned, with the continuation; a `q` outside 2–100 is `400`; no snapshot field is searched or returned | integration |
@@ -292,11 +294,11 @@ and id, never this plan. Security cases are marked **S**.
 
 - No permission is widened. TM2 moves forms and removes a search; UP2
   keeps recent authentication; AD1 keeps the audit read's roles.
-- AU1 removes a control by the user's instruction and only that one: the
+- AU1 removes a control by the user's instruction and only that one, for password users and for the master user: the
   lockout, the rate limit, the password rules, the generic error and the
   setup link's single use stay.
 - Nothing is written to LiteLLM by any unit. The sync's skip rule stays.
-- Not in this plan: the master user's code unless the user answers (b);
+- Not in this plan: any change under `infra/` or to SSM (a follow-up at a deploy);
   removing the KMS key from the CDK stacks; deleting a team that still has
   people unless the user answers (b); a result or action filter on the
   audit; invites binding at a password sign-in (SM8, the user's "No, keep
