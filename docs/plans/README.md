@@ -38,6 +38,7 @@ Run plans, named `<YYYYMMDD>_<slug>.md` by the date each was first written (user
 | `20261126_round3_followups.md` | Round 3 follow-ups (user, 2026-11-26): FX2 three UI fixes (select arrow, connection test, sidebar brand line), OC2 Organisation weekly buckets, ok/failed, share and usage per team | Queued |
 | `20261126_litellm_chart_by_model.md` | LiteLLM Organisation chart by model (user, 2026-11-26: "Yes, plan it"; series by LiteLLM model name): unit OC3, `improvements_worker` after OC2 | Queued |
 | `20261126_litellm_pages_names_charts.md` | LiteLLM user and team pages: names in the breadcrumb and a Spend over time chart (user, 2026-11-26): unit LP3, `litellm_worker` after OC2 | Queued |
+| `20261127_management_round4.md` | Management round 4 (user, 2026-11-27, 13 items): MR4 spec, TM2 and TD1 (`bedrock_worker`), UP2 and AU1 (`litellm_worker`), AD1 (`improvements_worker` after OC3); TD1 waits on Q-R4-2, AU1 on Q-R4-1 | Queued |
 
 Removed on 2026-11-18, all units on `main`: the POC plan (`poc/` is built),
 the app config file plan (unit CFG, `5484f12`), the base path plan (unit BP,
@@ -93,6 +94,7 @@ Spec units come before code.
 | 24d | **Follow-ups:** FX2, OC2 | `20261126_round3_followups.md` | queued | FX2 the three UI fixes; OC2 the Organisation usage parity with LiteLLM |
 | 24e | **OC3:** Organisation chart by model | `20261126_litellm_chart_by_model.md` | queued, after OC2 | By-model series (LiteLLM model names) and a Models table |
 | 24f | **LP3:** LiteLLM pages names and charts | `20261126_litellm_pages_names_charts.md` | queued, after OC2 | Alias or email in the breadcrumb; Spend over time on the user and team pages |
+| 24g | **Round 4:** MR4, TM2, UP2, AD1, then TD1 and AU1 | `20261127_management_round4.md` | queued; TD1 and AU1 after the user's answers | One member list and the Edit page, delete a team, Add user and Not signed in yet, remove authenticator codes, audit pages and search |
 | 25 | **Phase 5** polish and accessibility | `20261103_master.md` | fluid workspace done (`85609ea`); compact workspace slices A, B1, B2, B2b on `main`; **the rest is open** | Full accessibility audit (includes the focus-ring token), responsive checks, e2e journeys, and the periodic read-only **security and best-practices review** (HIGH findings block the next unit) |
 
 **Parallel allowances** (user direction, recorded in Rule 30 and
@@ -133,6 +135,7 @@ and gets the Settings → Sync **Refresh now** button (user, 2026-11-18).
 | `20261126_round3_followups.md` | `/goal FX2 of docs/plans/20261126_round3_followups.md is ready: at a green branch gate with its handover sent` (`bedrock_worker`); `/goal OC2 of docs/plans/20261126_round3_followups.md is ready: at a green branch gate with its handover sent` (`improvements_worker`) |
 | `20261126_litellm_chart_by_model.md` | `/goal OC3 of docs/plans/20261126_litellm_chart_by_model.md is ready: at a green branch gate with its handover sent` (`improvements_worker`) |
 | `20261126_litellm_pages_names_charts.md` | `/goal LP3 of docs/plans/20261126_litellm_pages_names_charts.md is ready: at a green branch gate with its handover sent` (`litellm_worker`) |
+| `20261127_management_round4.md` | `/goal <unit> of docs/plans/20261127_management_round4.md is ready: at a green branch gate with its handover sent` (TM2, TD1 `bedrock_worker`; UP2, AU1 `litellm_worker`; AD1 `improvements_worker`) |
 
 Send the instruction first (for example "Run docs/plans/20261109_rbac.md for unit
 R3 in this worktree…", mentioning the plan with `@docs/plans/20261109_rbac.md`),
